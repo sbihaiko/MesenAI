@@ -141,7 +141,7 @@ public class PauseOverlayViewTests : IDisposable
 		model.InHandDevice = () => (PlayInputDevice.Controller, PadFamily.Ps4);
 		model.OpenPauseOverlay();
 		Dispatcher.UIThread.RunJobs();
-		Assert.Equal("○ to resume", footer.Text);
+		Assert.Equal("Circle to resume", footer.Text);
 
 		model.InHandDevice = () => (PlayInputDevice.Controller, null);
 		model.OpenPauseOverlay();

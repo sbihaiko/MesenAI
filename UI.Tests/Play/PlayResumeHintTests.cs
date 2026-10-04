@@ -10,7 +10,7 @@ namespace Mesen.Tests.Play
 {
 	//ADR-0256 Decision 6 ("Segue o controle na mão"): W-P4's footer names the
 	//control the player is actually holding - Esc from a keyboard, the pad's own
-	//back button from a pad (B on an Xbox pad, ○ on a DualShock) - and names no
+	//back button from a pad (B on an Xbox pad, Circle on a DualShock) - and names no
 	//control at all when the pad's family cannot be told, because a guess would
 	//send the player looking for a button their pad may not have.
 	public class PlayResumeHintTests
@@ -38,7 +38,7 @@ namespace Mesen.Tests.Play
 		[Fact]
 		public void A_Ps4_pad_resumes_with_its_circle()
 		{
-			Assert.Equal(new PlayResumeHint("OverlayResumeHint", "○"), PlayMenuHint.ResumeHint(PlayInputDevice.Controller, PadFamily.Ps4));
+			Assert.Equal(new PlayResumeHint("OverlayResumeHint", "Circle"), PlayMenuHint.ResumeHint(PlayInputDevice.Controller, PadFamily.Ps4));
 		}
 
 		//Decision 4's reason on a second surface: a family the app cannot tell

@@ -122,14 +122,20 @@ public static class PlayMenuHint
 	//point the player at a button their pad may not have, which is the same
 	//reason Decision 4 refuses to let navigation be rebound.
 	//
-	//The label is the one printed on the plastic, not the host's key name:
+	//The label names the control on the plastic, not the host's key name:
 	//PadNavControls.Controls holds the codes the config binds ("But3" for the
 	//DualShock's circle), and no player reads "But3" off their pad.
+	//
+	//"Circle" in words rather than the glyph, for the reason W-P4's Resume
+	//button already draws its play mark instead of putting one in the string
+	//(MainWindow.axaml): the Player theme's font is the bundled Inter, which is
+	//a text face and carries no geometric shapes, so a symbol here would depend
+	//on font fallback for the one line an arcade cabinet reads.
 	public static PlayResumeHint ResumeHint(PlayInputDevice device, PadFamily? family)
 	{
 		string? control = device == PlayInputDevice.Keyboard ? "Esc" : family switch {
 			PadFamily.Xbox => "B",
-			PadFamily.Ps4 => "○",
+			PadFamily.Ps4 => "Circle",
 			_ => null
 		};
 		return control == null
