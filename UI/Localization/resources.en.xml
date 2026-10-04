@@ -19,7 +19,6 @@
 			<Control ID="btnOverlayCheats">Cheats</Control>
 			<Control ID="btnOverlaySettings">Settings</Control>
 			<Control ID="btnOverlayQuitGame">Quit Game</Control>
-			<Control ID="lblOverlayEscHint">Esc to resume</Control>
 			<Control ID="lblSaveStatesSheetTitle">Save States</Control>
 			<Control ID="btnSaveStatesSave">Save to a slot…</Control>
 			<Control ID="btnSaveStatesLoad">Load a slot…</Control>
@@ -2174,6 +2173,8 @@
 		<Message ID="OverlayRowNone">none</Message>
 		<Message ID="OverlayPackCommunityAvailable">Community pack available</Message>
 		<Message ID="OverlayRowCountOn">{0} on</Message>
+		<Message ID="OverlayResumeHint">{0} to resume</Message>
+		<Message ID="OverlayResumeHintNeutral">Leave the menu to resume</Message>
 		<Message ID="SaveStatesRowEmpty">empty</Message>
 		<Message ID="SaveStatesRowSlot">Slot {0} · {1}</Message>
 		<Message ID="AgeJustNow">just now</Message>
