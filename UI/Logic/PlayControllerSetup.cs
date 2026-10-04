@@ -15,6 +15,22 @@ public static class ControllerDevices
 	//gamepad key as 0x1000 + device * 0x100 + button.
 	public const int BaseGamepadIndex = 0x1000;
 
+	//IKeyManager::BaseDirectInputIndex: Windows is the only backend with a
+	//second pad family, the DirectInput joysticks above the XInput slots. A
+	//joystick's key is 0x2000 + device * 0x100 + button, with `device` its own
+	//ordinal - not the family-relative index XInput keys carry. Mirrored from
+	//the core so DeviceReconnect can read a key within its family.
+	public const int BaseDirectInputIndex = 0x2000;
+
+	//The pad index this file's detection rule and setup session key on. It reads
+	//EVERY pad key against BaseGamepadIndex, so a Windows joystick key (0x2000+)
+	//comes out as device 16 and up rather than as the joystick's own ordinal -
+	//that is this file's private numbering and it is consistent with itself
+	//(#813's family-relative index is not what it answers; see
+	//DeviceReconnect.DeviceOf, which takes the backend for exactly that reason).
+	//It is safe only while nothing hands the result to family-aware code, which
+	//is true today: the setup session compares it against its own
+	//ControllerDevices.DeviceOf and the pad drawing is keyed by SetupButton.
 	public static int? DeviceOf(ushort keyCode)
 	{
 		return keyCode >= BaseGamepadIndex ? (keyCode - BaseGamepadIndex) >> 8 : null;

@@ -162,6 +162,70 @@ namespace Mesen.Config
 			}
 		}
 
+		//ADR-0255 slice 5: rewrite the device index of every key this mapping
+		//binds, so a pad that reconnects at another device index keeps its
+		//bindings (DeviceReconnect / ControllerKeyMigration). `moves` names the
+		//device index per backend; a key whose family+index is not in it is left
+		//alone, and a key below the gamepad base (a keyboard key) has no device to
+		//move. Returns how many keys changed. Subclasses that store custom buttons
+		//override to remap those arrays too.
+		public virtual int RemapDevice(IReadOnlyList<DeviceMove> moves)
+		{
+			int moved = 0;
+			void Remap(Func<UInt16> get, Action<UInt16> set)
+			{
+				UInt16 key = get();
+				UInt16 next = DeviceReconnect.RemapKey(key, moves);
+				if(next != key) {
+					set(next);
+					moved++;
+				}
+			}
+
+			Remap(() => A, v => A = v);
+			Remap(() => B, v => B = v);
+			Remap(() => X, v => X = v);
+			Remap(() => Y, v => Y = v);
+			Remap(() => L, v => L = v);
+			Remap(() => R, v => R = v);
+			Remap(() => Up, v => Up = v);
+			Remap(() => Down, v => Down = v);
+			Remap(() => Left, v => Left = v);
+			Remap(() => Right, v => Right = v);
+			Remap(() => Start, v => Start = v);
+			Remap(() => Select, v => Select = v);
+			Remap(() => U, v => U = v);
+			Remap(() => D, v => D = v);
+			Remap(() => TurboA, v => TurboA = v);
+			Remap(() => TurboB, v => TurboB = v);
+			Remap(() => TurboX, v => TurboX = v);
+			Remap(() => TurboY, v => TurboY = v);
+			Remap(() => TurboL, v => TurboL = v);
+			Remap(() => TurboR, v => TurboR = v);
+			Remap(() => TurboSelect, v => TurboSelect = v);
+			Remap(() => TurboStart, v => TurboStart = v);
+			Remap(() => GenericKey1, v => GenericKey1 = v);
+			return moved;
+		}
+
+		//A custom-button array (PowerPad, Zapper, light phaser …), remapped in
+		//place. Null stays null; each entry is read through the same moves.
+		protected static int RemapArray(UInt16[]? keys, IReadOnlyList<DeviceMove> moves)
+		{
+			if(keys == null) {
+				return 0;
+			}
+			int moved = 0;
+			for(int i = 0; i < keys.Length; i++) {
+				UInt16 next = DeviceReconnect.RemapKey(keys[i], moves);
+				if(next != keys[i]) {
+					keys[i] = next;
+					moved++;
+				}
+			}
+			return moved;
+		}
+
 		public virtual void ClearKeys(ControllerType type)
 		{
 			A = 0;

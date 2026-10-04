@@ -16,6 +16,13 @@
   - nothing in the app writes a `PadBinding`, and `PreferencesConfig` drops an
   axis binding before the core push (`!pad.IsAxis`), so a player-set threshold
   can be stored but cannot fire.
+  **Slice 5 landed 2026-10-04** as re-specified below, after the implementer put
+  the block's own question back to the coordinator - "is a repair that cannot fire
+  on two of three backends worth shipping at all?" - and the answer was **ship
+  it**, on the terms recorded under Decision 5: it is a real repair on the two
+  backends that report a VID:PID, it names nothing where it cannot, and its cost
+  is bounded and stated. The **sheet** is still not implemented: the sheet itself
+  (#811), the PLAYERS slice and the remap mode are separate work.
 - Date: 2026-10-04
 - Related: ADR-0241 (the four-door Player GUI), ADR-0249 (the Play sheets, the
   Esc router and W-P15 - the setup sheet this one sits beside), ADR-0250 (one
@@ -198,6 +205,30 @@ mappings, and the reconnect is repaired by VID:PID. Slices, in order:**
    unidentified, the repair does not fire at all. See "The answers, against the
    code" for why - and #813, which blocks this slice on Windows.
 
+   **Landed 2026-10-04**, and the review of it added four rules the shape above
+   did not settle. They are part of the decision, not implementation notes:
+   - **A dropped move does not re-baseline the pad.** The history remembered the
+     pad's new index even when the move had been dropped, which claimed an index
+     the pad's keys do not occupy; a later, otherwise-legal move then rewrote the
+     keys of the pad that *does* occupy it. A dropped move leaves the keys where
+     they were, so the baseline stays there too.
+   - **A pad whose backend is unresolved (`GamepadBackend.None`) is refused the
+     same way `0:0000` is.** With no known family there is no known key block, and
+     reading it as the one-family default is the guess point 1 forbids. Unreached
+     by the three shipping backends, which all set `Backend`; refused anyway,
+     because "unreached today" is not a rule.
+   - **The observation runs while the Play door is up, home screen included** -
+     not only over a running game. The keys have to be right *by the time* a game
+     reads them, and the home screen is the moment before that, not after. The
+     cost is one pad enumeration per 50 ms on that door; on the backends that
+     report a VID:PID it can move something, and on macOS and Windows XInput it
+     cannot fire at all. Gating it on a backend the host can identify is not
+     available host-free, and the honest statement of the cost is preferred to a
+     platform branch in the UI.
+   - **The write goes through the same `ConfigManager`/`ApplyConfig()` pair the
+     classic Input page uses, and only when a key actually moved** - so a
+     reconnect that touches no bound key never rewrites `settings.json`.
+
 **The keyboard case (requirement 4)** is a state of the same sheet, and it also
 closes a real hole - reported on the bug board, not adjudicated here, because a
 reproducible bug is a bug before it is a decision: `Configuration.UpgradeConfig` applies the presets only on
@@ -227,6 +258,18 @@ anywhere, because a config whose keys the player bound by hand is theirs.
   light where it has one (DualShock 4/DualSense via `GCController.light`; `nil`
   on an Xbox pad, which is not an error state), and nowhere else. Colour that
   appears once is decoration, not language.
+- **The reconnect repair has two limits that survive it, and they are limits of
+  the identity, not of the implementation (recorded 2026-10-04 with slice 5).**
+  The first is that a **single** pad of a model that appeared twice cannot be
+  told from its sibling: with only one of two identical pads present after a
+  disconnect, nothing distinguishes it from the other, so a reconnect can still
+  move its keys. Point 4 only drops the move when both are *present*; no
+  VID:PID scheme can disambiguate a lone sibling, and inventing one (a serial, a
+  connection order) is the guess this ADR refuses. The second is that the repair
+  walks `Port1A`/`Port1B` (the Four Score's P3/P4) but `NesConfig.ApplyConfig`
+  pushes those two from `Port1`/`Port2`, so that part of the walk is decorative
+  until the Four Score's own push path is fixed - pre-existing, named here so it
+  is not mistaken for coverage.
 - **The pad's own light is the one promise above with no owner, and it is
   recorded here rather than silently dropped (2026-10-04).** No slice carries
   it, and it cannot be built from what exists: `GamepadInfo`

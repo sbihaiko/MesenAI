@@ -21,6 +21,14 @@ namespace Mesen.ViewModels
 		public PlayPackDepSheetViewModel PackDepSheet { get; } = new();
 		public PlayControllerSetupViewModel ControllerSetup { get; } = new();
 
+		//ADR-0255 slice 5: repairs a pad that reconnects at a different device
+		//index, moving its keys with it. Driven by the window's Play poll
+		//(PlayEdgeFlowsWiring), so it is only looked at while Player mode has the
+		//Play door up - home or game screen, because the keys have to be right by
+		//the time a game reads them. Inert on macOS and Windows XInput, where every
+		//pad is unidentified (see the class).
+		public ControllerReconnectRepair ControllerReconnect { get; } = new();
+
 		public bool IsPlayerMode => Config.Preferences.UiMode == UiMode.Player;
 
 		//Any open (a recent card, Open a ROM…, a drop): the W-P14 alert and a

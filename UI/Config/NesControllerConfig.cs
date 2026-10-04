@@ -1,5 +1,6 @@
 ﻿using Mesen.Interop;
 using Mesen.Localization;
+using Mesen.Logic;
 using Mesen.ViewModels;
 using System;
 using System.Collections.Generic;
@@ -42,6 +43,32 @@ namespace Mesen.Config
 		public UInt16[]? OekakidsButtons { get; set; } = null;
 		public UInt16[]? BandaiHypershotButtons { get; set; } = null;
 		public UInt16[]? NttDataKeypadButtons { get; set; } = null;
+
+		//ADR-0255 slice 5: the fixed pad keys (base) plus every custom-button
+		//array this mapping carries, so a PowerPad or Zapper bound to a pad's
+		//device index moves with it on a reconnect.
+		public override int RemapDevice(IReadOnlyList<DeviceMove> moves)
+		{
+			int moved = base.RemapDevice(moves);
+			moved += RemapArray(PowerPadButtons, moves);
+			moved += RemapArray(FamilyBasicKeyboardButtons, moves);
+			moved += RemapArray(PartyTapButtons, moves);
+			moved += RemapArray(PachinkoButtons, moves);
+			moved += RemapArray(FcnsButtons, moves);
+			moved += RemapArray(ExcitingBoxingButtons, moves);
+			moved += RemapArray(JissenMahjongButtons, moves);
+			moved += RemapArray(SuborKeyboardButtons, moves);
+			moved += RemapArray(BandaiMicrophoneButtons, moves);
+			moved += RemapArray(VirtualBoyButtons, moves);
+			moved += RemapArray(KonamiHyperShotButtons, moves);
+			moved += RemapArray(ArkanoidButtons, moves);
+			moved += RemapArray(ZapperButtons, moves);
+			moved += RemapArray(MouseButtons, moves);
+			moved += RemapArray(OekakidsButtons, moves);
+			moved += RemapArray(BandaiHypershotButtons, moves);
+			moved += RemapArray(NttDataKeypadButtons, moves);
+			return moved;
+		}
 
 		protected override UInt16[]? GetCustomButtons(ControllerType type)
 		{

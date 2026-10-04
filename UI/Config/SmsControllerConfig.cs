@@ -1,5 +1,6 @@
 ﻿using Mesen.Interop;
 using Mesen.Localization;
+using Mesen.Logic;
 using Mesen.ViewModels;
 using System;
 using System.Collections.Generic;
@@ -26,6 +27,13 @@ namespace Mesen.Config
 	public class SmsKeyMapping : KeyMapping
 	{
 		public UInt16[]? LightPhaserButtons { get; set; } = null;
+
+		//ADR-0255 slice 5: the fixed pad keys (base) plus the light phaser's own
+		//buttons, so a phaser bound to a pad's device index moves with it.
+		public override int RemapDevice(IReadOnlyList<DeviceMove> moves)
+		{
+			return base.RemapDevice(moves) + RemapArray(LightPhaserButtons, moves);
+		}
 
 		protected override UInt16[]? GetCustomButtons(ControllerType type)
 		{
