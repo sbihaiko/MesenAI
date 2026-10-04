@@ -1,6 +1,7 @@
 #include "Common.h"
 #include "WindowsKeyManager.h"
 #include "Shared/KeyDefinitions.h"
+#include "Shared/ShortcutKeyRules.h"
 
 WindowsKeyManager::WindowsKeyManager(Emulator* emu, HWND hWnd)
 {
@@ -261,7 +262,13 @@ bool WindowsKeyManager::GetGamepadInfo(uint32_t index, GamepadInfo& info)
 		info.Name = _directInput->GetName(diIndex);
 		info.VendorId = _directInput->GetVendorId(diIndex);
 		info.ProductId = _directInput->GetProductId(diIndex);
-		info.Slot = (uint32_t)index;
+		//#813: this walk is a GLOBAL enumeration - the four XInput slots above,
+		//then the joysticks - so `index` is not the device index a mapping's key
+		//code carries, nor the one GetVendorId/GetProductId above take (both are
+		//the joystick's own ordinal). Slot is documented as the device index, so
+		//it is the family's, and the rule is shared with its unit test rather than
+		//re-derived here.
+		info.Slot = ShortcutKeyRules::DirectInputDeviceOf(index, (uint32_t)xinputCount);
 		info.HasRumble = false; //DirectInput force feedback is not implemented
 		info.Backend = GamepadBackend::DirectInput;
 		return true;

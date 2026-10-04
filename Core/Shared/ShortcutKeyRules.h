@@ -97,6 +97,27 @@ namespace ShortcutKeyRules
 		return families;
 	}
 
+	//#813: the device index a pad's key code carries, given how the host
+	//enumerated it. A key code is <family base> + device * 0x100 + button, so
+	//`device` is the pad's index WITHIN its family, and DirectInputManager takes
+	//that same within-family index for GetVendorId/GetProductId.
+	//
+	//The host's enumeration is not that numbering on Windows:
+	//WindowsKeyManager::GetGamepadInfo walks the four XInput slots first and only
+	//then the joysticks, so the ordinal it is handed is global. Everything that
+	//compares a recorded device index against the host - the reconnect repair of
+	//ADR-0255 slice 5, and any sheet that labels a pad by the device its keys
+	//belong to - reads the wrong pad without this.
+	//
+	//XInput is handed its own slot by the caller (the arm that finds it walks the
+	//slots itself), so only the DirectInput arm has to subtract the XInput pads
+	//the host enumerated ahead of it. Linux and macOS have one family each, where
+	//the global ordinal already is the device index.
+	inline uint32_t DirectInputDeviceOf(uint32_t enumerationIndex, uint32_t connectedXInputPads)
+	{
+		return enumerationIndex >= connectedXInputPads ? enumerationIndex - connectedXInputPads : 0;
+	}
+
 	//The family a pad key code belongs to: the highest family base at or below it,
 	//or the lowest base when the code sits under all of them. With one family - and
 	//however high the device index goes - that is always the same answer.

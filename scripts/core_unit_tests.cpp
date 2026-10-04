@@ -6140,6 +6140,39 @@ namespace
 			"BlocoO.2: ...and with only the subset down, it fires again");
 	}
 
+	//#813: Windows hands GetGamepadInfo a GLOBAL ordinal - it walks the four
+	//XInput slots and only then the joysticks - while a mapping's key code carries
+	//the device index WITHIN its family, which is also what DirectInputManager
+	//takes. The two have to be reconciled or anything comparing a recorded device
+	//index against the host reads the wrong pad: the reconnect repair of ADR-0255
+	//slice 5, and any surface that labels a pad by the device its keys belong to.
+	void TestAJoysticksDeviceIndexIsItsOwnFamilyNotTheHostsOrdinal()
+	{
+		//No XInput pad ahead of it: the host's ordinal already is the device index.
+		Check(ShortcutKeyRules::DirectInputDeviceOf(0, 0) == 0,
+			"BlocoO.3: with no XInput pad, the first joystick is device 0");
+		Check(ShortcutKeyRules::DirectInputDeviceOf(2, 0) == 2,
+			"BlocoO.3: ...and the third is device 2");
+
+		//The case that was wrong: two XInput pads enumerated first, so the host
+		//calls the first joystick ordinal 2 while its own key codes - and
+		//DirectInputManager's GetVendorId - call it device 0.
+		Check(ShortcutKeyRules::DirectInputDeviceOf(2, 2) == 0,
+			"BlocoO.3: with two XInput pads ahead of it, the first joystick is still device 0");
+		Check(ShortcutKeyRules::DirectInputDeviceOf(3, 2) == 1,
+			"BlocoO.3: ...and the second joystick is device 1");
+
+		//The whole point of the index: it names the same pad the key code does, so
+		//a code built from it must land inside the DirectInput family and on that
+		//device.
+		uint32_t device = ShortcutKeyRules::DirectInputDeviceOf(5, 4);
+		uint16_t code = (uint16_t)(IKeyManager::BaseDirectInputIndex + device * 0x100 + kPadStartButton);
+		Check(ShortcutKeyRules::PadFamilyOf(code, TwoPadFamilies()) == (uint16_t)IKeyManager::BaseDirectInputIndex,
+			"BlocoO.3: the reconciled index builds a code in the DirectInput family");
+		Check(ShortcutKeyRules::PadButtonOf(code) == kPadStartButton && code == JoystickKey(1, kPadStartButton),
+			"BlocoO.3: ...on device 1, the one the host enumerated fifth behind four XInput pads");
+	}
+
 	//A binding may name pad keys from two families at once, and no single pad can
 	//answer it: the button bytes are only buttons inside their own family, so an
 	//XInput pad holding buttons 7 and 4 must not stand in for a binding written as
@@ -16815,6 +16848,7 @@ TestW6TheFiltersAcceptTheExtendedFrame();
 	TestABindingAcrossTwoFamiliesIsNotAnsweredByOnePad();
 	TestAMixedCombinationAsksEachHalfItsOwnWay();
 	TestAPadSupersetShadowsItsSubsetOnAnyPad();
+	TestAJoysticksDeviceIndexIsItsOwnFamilyNotTheHostsOrdinal();
 	TestPadRuleLeavesTheKeyboardAndMouseExact();
 
 	TestSheetStableScreensCollapseRepeats();
