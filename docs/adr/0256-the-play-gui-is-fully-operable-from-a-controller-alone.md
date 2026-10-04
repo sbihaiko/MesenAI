@@ -1,9 +1,10 @@
 # ADR-0256: The Play GUI is fully operable from a controller alone
 
-- Status: proposed (2026-10-04). The requirement is the user's; the four
-  decisions under "Open questions" are theirs to make and nothing is
-  implemented. Ids are never reused (ADR-0035), which is why this is 0256 and
-  not 0255.
+- Status: proposed (2026-10-04). The requirement is the user's, and three of
+  the four questions under "Open questions" are still theirs to make; the second
+  was answered on 2026-10-04 - **"Não reconfigurável"** - and is recorded under
+  Decision. Nothing is implemented. Ids are never reused (ADR-0035), which is
+  why this is 0256 and not 0255.
 - Date: 2026-10-04
 - Related: ADR-0241 (Play's home and the W-P4 pause overlay), ADR-0249 (the
   rendered wireframes as the visual spec), ADR-0250 (every menu entry has one
@@ -72,6 +73,16 @@ Not decided. The shape the four questions below have to settle:
    as from the keyboard.
 3. **One focusable control at a time**, with the focus visible — an arcade
    cabinet has no cursor to fall back on, so "where am I" has to be drawn.
+4. **Navigation is not rebindable** (the user's answer, 2026-10-04:
+   *"Não reconfigurável"*). Confirm, back and focus movement follow the pad's own
+   preset - `DefaultKeyMappingType.Xbox` or `Ps4`, which the first run already
+   models - and no surface may unbind them. Esc stays fixed, as it always was.
+   The reason is the one this ADR is written for: the target is a cabinet with a
+   pad and nothing else, and a player who binds "confirm" to a control their pad
+   does not have is stuck, with no keyboard and no pointer to recover with. It
+   also settles what ADR-0255's extra-buttons slice may offer: the navigation
+   controls are **excluded** from it, because offering them is the same bug with
+   a nicer dialog in front of it.
 
 The cheap implementation, and the one worth trying first: translate pad events
 into the **keyboard navigation events Avalonia already handles** (arrow keys,
@@ -86,12 +97,8 @@ to `ShortcutHandler`.
    difference: `DefaultKeyMappingType.Xbox` and `Ps4` are first-run presets.
    Whether navigation follows the pad's own preset, or is fixed, decides
    whether "back" is B or A on a given desk.
-2. **Is navigation rebindable?** ADR-0255's extra-buttons slice wants a pad's
-   spare controls assignable to anything, and navigation is the obvious thing to
-   assign. But a player who
-   rebinds "confirm" to a control their pad does not have has bricked the
-   cabinet, with no keyboard to recover from. Whatever is chosen needs an
-   answer to that, and "not rebindable" is a legitimate one.
+2. ~~**Is navigation rebindable?**~~ **Answered 2026-10-04: not rebindable** -
+   the user's pick, verbatim: **"Não reconfigurável"**. See Decision 4.
 3. **Can the player get stuck?** With rule 1, a running game offers exactly one
    gesture. If that chord is rebound away, or the pad is one whose Home button
    the platform does not report, is there a second way in?

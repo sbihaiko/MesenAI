@@ -130,8 +130,14 @@ mappings, and the reconnect is repaired by VID:PID. Slices, in order:**
    does and offers the preset back; with one pad PLAYERS is absent, because there
    is nothing to assign.
 3. **Remapping**, as a *mode* of the same sheet rather than a dialog: pick a row,
-   press a control, Esc cancels. The two lights on the row - what the pad sends,
-   what the port receives - are the reason testing and mapping are one line.
+   press a control, Esc cancels. Each row carries **two lights** - what the pad
+   sends and what the port receives - which is why testing and mapping are one
+   line rather than two screens. The user kept both on 2026-10-04 (the
+   alternatives offered were one light, or none): a row lit on the pad side and
+   dark on the port side is a wrong binding made visible, and nothing else in the
+   app shows one. Confirm, back and focus movement are **not** rebindable
+   (ADR-0256 Decision 4), so they are excluded from this sheet entirely - the
+   section below is the pad's spare controls, not its navigation.
 4. **EXTRA BUTTONS**, the `ShortcutKeyInfo` slot, with the axis threshold from
    the third answer. The section is a filtered view of the one shortcut list.
 5. **The reconnect repair**: on a pad appearing whose VID:PID was last seen at
