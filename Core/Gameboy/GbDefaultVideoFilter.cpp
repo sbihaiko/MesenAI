@@ -70,7 +70,16 @@ void GbDefaultVideoFilter::OnBeforeApplyFilter()
 	VideoConfig config = _emu->GetSettings()->GetVideoConfig();
 	GameboyConfig gbConfig = _emu->GetSettings()->GetGameboyConfig();
 
-	bool adjustColors = gbConfig.GbcAdjustColors && ((Gameboy*)_emu->GetConsole().get())->IsCgb();
+	//The same null-console read #829 fixed in NesDefaultVideoFilter and #831 in
+	//NesNtscFilter, at the third site that does it. Unreachable today for the
+	//same two reasons (Emulator::GetVideoFilter answers a NesDefaultVideoFilter
+	//while no console exists, and Emulator::IsRunning() *is* "a console is
+	//loaded", which is what gates every drive of a console's filter), and with
+	//no console there is no Game Boy to ask, so "not a CGB" is the answer that
+	//follows from the question being unaskable.
+	shared_ptr<IConsole> console = _emu->GetConsole();
+	bool isCgb = console && ((Gameboy*)console.get())->IsCgb();
+	bool adjustColors = gbConfig.GbcAdjustColors && isCgb;
 	if(_videoConfig.Hue != config.Hue || _videoConfig.Saturation != config.Saturation || _videoConfig.Contrast != config.Contrast || _videoConfig.Brightness != config.Brightness || _gbcAdjustColors != adjustColors) {
 		_gbcAdjustColors = adjustColors;
 		InitLookupTable();

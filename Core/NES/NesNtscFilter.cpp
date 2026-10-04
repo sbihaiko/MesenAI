@@ -69,7 +69,26 @@ void NesNtscFilter::OnBeforeApplyFilter()
 	NesConfig& nesCfg = _emu->GetSettings()->GetNesConfig();
 
 	shared_ptr<IConsole> console = _emu->GetConsole();
-	PpuModel model = ((NesConsole*)console.get())->GetPpu()->GetPpuModel();
+
+	//#831: the same read NesDefaultVideoFilter guarded in #829, at the second
+	//site that does it. The model lives on a console this filter only has while
+	//a game is loaded, and #829 proved the cost of assuming one: an access
+	//violation at the Ppu field's offset of a null NesConsole.
+	//
+	//Reachable today it is not, and the two reasons are worth writing down so
+	//the next reader can check them rather than take them: Emulator::
+	//GetVideoFilter hands this filter out only from a console that exists - with
+	//none it answers a NesDefaultVideoFilter - and Emulator::IsRunning() *is*
+	//"a console is loaded", which is what gates the decoder's own NTSC filter
+	//(VideoDecoder::RedrawPausedFrame, and Stop() joining the emulation thread
+	//before it resets the console). Neither of those is this filter's promise to
+	//keep, though: one call site that drives a filter past a Stop() takes the
+	//#829 crash back, so the model falls back to the filter's own as that one
+	//does (#829, NesDefaultVideoFilter::OnBeforeApplyFilter).
+	PpuModel model = _ppuModel;
+	if(console) {
+		model = ((NesConsole*)console.get())->GetPpu()->GetPpuModel();
+	}
 
 	if(GenericNtscFilter::NtscFilterOptionsChanged(_ntscSetup, _emu->GetSettings()->GetVideoConfig()) || model != _ppuModel || memcmp(_nesConfig.UserPalette, nesCfg.UserPalette, sizeof(nesCfg.UserPalette)) != 0) {
 		GenericNtscFilter::InitNtscFilter(_ntscSetup, _emu->GetSettings()->GetVideoConfig());
