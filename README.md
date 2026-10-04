@@ -29,7 +29,7 @@ MesenCE is one window that does everything; this fork is the same emulator behin
 
 **NES / Famicom** · **Game Boy / Game Boy Color / GBS** · **Master System / Game Gear / SG-1000** (incl. YM2413 FM) · **Game Boy Advance**
 
-Not included: SNES (incl. Super Game Boy), PC Engine, WonderSwan, ColecoVision — see [FAQ](#faq).
+Not included: SNES (incl. Super Game Boy), PC Engine, WonderSwan, ColecoVision.
 
 ## Download
 
@@ -43,7 +43,7 @@ Platforms without a tagged release use the on-demand CI channel (`ci-latest` pre
 | **Linux ARM64** | [Download](https://github.com/sbihaiko/MesenAI/releases/download/ci-latest/MesenAI-ci-linux-arm64.zip) · [AppImage](https://github.com/sbihaiko/MesenAI/releases/download/ci-latest/MesenAI-ci-linux-arm64.AppImage) | `sudo apt install libsdl2-2.0-0` |
 | **macOS Apple Silicon (CI)** | [Download](https://github.com/sbihaiko/MesenAI/releases/download/ci-latest/MesenAI-ci-macos-arm64.zip) | Not code-signed (ADR-0203); Gatekeeper needs `xattr -dr com.apple.quarantine Mesen.app`. The signed tagged build is above. `brew install sdl2` |
 | **macOS Apple Silicon (release)** | [Releases](https://github.com/sbihaiko/MesenAI/releases/latest) | arm64; ad-hoc signed, first-open step above. `brew install sdl2` |
-| **Windows x64** | [Download](https://github.com/sbihaiko/MesenAI/releases/download/ci-latest/MesenAI-ci-windows-x64-aot.zip) | AoT build |
+| **Windows x64** | [Download](https://github.com/sbihaiko/MesenAI/releases/download/ci-latest/MesenAI-ci-windows-x64-aot.zip) | Windows 10 (1607) or newer |
 
 `ci-latest` is a pre-release, so [Releases](https://github.com/sbihaiko/MesenAI/releases/latest) still resolves to the tagged build. The channel is **built on demand** — `build.yml` on a pull request against `prod` or a manual dispatch (ADR-0200, ADR-0203), not on every push. Assets are whatever `prod` held when that run compiled. Code on `main` that has not been promoted is [built from source](COMPILING.md).
 
@@ -161,7 +161,7 @@ Decisions: [docs/adr/](docs/adr/). Roadmap: [docs/roadmap/PRD-mesence-enhancemen
 
 ## Why this fork exists
 
-Upstream's contribution policy does not accept AI-assisted PRs (Enhanced Audio was [nesdev-org/MesenCE#262](https://github.com/nesdev-org/MesenCE/pull/262), closed for that reason). This is an independent fork. Product consoles are the four families above; dropped cores are listed in the FAQ. Lineage: Mesen 0.9.x → Mesen2 → [MesenCE](https://github.com/nesdev-org/MesenCE) → **MesenAI**. How to contribute, including the AI-assisted rule: [CONTRIBUTING.md](CONTRIBUTING.md).
+Upstream's contribution policy does not accept AI-assisted PRs (Enhanced Audio was [nesdev-org/MesenCE#262](https://github.com/nesdev-org/MesenCE/pull/262), closed for that reason). This is an independent fork. Product consoles are the four families above; the dropped ones are named under [What it runs](#what-it-runs). Lineage: Mesen 0.9.x → Mesen2 → [MesenCE](https://github.com/nesdev-org/MesenCE) → **MesenAI**. How to contribute, including the AI-assisted rule: [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## FAQ
 
@@ -179,7 +179,7 @@ Upstream's contribution policy does not accept AI-assisted PRs (Enhanced Audio w
 
 **Where's SNES?** Not here. [bsnes](https://github.com/bsnes-emu/bsnes), [snes9x](https://github.com/snes9x/snes9x) and [ZSNES](https://www.zsnes.com/) already cover it.
 
-**Is it a drop-in replacement for Mesen?** For NES, GB/GBC, SMS/GG/SG-1000 and GBA: same core, same debugger, same save/state formats, plus the enhancement layer.
+**Is it a drop-in replacement for Mesen?** For NES, GB/GBC, SMS/GG/SG-1000 and GBA: same core, the same save-state (`.mss`) format, plus a couple of debugger expression fixes and the enhancement layer.
 
 ## Contributing
 
