@@ -10,9 +10,10 @@ using System.Linq;
 namespace Mesen.Windows
 {
 	//G.5 (PRD Part B §8, ADR-0241, §13.5.2 W-P13, W-P15, W-P16): the window-side
-	//glue of the Play edge flows - focus on open (rule 9: the pad reaches the
-	//sheet's first button), the pack-file sheet's reload and close, and the
-	//controller poll. Kept out of MainWindow.axaml.cs, which only calls Attach.
+	//glue of the Play edge flows - the pack-file sheet's reload and close, and
+	//the controller poll. Kept out of MainWindow.axaml.cs, which only calls
+	//Attach. The sheets' focus-on-open (rule 9: the pad reaches the sheet's first
+	//button) is PlayPadNavigationWiring's now, one path for every Play surface.
 	internal static class PlayEdgeFlowsWiring
 	{
 		//The same 50 ms cadence the Advanced key-binding grid polls at.
@@ -20,12 +21,10 @@ namespace Mesen.Windows
 
 		public static DispatcherTimer Attach(Window window, MainWindowViewModel model)
 		{
-			FocusOnOpen(window, model.BiosSheet, nameof(PlayBiosSheetViewModel.IsVisible), () => model.BiosSheet.IsVisible, "BiosSheetChooseFile");
-			FocusOnOpen(window, model.PackDepSheet, nameof(PlayPackDepSheetViewModel.IsVisible), () => model.PackDepSheet.IsVisible, "PackDepSheetChooseFile");
-			FocusOnOpen(window, model.SelectRomSheet, nameof(PlaySelectRomSheetViewModel.IsVisible), () => model.SelectRomSheet.IsVisible, "SelectRomSheetSearch");
-			FocusOnOpen(window, model.ToolSheet, nameof(PlayerToolSheetViewModel.IsBarcode), () => model.ToolSheet.IsBarcode, "ToolSheetBarcode");
-			FocusOnOpen(window, model, nameof(MainWindowViewModel.IsShaderSheetVisible), () => model.IsShaderSheetVisible, "ShaderSheetOk");
-			FocusOnOpen(window, model.ControllerSetup, nameof(PlayControllerSetupViewModel.IsVisible), () => model.ControllerSetup.IsVisible, "ControllerSetupSkip");
+			//The six sheets' focus-on-open used to be registered here, each one
+			//posting its own Focus(). ADR-0256 Decision 3 moved them to
+			//PlayPadNavigationWiring, where every Play surface's claim is
+			//arbitrated in one place; this file keeps the flows and the poll.
 
 			//Play Without It: back to the pause overlay (rule 8).
 			model.PackDepSheet.Closed += model.OpenPauseOverlay;
@@ -69,15 +68,6 @@ namespace Mesen.Windows
 				model.ControllerSetup.StopListening();
 			}
 			return listening;
-		}
-
-		private static void FocusOnOpen(Window window, System.ComponentModel.INotifyPropertyChanged source, string property, Func<bool> isOpen, string controlName)
-		{
-			source.PropertyChanged += (s, e) => {
-				if(e.PropertyName == property && isOpen()) {
-					Dispatcher.UIThread.Post(() => window.GetVisualDescendants().OfType<Control>().FirstOrDefault(c => c.Name == controlName)?.Focus());
-				}
-			};
 		}
 	}
 }

@@ -54,7 +54,12 @@ namespace Mesen.ViewModels
 
 		//PlayGameLayer: a Play surface is up over the game, so the native picture,
 		//drawn above every Avalonia control, has to step aside for it.
-		private bool IsPlaySurfaceOverGame => PlayGameLayer.SurfaceOverGame(IsPlayerOverlayVisible, CurrentPlaySheet() != PlaySheet.None, BiosSheet.IsVisible, ControllerSetup.IsVisible, IsLoadWaitActive)
+		//
+		//Public because it is also ADR-0256 Decision 2's authority input - "is a
+		//Play surface up" is what hands the pad to the GUI - and that question is
+		//already answered here, once, for the renderer. PlayPadNavigationWiring
+		//reads this rather than re-deriving it from the same surfaces.
+		public bool IsPlaySurfaceOverGame => PlayGameLayer.SurfaceOverGame(IsPlayerOverlayVisible, CurrentPlaySheet() != PlaySheet.None, BiosSheet.IsVisible, ControllerSetup.IsVisible, IsLoadWaitActive)
 			|| SelectRomSheet.IsVisible || IsShaderSheetVisible || ToolSheet.IsVisible;
 
 		private static readonly HashSet<string> PlaySurfaceProperties = new() {

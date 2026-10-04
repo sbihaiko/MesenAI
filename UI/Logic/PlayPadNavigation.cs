@@ -69,7 +69,10 @@ public static class PlayPadNavigation
 		return PadNavAction.None;
 	}
 
-	private static ushort CodeOf(PadNavMapping mapping, PadNavAction action)
+	//The code one of the six actions is bound to on this mapping. Public
+	//because the repeat rule (PadNavRepeat) reads the directions back out of a
+	//pressed set and must ask the same table Next does, never its own copy.
+	public static ushort CodeOf(PadNavMapping mapping, PadNavAction action)
 	{
 		return action switch {
 			PadNavAction.Up => mapping.Up,
