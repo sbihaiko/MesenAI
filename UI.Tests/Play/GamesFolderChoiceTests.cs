@@ -10,8 +10,9 @@ namespace Mesen.Tests.Play
 	//true, `listdir` empty - so a games folder left pointing at it (which the
 	//picker's own "make this my games folder" action will do from the This Mac
 	//root) starts Open ROM on a folder with nothing in it and leads the picker's
-	//roots list with the same dead end. Every guard on the path asked
-	//`Directory.Exists`, which is true for `/home`.
+	//roots list with the same dead end. Two guards on the path asked
+	//`Directory.Exists`, which is true for `/home`; the third - the picker's own
+	//GamesFolder - asked nothing and led with the raw path.
 	//
 	//Real temp folders rather than an injected predicate, which is why the rule
 	//lives in UI/Logic (ADR-0123).

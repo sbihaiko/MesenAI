@@ -131,5 +131,6 @@ been corrected — this paragraph is what both of them mean.
   games folder that is also the app's own ROM folder or a volume is still a root,
   under that other label. The alternative was telling an autofs node apart from an
   empty folder, which is not knowable from the path.
-- The guard is now one function instead of three inline `Directory.Exists` calls,
-  so the next entry point that needs it asks the same question.
+- The guard is now one function instead of two inline `Directory.Exists` calls —
+  and a third entry point that asked nothing at all — so the next entry point that
+  needs it asks the same question.
