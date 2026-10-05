@@ -706,8 +706,9 @@ public class PlayPadNavigationTests : IDisposable
 	{
 		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
 		(MainWindow window, MainWindowViewModel model) = ShowPlay();
-		//Two packs and W-P5's own "No pack" row, the same shape the picker's own
-		//suite builds.
+		//Two packs. Set directly, so W-P5's own "No pack" row - which
+		//MainWindowViewModel appends when it builds the list - is not among them;
+		//this case is about the walk, and two rows are enough to have one.
 		model.PlayerPackChoices = new() {
 			new PlayerPackChoice(new PackPreferenceResolver.Candidate { Container = "/packs/aaa", Name = "Aaa Pack", PackId = "issue-1", Enabled = true }, null, 0, null),
 			new PlayerPackChoice(new PackPreferenceResolver.Candidate { Container = "/packs/bbb", Name = "Bbb Pack", PackId = "issue-2", Enabled = true }, null)
