@@ -232,6 +232,24 @@ namespace Mesen.ViewModels
 			RemapNote = "";
 		}
 
+		//The port's slot the selected pad's other keys are in, or null when nothing
+		//in the port holds them (a pad nothing has bound yet). Feeds the rebind's
+		//slot choice, so an unbound control joins the pad's own slot instead of
+		//whichever slot happens to be free (review of #839).
+		private int? FirstSlotHolding(SheetPort port)
+		{
+			if(Pad is not GamepadTestItem pad) {
+				return null;
+			}
+			int block = ControllerDevices.PadBlock(pad.Backend, (int)pad.Slot);
+			for(int i = 0; i < port.Slots.Count; i++) {
+				if(ControllerSheetPorts.SlotDevice(port.Slots[i]) == block) {
+					return i;
+				}
+			}
+			return null;
+		}
+
 		//The write: the pad control that was pressed replaces this control's
 		//binding, through the same ConfigManager path and the same ApplyConfig()
 		//call the classic Input page uses (ADR-0255 Consequences). It lands in the
@@ -249,7 +267,7 @@ namespace Mesen.ViewModels
 				controlPerSlot[i] = ControllerSheetSlotWrite.Field(ControllerSheetSlotWrite.Slot(config, i), button);
 			}
 			bool[] slotTaken = port.Slots.Select(slot => slot.Length > 0).ToArray();
-			if(ControllerSheetRemap.TargetSlot(controlPerSlot, slotTaken) is not int slot) {
+			if(ControllerSheetRemap.TargetSlot(controlPerSlot, slotTaken, FirstSlotHolding(port)) is not int slot) {
 				RemapNote = ResourceHelper.GetMessage("ControllerSheetRemapNoSlot");
 				return;
 			}

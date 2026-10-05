@@ -60,25 +60,46 @@ namespace Mesen.Tests.Play
 		}
 
 		//Where a rebind lands: the slot that already binds the control, so a
-		//rebind replaces its own binding; else the first slot that binds nothing at
-		//all; else nothing, and the sheet refuses rather than overwriting a slot.
+		//rebind replaces its own binding; else the slot the pad's other keys are
+		//in, so the pad is not split across two; else the first slot that binds
+		//nothing at all; else nothing, and the sheet refuses rather than
+		//overwriting a slot.
 		[Fact]
 		public void A_rebind_lands_in_the_slot_that_already_binds_the_control()
 		{
 			ushort code = PadKey(0, 0);
-			Assert.Equal(1, ControllerSheetRemap.TargetSlot(new ushort[] { 0, code, 0, 0 }, new[] { true, true, true, true }));
+			Assert.Equal(1, ControllerSheetRemap.TargetSlot(new ushort[] { 0, code, 0, 0 }, new[] { true, true, true, true }, null));
 		}
 
 		[Fact]
 		public void An_unbound_control_lands_in_the_first_free_slot()
 		{
-			Assert.Equal(2, ControllerSheetRemap.TargetSlot(new ushort[] { 0, 0, 0, 0 }, new[] { true, true, false, false }));
+			Assert.Equal(2, ControllerSheetRemap.TargetSlot(new ushort[] { 0, 0, 0, 0 }, new[] { true, true, false, false }, null));
+		}
+
+		//An unbound control joins the slot the pad's other keys are in, even when an
+		//earlier slot is free: writing it into the free one would split the pad across
+		//two slots, and the PLAYERS assignment then has to move both - refusing with
+		//NoFreeSlot where one slot would have fit (review of #839).
+		[Fact]
+		public void An_unbound_control_lands_in_the_pads_own_slot_before_a_free_one()
+		{
+			Assert.Equal(1, ControllerSheetRemap.TargetSlot(new ushort[] { 0, 0, 0, 0 }, new[] { false, true, true, true }, padSlot: 1));
+		}
+
+		//The slot that already binds the control still wins over the pad's own: a
+		//rebind replaces its own binding where it is.
+		[Fact]
+		public void The_slot_that_binds_the_control_wins_over_the_pads_own()
+		{
+			ushort code = PadKey(0, 0);
+			Assert.Equal(2, ControllerSheetRemap.TargetSlot(new ushort[] { 0, 0, code, 0 }, new[] { true, true, true, true }, padSlot: 1));
 		}
 
 		[Fact]
 		public void A_port_with_no_free_slot_refuses()
 		{
-			Assert.Null(ControllerSheetRemap.TargetSlot(new ushort[] { 0, 0, 0, 0 }, new[] { true, true, true, true }));
+			Assert.Null(ControllerSheetRemap.TargetSlot(new ushort[] { 0, 0, 0, 0 }, new[] { true, true, true, true }, null));
 		}
 
 		//The pad's own button a bound code names, read off the core's name for that

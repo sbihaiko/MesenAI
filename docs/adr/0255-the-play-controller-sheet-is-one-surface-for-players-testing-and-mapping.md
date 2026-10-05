@@ -67,7 +67,11 @@
   holding two devices in different slots sent the rebind to the first port instead
   of the one holding the pad's keys; and a keyboard binding named "Page Up" or
   "Page Down" lit a row's pad side, because the name was matched from its second
-  word on.
+  word on. A fifth came from CodeRabbit: a rebind of a control the pad had not
+  bound yet landed in the first *free* slot, which can be a different slot from
+  the pad's own and leaves the pad split across two - the PLAYERS move then has to
+  move both slots and refuses with NoFreeSlot where one would have fit. It now
+  joins the pad's slot (`ControllerSheetRemap.TargetSlot`'s `padSlot`).
   Three limits are carried rather than solved: a rebind does not clear the same
   pad button from another control, the port light reads the first non-zero field
   across the port's four slots, and the section was never visually evaluated with

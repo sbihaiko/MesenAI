@@ -1627,6 +1627,48 @@ public class PlayerControllerSheetTests : IDisposable
 		}
 	}
 
+	//A rebind of a control the pad has not bound yet lands in the pad's own slot,
+	//not in whichever slot happens to be free: a pad split across two slots makes
+	//the PLAYERS assignment move both, and it refuses with NoFreeSlot where one slot
+	//would have fit. The pad here has A and the D-pad in Port1's second slot, and B
+	//unbound, with the first slot free (review of #839).
+	[AvaloniaFact]
+	public void A_rebind_of_an_unbound_control_joins_the_pads_own_slot()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model) = ShowPlayWithGame();
+		OpenFromSettings(window, model);
+		ControllerSheetViewModel sheet = model.ControllerSheet;
+		Poll(sheet)!.Stop();
+		sheet.CurrentConsole = () => ConsoleType.Nes;
+
+		NesConfig saved = SavedNes();
+		try {
+			ConfigManager.Config.Nes.Port1 = new NesControllerConfig();
+			ConfigManager.Config.Nes.Port2 = new NesControllerConfig();
+			ConfigManager.Config.Nes.Port1.Mapping2.A = PadButton(0, 0);
+			ConfigManager.Config.Nes.Port1.Mapping2.Up = PadButton(0, 8);
+			//Mapping1 stays empty, so it is the first free slot.
+
+			sheet.Tester.Gamepads.Add(new GamepadTestItem(0) { Name = "Pad Zero", Backend = GamepadBackend.GameController });
+			sheet.PressedKeys = () => Array.Empty<ushort>();
+			sheet.ApplyPad();
+
+			sheet.ArmRemap(SetupButton.B);
+			ushort x = PadButton(0, 1);
+			sheet.PressedKeys = () => new ushort[] { x };
+			sheet.RefreshRemap();
+
+			//The pad's keys stay in one slot: B joins them, and the free first slot
+			//is left alone.
+			Assert.Equal(0, ConfigManager.Config.Nes.Port1.Mapping1.A);
+			Assert.Equal(0, ConfigManager.Config.Nes.Port1.Mapping1.B);
+			Assert.Equal(x, ConfigManager.Config.Nes.Port1.Mapping2.B);
+		} finally {
+			ConfigManager.Config.Nes = saved;
+		}
+	}
+
 	//Every console's player ports, emptied: the state the keyboard guard
 	//("nothing is bound anywhere") reads.
 	private static void ClearPlayerPorts()

@@ -52,19 +52,27 @@ public static class ControllerSheetRemap
 		return button.ToString();
 	}
 
-	//Where a rebind lands among the port's four slots: the slot that already
-	//binds this control, so a rebind replaces its own binding and cannot leave
-	//the old key behind in another slot; else the first slot that binds nothing
-	//at all; else null - every slot is taken, and the sheet says so rather than
-	//overwriting a binding the player (or a preset) made. `controlPerSlot` is
-	//this control's field per slot (0 = unbound), `slotTaken` is the port's own
-	//free-slot rule (a slot binding anything, custom keys included).
-	public static int? TargetSlot(IReadOnlyList<ushort> controlPerSlot, IReadOnlyList<bool> slotTaken)
+	//Where a rebind lands among the port's four slots, in order: the slot that
+	//already binds this control, so a rebind replaces its own binding and cannot
+	//leave the old key behind in another slot; else the slot the selected pad's
+	//other keys are already in (`padSlot`), so the pad keeps one slot instead of
+	//being split across two - a split pad makes the PLAYERS assignment move two
+	//slots and refuse with NoFreeSlot where one would have fit (review of #839);
+	//else the first slot that binds nothing at all; else null - every slot is
+	//taken, and the sheet says so rather than overwriting a binding the player
+	//(or a preset) made. `controlPerSlot` is this control's field per slot
+	//(0 = unbound), `slotTaken` is the port's own free-slot rule (a slot binding
+	//anything, custom keys included), and `padSlot` is null for a pad nothing in
+	//the port holds - the setup case, where the first free slot is the answer.
+	public static int? TargetSlot(IReadOnlyList<ushort> controlPerSlot, IReadOnlyList<bool> slotTaken, int? padSlot)
 	{
 		for(int i = 0; i < controlPerSlot.Count; i++) {
 			if(controlPerSlot[i] != 0) {
 				return i;
 			}
+		}
+		if(padSlot is int own && own >= 0 && own < slotTaken.Count) {
+			return own;
 		}
 		for(int i = 0; i < slotTaken.Count; i++) {
 			if(!slotTaken[i]) {
