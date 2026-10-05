@@ -3,7 +3,7 @@
 
 Scans `docs/**/*.md` (the ADR register itself included), `.github/**/*.md`,
 `CLAUDE.md` and every `AGENTS.md` for `ADR-NNNN` references and fails when it has no
-`docs/adr/NNNN-*.md` file. Motivation: commit b0b334b0 (2026-08-28)
+`docs/adr/<area>/NNNN-*.md` file. Motivation: commit b0b334b0 (2026-08-28)
 deleted four accepted ADRs (0130/0131/0136/0137) as a side effect of an
 unrelated fix and nothing noticed for four days (PRD slice D1).
 
@@ -130,18 +130,19 @@ def scan(failures):
     for num in sorted(set(declared) & ids):
         declarers = declared[num]
         path = next(iter(ADR_DIR.rglob(f"{num}-*.md")))
+        rel_path = path.relative_to(ROOT).as_posix()
         target = stub_target(path.read_text(encoding="utf-8"))
         if target in declarers:
             continue
         if target:
             failures.append(
-                f"docs/adr/{num}-*.md is a stub for ADR-{target}, but "
+                f"{rel_path} is a stub for ADR-{target}, but "
                 f"{', '.join(sorted(declarers))} declares it consolidated. "
                 "A tombstone must point at the ADR that absorbed it."
             )
         else:
             failures.append(
-                f"docs/adr/{num}-*.md still holds its full text, but "
+                f"{rel_path} still holds its full text, but "
                 f"{', '.join(sorted(declarers))} declares it consolidated. "
                 "Either fold it into a tombstone naming that ADR (Status "
                 "superseded / '- Superseded by: ADR-NNNN'), delete it, or drop "
@@ -172,7 +173,7 @@ def scan(failures):
                         "former/retired/consolidated/superseded/deleted context")
                     continue
                 failures.append(
-                    f"{rel}:{lineno}: ADR-{num} has no docs/adr/{num}-*.md")
+                    f"{rel}:{lineno}: ADR-{num} has no docs/adr/<area>/{num}-*.md")
 
 
 def main():
@@ -183,7 +184,7 @@ def main():
         for f in failures:
             print(f"  {f}")
         return 1
-    print("PASS verify_adr_refs: every cited ADR-NNNN resolves to docs/adr/")
+    print("PASS verify_adr_refs: every cited ADR-NNNN resolves to docs/adr/<area>/")
     return 0
 
 

@@ -1667,7 +1667,7 @@ recording; a `jev_harness.py` script replayed by the recorder is `ai`.
 - `python3 scripts/validate-specs.py` - specs/goldens under `docs/specs/`.
 - `python3 scripts/checks/verify_adr_refs.py` (also in `make doc-checks`) -
   every `ADR-NNNN` cited in `docs/`, `.github/`, `CLAUDE.md` or any
-  `AGENTS.md` resolves to `docs/adr/NNNN-*.md`.
+  `AGENTS.md` resolves to `docs/adr/<area>/NNNN-*.md`.
 - `python3 scripts/checks/verify_adr_citations.py` (also in `make
   doc-checks`) - the companion of the line above: that one checks the id
   resolves, this one checks the citation is *true*. Two ways a consolidation
@@ -1764,7 +1764,7 @@ recording; a `jev_harness.py` script replayed by the recorder is `ai`.
   `mei_rules.STATUS_TO_KIND`; see `checks/` above.
 - `python3 scripts/checks/verify_adr_refs.py` (PRD slice D1, 2026-09-01) -
   every `ADR-NNNN` cited in `docs/adr/`, `docs/`, `.github/`,
-  `CLAUDE.md` and any `AGENTS.md` resolves to `docs/adr/NNNN-*.md`;
+  `CLAUDE.md` and any `AGENTS.md` resolves to `docs/adr/<area>/NNNN-*.md`;
   the ADR-0035 retired ids and the 2026-08-27 consolidated ids
   (0045/0046/0048, 0053-0119) are tolerated only with former/retired/
   consolidated/superseded/deleted context on the line (or, for the

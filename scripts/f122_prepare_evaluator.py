@@ -67,7 +67,7 @@ nothing, and the logo sitting in VRAM is never fetched. So:
   which the capture's own pixels then hide. Tetris 2's F14.2 re-score is the
   measured case - a 40 s frame that is `screen002.png` came back "drawing 3
   background rule(s)", the panel's cell (14,18) was under the capture, and
-  painting it changed no pixel (`docs/validation/`
+  painting it changed no pixel (`docs/validation/slices/`
   `f14.2-rescore-after-431-gauntlet-tetris2-2026-09-24.md`). A candidate whose
   frame a recorded screen owns is dropped, and a game whose every sampled second
   is owned is refused by name instead of handed over;

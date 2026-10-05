@@ -10645,8 +10645,8 @@ namespace
 		return (pixels + (pixels >= 0 ? 4 : -4)) / 8;
 	}
 
-	//Contra's player shape (docs/validation/contra-pose-offsets-and-flicker-
-	//2026-09-23.md §1): legs at y 14 under a torso shifted `torsoX` px right.
+	//Contra's player shape
+	//(docs/validation/measurements/contra-pose-offsets-and-flicker-2026-09-23.md §1): legs at y 14 under a torso shifted `torsoX` px right.
 	//OAM order puts the legs first, so they are the frontmost tiles.
 	OamFrame ContraRunFrame(uint32_t f, uint32_t torsoX, uint32_t repeat, bool legsFirst = true)
 	{

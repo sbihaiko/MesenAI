@@ -369,7 +369,7 @@ def main(argv=None):
                          "is the same parallelism at roughly half the wall "
                          "clock per candidate, and never more than three "
                          "quarters - the log has the range, not a single "
-                         "digit (docs/validation/"
+                         "digit (docs/validation/slices/"
                          "f1412-step-mode-emulator-2026-09-26.md)")
     ap.add_argument("--only", default=None, help="comma-separated labels")
     ap.add_argument("--log", default=None)
