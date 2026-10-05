@@ -130,5 +130,22 @@ namespace Mesen.Tests.Play
 		{
 			Assert.Empty(PlayRomPicker.Rows(new[] { R("/games/.hidden") }, new[] { R("/games/a.txt"), R("/games/.b.nes") }));
 		}
+
+		//The review of #845 (Grok 4.6, 2026-10-05): the configured game folder is a
+		//string out of settings.json, which a person can edit, and Path.GetFullPath
+		//throws on one the platform cannot spell. That throw would leave the press
+		//that opened the picker - the pad's Confirm on the home - and the sheet
+		//would never appear on the machine this exists for. A path that cannot be
+		//spelled is not a root: it is left out, like a blank.
+		[Fact]
+		public void A_root_the_platform_cannot_spell_is_left_out_instead_of_throwing()
+		{
+			//The unspellable folder is dropped and the two that can be spelled are
+			//not: this is a root left out, not a picker that refuses to open.
+			Assert.Equal(new[] { R("/roms"), R("/Volumes/My Book") },
+				PlayRomPicker.Roots("bad\0path", "/roms", new[] { "/Volumes/My Book" }).Select(r => r.Folder).ToArray());
+			//And a volume the platform cannot spell is not a row either.
+			Assert.Equal(new[] { R("/roms") }, PlayRomPicker.Roots(null, "/roms", new[] { "bad\0volume" }).Select(r => r.Folder).ToArray());
+		}
 	}
 }

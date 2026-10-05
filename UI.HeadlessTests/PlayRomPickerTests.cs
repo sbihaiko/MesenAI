@@ -290,6 +290,36 @@ public class PlayRomPickerTests : IDisposable
 		}
 	}
 
+	//The review of #845 (Grok 4.6, 2026-10-05) found this one, and it is the kind
+	//of defect no colour or focus case can see: the sheet's heading and its empty
+	//line are the two strings the view-model reads with
+	//ResourceHelper.GetMessage, and that reads the resource file's <Messages>
+	//section - the four picker strings landed as <Control> entries under a
+	//<Form>, which is what {l:Translate} resolves. GetMessage answers an id it
+	//does not hold with "[[" + id + "]]", so the one line that says what the
+	//surface is rendered as "[[RomPickerTitle]]", and a folder with nothing to
+	//open said "[[RomPickerEmpty]]". Words, never a key: the same rule W-X2
+	//already states for the sentences Play shows.
+	[AvaloniaFact]
+	public void The_sheet_says_its_own_title_in_words()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model) = ShowFirstRunHome();
+		model.OpenRomPicker();
+		Pump();
+		Assert.True(model.RomPicker.IsVisible, "the picker did not open, so this case would prove nothing");
+
+		//The heading is a bound TextBlock, so this is what the player reads.
+		TextBlock title = window.FindNamed<TextBlock>("RomPickerTitle");
+		Assert.True(title.IsOnScreen(), "the sheet's heading is not on screen");
+		Assert.False(string.IsNullOrWhiteSpace(title.Text), "the sheet's heading is empty");
+		Assert.DoesNotContain("[[", title.Text);
+
+		//And the sentence a folder with nothing to open shows, read the same way
+		//and empty while there is something to pick.
+		Assert.DoesNotContain("[[", model.RomPicker.EmptyText);
+	}
+
 	//The label of the row the pad's ring is on. The rows are the picker's own
 	//list, so this is "which row would Confirm act on" and nothing else.
 	private static string? FocusedRow(MainWindow window)

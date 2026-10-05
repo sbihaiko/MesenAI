@@ -45,8 +45,8 @@ public static class PlayRomPicker
 			if(string.IsNullOrWhiteSpace(folder)) {
 				return;
 			}
-			string full = Normalize(folder);
-			if(!seen.Add(full)) {
+			string? full = Normalize(folder);
+			if(full is null || !seen.Add(full)) {
 				return;
 			}
 			roots.Add(new RomPickerRoot(label, full));
@@ -96,8 +96,8 @@ public static class PlayRomPicker
 	//than a folder.
 	public static string? Ascend(string folder, IReadOnlyList<RomPickerRoot> roots)
 	{
-		string full = Normalize(folder);
-		if(roots.Any(r => SameFolder(r.Folder, full))) {
+		string? full = Normalize(folder);
+		if(full is null || roots.Any(r => SameFolder(r.Folder, full))) {
 			return null;
 		}
 		string? parent = Path.GetDirectoryName(full);
@@ -117,8 +117,8 @@ public static class PlayRomPicker
 		if(root != null) {
 			return root.Label;
 		}
-		string full = Normalize(folder);
-		string home = string.IsNullOrEmpty(homeFolder) ? "" : Normalize(homeFolder);
+		string full = Normalize(folder) ?? folder;
+		string home = string.IsNullOrEmpty(homeFolder) ? "" : Normalize(homeFolder) ?? "";
 		if(home.Length > 0 && full.StartsWith(home + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)) {
 			return "~" + full[home.Length..];
 		}
@@ -129,7 +129,9 @@ public static class PlayRomPicker
 	//and the volume itself when that is all there is (a Windows drive root).
 	private static string VolumeLabel(string volume)
 	{
-		string full = Normalize(volume);
+		//Null here means Roots is about to drop the volume; the label it returns
+		//for it is never read, so the volume's own text will do.
+		string full = Normalize(volume) ?? volume;
 		string name = Path.GetFileName(full);
 		return string.IsNullOrEmpty(name) ? full : name;
 	}
@@ -137,11 +139,21 @@ public static class PlayRomPicker
 	//One spelling per folder, so two names for the same place are one root. The
 	//trailing separator goes, except where it is the whole path (the filesystem
 	//root) or all but a Windows drive letter's.
-	private static string Normalize(string folder)
+	//
+	//Null when the platform cannot spell the folder at all - the configured game
+	//folder is a string out of settings.json, which a person can edit, and
+	//Path.GetFullPath throws on one with a null character in it. That throw would
+	//leave the press that opened the picker and the sheet would never appear, so a
+	//path that cannot be spelled is not a root (the same answer a blank gets).
+	private static string? Normalize(string folder)
 	{
-		string full = Path.GetFullPath(folder);
-		string trimmed = full.TrimEnd(Path.DirectorySeparatorChar);
-		return trimmed.Length == 0 || trimmed.EndsWith(":", StringComparison.Ordinal) ? full : trimmed;
+		try {
+			string full = Path.GetFullPath(folder);
+			string trimmed = full.TrimEnd(Path.DirectorySeparatorChar);
+			return trimmed.Length == 0 || trimmed.EndsWith(":", StringComparison.Ordinal) ? full : trimmed;
+		} catch(Exception) {
+			return null;
+		}
 	}
 
 	private static IEnumerable<string> Ordered(IEnumerable<string> paths)
@@ -155,6 +167,10 @@ public static class PlayRomPicker
 		if(string.IsNullOrEmpty(left) || string.IsNullOrEmpty(right)) {
 			return false;
 		}
-		return string.Equals(Normalize(left), Normalize(right), StringComparison.OrdinalIgnoreCase);
+		string? leftFull = Normalize(left);
+		string? rightFull = Normalize(right);
+		//Neither is a folder the platform can name, so neither is the other.
+		return leftFull is not null && rightFull is not null
+			&& string.Equals(leftFull, rightFull, StringComparison.OrdinalIgnoreCase);
 	}
 }

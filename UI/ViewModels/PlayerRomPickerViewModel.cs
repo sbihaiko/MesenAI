@@ -134,8 +134,13 @@ namespace Mesen.ViewModels
 		private void ShowFolder(string folder)
 		{
 			(IReadOnlyList<string> folders, IReadOnlyList<string> files) = FolderSource(folder);
-			PathText = PlayRomPicker.PathText(folder, _roots, ConfigManager.HomeFolder);
+			//The list first, the path line second: PathText is the property the
+			//focus arbiter watches (see the claim in PlayPadNavigationWiring), and
+			//the step is only complete once the new rows exist. The arbiter is
+			//posted, so it would survive either order today - this is so that it
+			//still does if it is ever made to answer in the same turn.
 			SetRows(PlayRomPicker.Rows(folders, files));
+			PathText = PlayRomPicker.PathText(folder, _roots, ConfigManager.HomeFolder);
 		}
 
 		private void SetRows(IReadOnlyList<RomPickerRow> rows)
