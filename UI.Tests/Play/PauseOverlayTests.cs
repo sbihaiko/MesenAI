@@ -143,6 +143,20 @@ namespace Mesen.Tests.Play
 			Assert.Equal(PlayEscAction.DismissPackPicker, PlayEsc.Next(true, PlaySheet.PackPickerOnLoad, overlayVisible: false));
 		}
 
+		//ADR-0255 slice 3: while the Controller sheet is capturing "press a
+		//control", Esc is the capture's own state - it releases the capture and the
+		//sheet stays up, so a second Esc is what closes the sheet. One chain, one
+		//more state; no second key handler.
+		[Fact]
+		public void Esc_releases_a_capture_before_it_closes_the_sheet()
+		{
+			Assert.Equal(PlayEscAction.CancelCapture, PlayEsc.Next(true, PlaySheet.Controller, overlayVisible: false, capturing: true));
+			Assert.Equal(PlayEscAction.CloseSheetToOverlay, PlayEsc.Next(true, PlaySheet.Controller, overlayVisible: false, capturing: false));
+			//The capture is the Controller sheet's state alone: it never changes what
+			//Esc does on any other sheet.
+			Assert.Equal(PlayEscAction.CloseSheetToOverlay, PlayEsc.Next(true, PlaySheet.Settings, overlayVisible: false, capturing: true));
+		}
+
 		//The full rule-8 walk: three presses from a sheet end with the game running.
 		[Fact]
 		public void Esc_sequence_from_a_sheet_is_overlay_then_resume()

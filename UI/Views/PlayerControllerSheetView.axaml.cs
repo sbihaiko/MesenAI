@@ -38,6 +38,16 @@ namespace Mesen.Views
 			}
 		}
 
+		//ADR-0255 slice 3: a REMAP row is picked. The sheet then waits for the pad
+		//control the player wants on it; the row carries the console control in its
+		//DataContext, as the PLAYERS rows carry their port.
+		private void OnRemapRow(object? sender, RoutedEventArgs e)
+		{
+			if(sender is Control { DataContext: ViewModels.ControllerSheetRemapRow row } && DataContext is ViewModels.ControllerSheetViewModel sheet) {
+				sheet.ArmRemap(row.Button);
+			}
+		}
+
 		//The keyboard case's action: write the preset back (the ViewModel keeps
 		//the guard - it only shows this button when nothing is bound).
 		private void OnRestoreKeyboard(object? sender, RoutedEventArgs e)

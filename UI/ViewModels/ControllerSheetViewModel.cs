@@ -114,6 +114,13 @@ namespace Mesen.ViewModels
 		public void Close()
 		{
 			IsVisible = false;
+			//ADR-0255 slice 3: the sheet's own mode dies with the sheet. The poll
+			//that would have ended a capture - the pad going away - stops with the
+			//sheet, and the capture is what the pad bridge reads to decide the pad is
+			//not the GUI's (MainWindowViewModel.IsControllerCapturing). Left armed
+			//here it would hold the pad out of the whole Play door for the rest of
+			//the session, so the one path that closes the sheet ends it.
+			EndCapture();
 		}
 
 		//The timer's lifetime follows the sheet's visibility, not the stricter read

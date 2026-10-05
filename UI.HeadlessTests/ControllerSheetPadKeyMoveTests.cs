@@ -1,4 +1,5 @@
 using Mesen.Config;
+using Mesen.Logic;
 using Mesen.ViewModels;
 using System;
 using Xunit;
@@ -77,5 +78,30 @@ public class ControllerSheetPadKeyMoveTests
 		Assert.NotNull(port2.Mapping1.LightPhaserButtons);
 		Assert.Contains(PadKey(1, 1), port2.Mapping1.LightPhaserButtons!);
 		Assert.DoesNotContain(PadKey(1, 1), port1.Mapping1.LightPhaserButtons ?? Array.Empty<ushort>());
+	}
+
+	//ADR-0255 slice 3, the rebind's write half: one console control's field inside
+	//a slot, read by the REMAP rows and written back by the capture. Every control
+	//the sheet offers has its own field (L/R included), a write is visible to the
+	//read, and writing one control leaves the others alone - a rebind that shared a
+	//field would bind two controls at once.
+	[Fact]
+	public void A_controls_field_round_trips_and_leaves_the_others_alone()
+	{
+		NesControllerConfig port = new();
+		foreach(SetupButton button in Enum.GetValues<SetupButton>()) {
+			Assert.Equal(0, ControllerSheetSlotWrite.Field(port.Mapping2, button));
+		}
+
+		ushort code = PadKey(1, 3);
+		ControllerSheetSlotWrite.SetField(port.Mapping2, SetupButton.Select, code);
+		Assert.Equal(code, ControllerSheetSlotWrite.Field(port.Mapping2, SetupButton.Select));
+		foreach(SetupButton other in Enum.GetValues<SetupButton>()) {
+			if(other != SetupButton.Select) {
+				Assert.Equal(0, ControllerSheetSlotWrite.Field(port.Mapping2, other));
+			}
+		}
+		//The slot next to it is untouched: the write is one field of one slot.
+		Assert.Equal(0, ControllerSheetSlotWrite.Field(port.Mapping1, SetupButton.Select));
 	}
 }

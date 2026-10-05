@@ -153,7 +153,14 @@ namespace Mesen.ViewModels
 				return;
 			}
 			PlaySheet sheet = CurrentPlaySheet();
-			switch(PlayEsc.Next(IsGameLoaded, sheet, IsPlayerOverlayVisible)) {
+			switch(PlayEsc.Next(IsGameLoaded, sheet, IsPlayerOverlayVisible, IsControllerCapturing)) {
+				case PlayEscAction.CancelCapture:
+					//ADR-0255 slice 3: Esc releases the capture and the sheet stays
+					//up, ready for another row. The sheet's own tail decides what
+					//"cancelled" means on screen.
+					ControllerSheet.CancelCapture();
+					break;
+
 				case PlayEscAction.DismissPackPicker:
 					//P.5: Esc on the first-start picker plays un-enhanced this session.
 					DismissPlayerPackPicker();

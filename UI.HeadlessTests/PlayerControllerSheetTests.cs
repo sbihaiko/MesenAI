@@ -141,6 +141,14 @@ public class PlayerControllerSheetTests : IDisposable
 
 	private static Button[] PlayerRows(Visual root) => root.FindAll<Button>().Where(b => b.Name == "ControllerSheetPlayerRow").ToArray();
 
+	//One of a REMAP row's two lights, by the row's control label (the row's own
+	//DataContext), so the class on the drawn dot is what is asserted and not only
+	//the view-model's answer.
+	private static Border LightOf(Visual root, string name, string label)
+	{
+		return root.FindAll<Border>().Single(b => b.Name == name && b.DataContext is ControllerSheetRemapRow row && row.Label == label);
+	}
+
 	//The sheet writes the global config through the same ConfigManager path the
 	//classic Input page uses; a test that seeds a port must put it back.
 	private static NesConfig SavedNes() => ConfigManager.Config.Nes.Clone();
@@ -1130,6 +1138,334 @@ public class PlayerControllerSheetTests : IDisposable
 			ConfigManager.Config.Gba = savedGba;
 			ConfigManager.Config.Sms = savedSms;
 			ConfigManager.Config.DefaultKeyMappings = savedFlags;
+		}
+	}
+
+	//ADR-0255 slice 3: REMAP is a mode of this sheet, not a dialog. The rows are
+	//the console's controls and each carries two lights - what the pad sends and
+	//what the port receives. The pad's own button is the pad side (the tester's
+	//list, the per-backend order slice 1 reads); the port's bound code being held
+	//is the port side. A row lit on the pad side and dark on the port side is a
+	//wrong binding made visible - here a binding whose device index moved.
+	[AvaloniaFact]
+	public void The_remap_rows_are_the_consoles_controls_each_with_the_pads_two_lights()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model) = ShowPlayWithGame();
+		OpenFromSettings(window, model);
+		ControllerSheetViewModel sheet = model.ControllerSheet;
+		Poll(sheet)!.Stop();
+		sheet.CurrentConsole = () => ConsoleType.Nes;
+		//The pad's own codes, as its backend names them (macOS: "Pad1 A" is device
+		//0's button 0), built from the tester's own per-backend table so the name a
+		//code gets is the name the sheet's button lookup reads back.
+		string[] backendNames = ControllerLivePad.NameList(GamepadBackend.GameController);
+		sheet.KeyName = key => "Pad" + (((key - ControllerDevices.BaseGamepadIndex) >> 8) + 1) + " " + backendNames[key & 0xFF];
+
+		NesConfig saved = SavedNes();
+		try {
+			ConfigManager.Config.Nes.Port1 = new NesControllerConfig();
+			ConfigManager.Config.Nes.Port2 = new NesControllerConfig();
+			//Device 0's A is bound to the console's A: a correct binding.
+			ConfigManager.Config.Nes.Port1.Mapping1.A = PadButton(0, 0);
+
+			GamepadTestItem pad = new(0) { Name = "Pad Zero", Backend = GamepadBackend.GameController };
+			sheet.Tester.Gamepads.Add(pad);
+			sheet.SelectedPadIndex = 0;
+			//The pad's own A is down, and the port's bound code is the one held -
+			//the two real sources, both lit.
+			pad.Buttons[0].IsPressed = true;
+			sheet.PressedKeys = () => new ushort[] { PadButton(0, 0) };
+			sheet.ApplyPad();
+			Dispatcher.UIThread.RunJobs();
+			window.UpdateLayout();
+			Dispatcher.UIThread.RunJobs();
+
+			Assert.True(sheet.ShowRemap);
+			Assert.True(window.FindNamed<StackPanel>("ControllerSheetRemap").IsOnScreen());
+			Assert.Equal(8, sheet.RemapRows.Count);
+			Assert.Equal("A", sheet.RemapRows[0].Label);
+			Assert.True(sheet.RemapRows[0].HasBinding);
+			Assert.True(sheet.RemapRows[0].PadLit);
+			Assert.True(sheet.RemapRows[0].PortLit);
+			//An unbound control lights nothing.
+			Assert.False(sheet.RemapRows[1].HasBinding);
+			Assert.False(sheet.RemapRows[1].PadLit);
+			Assert.False(sheet.RemapRows[1].PortLit);
+
+			//The lights are the drawing, not only the model: the lit class the style
+			//reads is on the row's own two dots.
+			Assert.Contains("lit", LightOf(window, "ControllerSheetRemapPadLight", "A").Classes);
+			Assert.Contains("lit", LightOf(window, "ControllerSheetRemapPortLight", "A").Classes);
+			Assert.DoesNotContain("lit", LightOf(window, "ControllerSheetRemapPadLight", "B").Classes);
+
+			//The binding's device index moves (the pad reconnected as device 1):
+			//the stale code is never held, so the port goes dark while the pad's own
+			//A still lights the pad side. The wrong binding is visible.
+			ConfigManager.Config.Nes.Port1.Mapping1.A = PadButton(1, 0);
+			sheet.ApplyPad();
+			Dispatcher.UIThread.RunJobs();
+			window.UpdateLayout();
+			Dispatcher.UIThread.RunJobs();
+			Assert.True(sheet.RemapRows[0].PadLit);
+			Assert.False(sheet.RemapRows[0].PortLit);
+			Assert.Contains("lit", LightOf(window, "ControllerSheetRemapPadLight", "A").Classes);
+			Assert.DoesNotContain("lit", LightOf(window, "ControllerSheetRemapPortLight", "A").Classes);
+
+			Assert.Equal(8, window.FindNamed<ItemsControl>("ControllerSheetRemapRows").ItemCount);
+			Assert.Equal(8, window.FindAll<Button>().Count(b => b.Name == "ControllerSheetRemapRow"));
+			Assert.Equal(8, window.FindAll<Border>().Count(b => b.Name == "ControllerSheetRemapPortLight"));
+			Assert.Equal(8, window.FindAll<Border>().Count(b => b.Name == "ControllerSheetRemapPadLight"));
+		} finally {
+			ConfigManager.Config.Nes = saved;
+		}
+	}
+
+	//Picking a row arms the capture; the next pad button that goes down (after the
+	//one that picked the row is released) is bound, through the same ConfigManager
+	//path and ApplyConfig() the classic Input page uses.
+	[AvaloniaFact]
+	public void Picking_a_remap_row_arms_it_and_the_next_pad_button_is_bound()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model) = ShowPlayWithGame();
+		OpenFromSettings(window, model);
+		ControllerSheetViewModel sheet = model.ControllerSheet;
+		Poll(sheet)!.Stop();
+		sheet.CurrentConsole = () => ConsoleType.Nes;
+
+		NesConfig saved = SavedNes();
+		try {
+			ConfigManager.Config.Nes.Port1 = new NesControllerConfig();
+			ConfigManager.Config.Nes.Port2 = new NesControllerConfig();
+			sheet.Tester.Gamepads.Add(new GamepadTestItem(0) { Name = "Pad Zero", Backend = GamepadBackend.GameController });
+			sheet.PressedKeys = () => Array.Empty<ushort>();
+			sheet.ApplyPad();
+			Dispatcher.UIThread.RunJobs();
+			window.UpdateLayout();
+			Dispatcher.UIThread.RunJobs();
+
+			//Tap the B row (the second one).
+			Click(window.FindAll<Button>().First(b => b.Name == "ControllerSheetRemapRow" && b.DataContext is ControllerSheetRemapRow { Label: "B" }));
+
+			Assert.True(sheet.IsCapturing);
+			Assert.True(model.IsControllerCapturing);
+			Assert.Contains("B", sheet.RemapNote);
+			Assert.Contains("Esc", sheet.RemapNote);
+
+			//The release that arms it, then the new button.
+			ushort x = PadButton(0, 2);
+			sheet.PressedKeys = () => new ushort[] { x };
+			sheet.RefreshRemap();
+			Assert.Equal(x, ConfigManager.Config.Nes.Port1.Mapping1.B);
+			Assert.False(sheet.IsCapturing);
+			Assert.False(model.IsControllerCapturing);
+			//The write is the port's own, and nothing else moved.
+			Assert.Equal(0, ConfigManager.Config.Nes.Port1.Mapping1.A);
+		} finally {
+			ConfigManager.Config.Nes = saved;
+		}
+	}
+
+	//ADR-0256 Decision 4: the pad's navigation controls may not be bound here, and
+	//the refusal is shown rather than swallowed. The pad's A is the preset's
+	//Confirm, so a capture that takes it refuses and stays armed.
+	[AvaloniaFact]
+	public void A_navigation_control_is_refused_visibly_and_nothing_is_written()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model) = ShowPlayWithGame();
+		OpenFromSettings(window, model);
+		ControllerSheetViewModel sheet = model.ControllerSheet;
+		Poll(sheet)!.Stop();
+		sheet.CurrentConsole = () => ConsoleType.Nes;
+		//The backend's own names, so PadNavControls resolves the pad's preset for
+		//it: the pad's A is Confirm and its B is Back (the Xbox family).
+		sheet.KeyName = key => key == PadButton(0, 0) ? "Pad1 A" : key == PadButton(0, 1) ? "Pad1 B" : "Pad1 " + (key & 0xFF);
+		sheet.KeyCode = name => name switch {
+			"Pad1 A" => PadButton(0, 0),
+			"Pad1 B" => PadButton(0, 1),
+			"Pad1 Up" => PadButton(0, 8),
+			"Pad1 Down" => PadButton(0, 9),
+			"Pad1 Left" => PadButton(0, 10),
+			"Pad1 Right" => PadButton(0, 11),
+			_ => 0
+		};
+
+		NesConfig saved = SavedNes();
+		try {
+			ConfigManager.Config.Nes.Port1 = new NesControllerConfig();
+			ConfigManager.Config.Nes.Port2 = new NesControllerConfig();
+			sheet.Tester.Gamepads.Add(new GamepadTestItem(0) { Name = "Pad Zero", Backend = GamepadBackend.GameController });
+			sheet.PressedKeys = () => Array.Empty<ushort>();
+			sheet.ApplyPad();
+
+			sheet.ArmRemap(SetupButton.A);
+			//Released, then the pad's own Confirm is pressed - the control the
+			//player opens menus with, and the one they would be stuck behind if it
+			//were bound here.
+			ushort confirm = PadButton(0, 0);
+			sheet.PressedKeys = () => new ushort[] { confirm };
+			sheet.RefreshRemap();
+
+			Assert.True(sheet.IsCapturing);
+			Assert.Equal(0, ConfigManager.Config.Nes.Port1.Mapping1.A);
+			Assert.NotEqual("", sheet.RemapNote);
+			Assert.DoesNotContain("is now", sheet.RemapNote);
+		} finally {
+			ConfigManager.Config.Nes = saved;
+		}
+	}
+
+	//ADR-0255 slice 3, trap 2: Esc cancels the capture through the one Esc router
+	//(PlayEsc's CancelCapture state), and the sheet stays up - a second Esc is what
+	//closes it. No second key handler races the chain.
+	[AvaloniaFact]
+	public void Esc_cancels_the_capture_through_the_esc_router_and_leaves_the_sheet_up()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model) = ShowPlayWithGame();
+		OpenFromSettings(window, model);
+		ControllerSheetViewModel sheet = model.ControllerSheet;
+		Poll(sheet)!.Stop();
+		sheet.CurrentConsole = () => ConsoleType.Nes;
+
+		NesConfig saved = SavedNes();
+		try {
+			ConfigManager.Config.Nes.Port1 = new NesControllerConfig();
+			ConfigManager.Config.Nes.Port2 = new NesControllerConfig();
+			sheet.Tester.Gamepads.Add(new GamepadTestItem(0) { Name = "Pad Zero", Backend = GamepadBackend.GameController });
+			sheet.PressedKeys = () => Array.Empty<ushort>();
+			sheet.ApplyPad();
+			sheet.ArmRemap(SetupButton.A);
+			Assert.True(sheet.IsCapturing);
+
+			model.TogglePlayerOverlay();
+
+			Assert.False(sheet.IsCapturing);
+			Assert.False(model.IsControllerCapturing);
+			//Still the Controller sheet: the capture ended, the sheet did not.
+			Assert.True(sheet.IsVisible);
+			Assert.Equal("", sheet.RemapNote);
+
+			//The next Esc is the ordinary one again.
+			model.TogglePlayerOverlay();
+			Assert.False(sheet.IsVisible);
+			Assert.True(model.IsPlayerOverlayVisible);
+		} finally {
+			ConfigManager.Config.Nes = saved;
+		}
+	}
+
+	//ADR-0255 slice 3, trap 1: while the sheet captures, the pad press is the
+	//capture's, so ADR-0256's bridge must not also turn it into a focus move or a
+	//Confirm. The one authority predicate answers it, so `IsControllerCapturing`
+	//is what the bridge reads - and a bridge tick with the pad's Confirm down moves
+	//nothing while a capture is armed.
+	[AvaloniaFact]
+	public void The_pad_bridge_leaves_the_pad_to_the_capture()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model) = ShowPlayWithGame();
+		OpenFromSettings(window, model);
+		ControllerSheetViewModel sheet = model.ControllerSheet;
+		Poll(sheet)!.Stop();
+		sheet.CurrentConsole = () => ConsoleType.Nes;
+
+		NesConfig saved = SavedNes();
+		try {
+			ConfigManager.Config.Nes.Port1 = new NesControllerConfig();
+			ConfigManager.Config.Nes.Port2 = new NesControllerConfig();
+			sheet.Tester.Gamepads.Add(new GamepadTestItem(0) { Name = "Pad Zero", Backend = GamepadBackend.GameController });
+			sheet.PressedKeys = () => Array.Empty<ushort>();
+			sheet.ApplyPad();
+			Dispatcher.UIThread.RunJobs();
+			window.UpdateLayout();
+			Dispatcher.UIThread.RunJobs();
+
+			//The pad, as the bridge and the capture both resolve it: the Xbox
+			//preset's own button names, so the D-pad is a navigation control.
+			Func<string, ushort> keyCode = name => name switch {
+				"Pad1 A" => PadButton(0, 0),
+				"Pad1 B" => PadButton(0, 1),
+				"Pad1 Up" => PadButton(0, 8),
+				"Pad1 Down" => PadButton(0, 9),
+				"Pad1 Left" => PadButton(0, 10),
+				"Pad1 Right" => PadButton(0, 11),
+				_ => 0
+			};
+			Func<ushort, string> keyName = key => key == PadButton(0, 0) ? "Pad1 A" : key == PadButton(0, 1) ? "Pad1 B" : "Pad1 X";
+			sheet.KeyName = keyName;
+			sheet.KeyCode = keyCode;
+			ushort confirm = PadButton(0, 0);
+
+			//Capturing: the pad's Confirm is the capture's. The bridge must not also
+			//take it as a Confirm - which, on the sheet, would activate the focused
+			//control (Done) and close the sheet - and must not move the focus with a
+			//direction either. The one authority predicate answers it.
+			sheet.ArmRemap(SetupButton.A);
+			Assert.True(model.IsControllerCapturing);
+			Control? armed = window.FocusManager?.GetFocusedElement() as Control;
+			PlayPadNavigationWiring.TickForTest(window, Array.Empty<ushort>(), TimeSpan.FromMilliseconds(50), keyName, keyCode);
+			PlayPadNavigationWiring.TickForTest(window, new ushort[] { confirm }, TimeSpan.FromMilliseconds(50), keyName, keyCode);
+			PlayPadNavigationWiring.TickForTest(window, new ushort[] { PadButton(0, 8) }, TimeSpan.FromMilliseconds(50), keyName, keyCode);
+
+			Assert.Same(armed, window.FocusManager?.GetFocusedElement() as Control);
+			Assert.True(model.ControllerSheet.IsVisible);
+			Assert.False(model.IsPlayerOverlayVisible);
+			//The press bound nothing: it is the capture's, and the capture has not
+			//run a tick of its own here.
+			Assert.True(sheet.IsCapturing);
+			Assert.Equal(0, ConfigManager.Config.Nes.Port1.Mapping1.A);
+		} finally {
+			ConfigManager.Config.Nes = saved;
+		}
+	}
+
+	//A capture is a mode of the sheet, and the sheet closing takes it with it. The
+	//poll that ends a capture the other way - the pad going away - stops with the
+	//sheet, so a capture left armed by the close would keep answering true to the
+	//one predicate ADR-0256's bridge asks (IsControllerCapturing), and the pad would
+	//stay out of the entire Play door: no focus moves, no Confirm, nothing, for the
+	//rest of the session. Reached by arm-then-Done-with-the-pointer, which is one
+	//click away from the ordinary path.
+	[AvaloniaFact]
+	public void Closing_the_sheet_ends_the_capture_it_was_in()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model) = ShowPlayWithGame();
+		OpenFromSettings(window, model);
+		ControllerSheetViewModel sheet = model.ControllerSheet;
+		Poll(sheet)!.Stop();
+		sheet.CurrentConsole = () => ConsoleType.Nes;
+
+		NesConfig saved = SavedNes();
+		try {
+			ConfigManager.Config.Nes.Port1 = new NesControllerConfig();
+			ConfigManager.Config.Nes.Port2 = new NesControllerConfig();
+			sheet.Tester.Gamepads.Add(new GamepadTestItem(0) { Name = "Pad Zero", Backend = GamepadBackend.GameController });
+			sheet.PressedKeys = () => Array.Empty<ushort>();
+			sheet.ApplyPad();
+
+			sheet.ArmRemap(SetupButton.A);
+			Assert.True(sheet.IsCapturing);
+			Assert.True(model.IsControllerCapturing);
+
+			//Done: back to W-P4, which is where this sheet came from.
+			model.CloseControllerSheetToOverlay();
+
+			Assert.False(sheet.IsCapturing);
+			//The one predicate the pad bridge asks (PlayPadNavigationWiring.
+			//HasAuthority): true here is a pad that moves no focus and confirms
+			//nothing anywhere in the Play door, for the rest of the session. What the
+			//bridge does with it while it *is* true is the sibling case above.
+			Assert.False(model.IsControllerCapturing);
+			Assert.Equal("", sheet.RemapNote);
+			//Back where the sheet came from, and the door is the player's again.
+			Assert.False(sheet.IsVisible);
+			Assert.True(model.IsPlayerOverlayVisible);
+		} finally {
+			ConfigManager.Config.Nes = saved;
 		}
 	}
 
