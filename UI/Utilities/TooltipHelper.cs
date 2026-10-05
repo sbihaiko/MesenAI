@@ -15,6 +15,11 @@ namespace Mesen.Utilities
 		public static void ShowTooltip(Control target, object? tooltipContent, int horizontalOffset)
 		{
 			try {
+				//Issue #872: replacing a tip discards the previous content, so release
+				//the subscriptions it owns. A tooltip re-shown as the same instance
+				//(updated in place) must not be torn down - hence the reference check.
+				object? previous = ToolTip.GetTip(target);
+
 				ToolTip.SetShowDelay(target, 0);
 				ToolTip.SetTip(target, tooltipContent);
 
@@ -23,6 +28,10 @@ namespace Mesen.Utilities
 				ToolTip.SetHorizontalOffset(target, horizontalOffset);
 
 				ToolTip.SetIsOpen(target, true);
+
+				if(previous is IDisposable disposable && !ReferenceEquals(previous, tooltipContent)) {
+					disposable.Dispose();
+				}
 			} catch(Exception) {
 				HideTooltip(target);
 			}
@@ -31,8 +40,15 @@ namespace Mesen.Utilities
 		public static void HideTooltip(Control target)
 		{
 			try {
+				//Issue #872: clearing the tip is how every popup tooltip is dropped
+				//(the pointer-exited handlers and their kin). Release the content's
+				//subscriptions here so no call site has to remember to.
+				object? content = ToolTip.GetTip(target);
+
 				ToolTip.SetTip(target, null);
 				ToolTip.SetIsOpen(target, false);
+
+				(content as IDisposable)?.Dispose();
 			} catch(Exception) { }
 		}
 	}
