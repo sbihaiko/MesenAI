@@ -67,7 +67,7 @@ source ADR-0255's Controller sheet reads.**
   is not the whole of it.** `WorkspaceShell.IsBarVisible` keeps the bar while a
   game runs unpaused *with a sheet over it* (`sheetOpen`), which is the shape
   ADR-0256 names: the on-load pack picker is posted over a game that is **not**
-  paused, and the bar - and therefore the strip - stays on screen over it. So
+  paused, and the bar — and therefore the strip — stays on screen over it. So
   the lamps are up on the home, with the pause overlay, and over a non-pausing
   surface; they are off only while a game fills the window with nothing over it.
   That is the honest consequence of the surface chosen, and it is also what a
