@@ -16,7 +16,7 @@ validation via `python3 scripts/validate-specs.py` (repo root).
 | **hires.txt extensions (GB/SMS + NES tag)** | [`hires-gbsms-v1-draft.md`](hires-gbsms-v1-draft.md) | **draft** (rev. 4, 2026-09-25) | backward-compatible extension of the HDNes format for GB/SMS (pending community review — ADR-0004); rev. 2: §7 additive NES-side opt-in tag `<bgPreservesBehindBgSprites>` (ADR-0224), ignored by loaders that do not know it; rev. 3: §7 declares the layer-3 edge and the byte-identical rule for packs that do not opt in (ADR-0224, amended); rev. 4: §8 `<bgCellRecord>`, the per-cell record of the frame a capture was taken from, bound to the `<background>` line above it (ADR-0236) |
 
 Golden fixtures under [`golden/`](golden/) (one folder per spec — `esp/`,
-`mep/`, `mei/`, `mep-recipe/`, `hires-gbsms/`, `textures/` — plus):
+`mep/`, `mep-nes/`, `mei/`, `mep-recipe/`, `hires-gbsms/`, `sheets/`, `synth/` — plus):
 
 | Golden | Path | Checked by | What it pins |
 |---|---|---|---|

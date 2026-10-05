@@ -25,7 +25,7 @@ before telling users which presets work.
   it, so a stale or missing core is rebuilt first.
 - A slang-shaders library: a checkout of
   `https://github.com/libretro/slang-shaders`, or the `Shaders` folder the app
-  uses (`~/Library/Application Support/MesenCE/Shaders`). The sweep only
+  uses (`~/Library/Application Support/MesenAI/Shaders`). The sweep only
   reads it. Write down which revision you swept; the summary records the path,
   not the revision.
 - `python3` 3.9 or later, standard library only.

@@ -90,8 +90,8 @@ MesenCE), ducking the chip as it already does on NES.
 
 - Non-tile modes (legacy SMS mode 0-3 beyond basic TMS9918).
 - Normal/texture maps and shaders (SUPER ZSNES territory; see PRD §6).
-- Any change to the existing NES pipeline, except the single additive,
-  opt-in tag of §7.
+- Any change to the existing NES pipeline, except the additive,
+  opt-in tags of §7 and §8.
 
 ## 5. Process
 
