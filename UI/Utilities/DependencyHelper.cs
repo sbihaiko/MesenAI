@@ -23,13 +23,12 @@ class DependencyHelper
 			try {
 				//In builds done via VS (without the "OptimizeUi" flag), the core is not embedded in the .exe (to improve build performance)
 				//Copy it directly from the bin folder to the home folder
-				string[] extensions = new string[] { ".dll", ".so", "dylib" };
-				foreach(string ext in extensions) {
-					string src = Path.Join(Program.OriginalFolder, "MesenCore" + ext);
+				foreach(string name in NativeDependencyExtractor.DebugCoreFileNames) {
+					string src = Path.Join(Program.OriginalFolder, name);
 					if(File.Exists(src)) {
 						//Through a new file, like the archive walk: the destination
 						//is a library a running instance may already have mapped.
-						NativeDependencyExtractor.ReplaceFromFile(src, Path.Join(dest, "MesenCore" + ext));
+						NativeDependencyExtractor.ReplaceFromFile(src, Path.Join(dest, name));
 					}
 				}
 			} catch { }
