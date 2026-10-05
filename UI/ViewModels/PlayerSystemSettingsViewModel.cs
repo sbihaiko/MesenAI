@@ -135,8 +135,6 @@ namespace Mesen.ViewModels
 			File.WriteAllText(probe, "test");
 			File.Delete(probe);
 
-			ConfigManager.CreateConfig(portable: !storeInUserProfile);
-
 			//The folder being left must not win the next launch: HomeFolder
 			//prefers a settings.json next to the executable and otherwise takes a
 			//documents folder that holds one, so the file is moved aside under
@@ -145,14 +143,34 @@ namespace Mesen.ViewModels
 			//moves: saves, packs and save states stay in the folder that holds
 			//them, which is what makes Change Folder - the path that copies them,
 			//with a progress bar - the door for moving a library.
-			string old = Path.Combine(leaving, "settings.json");
-			if(File.Exists(old)) {
-				string backup = Path.Combine(leaving, "settings.backup.json");
-				if(File.Exists(backup)) {
-					File.Delete(backup);
-				}
-				File.Move(old, backup);
+			//
+			//The switch below cannot be undone by retrying, so the three files it
+			//touches are snapshotted first and put back if anything after it
+			//throws - the in-memory folder with them. Without that a failed move
+			//left both folders holding a settings.json, the old one won the next
+			//launch and the choice reverted in silence, which is worse than the
+			//"could not be written" the surface says.
+			SettingsStorageMove move = SettingsStorageMove.Begin(target, leaving);
+			string folderBefore = ConfigManager.HomeFolder;
+			try {
+				SwitchConfigFolder(storeInUserProfile);
+				move.MoveOldSettingsAside();
+			} catch {
+				move.Rollback();
+				ConfigManager.RestoreHomeFolder(folderBefore);
+				throw;
 			}
+		}
+
+		//The folder switch itself. `ConfigManager.CreateConfig` is the call the
+		//wizard made, and it writes to the process's own default folders - which a
+		//test must never do - so it is the second seam here (the folder functions
+		//are the first). A test overrides this to write the same settings.json
+		//into the temp folder it handed the constructor, which is what lets the
+		//rollback above be exercised end to end.
+		protected virtual void SwitchConfigFolder(bool storeInUserProfile)
+		{
+			ConfigManager.CreateConfig(portable: !storeInUserProfile);
 		}
 
 		//Pick the keyboard preset. It writes the setting the first run wrote and

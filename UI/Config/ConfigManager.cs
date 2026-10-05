@@ -197,6 +197,17 @@ namespace Mesen.Config
 			_homeFolder = null;
 		}
 
+		//The folder this process had resolved, put back as it was. ResetHomeFolder
+		//re-resolves from what is on disk, and that answer is not the same thing:
+		//the folder in use may hold no settings.json at all (it was created, not
+		//chosen), so re-resolving can land somewhere the player never picked.
+		//Settings › System's storage write is the caller - a move that failed
+		//part-way restores the file state and this with it.
+		internal static void RestoreHomeFolder(string homeFolder)
+		{
+			_homeFolder = homeFolder;
+		}
+
 		public static string HomeFolder
 		{
 			get
