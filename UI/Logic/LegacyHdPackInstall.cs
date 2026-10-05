@@ -458,5 +458,41 @@ namespace Mesen.Logic
 			}
 			return SupportedRomVerdict.Contradicts;
 		}
+
+		//--- writing the MEP-ized output (ADR-0147) ---------------------------
+
+		//The stamp that makes an output folder recognisably ours on the next
+		//install: DecideOutputFolderHandling above refuses a non-empty folder
+		//without it, so a folder that carries content and no stamp is read as the
+		//user's own work.
+		public const string InstallStampFileName = ".mep-install.json";
+
+		//Opens the pack zip and extracts its pack root into targetFolder. Lives
+		//here rather than in the coordinator so that the failure classification is
+		//a return value a test can read, not a branch behind a private static
+		//(ADR-0125, the same placement rule DecideOutputFolderHandling follows).
+		public static bool TryExtractPack(string zipPath, string targetFolder, string romName, out string error)
+		{
+			error = "";
+			try {
+				Directory.CreateDirectory(targetFolder);
+				using ZipArchive outer = ZipFile.OpenRead(zipPath);
+				return ExtractToFolder(outer, targetFolder, romName, out error);
+			} catch(Exception ex) when(ex is IOException or UnauthorizedAccessException or InvalidDataException or ObjectDisposedException) {
+				error = "cannot extract legacy HD pack: " + ex.Message;
+				return false;
+			}
+		}
+
+		//Writes the two files that MEP-ize the extracted pack: pack.json, and the
+		//stamp that DecideOutputFolderHandling reads on the next install.
+		public static bool WriteInstallOutputs(string outFolder, string packJson, string stampJson, out string error)
+		{
+			error = "";
+			Directory.CreateDirectory(outFolder);
+			File.WriteAllText(Path.Combine(outFolder, "pack.json"), packJson);
+			File.WriteAllText(Path.Combine(outFolder, InstallStampFileName), stampJson);
+			return true;
+		}
 	}
 }
