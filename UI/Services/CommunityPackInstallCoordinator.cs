@@ -212,9 +212,18 @@ namespace Mesen.Services
 					break;
 			}
 
-			LegacyHdPackInstall.WriteInstallOutputs(outFolder,
+			if(!LegacyHdPackInstall.WriteInstallOutputs(outFolder,
 				BuildLegacyPackJson(entry, stampedSha1, romName),
-				BuildLegacyInstallStamp(entry, entry.Sha256), out _);
+				BuildLegacyInstallStamp(entry, entry.Sha256), out string writeError)) {
+				EmuApi.WriteLogEntry("[CommunityPackInstall] hd-legacy write failed: " + writeError);
+				//Leave no mep/ behind (#886) - the same invariant the
+				//extract-failure and Contradicts branches above hold. The
+				//extraction has already filled this folder, and a folder left
+				//without our .mep-install.json is read as the user's own work by
+				//the RefuseNonEmptyUnstamped branch on the next install.
+				ClearFolderForReinstall(outFolder);
+				return CommunityPackInstallOutcome.Failed(writeError);
+			}
 			EmuApi.WriteLogEntry("[CommunityPackInstall] hd-legacy installed (MEP-ized): " + outFolder);
 			return CommunityPackInstallOutcome.Installed(containerName, Array.Empty<string>(), Array.Empty<CommunityPackDepPrompt>());
 		}

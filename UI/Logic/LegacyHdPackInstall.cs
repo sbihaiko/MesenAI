@@ -471,6 +471,13 @@ namespace Mesen.Logic
 		//here rather than in the coordinator so that the failure classification is
 		//a return value a test can read, not a branch behind a private static
 		//(ADR-0125, the same placement rule DecideOutputFolderHandling follows).
+		//Catches Exception rather than a list of archive types (#886): the caller
+		//runs ClearFolderForReinstall only when this reports false, so anything
+		//that escaped the catch would skip that cleanup - and the input is a
+		//community-contributed archive plus a path this class did not build, which
+		//no closed list of types bounds. The objectDisposed/invalidData/IO cases
+		//are still the ones that actually occur; the ArgumentException family is
+		//what an unusable path raises before a file handle exists.
 		public static bool TryExtractPack(string zipPath, string targetFolder, string romName, out string error)
 		{
 			error = "";
@@ -478,21 +485,35 @@ namespace Mesen.Logic
 				Directory.CreateDirectory(targetFolder);
 				using ZipArchive outer = ZipFile.OpenRead(zipPath);
 				return ExtractToFolder(outer, targetFolder, romName, out error);
-			} catch(Exception ex) when(ex is IOException or UnauthorizedAccessException or InvalidDataException or ObjectDisposedException) {
+			} catch(Exception ex) {
 				error = "cannot extract legacy HD pack: " + ex.Message;
 				return false;
 			}
 		}
 
 		//Writes the two files that MEP-ize the extracted pack: pack.json, and the
-		//stamp that DecideOutputFolderHandling reads on the next install.
+		//stamp that DecideOutputFolderHandling reads on the next install. Reports
+		//rather than throws (#886): this runs after the extraction, which is the
+		//expensive half of an install, so a failure here - a full disk is the
+		//realistic case - has to reach the caller as a value it can act on, and
+		//what it does is clear the folder it just filled. Throwing instead would
+		//leave the extracted textures on disk with no .mep-install.json beside
+		//them, and the next install would read that folder as the user's own work
+		//(RefuseNonEmptyUnstamped) and refuse it.
+		//pack.json is written first, deliberately: the stamp is what claims the
+		//folder as ours, so it must not exist beside a pack.json that never landed.
 		public static bool WriteInstallOutputs(string outFolder, string packJson, string stampJson, out string error)
 		{
 			error = "";
-			Directory.CreateDirectory(outFolder);
-			File.WriteAllText(Path.Combine(outFolder, "pack.json"), packJson);
-			File.WriteAllText(Path.Combine(outFolder, InstallStampFileName), stampJson);
-			return true;
+			try {
+				Directory.CreateDirectory(outFolder);
+				File.WriteAllText(Path.Combine(outFolder, "pack.json"), packJson);
+				File.WriteAllText(Path.Combine(outFolder, InstallStampFileName), stampJson);
+				return true;
+			} catch(Exception ex) {
+				error = "cannot write the MEP install files in " + outFolder + ": " + ex.Message;
+				return false;
+			}
 		}
 	}
 }
