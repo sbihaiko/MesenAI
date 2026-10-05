@@ -26,6 +26,13 @@ namespace Mesen.Tests.Play
 	public class GamesFolderNoticeTests
 	{
 		//The defect, and the assertion that fails against the old string.
+		//
+		//What it pins exactly: the sentence that shipped. A differently worded
+		//promise - "recent folder", "where you left off" - would pass both facts
+		//here, and no test can do better than this, because the property that
+		//broke is whether a sentence is true rather than what a function computes.
+		//The guard against the next rewording is the review, and it is named here
+		//rather than left for someone to assume the test covers more than it does.
 		[Fact]
 		public void The_empty_games_folder_notice_does_not_promise_a_fallback_location()
 		{

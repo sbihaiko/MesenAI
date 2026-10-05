@@ -3,7 +3,8 @@
 - Status: accepted 2026-10-05 (the rule was put to the user as a choice and he
   picked it: **"Degradar no uso"** — accept any folder as the games folder, and
   never open on one that lists nothing; the change ships with the unit tests
-  this decision is pinned by, `UI.Tests/Play/GamesFolderChoiceTests`).
+  this decision is pinned by, `UI.Tests/Play/GamesFolderChoiceTests` and
+  `UI.Tests/Play/GamesFolderNoticeTests`).
 - Date: 2026-10-05
 - Related: issue #887, ADR-0123 (the host-free split `UI/Logic/` exists for),
   ADR-0256 Decision 9 (the ROM picker this rule also feeds)
@@ -44,24 +45,29 @@ set up a cabinet on Linux.
 
 **A folder is a candidate to open on only when it holds something. Where the app
 would have opened on the configured games folder and that folder answers nothing,
-it falls back to the folder holding the last game the player opened.**
+the app does not open there.**
 
-The fallback is `StartFolder`'s, and it is the file dialog's: the dialog is the
+What happens instead is **not** one thing, and the first version of this ADR said
+it was: it claimed a fallback to the last game's folder everywhere. The fallback
+is `StartFolder`'s, and `StartFolder` is the **file dialog's** — the dialog is the
 one place with a single "where to start" answer to give. Everywhere else the
-outcome is the plainer one — the folder is simply not used (`Usable` returns
-null, so it is not a root in the picker and not registered with the core), and
-nothing else takes its place.
+outcome is the plainer one: the folder is simply not used (`Usable` returns null,
+so it is not a root in the picker and not registered with the core), and nothing
+else takes its place. The fourth review of PR #894 found the headline and the cost
+bullet below still making the everywhere-claim after the string it came from had
+been corrected — this paragraph is what both of them mean.
 
 - The rule is `UI/Logic/GamesFolderChoice` — BCL and a path, nothing else — so
   `UI.Tests` runs it against real temp folders (ADR-0123). `HasEntries` enumerates
   rather than counting (it runs on every `Open ROM`), and answers false for a path
   that is missing, unreadable, or not a directory at all, because none of those is
   somewhere to open on.
-- `StartFolder(gameFolder, lastOpenedFolder)` is the precedence: the designated
-  folder, else the last game's folder, else nowhere in particular — the caller
-  decides what that means. The last-opened folder is the fallback rather than
-  nothing because a player who has a games folder set has almost certainly opened
-  something from it. **The fallback is held to the same rule as the setting** —
+- `StartFolder(gameFolder, lastOpenedFolder)` is the precedence, and its only
+  caller is `Open ROM`: the designated folder, else the last game's folder, else
+  nowhere in particular — the caller decides what that means. The last-opened
+  folder is the fallback rather than nothing because a player who has a games
+  folder set has almost certainly opened something from it. **The fallback is held
+  to the same rule as the setting** —
   the last game's folder can answer nothing too, when the ROM was on a stick that
   is not plugged in, and a fallback that re-creates the dead end it exists to
   avoid is not a fallback.
@@ -111,10 +117,11 @@ nothing else takes its place.
   this, and the second review of PR #894 traced the ring rather than the rule to
   find it.
 - **A legitimately empty games folder is no longer led with either.** That is the
-  cost of the rule and it is deliberate: a fresh player who has just created an
-  empty library gets the last-opened folder rather than their new empty one. It is
-  the same trade the picker's own rows already make, and the alternative was
-  telling an autofs node apart from an empty folder, which is not knowable from
-  the path.
+  cost of the rule and it is deliberate. In the picker the folder is simply not a
+  root — the last-played folder is *not* substituted for it there, and the roots
+  list is shorter by one — and `Open ROM` starts at the last game's folder only
+  when that folder answers something too, otherwise at the dialog's own default.
+  The alternative was telling an autofs node apart from an empty folder, which is
+  not knowable from the path.
 - The guard is now one function instead of three inline `Directory.Exists` calls,
   so the next entry point that needs it asks the same question.
