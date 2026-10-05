@@ -75,15 +75,16 @@ public:
 	//is spelled with, so a reader that takes it for one reads a key that is not
 	//there.
 	//
-	//#902: macOS answers it for every virtual key code its table has no Mesen
-	//key for and records the answer, so the sentinel entered a pressed set. The
-	//set reached the host, Lua's getPressedKeys and ShortcutKeyHandler, and each
-	//one had to know: the host filters it in PressedKeys.Decode, Lua drops it by
-	//accident (code 0's key name is the empty string), and the shortcut handler
-	//does not drop it at all - its non-emptiness is "a key is down" and its size
-	//is a press or a release. SetKeyState, a host export, is the other way in: it
-	//accepts 0 on every backend. WithoutNoKey is the one filter, so no reader has
-	//to know the sentinel exists.
+	//#902: macOS's key table answers it for every virtual key code the table has
+	//no Mesen key for, and the event handler recorded the answer, so the sentinel
+	//entered a pressed set. The set reached the host, Lua's getPressedKeys and
+	//ShortcutKeyHandler, and each one handled it differently: the host drops it in
+	//PressedKeys.Decode, Lua leaves a hole (its key name is empty, so the push is
+	//skipped while the table index still advances, and ipairs stops there), and
+	//the shortcut handler keeps it - its non-emptiness is "a key is down" and its
+	//size is a press or a release. SetKeyState is the other way in, and it is the
+	//one still open: it is a host export, and all three backends accept code 0.
+	//WithoutNoKey is the filter the facade applies to whatever a backend answers.
 	static constexpr uint16_t NoKey = 0;
 
 	static constexpr int BaseMouseButtonIndex = 0x200;

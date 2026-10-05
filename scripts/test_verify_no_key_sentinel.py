@@ -4,9 +4,16 @@
 The guard exists because nothing host-free can fail on #902: the writer is
 ObjC++ behind AppKit and `KeyManager.cpp` is not linked into
 `make core-unit-tests`, so a stand-in written for either would pass whatever the
-real file does. A guard that cannot fail is worth nothing, so each drift below
-is fed to the checker as text and asserted to be reported - and the real tree is
-asserted to hold the contract.
+real file does. A guard that cannot fail is worth nothing - and a guard that
+cannot *pass* is worth less, because it fails on every refactor and teaches
+everyone to route around it. So this file feeds the checker both ways:
+
+  * each drift below must be reported, in the words it claims to report it in;
+  * each refactor below must stay silent - the guard reads statements, so a
+    spacing change, a comment between the `if` and the write, Allman braces, a
+    renamed local, an unqualified `NoKey` or the early-return form are all the
+    same rule to it;
+  * and the repo's own three files must hold the contract.
 
 Usage:
   python3 scripts/test_verify_no_key_sentinel.py
@@ -22,8 +29,6 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 CHECK_PATH = REPO_ROOT / "scripts" / "checks" / "verify_no_key_sentinel.py"
 
 INTERFACE_OK = """
-	//"No key": the value an empty KeyCombination slot has, and the one code a
-	//pressed set must never carry.
 	static constexpr uint16_t NoKey = 0;
 
 	static constexpr int BaseMouseButtonIndex = 0x200;
@@ -51,7 +56,13 @@ vector<uint16_t> KeyManager::GetPressedKeys()
 }
 """
 
+#The handler as it is written: the monitor, the modifier branch (whose writes
+#index by a constant and are not the table's), the mapping, and the guarded
+#write. Both of the guard's arms read this block.
 MACOS_OK = """
+	NSEventMask eventMask = NSEventMaskKeyDown | NSEventMaskKeyUp | NSEventMaskFlagsChanged;
+
+	_eventMonitor = [NSEvent addLocalMonitorForEventsMatchingMask:eventMask handler:^ NSEvent* (NSEvent* event) {
 		if([event type] == NSEventTypeFlagsChanged) {
 			HandleModifiers((uint32_t) [event modifierFlags]);
 		} else {
@@ -60,10 +71,27 @@ MACOS_OK = """
 				_keyState[mappedKeyCode] = ([event type] == NSEventTypeKeyDown);
 			}
 		}
+
+		return nil;
+	}];
+
+	_connectObserver = [[NSNotificationCenter defaultCenter] addObserverForName:GCControllerDidConnectNotification object:nil queue:nil usingBlock:^ void (NSNotification* notification) {
+		AddController(controller);
+	}];
+
+void MacOSKeyManager::HandleModifiers(uint32_t flags)
+{
+	_keyState[116] = (flags & NX_DEVICELSHIFTKEYMASK) != 0;
+	_keyState[70] = (flags & NX_DEVICELCMDKEYMASK) != 0;
+}
 """
 
+MAPPING = "uint16_t mappedKeyCode = [event keyCode] >= 128 ? IKeyManager::NoKey : _keyCodeMap[[event keyCode]];"
+GUARD = "if(mappedKeyCode != IKeyManager::NoKey) {"
+WRITE_LINE = "_keyState[mappedKeyCode] = ([event type] == NSEventTypeKeyDown);"
+
+#(what the drift is, the file it is in, the text, the words the report must carry)
 CASES = [
-    #(what the drift is, the file it is in, the text, the words the report must carry)
     (
         "the sentinel loses its name",
         "interface",
@@ -74,7 +102,7 @@ CASES = [
         "the filter drops a different code",
         "interface",
         INTERFACE_OK.replace("keyCode != NoKey", "keyCode != BaseMouseButtonIndex"),
-        ["no longer keeps the keys"],
+        ["no longer compares against"],
     ),
     (
         "the backend's set stops being filtered",
@@ -83,19 +111,99 @@ CASES = [
             "return IKeyManager::WithoutNoKey(_keyManager->GetPressedKeys());",
             "return _keyManager->GetPressedKeys();",
         ),
-        ["no longer runs the backend's answer through"],
+        ["no longer *returns*"],
+    ),
+    (
+        "the filter is called and its result discarded",
+        "key_manager",
+        KEY_MANAGER_OK.replace(
+            "return IKeyManager::WithoutNoKey(_keyManager->GetPressedKeys());",
+            "IKeyManager::WithoutNoKey(_keyManager->GetPressedKeys());\n\t\treturn _keyManager->GetPressedKeys();",
+        ),
+        ["no longer *returns*"],
     ),
     (
         "macOS maps to a literal 0 again",
         "macos",
         MACOS_OK.replace(">= 128 ? IKeyManager::NoKey :", ">= 128 ? 0 :"),
-        ["no longer answers `IKeyManager::NoKey`"],
+        ["the key-code mapping is gone"],
     ),
     (
         "macOS writes the sentinel's slot unguarded",
         "macos",
-        MACOS_OK.replace("if(mappedKeyCode != IKeyManager::NoKey) {", "if(true) {"),
-        ["no longer inside an `if(... NoKey ...)`"],
+        MACOS_OK.replace(GUARD + "\n", "").replace("\t\t\t}", "\t\t\t", 1),
+        ["is not guarded by a test of"],
+    ),
+    (
+        "the guard is inverted",
+        "macos",
+        MACOS_OK.replace(GUARD, "if(mappedKeyCode == IKeyManager::NoKey || true) {"),
+        ["is not guarded by a test of"],
+    ),
+    (
+        "the guard is short-circuited",
+        "macos",
+        MACOS_OK.replace(GUARD, "if(mappedKeyCode != IKeyManager::NoKey || true) {"),
+        ["is not guarded by a test of"],
+    ),
+    (
+        "the sentinel's own slot is written by a constant",
+        "macos",
+        MACOS_OK.replace(WRITE_LINE, "_keyState[0] = ([event type] == NSEventTypeKeyDown);"),
+        ["writes the sentinel's own slot"],
+    ),
+    (
+        "a second, unguarded write joins the handler",
+        "macos",
+        MACOS_OK.replace(WRITE_LINE + "\n\t\t\t}", WRITE_LINE + "\n\t\t\t}\n\t\t\t_keyState[[event keyCode] & 0x7F] = true;"),
+        ["is not guarded by a test of"],
+    ),
+    (
+        "the event handler moves out of this file",
+        "macos",
+        MACOS_OK.replace("addLocalMonitorForEventsMatchingMask", "addSomewhereElseEntirely"),
+        ["no `addLocalMonitorForEventsMatchingMask` handler"],
+    ),
+]
+
+#The other half of a guard's job: the same rule written differently. A report on
+#any of these is a false positive, and a guard that has them gets deleted.
+CLEAN_CASES = [
+    (
+        "the guard is written with a space before the parenthesis",
+        "macos",
+        MACOS_OK.replace(GUARD, "if (mappedKeyCode != IKeyManager::NoKey) {"),
+    ),
+    (
+        "a comment sits between the guard and the write",
+        "macos",
+        MACOS_OK.replace(WRITE_LINE, "//the sentinel is not a key\n\t\t\t" + WRITE_LINE),
+    ),
+    (
+        "the sentinel is tested with an early return instead",
+        "macos",
+        MACOS_OK.replace(GUARD + "\n\t\t\t\t" + WRITE_LINE + "\n\t\t\t}",
+                         "if(mappedKeyCode == IKeyManager::NoKey) { return nil; }\n\t\t\t" + WRITE_LINE),
+    ),
+    (
+        "the local is renamed",
+        "macos",
+        MACOS_OK.replace("mappedKeyCode", "code"),
+    ),
+    (
+        "the sentinel is spelled unqualified",
+        "macos",
+        MACOS_OK.replace("IKeyManager::NoKey", "NoKey"),
+    ),
+    (
+        "the brace is on its own line",
+        "macos",
+        MACOS_OK.replace(GUARD, "if(mappedKeyCode != IKeyManager::NoKey)\n\t\t\t{"),
+    ),
+    (
+        "the filter renames its loop variable",
+        "interface",
+        INTERFACE_OK.replace("keyCode", "code"),
     ),
 ]
 
@@ -116,11 +224,18 @@ def check_all(checker, interface: str, key_manager: str, macos: str) -> list[str
     return errors
 
 
+def with_text(which: str, text: str) -> tuple[str, str, str]:
+    texts = {"interface": INTERFACE_OK, "key_manager": KEY_MANAGER_OK, "macos": MACOS_OK}
+    texts[which] = text
+    return texts["interface"], texts["key_manager"], texts["macos"]
+
+
 def real_tree_errors(checker) -> list[str]:
+    root = CHECK_PATH.parents[2]
     errors: list[str] = []
-    checker.check_interface(CHECK_PATH.parents[2].joinpath("Core", "Shared", "Interfaces", "IKeyManager.h").read_text(encoding="utf-8"), errors)
-    checker.check_key_manager(CHECK_PATH.parents[2].joinpath("Core", "Shared", "KeyManager.cpp").read_text(encoding="utf-8"), errors)
-    checker.check_macos(CHECK_PATH.parents[2].joinpath("MacOS", "MacOSKeyManager.mm").read_text(encoding="utf-8"), errors)
+    checker.check_interface(root.joinpath("Core", "Shared", "Interfaces", "IKeyManager.h").read_text(encoding="utf-8"), errors)
+    checker.check_key_manager(root.joinpath("Core", "Shared", "KeyManager.cpp").read_text(encoding="utf-8"), errors)
+    checker.check_macos(root.joinpath("MacOS", "MacOSKeyManager.mm").read_text(encoding="utf-8"), errors)
     return errors
 
 
@@ -129,11 +244,9 @@ def main() -> int:
     failures = 0
 
     for name, which, text, expected in CASES:
-        texts = {"interface": INTERFACE_OK, "key_manager": KEY_MANAGER_OK, "macos": MACOS_OK}
-        texts[which] = text
-        case_errors = check_all(checker, texts["interface"], texts["key_manager"], texts["macos"])
-        joined = " | ".join(case_errors)
-        if not case_errors:
+        errors = check_all(checker, *with_text(which, text))
+        joined = " | ".join(errors)
+        if not errors:
             print(f"FAIL: the guard stayed silent on: {name}", file=sys.stderr)
             failures += 1
         elif not any(word in joined for word in expected):
@@ -142,8 +255,16 @@ def main() -> int:
         else:
             print(f"ok   the guard reports: {name}")
 
-    #The positive control: the checker reports nothing on texts that hold the
-    #contract, so a guard that simply always failed would be caught here.
+    for name, which, text in CLEAN_CASES:
+        errors = check_all(checker, *with_text(which, text))
+        if errors:
+            print(f"FAIL: the guard reports a rewrite of the same rule: {name} - {errors}", file=sys.stderr)
+            failures += 1
+        else:
+            print(f"ok   the guard stays silent on: {name}")
+
+    #The positive control: nothing reported on the texts that hold the contract,
+    #so a checker that simply always failed would be caught in the loop above.
     control = check_all(checker, INTERFACE_OK, KEY_MANAGER_OK, MACOS_OK)
     if control:
         print(f"FAIL: the guard reports the contract-holding text as broken: {control}", file=sys.stderr)
@@ -162,7 +283,7 @@ def main() -> int:
     if failures:
         print(f"FAIL: {failures} case(s) did not hold")
         return 1
-    print(f"PASS: {len(CASES) + 2} case(s) - the guard fails on every drift it claims to catch")
+    print(f"PASS: {len(CASES) + len(CLEAN_CASES) + 2} case(s) - the guard fails on every drift it claims to catch, and on no rewrite")
     return 0
 
 

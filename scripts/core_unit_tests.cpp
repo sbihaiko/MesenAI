@@ -6119,21 +6119,28 @@ namespace
 	//and keep everything else, in the backend's own order.
 	void TestTheNoKeySentinelIsNeverAKey()
 	{
-		Check(IKeyManager::NoKey == 0,
+		static_assert(IKeyManager::NoKey == 0,
 			"#902: the sentinel is 0, the value an empty KeyCombination slot holds");
 
 		Check(IKeyManager::WithoutNoKey({ IKeyManager::NoKey }).empty(),
 			"#902: a set holding only the sentinel is empty - no key is down");
 		Check(IKeyManager::WithoutNoKey({ IKeyManager::NoKey, IKeyManager::NoKey }).empty(),
 			"#902: ...however many times a backend reports it");
-
-		vector<uint16_t> kept = IKeyManager::WithoutNoKey({ 65, IKeyManager::NoKey, (uint16_t)IKeyManager::BaseMouseButtonIndex, 0x1005 });
-		Check(kept.size() == 3, "#902: every other code survives the filter");
-		Check(kept[0] == 65 && kept[1] == (uint16_t)IKeyManager::BaseMouseButtonIndex && kept[2] == 0x1005,
-			"#902: ...in the backend's own order, because the shortcut handler compares two reads position by position");
-
 		Check(IKeyManager::WithoutNoKey({}).empty(),
 			"#902: an empty set stays empty");
+
+		//The low codes are the sharp end: one of them is 1, and a filter that
+		//dropped everything below a threshold - or that deduplicated, or that
+		//capped the copy - passes a set made only of 65s. Four survivors, the
+		//sentinel first and last, and one repeated code in the middle.
+		vector<uint16_t> kept = IKeyManager::WithoutNoKey({
+			IKeyManager::NoKey, 1, 2, 65, 65, (uint16_t)IKeyManager::BaseMouseButtonIndex, 0x1005, IKeyManager::NoKey
+		});
+		Check(kept.size() == 6,
+			"#902: every code but the sentinel survives the filter, repeats included");
+		Check(kept.size() == 6 && kept[0] == 1 && kept[1] == 2 && kept[2] == 65 && kept[3] == 65
+			&& kept[4] == (uint16_t)IKeyManager::BaseMouseButtonIndex && kept[5] == 0x1005,
+			"#902: ...in the backend's own order, because the shortcut handler compares two reads position by position");
 	}
 
 	void TestPadChordFiresOnWhicheverPadIsInHand()
