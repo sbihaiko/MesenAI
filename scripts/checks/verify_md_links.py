@@ -26,13 +26,18 @@ is skipped, since those lines are samples rather than prose.
 import pathlib
 import re
 import sys
+from urllib.parse import unquote
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent.parent
 SKIP_DIRS = {".git", "out", "obj", "bin", "node_modules", ".vs", "runs"}
 SKIP_SCHEMES = ("http://", "https://", "mailto:", "ftp://", "tel:")
 
-#] target ) — the target may be wrapped in <> and may carry a title after a space.
-LINK = re.compile(r"\]\(\s*<?([^)>\s]+)>?(?:\s+\"[^\"]*\")?\s*\)")
+#] target ) — a CommonMark destination is either <angle-bracketed, and so allowed
+#to hold spaces> or bare and space-free; either may be followed by a "title".
+#The two forms are separate alternatives because the bare one must not eat the
+#space that starts the title (#883 review: a single pattern silently SKIPPED
+#every angle-bracketed destination with a space in it, checking nothing).
+LINK = re.compile(r"\]\(\s*(?:<([^>\n]*)>|([^)\s]+))(?:\s+\"[^\"]*\")?\s*\)")
 FENCE = re.compile(r"^\s*(```|~~~)")
 
 
@@ -58,13 +63,18 @@ def scan(failures):
             if in_fence:
                 continue
             for m in LINK.finditer(line):
-                target = m.group(1)
+                target = m.group(1) if m.group(1) is not None else m.group(2)
                 if target.startswith(SKIP_SCHEMES) or target.startswith("#"):
                     continue
                 path = target.split("#")[0]
                 if not path:
                     continue
-                if not (p.parent / path).resolve().exists():
+                #A markdown destination is a URL, so a space arrives as %20. Try
+                #the literal path first and the decoded one second: a filename
+                #that really holds a "%" is written as-is by convention here, and
+                #a bare "%25" is rare enough not to deserve being first.
+                if not (p.parent / path).resolve().exists() \
+                    and not (p.parent / unquote(path)).resolve().exists():
                     failures.append(
                         f"{rel}:{lineno}: '{target}' does not resolve from "
                         f"{p.parent.relative_to(ROOT).as_posix()}/")
