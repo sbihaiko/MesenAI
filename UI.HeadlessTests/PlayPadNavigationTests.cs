@@ -691,6 +691,53 @@ public class PlayPadNavigationTests : IDisposable
 			"Back did not dismiss the on-load pack picker: a first-run cabinet cannot choose a pack over an unpaused game (ADR-0256 Decision 2)");
 	}
 
+	//#848: the pad can walk W-P5's choices. The claim targets a *row*
+	//(PackPickerChoice - the stored choice, else the first one), and the search
+	//root the arbiter infers is the nearest ancestor that row and the focused
+	//control share, walked from the target's own parent: while the focus is on the
+	//target that is the row's own item container, holding one row, so a D-pad
+	//press had nowhere to go and only the first choice could ever be confirmed.
+	//
+	//`PlayerPackPickerTests.Keyboard_focus_moves_between_the_pack_choices` is not
+	//this case: it presses the arrow *keys*, which go through Avalonia's own XY
+	//focus and never reach the bridge, so it could not have caught it.
+	[AvaloniaFact]
+	public void The_pad_walks_the_pack_choices()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model) = ShowPlay();
+		//Two packs and W-P5's own "No pack" row, the same shape the picker's own
+		//suite builds.
+		model.PlayerPackChoices = new() {
+			new PlayerPackChoice(new PackPreferenceResolver.Candidate { Container = "/packs/aaa", Name = "Aaa Pack", PackId = "issue-1", Enabled = true }, null, 0, null),
+			new PlayerPackChoice(new PackPreferenceResolver.Candidate { Container = "/packs/bbb", Name = "Bbb Pack", PackId = "issue-2", Enabled = true }, null)
+		};
+		model.IsPlayerPackPickerVisible = true;
+		Pump();
+		Assert.True(model.IsPlayerPackPickerVisible, "the picker is not up, so this case would prove nothing");
+		WaitFor(() => FocusedChoice(window) == "Aaa Pack",
+			() => $"the picker did not put the ring on its first choice ({Focused(window, model)})");
+
+		Release(window);
+		Feed(window, PadNavAction.Down);
+		Pump();
+		WaitFor(() => FocusedChoice(window) == "Bbb Pack",
+			() => $"the pad could not leave the first pack choice ({Focused(window, model)})");
+
+		Release(window);
+		Feed(window, PadNavAction.Up);
+		Pump();
+		WaitFor(() => FocusedChoice(window) == "Aaa Pack",
+			() => $"the pad could not come back to the first choice ({Focused(window, model)})");
+	}
+
+	//The label of the pack row the ring is on: the first text its own row draws.
+	private static string? FocusedChoice(MainWindow window)
+	{
+		return (window.FocusManager?.GetFocusedElement() as Control)?
+			.GetVisualDescendants().OfType<TextBlock>().FirstOrDefault()?.Text;
+	}
+
 	//Finding 3: the Back-edge branch fires on a closeable grid with no door check,
 	//but Advanced (Classic) shows the same classic StateGrid - PlayHomeView's plain
 	//grid - as its game-selection and Save/Load screens. The bridge is attached in
