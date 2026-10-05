@@ -637,6 +637,12 @@ doc-checks-4:
 	python3 scripts/test_mep_recipe.py
 	python3 scripts/test_mep_compare_auto_palettes.py
 	python3 scripts/test_gen_mep_recipe_fixture.py
+	#ADR-0246 §5 (Hold to Compare): every renderer that runs a librashader
+	#chain must consult IsLookCompare, or the held frames keep the shader on
+	#that platform. macOS did from the start; Windows and Linux did not until
+	#2026-10-05, which is the bug this guard would have caught. The set is
+	#derived from the sources, so a new platform or renderer is covered.
+	python3 scripts/checks/verify_hold_compare_bypass.py
 
 ui: check-manifest InteropDLL/$(OBJFOLDER)/$(SHAREDLIB)
 	mkdir -p $(OUTFOLDER)/Dependencies
