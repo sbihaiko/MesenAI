@@ -3,7 +3,7 @@
 Two things came out of one session, and the second is the more valuable.
 
 The first is a portability result: the artist pipeline documented in
-[`../remastering-a-game.md`](../../remastering-a-game.md) ran end to end on
+[`../../remastering-a-game.md`](../../remastering-a-game.md) ran end to end on
 Metroid (USA) with **no code change at all**. Metroid is the third game the
 pipeline has been taken through, and the first that is neither Contra (the
 flagship) nor Castlevania.

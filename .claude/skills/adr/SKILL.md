@@ -16,14 +16,19 @@ versioned like any other doc, owned by `docs/AGENTS.md`. Accepted ADRs are
    Grep the register for the area (`grep -ril "<term>" docs/adr/`) and read
    the candidates. Amending or superseding an existing ADR is almost always
    better than minting a second one on the same topic.
-2. **Pick the area.** The register is split into six subfolders by the
+2. **Pick the area.** The register is split into seven subfolders by the
    decision's **subject** — `packs` (MEP/HD pack storage, discovery, install,
    catalogue, and the on-disk formats), `sprites` (tile and sprite capture,
    identity, sheets), `recorder` (recording, the TAS driver, coverage sweeps),
-   `ci-build` (the makefile, CI wiring, unit tests, guards), `audio` (export,
-   replacement, enhanced audio), `gui` (the Avalonia player). A decision that
-   touches two goes where its subject is, not where its effect lands;
-   `formats` was folded into `packs` for exactly that reason.
+   `ci-build` (the makefile, CI wiring, unit tests, guards, release
+   packaging), `audio` (export, replacement, enhanced audio), `gui` (the
+   Avalonia player), `core` (the emulator core's own behaviour — rendering and
+   the PPU, and the shared services behind them). A decision that touches two
+   goes where its subject is, not where its effect lands; `formats` was folded
+   into `packs` for exactly that reason, and `core` exists because three
+   decisions (ADR-0208, ADR-0237, ADR-0253) had no honest home among the other
+   six — each was filed by where its effect landed, which is the mistake this
+   rule names.
 3. **Decide which shape applies:**
    - *new decision* → new file;
    - *the same decision, refined* → edit that ADR in place and extend its

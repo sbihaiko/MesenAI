@@ -34,8 +34,8 @@ Two exceptions:
   (`/adr`), which allocates the next id and writes the file. Bugs go to the
   bug board (below), never the other way round.
 - The register is `docs/adr/<area>/NNNN-<kebab-title>.md`, versioned like any
-  other doc and owned by `docs/AGENTS.md`. The six areas are `packs`,
-  `sprites`, `recorder`, `ci-build`, `audio` and `gui`; the area is the
+  other doc and owned by `docs/AGENTS.md`. The seven areas are `packs`,
+  `sprites`, `recorder`, `ci-build`, `audio`, `gui` and `core`; the area is the
   decision's **subject**, and the `adr` skill carries the list. Old commits
   and links may point at `.dev-squad/adr/` (same files, moved 2026-09-03) or
   at the flat `docs/adr/NNNN-*.md` (same files, split into areas 2026-10-05) —
