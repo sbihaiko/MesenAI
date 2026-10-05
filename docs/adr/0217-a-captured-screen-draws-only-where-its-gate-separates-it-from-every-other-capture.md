@@ -39,7 +39,7 @@ the minted frame by 16 047 pixels.
 
 The 16 047 figure reproduces exactly (RGB compare, `1024x960`, the deployed
 `textures/backgrounds/screen003.png` against
-`~/f12.2-opus-sandbox/frames/Mike_Tyson_s_Punch-Out____1987___Nintendo_.png`).
+`~/f12.2-opus-sandbox/frames/Mike_Tyson_s_Punch-Out____1987___Nintendo_.png`; the other nine captures are 24 151 … 865 807).
 **The inference drawn from it is wrong, and the defect behind it is worse than
 the inference:** all 16 047 pixels sit in 66 cells in rows 3–11, columns 11–20 —
 the portrait box (Doc Louis and Little Mac, who are *sprites*; ADR-0050 captures

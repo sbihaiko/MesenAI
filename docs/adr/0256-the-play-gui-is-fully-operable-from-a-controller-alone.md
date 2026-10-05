@@ -307,10 +307,10 @@ place.
    >
    > **Why the others lose.** A as written is a Finder clone plus five call
    > sites. That pretends BIOS, packs, shaders and movie export are this bug.
-   > B cannot reach a stick you just plugged in, or a library one folder below
-   > the scan. An HTPC guess at Downloads is not a cabinet answer. C leaves
-   > *Open a ROM…* a lie. If the default folder is empty, the machine still
-   > cannot load a game.
+   > They are not. B cannot reach a stick you just plugged in, or a library one
+   > folder below the scan. An HTPC guess at Downloads is not a cabinet answer.
+   > C leaves *Open a ROM…* a lie. If the default folder is empty, the machine
+   > still cannot load a game. That does not close #845.
    >
    > **The stop rule.** Host-free in `UI/Logic/`: given a fake tree, the model
    > lists the roots (configured `GameFolder` when set, the app ROM folder, each

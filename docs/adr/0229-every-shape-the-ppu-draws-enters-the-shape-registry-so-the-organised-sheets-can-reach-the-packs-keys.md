@@ -94,7 +94,7 @@ sheet cell, against today's 19.2 % and 17.2 %; (2) **Dump size** — the grid du
 and the `sheets/` folder, before and after; (3) **Wall clock** — the recording's
 wall time, before and after, over the same emulated frame count. Confirm
 `mep_build` round-trips the kit byte-identically (ADR-0183 §4); if (i)'s cost is
-out of proportion to its coverage, (ii) or (iii) are measured next.
+out of proportion to its coverage, (ii) or (iii) are measured next. The decision is written here, by hand, after those numbers.
 
 ### Measured 2026-09-23 on a prototype of (i) (not a decision)
 

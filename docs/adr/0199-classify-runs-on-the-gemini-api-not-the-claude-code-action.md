@@ -21,9 +21,11 @@ list can be misconfigured silently: an unknown `with:` key only warns, and run
 
 On 2026-09-16 the user asked to move the pack automation off Claude — first
 Grok or OpenAI, then DeepSeek, finally Gemini. Cost was measured first, on the
-real fixtures in `.cache/validate-local/` (about 5,200 tokens in / 900 out per
-pack, so US$0.0006–US$0.02 per pack and US$0.01–US$0.35 for the 15-pack
-catalog). **Cost could not decide this**: the incumbent ran on the
+real fixtures in `.cache/validate-local/` (prompt ≈ 2,584 tokens, schema ≈ 287,
+`PACK_BRIEF` 1,300–2,550 across the 11 submissions measured, the script's own
+cap 80,000 characters never reached, output ≈ 900 — about 5,200 tokens in /
+900 out per pack, so US$0.0006–US$0.02 per pack and US$0.01–US$0.35 for the
+15-pack catalog). **Cost could not decide this**: the incumbent ran on the
 `CLAUDE_CODE_OAUTH_TOKEN` subscription, so its marginal cost was zero.
 
 Alternatives and why they lost:

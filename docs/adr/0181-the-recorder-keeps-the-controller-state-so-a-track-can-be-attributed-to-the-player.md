@@ -60,7 +60,7 @@ The de-duplication rule of `RecordOamFrame` is **unchanged**: a frame is still c
 
 A `cycles[]` or `sequences[]` entry gains an optional `"driver": "port1" | "port2"`, to distinguish "this figure moves while you hold Right" from "this figure happens to move a lot". Three shapes were measured on 2026-09-12 (`runs/golden-20260912/spike-pose-driver.md`; tracks come out of the recorder under `MESEN_POSE_TRACK_DUMP`, buttons on `MESEN_OAM_STREAM_DUMP`):
 
-- **Conditional frequency** (the pose's share of retained frames under a held button against its share overall) attributes Zelda's four walks to the four directions with a 3x margin — and attributes eleven enemy cycles to Up for having been on screen while Up was held. Where one button is held most of the run it says nothing: Contra's player and soldier runs both score Right 1.14, Excitebike's wheels A 1.00 for player and rivals alike. It is the frequency argument ADR-0177 rejected, failing the same way. **Rejected.**
+- **Conditional frequency** (the pose's share of retained frames under a held button against its share overall) attributes Zelda's four walks to the four directions with a 3x margin — and attributes eleven enemy cycles to Up for having been on screen while Up was held. Where one button is held most of the run it says nothing: Contra's player and soldier runs both score Right 1.14, Excitebike's wheels A 1.00 for player and rivals alike, Mega Man 3's runs 1.09–1.14. It is the frequency argument ADR-0177 rejected, failing the same way. **Rejected.**
 - **Lagged correlation** (phase advances against the button byte over a lag window) inherits the same confound. **Rejected.**
 - **Interruption** — a cycle that stops within a few frames of the button being released — is the only shape that is not a frequency argument, and the only one that says what "you control it" means. **This is the rule.**
 
@@ -84,7 +84,7 @@ Beside the other pose constants in `TileSheetTypes.h`, set by the F9.23 measurem
 | Excitebike | the wheels (period 2, 469 repeats) | 18 | 3 | none |
 | Excitebike | six 1–4-window cycles | < 4 | — | none |
 
-The stop-share margins are 0.90–1.00 for the player's cycles against 0.00–0.17 for everything else; the enemy cycles sharing the player's window count (Mega Man 3) are separated by the stop, not the count. The probes had to learn that a hold must last two full turns of the cycle *plus* a phase (Contra's period-6 run at 8 f a phase needs >= 104 f), that the screen must not scroll (on Contra every scroll brings soldiers that fuse with the figure), and that the first screen has water to the left of the start (a Left hold from x = 48 drops the player in and he stops animating).
+The stop-share margins are 0.90–1.00 for the player's cycles against 0.00–0.17 for everything else; the enemy cycles sharing the player's window count (Mega Man 3) are separated by the stop, not the count. The probes had to learn that a hold must last two full turns of the cycle *plus* a phase (Contra's period-6 run at 8 f a phase needs >= 104 f; 40 f and 96 f holds produced no window at all), that the screen must not scroll (on Contra every scroll brings soldiers that fuse with the figure — 120 f of Right from the stage-1 start yielded one or two windows in twenty holds, 104 f of Right then 104 f of Left, oscillating on the first screen, twelve), and that the first screen has water to the left of the start (a Left hold from x = 48 drops the player in and he stops animating).
 
 ### 5. Label, do not delete
 

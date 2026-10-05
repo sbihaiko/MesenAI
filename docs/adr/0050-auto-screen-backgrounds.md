@@ -7,7 +7,7 @@
 - Related: ADR-0049 (sibling-folder convention), ADR-0157 (headless input for the recorder)
 
 ## Context
-Comparing the auto layer with three community packs (`scripts/mep_compare.py`, 25/08/2026) showed the distance: xBRZ tiles are no closer to the artist's result than raw pixels, and the most elaborate pack (Zelda Remastered) barely works in tiles — 93 % of its tiles left transparent. Artists paint *screens*; the machine offered tiles.
+Comparing the auto layer with three community packs (`scripts/mep_compare.py`, 25/08/2026) showed the distance: xBRZ tiles are no closer to the artist's result than raw pixels (MAE 56 vs 56.5 on Castlevania), and the most elaborate pack (Zelda Remastered) barely works in tiles — 19 905 `<background>` lines conditioned by `tileAtPosition`, 93 % of its tiles left transparent. Artists paint *screens*; the machine offered tiles.
 
 ## Decision
 While the bootstrap records, a static screen (same background tile at every pixel for 15 consecutive frames, ≥ 50 % of the frame drawn) is saved once as `auto/textures/backgrounds/screenNNN.png` — the whole frame rebuilt from the background tiles (no sprites) and upscaled in one pass with the pack filter — plus up to three `tileAtPosition` anchors (rarest non-flat tiles on screen, ≥ 64 px apart) and a `[A&B&C]<background>…,1,0,0,20` line. Priority 20 (behind foreground sprites) so the screen replaces the tiles and sprites still draw on top. Per-session cap 300 screens; screens already in the pack keep their numbers on re-record.

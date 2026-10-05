@@ -42,6 +42,14 @@ Binary: `origin/main` at `7565c4868` plus two env-gated switches, both off when 
 
 A frame is **stale** when the drawn capture differs from the live plane on more than 2 000 px; the distribution is bimodal — a matching frame reads 55 to 1 362 px (upscale smoothing), every other drawn frame reads 2 800 px or more, and none of the 7 521 drawn frames in the four traces falls between. Routes: Ninja Gaiden `scripts/stages/ninjagaiden` `stage1-run` and Castlevania `scripts/stages/castlevania` `stage1-run` (freshly minted), both 60 s; Punch-Out!! power-on 60 s with no input (the ADR-0223 card route); and the Glass Joe fight recording of the 2026-09-25 re-measure as step-1 control (`fight1` state, 70 s).
 
+**Stale frames on the recordings as they stand.**
+
+| recording | frames | a capture drawn | stale |
+|---|---|---|---|
+| Ninja Gaiden `stage1-run` (the #499 pack, 15 captures) | 3 608 | 3 218 | **2 317** |
+| Punch-Out!! fight route (3 captures) | 4 208 | 247 | 48 |
+| Punch-Out!! card route (9 captures, re-recorded) | 3 606 | 2 012 | 3 |
+
 On Ninja Gaiden, **2 316 of the 2 318 stale frames** (re-recorded pack, identical gates) are at a fine scroll other than the drawing capture's own; two could not be aligned to a grid frame. On Castlevania it is 312 of 448, the other 136 same-`FineX` frames the capture owns as variants (ADR-0159 §1). Punch-Out!!'s 3 are same-`FineX`; ADR-0223 closed the card, and this confirms it.
 
 **Option B's cost.** The recorder's summary line reads `N screen(s) anchored (… K still matching another recorded screen …)`, and `K` is exactly the number of screens with `Picked` non-empty and `choice.Rivals > 0` (`FinalizeScreenAnchors`, counted before the ADR-0217 collision skip) — "Another recorded screen" undersells it, because `Rivals` counts retained frames at the capture's `FineX` that still pass the gate, not only other captures. On the 30-ROM bounded library as recorded for F12.16 (28 ROMs with captures), `K` sums to **104 of 241 pending screens, in 12 ROMs**; of the 219 captures written, B keeps **at least 118** (a lower bound). Worst cases: Donkey Kong (30 written, 33 flagged), Ice Climber (23 and 21), Pac-Man (25 and 16), Tetris (17 and 14), Double Dragon (2 and 2). Re-recorded with and without the switch:
