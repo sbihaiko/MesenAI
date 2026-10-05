@@ -446,6 +446,15 @@ doc-checks-2:
 	#ADR reference integrity (PRD slice D1): every ADR-NNNN cited in docs/ADRs/
 	#AGENTS.md/CLAUDE.md must resolve to docs/adr/NNNN-*.md.
 	python3 scripts/checks/verify_adr_refs.py
+	#The companion of the line above: that one checks the ID resolves, this one
+	#checks the citation is TRUE. Two ways a consolidation makes a citation that
+	#resolves and still lies: it moves a section number (`ADR-0196 §1` is written
+	#into 68 sites across Core/ and scripts/, and after the fold `§1` was 0189's
+	#own), or it leaves a sentence claiming an ADR was absorbed after that fold was
+	#undone (`ADR-0231, consolidated into ADR-0230` sat in ten files). No
+	#allow-list: an earlier revision excused 21 "pre-existing" breaks that were its
+	#own blind spot around bold-numbered sections.
+	python3 scripts/checks/verify_adr_citations.py
 	#The session-start index is the only register a session sees by default;
 	#four accepted ADRs were missing from it (0209, 0212, 0213, 0214) because
 	#the Status parser anchored on the first word. That guard is this one.

@@ -1294,7 +1294,7 @@ jobs:
               siblings = prior.get("siblings")
               if isinstance(siblings, list) and siblings:
                   meta["siblings"] = siblings
-          # ADR-0140/§3.3 (P.2): pack_id (id -> owner/repo -> issue-n) and
+          # ADR-0140 (PRD Part B §3.3, P.2): pack_id (id -> owner/repo -> issue-n) and
           # the origin it is bound to (owner/repo for GitHub hosts, else the
           # issue author's login). The catalog generator and the client (P.3)
           # read these from here — one shared resolution function

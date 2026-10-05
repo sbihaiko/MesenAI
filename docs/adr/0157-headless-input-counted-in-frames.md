@@ -1,231 +1,71 @@
-# ADR-0157: Headless input is counted in emulated frames, resolved from inside the frame
+# ADR-0157: Headless validation is frame-accurate input, an accuracy suite, and a HUD-only capture seam
 
 - Status: accepted
 - Date: 2026-09-05
-- Amended: 2026-09-05
-- Related: ADR-0158 (runtime mode, not compile-time — relies on §3), ADR-0162 (the accuracy harness drives input through this contract), ADR-0013 (same axis, exporter side), ADR-0050, ADR-0153, ADR-0156, PRD Part A Phase 9 (F9.13, F9.14), `scripts/headless_record.cpp`, `scripts/bootstrap_auto_packs.sh`, `scripts/gameplay_probe.py`
-
-## Amended 2026-09-05
-
-Section 2 originally required the harness to **drive** the core frame by frame:
-a single-frame InteropDLL entry point, a null-`_frameLimiter` guard in
-`ProcessEndOfFrame`, a hand-called `ControlManager::ProcessEndOfFrame`, and the
-override pushed through `UpdateInputState()` before each frame. Reading
-`zerkz/MesenCE`'s `Core/Shared/InputOverrideProvider.{h,cpp}` — the prior art
-the PRD's fork survey pointed at — showed that the property the slice exists
-for is already reachable from inside the core, at a fraction of the surface.
-
-An `IInputProvider` registered on the emulator has `SetInput()` called from
-*inside* the frame, once per frame, on the emulation thread. A provider that
-holds the **whole script in absolute frame numbers** therefore answers "which
-buttons are held on frame N" as a pure function of the script and
-`Emulator::GetFrameCount()` — no external thread has to wake up on time, or at
-all. The harness does not need to own pacing to own the result. Section 2 below
-is rewritten to that design; the frame-stepping approach moved to Alternatives
-as rejected-for-now, because it costs new InteropDLL surface and a change to
-the threading model to buy a property the provider already gives.
-
-Sections 1, 3 and 4 are unchanged, apart from one dangling phrase in section
-3 ("the frame-stepping path" -> "the headless path"); the rule it states — no
-`#ifdef` in `Core/` — is untouched.
-
-## Context
-
-`scripts/headless_record` drives a recording by the **host clock**. The core
-runs on its own emulation thread under the frame limiter; the harness sleeps
-in 50 ms steps and advances the input script when enough wall-clock seconds
-have passed, with each step declared in seconds (`InputStep::seconds`, the
-`input=<script>` parser). How many emulated frames a step covers is therefore
-a function of host load: the same script, the same ROM and the same binary
-produce a different number of frames per step on a loaded machine than on an
-idle one.
-
-That matters because the scripts are **menu navigation**, where a step is not
-a duration but a position in a sequence. F9's per-game scripts encode exactly
-that kind of knowledge: Punch-Out!! advances on Start alone (A or Right on the
-title types into the PASS KEY field), and both Zeldas need SELECT — not the
-D-pad — to move the heart on REGISTER YOUR NAME. One step landing early or
-late derails every step after it, and the failure is **silent**: the recording
-keeps running, capturing the wrong screen for the rest of its 300 s. Two packs
-held 69 near-identical captures of a name-registration screen; another was
-recorded entirely on a password screen while the batch printed `OK`.
-
-F9.13 answers "did this recording reach gameplay?" *after the fact*, from a
-pack on disk. That detector is worth keeping — it also catches a script that
-was simply wrong — but it is a diagnosis of the symptom. The cause is that the
-harness has no way to say "hold Start for 12 frames" and mean it.
-
-ADR-0013 already rejected the host clock as a time source on the other end of
-the same pipeline: exporter timing derives from an emulated 44100 Hz sample
-counter, precisely so fast-forward, a breakpoint pause or a stalled host frame
-cannot change what a capture means. Input is the same axis, unresolved.
-
-The mechanics of driving the core externally are known rather than
-speculative. The `libretro/MesenCE` fork does it, and its commit `41e0b517`
-("remove additional frame of latency due to stale input") records the trap
-that comes with it: refreshing the key manager is not enough, because the
-frame reads the *control manager* — `GetControlManager()->UpdateInputState()`
-has to run before `RunFrame()`, or the frame consumes the previous frame's
-input. Its `Emulator` changes record the rest: when `Run()` is not executing,
-`_frameLimiter` does not exist and `ProcessEndOfFrame` must tolerate that, and
-`_console->GetControlManager()->ProcessEndOfFrame()` has to be called by hand.
-
-**Non-goals.** This does not replace `gameplay_probe.py` (F9.13); the detector
-stays. It does not change what a pack contains, nor any pack-format
-precedence. It is not about emulation accuracy. It does not add movie
-recording or playback.
+- Related: ADR-0158, ADR-0159, ADR-0013, ADR-0005, ADR-0050, ADR-0153, ADR-0156, ADR-0133, ADR-0137, ADR-0131, ADR-0127, ADR-0150 (`Avalonia.Headless`), ADR-0138, ADR-0181, PRD Part A Phase 9 (F9.13, F9.14), PRD Part A slice H10
+- Consolidates: ADR-0162, ADR-0167
 
 ## Decision
 
-**1. The script's unit is the emulated frame, declared explicitly.** A line of
-an `input=<script>` file is `<count><unit> <buttons>`, where `<unit>` is `f`
-(frames) or `s` (seconds). A bare number is a **parse error**, not a default —
-the existing scripts use bare numbers meaning seconds, and silently
-reinterpreting `3` as three frames would corrupt every hand-tuned sequence in
-the recorder library. Migration is appending `s` to each line; the per-game
-scripts written by `bootstrap_auto_packs.sh` are regenerated in frames.
+**1. A script's unit is the emulated frame, declared explicitly and resolved inside the frame.** An `input=<script>` line is `<count><unit> <buttons>`; `<unit>` is `f` (frames) or `s` (seconds). A bare number is a parse error, not a default — existing scripts use bare numbers meaning seconds, and reinterpreting them as frames would corrupt every sequence. Migration appends `s`; the per-game scripts written by `scripts/bootstrap_auto_packs.sh` are regenerated in frames. `s` resolves at parse time at the region's nominal rate (`NTSC` 60.0988, `PAL` 50.0070 — the `pal` flag picks the region), so meaning never depends on host load. `HeadlessInputScript` is the pure half.
 
-`s` is resolved to frames **at parse time**, using the region's nominal frame
-rate (NTSC 60.0988, PAL 50.0070 — the `pal` flag already selects the region),
-rounded to the nearest frame. After parsing, the harness knows only frames, so
-a script's meaning never depends on host load regardless of which unit it was
-written in.
+*Amended 2026-09-13 (F9.22):* `<buttons>` may be `<port1>|<port2>`, one token per port, either `-`; a line without `|` holds nothing on port 2, and the harness plugs a controller into port 2 only when a line names one (`HeadlessInputScript::UsesPortTwo`). Needed because ADR-0181 §3's `port2` attribution had no recording to measure.
 
-*Amended 2026-09-13 (F9.22):* the `<buttons>` field may be `<port1>|<port2>`,
-one token per port, either of them `-`. A line without `|` holds nothing on
-port 2, and the harness plugs a controller into port 2 only when some line
-names one (`HeadlessInputScript::UsesPortTwo`), so every one-player script
-keeps producing the recording it always did. The engine applies port 1's
-token to the device on port 1 and port 2's to port 2; any other port is
-untouched. Needed because a two-player game's second figure exists only
-while someone moves it, and ADR-0181 §3's `port2` attribution had no
-recording to be measured on.
+**2. The script is resolved inside the frame, and the run ends on an absolute frame count.** A `HeadlessInputProvider` (`IInputProvider` + `INotificationListener`) holds the script and is registered on the emulator. `BaseControlManager::UpdateInputState()` calls `SetInput()` once per frame on the emulation thread (`NesPpu` at `InputScanline`, `SmsConsole`/`Gameboy` at end of frame). Buttons resolve by name (`BaseControlDevice::GetKeyNameAssociations()`) and set with `SetBitValue`, so one script drives a NES, GB and SMS pad; `SetInput` returns `false`, so it overlays physical input. It re-registers on `ConsoleNotificationType::GameLoaded` — a new console and control manager (holding no providers) is created per game load, the root of our documented "`input=` is silently a no-op" trap. End and start go through the same hook: an absolute stop frame, with `Emulator::Pause()` called from inside the first frame to reach it; the run is stopped on frame 1 before any recorder starts. The `<seconds>` argument is converted to a frame count at startup.
 
-**2. The script is resolved from inside the frame, and the run ends on an
-absolute frame count.** A `HeadlessInputProvider` — an `IInputProvider` plus an
-`INotificationListener` — holds the parsed script and is registered on the
-emulator. `BaseControlManager::UpdateInputState()` calls `SetInput()` on it once
-per frame, on the emulation thread (`NesPpu` at `InputScanline`,
-`SmsConsole`/`Gameboy` at end of frame), so the provider resolves the step
-covering `Emulator::GetFrameCount()` and applies it. Concretely:
+Because nothing depends on when frames happen, speed is free: `EmulationSpeed = 0` disables the limiter, so a 300 s recording finishes in a fraction of that; `realtime` restores it. `RamState::Random` power-on RAM is zeroed, as `RecordedRomTest::Run` already does — part of the decision: a game seeding RNG from uninitialised memory behaves identically every recording, so variety comes from the script (a future `ramseed=`), never a return to `RamState::Random`.
 
-- buttons are resolved **by name** through `BaseControlDevice::
-  GetKeyNameAssociations()` and set with `SetBitValue`, so one script drives a
-  NES, GB and SMS pad without knowing which is loaded;
-- `SetInput` returns `false`, so the script **overlays** physical input instead
-  of replacing it;
-- the provider **re-registers itself on `ConsoleNotificationType::GameLoaded`**.
-  A new console — and with it a new control manager, holding no providers — is
-  created on every game load. That is the structural root of our documented
-  "`input=` is silently a no-op" trap;
-- the run's **end** goes through the same hook: the provider is given an
-  absolute stop frame and calls `Emulator::Pause()` from inside the first frame
-  that reaches it. `Pause()` only sets a flag, so the emulation thread parks
-  after finishing exactly that frame. A host timer that fires whenever the OS
-  gets round to it would have covered a host-dependent number of frames;
-- the same mechanism fixes the *start*: the harness stops the run on frame 1
-  before starting any recorder, so what a recording is started on is a fixed
-  frame rather than "whatever the emulation thread reached while this thread
-  was calling into the DLL".
+**3. The headless path is a runtime mode, not compile-time.** No `#ifdef` in `Core/`. The `libretro/MesenCE` fork spreads `#ifdef LIBRETRO` through `Emulator.{h,cpp}`, `KeyManager`, `SoundMixer`, `WaveRecorder`, `VideoDecoder`; that cost is permanent and splits the harness from the shipped GUI. The core is one binary.
 
-The harness therefore never drives frames. It parses, hands the provider one
-list of absolute ranges, resumes, and waits. The recording length argument
-(`<seconds>`) is converted to a frame count at startup, so a run is a fixed
-number of frames.
+**4. Verification.** Same ROM, same script, same binary, twice ⇒ byte-identical `auto/` output; `Emulator::GetFrameCount()` cross-checks the harness cursor against the core's. `scripts/gameplay_probe.py` (F9.13) stays as an after-the-fact detector (`did this recording reach gameplay?`); frames are the cause's fix.
 
-Because nothing in the result depends on when frames happen, **speed is a free
-variable**: the frame limiter is turned off (`EmulationSpeed = 0`), which makes
-a 300 s recording finish in a fraction of that without changing a byte of its
-output. A `realtime` flag puts the limiter back for anyone who wants to watch
-one go by.
+**5. An accuracy suite runs our own binary in several configurations — arms — requiring the captured frames to be byte-identical**, via `scripts/accuracy_compare.py`. MEP (ADR-0005, ADR-0138) and the Enhanced Synth (ADR-0133) hook hot paths; a perturbed PPU timing or DMC shift shows up as a game subtly wrong only in our build. `mep_compare.py` compares *pictures*, `smoke_pack_headless.sh` checks a pack loads, the F9 harnesses measure what the builder wrote — none asks whether the machine still computed the same thing.
 
-One non-obvious consequence found while verifying section 4: covering the same
-frames is necessary but not sufficient. `RamState::Random` power-on RAM makes a
-game that reads uninitialised memory take a different path, and two runs over
-identical frames still differ. The harness zeroes it, as the core's own
-deterministic replay harness already does (`RecordedRomTest::Run`).
+- **Primitive:** each arm runs `scripts/headless_record` with `capture`, printing dimensions, frame number and FNV-1a checksum into memory (`Core/Shared/Video/FrameCapture.h`, F9.15); no PNG. The frame number must match too — equal checksums from runs stopped at different frames prove nothing.
+- **Determinism is inherited from §2.** Checkpoints are absolute frames: `boot-menu` = 180 (`CPU BEHAVIOR`, page 1/22, art only), `results-table` = 4808 (`TESTS PASSED: 141 / 144`; drawn at 4207, static after).
+- **Arms:** `vanilla`, `builder` (HD Pack Builder recording, `hdpack`), `hdpack` (loose pack in `HdPacks/<rom>/`), `mep` (container in `EnhancementPacks/`, textures **and** synth). The art arms install an **identity pack** — the builder records the pack at scale 1 over the compared range, then installs it — so the core logs a 100 % background tile match rate (659 tiles replaced) and "the frames must be identical" stays exact. `gen_mep_test_pack.py` builds `mep` from it.
+- **A divergence** means one of our layers changed what the emulator computed (or displayed) — a defect here, never a statement about upstream.
+- **Not vendored:** `--rom`, then `$MESENCE_ACCURACY_ROM`, then `tests/accuracy/AccuracyCoin.nes`; with none, `SKIP` and exit 0, and `--require-rom` makes it exit 2. AccuracyCoin is MIT ("Copyright (c) 2025 Chris Siebert"), but a 40 KB binary needs a maintenance story and `docs/AGENTS.md` keeps derivative game content out.
+- **Not in CI:** `make doc-checks` is stdlib-only and core-free (ADR-0137), `unit-tests.yml` builds no core (ADR-0131), `build.yml` has no `capture-tool` step. The `SKIP`-and-0 contract lets a workflow call it and stay green. Pure helpers (`parse_capture`, `frames_to_seconds`, `compare`, `rotate_tile_art`, `resolve_rom`, `format_report`) are separated per ADR-0127, covered by `scripts/test_accuracy_compare.py` (stdlib only). Cost: four arms × two checkpoints + one pack run — nine emulator runs, ~46 s on macOS/arm64; `--arms` narrows it.
+- **A harness that has never failed is not known to work:** `--perturb-flag ARM=FLAG` adds a recorder flag to one arm, `--perturb-texture ARM` rotates every `<tile>` rule in that arm's pack by one — *all* rules, because which tiles are on screen is not knowable from the manifest.
+- **Not tested:** upstream's accuracy (the two `TESTS PASSED: n / 144` cells must be the *same*, never the number), audio, a pack that changes the picture on purpose, non-NES consoles, intermediate frames. Negative: powering `builder` with `RamState::AllOnes` changed neither checkpoint. Rejected: comparing RAM (debug menu `$20-$2F`, `$50-$6F`, `$500-$5FF`) — `InteropDLL/DebugApiWrapper.cpp` exposes `GetConsoleState`, not RAM.
 
-Deterministic power-on RAM is therefore **part of this decision, not an
-implementation detail**, and it has a cost worth stating plainly: a game that
-seeds its RNG from uninitialised memory now behaves *identically in every
-recording*. Where a recording library previously got some free variety by
-running the same ROM more than once — different enemy patterns, different
-random level furniture, and therefore different tiles captured — it now gets
-the same run every time. Variety has to come from the script instead. If a
-future slice wants spread across recordings, the way to get it is an explicit,
-recorded seed (a `ramseed=` argument selecting a fixed pattern per run), never
-a return to `RamState::Random`, which would trade the reproducibility of
-section 4 away to buy it.
+**6. A HUD-only capture seam answers "did a toast appear", without a renderer or a checksum on faded pixels** (extends F9.15's `FrameCapture.h` `IsCaptureSizeValid`/`MeasureBorders`/`Checksum`, reached via `HeadlessCaptureFrame`/`HeadlessReadCapturedPixels`). It closes the one manual item `docs/validation/manual-validation-automation-plan.md`'s wave 3 called "genuinely manual, but structural rather than a wall" ("the OSD toast appearing.").
 
-**3. The headless path is a runtime mode, not a compile-time one.** No
-`#ifdef` in `Core/`. The libretro fork spreads `#ifdef LIBRETRO` through
-`Emulator.{h,cpp}`, `KeyManager`, `SoundMixer`, `WaveRecorder` and
-`VideoDecoder`; that cost is permanent and it means the headless harness and
-the shipped GUI no longer exercise the same code. The core is one binary, and
-the headless path is selected at runtime.
+- **The seam.** `SystemHud` (`Core/Shared/Video/SystemHud.h/.cpp`) is pure software: `DisplayMessage` queues a `MessageInfo` (fixed 3000 ms lifetime), `Draw` emits `DrawString` into a caller-owned `DebugHud`, `DebugHud::Draw` rasterises a `uint32_t*` ARGB buffer. It is already the global sink (`MessageManager::RegisterMessageManager`), `_osdEnabled` `true`, and `InteropDLL/EmuApiWrapper.cpp` already exports `DisplayMessage`. `VideoRenderer::RenderThread()` (`Core/Shared/Video/VideoRenderer.cpp`) is the only caller of `SystemHud::Draw`, gated on `if(_renderer)`; `scripts/headless_record.cpp` calls `InitializeEmu` with null handles, so `_renderer` is `nullptr` every headless run and the HUD never rasterises. F9.15's `CopyOutputBuffer`/`CaptureScreenshot` read `BaseVideoFilter::_outputBuffer`, which the HUD never touches. `VideoRenderer::ProcessAviRecording` already composes exactly this (`_systemHud->Draw`, `InputHud::DrawControllers` over a frame copy — no render thread). The seam follows it: `CaptureSystemHud`, an accessor that builds a local `DebugHud`, draws under `_hudLock` (the lock `RenderThread` takes), returns the buffer plus dimensions. `DrawInputHud`/`DrawScriptHud` are out of scope.
+- **The oracle is `MeasureBorders`/`IsBlank`, never `Checksum()`.** No message ⇒ `IsBlank == true`; a toast ⇒ `IsBlank == false`, independent of fade phase. `Checksum()` is printed for parity only, because `MessageInfo::GetOpacity()` fades off `std::chrono::high_resolution_clock` (and `DrawTurboRewindIcon` animates off another timer).
+- **New exports** in `InteropDLL/EmuApiWrapperHeadless.cpp`: `HeadlessCaptureHud(width, height, outWidth, outHeight, outPixelCount)` mirrors `HeadlessCaptureFrame`'s two-call pattern (then `HeadlessReadCapturedHudPixels(outPixels, maxPixels)`). `scripts/headless_record`'s `capture` gains a third line after `capture:` / `capture borders:`: `capture hud: <W>x<H> checksum=0x%08X blank=<0|1>`. Assert "a toast appeared" via `DisplayMessage` + `blank=0`; "no stray toast" via `blank=1`.
+- **Gotchas** (`roms/Zelda.nes`). The game-loaded toast (`[console] romfile`, `Emulator.cpp`'s `NTSC`/`PAL` name) is always resident — it only ages out via `SystemHud::UpdateHud` on running frames — so "is the HUD surface non-blank" reads `true`; `HeadlessSetOsdEnabled(bool)` (over `MessageManager::SetOptions`, resetting `outputToStdout`) is `false` before `LoadRom`, `true` for the instant a `hud-message=` run enqueues its toast. Capture runs right after `Resume()` (until a re-armed `HeadlessSetPauseFrame` parks it), not on the paused F9.15 frame, because `DrawPauseIcon` paints while paused; a ~100ms settle (inside the 3000ms lifetime) drains the transient the frame capture's own 200ms settle drains, completing the 100ms fade. A test for "no toast"/"toast present" must avoid the pause icon's corner.
+- **Rejected:** compositing the HUD onto the *filtered* frame (opacity non-determinism plus reconciling `GetEmuHudSize`'s surface with `BaseVideoFilterCapture`'s dimensions for a "what would the player actually see"); registering a `SoftwareRenderer` so `VideoRenderer.cpp:127`'s `if(_renderer)` path runs unmodified (starts the render thread's 32 ms `_waitForRender` loop for no fidelity gain).
 
-**4. Verification.** Recording the same ROM twice with the same script and the
-same binary must produce byte-identical `auto/` output. That check is the
-point of the slice — it is not obtainable today at any host load — and it is
-what a regression here would break first. `Emulator::GetFrameCount()` gives
-the harness the cross-check that its own frame cursor and the core's agree.
+## Context
+
+`scripts/headless_record` originally drove by the **host clock**: 50 ms steps advanced the `input=<script>` script by wall-clock seconds (`InputStep::seconds`), so frames-per-step depended on host load. The scripts are **menu navigation** — a position in a sequence — so a step landing early or late derails every step after it, silently. `gameplay_probe.py` (F9.13) diagnoses the symptom; the harness could not say "hold Start for 12 frames" and mean it. ADR-0013 had already rejected the host clock at the pipeline's other end (exporter timing from an emulated 44100 Hz counter).
+
+The mechanics are known. The `libretro/MesenCE` fork drives the core externally; its commit `41e0b517` ("remove additional frame of latency due to stale input") records the trap — refreshing the key manager is not enough, because the frame reads the *control manager*, so `GetControlManager()->UpdateInputState()` must run before `RunFrame()`. Reading `zerkz/MesenCE`'s `Core/Shared/InputOverrideProvider.{h,cpp}` showed the property is reachable inside the core: an `IInputProvider` gets `SetInput()` from *inside* the frame. The old §2 instead drove the core frame by frame — a single-frame InteropDLL entry point, a null-`_frameLimiter` guard in `ProcessEndOfFrame`, a hand-called `ControlManager::ProcessEndOfFrame`, the override through `UpdateInputState()` — rewritten here; its rule, no `#ifdef` in `Core/` (§3), is untouched.
+
+**Non-goals.** No replacement for `gameplay_probe.py`, no pack-format change, not about emulation accuracy, no movie recording.
+
+The suite exists because this fork's product is layers bolted onto an accurate emulator; the risk is not "is Mesen accurate" but "does the game behave differently because one of our layers is on". `100thCoin/AccuracyCoin` is the instrument: one NROM cartridge, 144 tests plus 5 informational "DRAW" screens, verdicts on screen (`TESTS PASSED: n / 144`) because there is no serial log and no exported memory-read. "zero power-on RAM or the comparison is noise" came from `Core/Shared/RecordedRomTest.{h,cpp}`.
+
+The HUD seam closes the last wave-3 item manual for a structural reason rather than a wall: in every headless run `_renderer` is `nullptr`, so `SystemHud::Draw` never runs and `_emuHudSurface.Buffer` stays null. "What remains genuinely manual" lists a pad, subjective audio and the OS file picker, unchanged.
 
 ## Consequences
 
-Recordings become reproducible: a pack is a function of (ROM, script, binary),
-which is what the F9 goldens have been implicitly assuming. Scripts become
-reviewable as sequences — "12 frames of Start" is a fact a reader can check
-against a game's behaviour, where "0.2 s" was a guess about scheduling.
-
-The costs are real. Every existing `input=` script and every `<Game>.play.txt`
-in the recorder library has to be migrated (mechanical: append `s`), and the
-parse error is deliberately noisy so none is missed silently. Turning the frame
-limiter off means a recording runs as fast as the host allows rather than in
-real time — wall-clock run durations in existing docs and scripts stop being
-predictive, and anything that assumed a 300 s recording takes 300 s needs
-re-reading. The new InteropDLL surface is four thin exports over the provider
-(load script, set stop frame, read either frame count); no core invariant is
-relaxed and no thread changes owner.
-
-This ADR decides the *harness*. Interactive playback in the GUI is untouched.
+- A pack becomes a function of (ROM, script, binary), which the F9 goldens assumed; scripts become reviewable as sequences ("12 frames of Start" is checkable, where `0.2 s` was a scheduling guess).
+- Every `input=` script and `<Game>.play.txt` must migrate (append `s`), and the parse error is deliberately loud. Wall-clock durations stop being predictive — a `make a` 300 s recording no longer takes 300 s. The new InteropDLL surface is four thin exports over the provider (load script, set stop frame, read either frame count).
+- Deterministic power-on RAM forecloses free variety; spread must come from an explicit recorded seed.
+- The accuracy suite is a local gate, not CI, by decision; it says nothing about upstream parity (self-comparison isolates `our layer`), audio, or the frames between checkpoints.
+- The `IsBlank` oracle is valid only unpaused and with the game-loaded toast suppressed; `Checksum()` is diagnostic.
+- This ADR decides the *harness*; interactive GUI playback is untouched.
 
 ## Alternatives
 
-**Drive the core frame by frame from the harness** — the design this ADR
-originally decided (see the amendment note): a single-frame InteropDLL entry
-point, `Emulator::ProcessEndOfFrame` tolerating the null `_frameLimiter` that
-only exists while `Run()` executes, `_console->GetControlManager()->
-ProcessEndOfFrame()` called by hand, and the override pushed through
-`UpdateInputState()` before each frame (the stale-input frame of latency the
-libretro fork's `41e0b517` records). Rejected for now: it buys the same
-property the provider already gives — input resolved against the core's frame
-counter, and a run that ends on an absolute frame — at the cost of new public
-InteropDLL surface, a guard on a core invariant that holds today, and a
-threading model where the harness owns pacing. It stays the right answer if we
-ever need to *interleave* work between frames (read memory at frame N, decide
-frame N+1), which nothing here does.
+**Drive the core frame by frame** (the original §2): a single-frame InteropDLL entry point, `Emulator::ProcessEndOfFrame` tolerating the null `_frameLimiter` that exists only while `Run()` executes, `_console->GetControlManager()->ProcessEndOfFrame()` by hand, the override through `UpdateInputState()`. Rejected for now — same property as the provider, at the cost of new public InteropDLL surface and harness-owned pacing. **Polling `Emulator::GetFrameCount()` from outside** lands the override a frame or two off, so the §4 check stays unobtainable. **The movie system** (`Core/Shared/Movies`, `MesenMovie`/`MovieRecorder`) stores input per frame but is a binary artifact, not a diffable text file.
 
-**Keep the emulation thread and poll `Emulator::GetFrameCount()`**, applying
-the next override when the counter reaches the step's target. Cheaper — no new
-entry point, no `_frameLimiter` guard — and it removes the gross drift, since
-a step would cover the frames it declares. Rejected because it does not
-deliver the property the slice exists for: the override still lands one or two
-frames off depending on when the polling loop wakes, so two runs of the same
-script still produce different output and the byte-identical check in §4 is
-unobtainable. It buys most of the robustness and none of the reproducibility.
-Note that this is *polling from outside*; §2 as amended resolves the script
-from inside the frame, which is what removes the last frame of slack.
+## Record
 
-**Use the existing movie system** (`Core/Shared/Movies`, `MesenMovie` /
-`MovieRecorder`), which already stores input per frame and replays it
-deterministically. Rejected as the authoring format: a movie is a recorded
-binary artifact, not a text file a person writes and reviews, and producing
-one means playing the game in the GUI. The F9 scripts' value is that they are
-hand-written, diffable statements of what a game's menus need. The movie
-system remains the right tool for capturing a long human play session, which
-is a different job.
-
-**Leave it as is and rely on F9.13.** Rejected: the detector reports that a
-recording missed gameplay, but the batch has no way to fix it other than
-re-running and hoping for a better schedule, and it cannot distinguish a wrong
-script from a script that lost a race.
+- 2026-09-05 — §2 rewritten from frame-by-frame driving (the frame-stepping approach) to an `IInputProvider` resolved inside the frame. §1, §3, §4 unchanged bar one dangling phrase in §3 (`the frame-stepping path` -> `the headless path`).
+- 2026-09-06 — ADR-0162 accepted by the user; `scripts/accuracy_compare.py` + `scripts/test_accuracy_compare.py`, slice H10 in `docs/roadmap/PRD-mesence-enhancement-ecosystem.md` §4 "Repo hygiene and tests". CI not wired: §5 stands.
+- 2026-09-07 — ADR-0167 accepted by the user; verified against a real recording, adding `HeadlessSetOsdEnabled` and the run-while-resumed capture — no `hud-message=` reads `capture hud: ... blank=1` 5/5, `hud-message=Headless|toast de teste` reads `blank=0` 20/20. `a human looks at a PNG`, a pad, subjective audio and the OS file picker stay manual.
+- 2026-09-13 — §1 amended (F9.22): two-port `<port1>|<port2>`, `UsesPortTwo` port-2 control.

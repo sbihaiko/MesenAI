@@ -51,7 +51,7 @@ take a *directory*; only the NES `HdPacks/<rom>.zip` path reads zips directly.
    without confusing users. This rule stands: MEP-v1 §5.1's parenthetical
    "installation order" is only the spec's example of a deterministic order;
    the MesenCE reference order is the lexicographic one defined here.
-5. **Loose HD pack wins** (ADR-0005/§5.1): when `HdPacks/<rom>/hires.txt`
+5. **Loose HD pack wins** (ADR-0005, MEP-v1 §5.1): when `HdPacks/<rom>/hires.txt`
    (or `HdPacks/<rom>.zip`) exists, the MEP `textures` section is skipped
    with a log line saying so. *Exception (ADR-0049, MEP-v1 §5.1):* a
    `textures` section coming from the ROM's sibling folder prevails over both

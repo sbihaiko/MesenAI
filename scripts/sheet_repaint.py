@@ -909,7 +909,7 @@ def apply_alpha(generated: Image, control: Image, verbose=False, label=""):
 
 
 def palette_correspondence(img: Image, canon: Region, variant: Region):
-    """ADR-0154 §5 step 1, mechanism per ADR-0161 — which canonical colour is
+    """ADR-0154 §5 step 1 (mechanism; ADR-0161 consolidated into ADR-0154) — which canonical colour is
     which variant colour.
 
     The ADR words this as "in NES colour-index order (0..3)", and the index is
