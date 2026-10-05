@@ -21,11 +21,15 @@
   the bridge registered), and Decision 7's repeat rides the same tick. The
   corrections the slices needed followed in #834 — a claim for ADR-0255's
   Controller sheet, which the Consequences name, and the tool sheet's claim
-  widened from the barcode kind to every kind it shows. **Not implemented**:
-  Decision 8's first run — storage
-  choice, keyboard preset and the ROM picker are not yet drivable from a pad,
-  which the Consequences call the hard part and which the PRD's stop rule still
-  waits on.
+  widened from the barcode kind to every kind it shows. **Decision 8 is answered
+  on 2026-10-04, later the same day**, by the user's pick *"Tirar o wizard do
+  caminho"*: the pre-core `SetupWizardWindow` leaves the startup path and the two
+  choices it asked - storage and keyboard preset - move into Settings, which the
+  bridge already drives. The ROM picker was never the gap (Play's home is
+  drivable from the pad through the bridge's content claim), so retiring the
+  wizard is what the first run came down to. Decision 8's own paragraph carries
+  the pick, its reasoning and what it costs, and the work is dispatched on the
+  strength of it.
   **Amended 2026-10-04**, the same day, after the work started: four more
   questions were put to the user and answered — the focus mechanism (Decision
   7's paragraph: the focus engine, not synthetic key events), what "one
@@ -195,6 +199,45 @@ heading are answered by them and by the section after.**
    are driven by the same rules above — this is the surface the ADR's own
    Consequences section already called "the hard part", and it is a slice of
    this work rather than a later ADR.
+
+   **Answered 2026-10-04, later the same day**, after the three surfaces were
+   mapped and one of them turned out not to be a gap at all: the user's pick is
+   *"Tirar o wizard do caminho"* - the option that reads "the app assumes the
+   default folder and goes straight to the MainWindow (already drivable from a
+   pad); the storage choice and the keyboard preset move into Settings, reachable
+   from the pad afterwards. It settles the question for good, but it changes a
+   contract already in the PRD (W-P12) and deletes a screen that exists today."
+   Concretely:
+   - **`SetupWizardWindow` is retired.** `Program.cs` no longer branches to it
+     when no settings file exists, and `App.ShowConfigWindow` goes with it. A
+     fresh install boots into the main window with the default home folder,
+     lands on the first-run home (W-P1) and is driven from there by the same
+     bridge every other surface uses - no second process, no restart, no pad
+     read that the core cannot make yet.
+   - **The storage choice becomes a Settings surface.** It writes the same
+     setting the wizard wrote; a switch that the running process cannot absorb
+     offers the restart the wizard's own flow performed (write, then relaunch)
+     rather than pretending the move happened.
+   - **The keyboard preset lives there too**, next to it, reusing the preset
+     writers `KeyPresets` already has and the Controller sheet's
+     `RestoreKeyboardPreset` rule instead of a second copy.
+   - **`DependencyHelper.ExtractNativeDependencies(ConfigManager.HomeFolder)`
+     is the wizard path's other job** and has to run on the normal startup path
+     - it is the one thing the retired screen did that a player never saw.
+   - **The PRD's drawn W-P12 sheet is retired with it**, and the PRD line says
+     so: the sheet kept the question and moved it inside the window, this pick
+     drops the question from the first run altogether and answers it in Settings
+     - which is what W-P12's own caption already promised ("Both can be changed
+     later in Settings").
+   - **Why this rather than the alternatives.** The wizard shows *before* the
+     core exists, and a pad is read through the core's key manager
+     (`InitializeEmu` registers it only when the window *and* the viewer handles
+     are present, `InteropDLL/EmuApiWrapper.cpp`). A pad in the wizard would
+     therefore mean either a second, platform-specific reading of the pad -
+     against this ADR's one-place rule - or initialising the core to read a
+     device on the screen whose whole job is to say where the core's files go,
+     which is the wrong order and would create files before the player chose
+     where they live.
 
 There is no second gesture into W-P4: the chord on any pad, and nothing else
 (the user's pick, 2026-10-04, over adding a long-press). A pad whose Select or
