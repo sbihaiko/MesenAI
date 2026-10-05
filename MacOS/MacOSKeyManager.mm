@@ -74,8 +74,16 @@ MacOSKeyManager::MacOSKeyManager(Emulator* emu)
 		if([event type] == NSEventTypeFlagsChanged) {
 			HandleModifiers((uint32_t) [event modifierFlags]);
 		} else {
-			uint16_t mappedKeyCode = [event keyCode] >= 128 ? 0 : _keyCodeMap[[event keyCode]];
-			_keyState[mappedKeyCode] = ([event type] == NSEventTypeKeyDown);
+			//#902: the table answers 0 - the "no key" sentinel - for a virtual key
+			//code it has no Mesen key for (Fn, the keypad codes it leaves out), and
+			//everything >= 128 maps there too, which is where media and brightness
+			//keys live. Recording it would write _keyState[0] and put a key in the
+			//pressed set that no key name resolves to and no binding can name; the
+			//key has no Mesen code, so nothing about it is recorded.
+			uint16_t mappedKeyCode = [event keyCode] >= 128 ? IKeyManager::NoKey : _keyCodeMap[[event keyCode]];
+			if(mappedKeyCode != IKeyManager::NoKey) {
+				_keyState[mappedKeyCode] = ([event type] == NSEventTypeKeyDown);
+			}
 		}
 
 		return nil;

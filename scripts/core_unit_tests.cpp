@@ -6109,6 +6109,34 @@ namespace
 		return PadChordFires(down, ShortcutKeyRules::SinglePadFamily());
 	}
 
+	//#902: key code 0 is the "no key" sentinel, not a key. It is what an empty
+	//KeyCombination slot holds, and what macOS answers for every virtual key code
+	//it has no Mesen key for (the holes in its table, and everything >= 128, where
+	//media and brightness keys live). A pressed set carrying it describes a key
+	//that is not there, and it is read as one: ShortcutKeyHandler takes the set's
+	//non-emptiness for "a key is down" and compares two reads by size, so the
+	//sentinel is a press and a release that never happened. The filter is what
+	//keeps that knowledge out of each reader - and it has to drop that one code
+	//and keep everything else, in the backend's own order.
+	void TestTheNoKeySentinelIsNeverAKey()
+	{
+		Check(IKeyManager::NoKey == 0,
+			"#902: the sentinel is 0, the value an empty KeyCombination slot holds");
+
+		Check(IKeyManager::WithoutNoKey({ IKeyManager::NoKey }).empty(),
+			"#902: a set holding only the sentinel is empty - no key is down");
+		Check(IKeyManager::WithoutNoKey({ IKeyManager::NoKey, IKeyManager::NoKey }).empty(),
+			"#902: ...however many times a backend reports it");
+
+		vector<uint16_t> kept = IKeyManager::WithoutNoKey({ 65, IKeyManager::NoKey, (uint16_t)IKeyManager::BaseMouseButtonIndex, 0x1005 });
+		Check(kept.size() == 3, "#902: every other code survives the filter");
+		Check(kept[0] == 65 && kept[1] == (uint16_t)IKeyManager::BaseMouseButtonIndex && kept[2] == 0x1005,
+			"#902: ...in the backend's own order, because the shortcut handler compares two reads position by position");
+
+		Check(IKeyManager::WithoutNoKey({}).empty(),
+			"#902: an empty set stays empty");
+	}
+
 	void TestPadChordFiresOnWhicheverPadIsInHand()
 	{
 		Check(PadChordFires({ PadKey(0, kPadSelectButton), PadKey(0, kPadStartButton) }),
@@ -17115,6 +17143,7 @@ TestW6TheFiltersAcceptTheExtendedFrame();
 	TestKeyboardBlockOnlyAppliesWhileRunning();
 	TestKeyboardBlockSparesNonKeyboardInputs();
 	TestSupersetStillShadowsTheExemptShortcut();
+	TestTheNoKeySentinelIsNeverAKey();
 	TestPadChordFiresOnWhicheverPadIsInHand();
 	TestTheWholePadFamilyAnswersTheChord();
 	TestPadChordIsNotAnsweredAcrossPadFamilies();

@@ -59,7 +59,12 @@ bool KeyManager::IsMouseButtonPressed(MouseButton button)
 vector<uint16_t> KeyManager::GetPressedKeys()
 {
 	if(_keyManager != nullptr) {
-		return _keyManager->GetPressedKeys();
+		//#902: a backend's set can carry the "no key" sentinel (macOS writes it
+		//for every virtual key code it cannot name). Filtered here, at the one
+		//place the set leaves the backend, so the host, Lua's getPressedKeys and
+		//ShortcutKeyHandler all read the same set and none of them has to know
+		//the sentinel exists.
+		return IKeyManager::WithoutNoKey(_keyManager->GetPressedKeys());
 	}
 	return vector<uint16_t>();
 }

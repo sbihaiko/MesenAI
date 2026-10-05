@@ -70,6 +70,22 @@ struct GamepadState
 class IKeyManager
 {
 public:
+	//"No key": the value an empty KeyCombination slot has, and the one code a
+	//pressed set must never carry. It is not a key - it is what "nothing here"
+	//is spelled with, so a reader that takes it for one reads a key that is not
+	//there.
+	//
+	//#902: macOS writes it into a pressed set for every virtual key code it has
+	//no Mesen key for - the holes in its own table, like Fn, and everything
+	//>= 128, which is where media and brightness keys live - and SetKeyState, a
+	//host export, is free to press it on any platform. The set reached the host,
+	//Lua's getPressedKeys and ShortcutKeyHandler, and each one had to know: the
+	//host filters it in PressedKeys.Decode, Lua drops it by accident (its key
+	//name is empty), and the shortcut handler does not drop it at all - its
+	//non-emptiness is "a key is down" and its size is a press or a release.
+	//WithoutNoKey is the one filter, so no reader has to know the sentinel.
+	static constexpr uint16_t NoKey = 0;
+
 	static constexpr int BaseMouseButtonIndex = 0x200;
 	static constexpr int BaseGamepadIndex = 0x1000;
 	//Windows is the only backend with a second pad family: XInput above, and
@@ -78,6 +94,21 @@ public:
 	//tell the two apart - the families number their buttons independently, so the
 	//same button byte is "Start" in one and an axis direction in the other.
 	static constexpr int BaseDirectInputIndex = 0x2000;
+
+	//The pressed set a backend reports, with the sentinel removed. The backend's
+	//order is kept: ShortcutKeyHandler compares two reads of this list position
+	//by position.
+	static vector<uint16_t> WithoutNoKey(const vector<uint16_t>& keyCodes)
+	{
+		vector<uint16_t> keysOut;
+		keysOut.reserve(keyCodes.size());
+		for(uint16_t keyCode : keyCodes) {
+			if(keyCode != NoKey) {
+				keysOut.push_back(keyCode);
+			}
+		}
+		return keysOut;
+	}
 
 	virtual ~IKeyManager() {}
 
