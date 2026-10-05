@@ -70,7 +70,28 @@ void GbDefaultVideoFilter::OnBeforeApplyFilter()
 	VideoConfig config = _emu->GetSettings()->GetVideoConfig();
 	GameboyConfig gbConfig = _emu->GetSettings()->GetGameboyConfig();
 
-	bool adjustColors = gbConfig.GbcAdjustColors && ((Gameboy*)_emu->GetConsole().get())->IsCgb();
+	//The same null-console read #829 fixed in NesDefaultVideoFilter, at the site
+	//that can actually still reach it. #831 guarded NesNtscFilter on the way here
+	//and this filter was called unreachable for the wrong reason - Emulator::
+	//GetVideoFilter does answer a NesDefaultVideoFilter when no console exists,
+	//but this filter is not handed out that way. It is the *default* filter of a
+	//Game Boy console (Gameboy::GetVideoFilter returns it for getDefaultFilter
+	//too), so SaveStateManager::GetSaveStatePreview builds a GbDefaultVideoFilter
+	//out of a console that is alive at that moment and drives it on a worker
+	//thread; Emulator::Stop resets the console while those workers are in flight,
+	//and this read then runs with none.
+	//
+	//Measured on 2026-10-04 against a core without this guard: SIGSEGV,
+	//KERN_INVALID_ADDRESS at 0x80 - the Gameboy::IsCgb() read of `_model` on a
+	//null console - with the stack SaveStateManager::GetSaveStatePreview ->
+	//BaseVideoFilter::SendFrame -> GbDefaultVideoFilter::OnBeforeApplyFilter ->
+	//Gameboy::IsCgb(). Reproduced by
+	//UI.HeadlessTests/GameboyPreviewFilterTests.cs. With no console there is no
+	//Game Boy to ask, so "not a CGB" is the answer that follows from the question
+	//being unaskable.
+	shared_ptr<IConsole> console = _emu->GetConsole();
+	bool isCgb = console && ((Gameboy*)console.get())->IsCgb();
+	bool adjustColors = gbConfig.GbcAdjustColors && isCgb;
 	if(_videoConfig.Hue != config.Hue || _videoConfig.Saturation != config.Saturation || _videoConfig.Contrast != config.Contrast || _videoConfig.Brightness != config.Brightness || _gbcAdjustColors != adjustColors) {
 		_gbcAdjustColors = adjustColors;
 		InitLookupTable();

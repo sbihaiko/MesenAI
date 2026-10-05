@@ -191,6 +191,9 @@
 							<Binding Path="CheatsSheet.IsVisible" />
 							<Binding Path="ReplaysSheet.IsVisible" />
 							<Binding Path="IsPlayerSettingsVisible" />
+							<!--ADR-0255 slice 1 (W-P17): the Controller sheet, over the
+							paused game like every other sheet of W-P4.-->
+							<Binding Path="ControllerSheet.IsVisible" />
 						</MultiBinding>
 					</Border.IsVisible>
 				</Border>
@@ -282,8 +285,10 @@
 						<!--ADR-0249 (W-X1): ConfirmExitResetPower asks here, in place of the button.-->
 						<v:OverlayConfirmBanner Name="QuitGameConfirm" DataContext="{Binding QuitGameConfirm}" IsVisible="{Binding IsVisible}" Margin="0 38 0 0" />
 						<!--TEXT2, not the render's TEXT3: TEXT3 on the card is 2.5:1, under
-						PlaySheetsContrastTests' 4.5:1.-->
-						<TextBlock Classes="footnote secondary" Text="{l:Translate lblOverlayEscHint}" HorizontalAlignment="Center" Margin="0 26 0 0" />
+						PlaySheetsContrastTests' 4.5:1. ADR-0256 Decision 6: the control
+						named is the one in the player's hand, so the line is computed
+						(MainWindowViewModel.PauseOverlay), not a fixed string.-->
+						<TextBlock Name="OverlayResumeHint" Classes="footnote secondary" Text="{Binding OverlayResumeHint}" HorizontalAlignment="Center" Margin="0 26 0 0" />
 					</StackPanel>
 					</ScrollViewer>
 				</Border>
@@ -331,6 +336,18 @@
 				<!--G.4 (W-P5, was P.5 §5): the pack picker; (W-P6) the current pack detail.-->
 				<v:PlayerPackPickerSheetView Name="PlayerPackPickerHost" IsVisible="{Binding IsPlayerPackPickerVisible}" />
 				<v:PlayerPackDetailSheetView Name="PlayerPackDetailHost" IsVisible="{Binding IsPackDetailVisible}" />
+
+				<!--ADR-0255 slice 1 (W-P17): the Controller sheet, which Settings ›
+				Controls' More in Options… opens over the paused game. Its own
+				IsVisible is the view-model's, like W-P15's.-->
+				<v:PlayerControllerSheetView Name="PlayerControllerSheetHost" DataContext="{Binding ControllerSheet}" />
+
+				<!--#845 (ADR-0256 Decision 9): the ROM picker, over Play's home.
+				It is the one Play sheet not opened from W-P4 - the home's own
+				*Open a ROM…* opens it, with no game loaded - so it sits here, on
+				the load layer's own panel, above the home and below the tool
+				sheets a task door opens.-->
+				<v:PlayerRomPickerView Name="PlayerRomPickerHost" DataContext="{Binding RomPicker}" IsVisible="{Binding IsVisible}" />
 
 				<!--G.5 (PRD Part B §13.5.2 W-P13, W-P15, W-P16): the Play edge-flow sheets.-->
 				<v:PlayPackDepSheetView Name="PlayPackDepSheetHost" DataContext="{Binding PackDepSheet}" IsVisible="{Binding IsVisible}" />

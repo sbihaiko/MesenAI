@@ -125,6 +125,8 @@ namespace Mesen.Config
 
 		public void UpgradeConfig()
 		{
+			RestoreKeyboardPresetIfNothingIsBound();
+
 			if(ConfigUpgrade < (int)ConfigUpgradeHint.SmsInput) {
 				Sms.InitializeDefaults(DefaultKeyMappings);
 			}
@@ -155,16 +157,96 @@ namespace Mesen.Config
 			Version = EmuApi.GetMesenVersion().ToString(3);
 		}
 
+		//ADR-0255 (the keyboard case): with no pad connected the keyboard has to
+		//play, and DefaultKeyMappingType.None is the one value that leaves it with
+		//nothing bound at all - no pad preset and no keyboard preset, so the
+		//player cannot play and cannot reach the menus to fix it. ResetSettings
+		//already refuses to *write* None, but only for callers that reset: a
+		//settings.json already carrying 0 (hand-edited, or written by a build
+		//whose wizard offered it) loads straight through, and InitializeDefaults
+		//only ever runs on first run. The guard belongs where the presets are
+		//resolved.
+		//
+		//...and only when nothing is bound anywhere. A config whose keys the
+		//player bound by hand is theirs, and re-applying a preset over it would
+		//be this same bug in reverse. Returns whether it wrote, which is what the
+		//callers - and the test - need to tell "restored" from "left alone".
+		public bool RestoreKeyboardPresetIfNothingIsBound()
+		{
+			if(!CanRestoreKeyboardPreset()) {
+				return false;
+			}
+			DefaultKeyMappings = DefaultKeyMappingType.Xbox | DefaultKeyMappingType.ArrowKeys;
+			SeedConsoleKeyDefaults();
+			return true;
+		}
+
+		//The one question the guard above asks, on its own: may the keyboard preset
+		//be written back? DefaultKeyMappings.None is the state that leaves the player
+		//unable to play, and "nothing is bound anywhere" (every console's player
+		//ports - see NothingIsBound) is what keeps a preset from overwriting the
+		//player's own keys. The Play Controller sheet's "Use the keyboard preset"
+		//button is offered on THIS answer and no other, so the button can never be
+		//shown where RestoreKeyboardPresetIfNothingIsBound would silently do nothing
+		//(ADR-0255: "the guard belongs where the presets are resolved, not in one
+		//caller"). This is the authority; callers ask it rather than restating it.
+		public bool CanRestoreKeyboardPreset()
+		{
+			return DefaultKeyMappings == DefaultKeyMappingType.None && NothingIsBound();
+		}
+
+		//Whether every console's four mapping slots are empty - the state in
+		//which a preset can be applied without overwriting anything. Read off the
+		//slots' own fields rather than through ToInterop(): a console with default
+		//custom keys reports them for an empty slot, which would answer "bound"
+		//for a config where the player never bound anything.
+		private bool NothingIsBound()
+		{
+			//The ports a player can play from, per console: the two NES and SMS
+			//ports, GB's and GBA's single one. A config whose only keys sat in
+			//Nes.ExpPort or Nes.MapperInput would call this "bound", which is
+			//absurd enough to be worth not paying for.
+			return !SendsAnyKey(Nes.Port1) && !SendsAnyKey(Nes.Port2)
+				&& !SendsAnyKey(Gameboy.Controller)
+				&& !SendsAnyKey(Gba.Controller)
+				&& !SendsAnyKey(Sms.Port1) && !SendsAnyKey(Sms.Port2);
+		}
+
+		private static bool SendsAnyKey(ControllerConfig port)
+		{
+			foreach(KeyMapping m in new[] { port.Mapping1, port.Mapping2, port.Mapping3, port.Mapping4 }) {
+				if(m.A != 0 || m.B != 0 || m.X != 0 || m.Y != 0 || m.L != 0 || m.R != 0
+					|| m.Up != 0 || m.Down != 0 || m.Left != 0 || m.Right != 0
+					|| m.Start != 0 || m.Select != 0 || m.U != 0 || m.D != 0
+					|| m.TurboA != 0 || m.TurboB != 0 || m.TurboX != 0 || m.TurboY != 0
+					|| m.TurboL != 0 || m.TurboR != 0 || m.TurboSelect != 0 || m.TurboStart != 0
+					|| m.GenericKey1 != 0) {
+					return true;
+				}
+			}
+			return false;
+		}
+
 		public void InitializeDefaults()
 		{
 			if(ConfigUpgrade == (int)ConfigUpgradeHint.FirstRun) {
-				Nes.InitializeDefaults(DefaultKeyMappings);
-				Gameboy.InitializeDefaults(DefaultKeyMappings);
-				Gba.InitializeDefaults(DefaultKeyMappings);
-				Sms.InitializeDefaults(DefaultKeyMappings);
+				SeedConsoleKeyDefaults();
 				ConfigUpgrade = (int)ConfigUpgradeHint.NextValue - 1;
 			}
 			Preferences.InitializeDefaultShortcuts();
+		}
+
+		//Writes DefaultKeyMappings into the four consoles' ports - the one place
+		//that seeding happens, so the first run (InitializeDefaults), the
+		//Controller sheet's restore (RestoreKeyboardPresetIfNothingIsBound) and
+		//Play's Settings › System row (ADR-0256 Decision 8, which sets the
+		//mapping first and then asks for the keys) cannot drift apart.
+		public void SeedConsoleKeyDefaults()
+		{
+			Nes.InitializeDefaults(DefaultKeyMappings);
+			Gameboy.InitializeDefaults(DefaultKeyMappings);
+			Gba.InitializeDefaults(DefaultKeyMappings);
+			Sms.InitializeDefaults(DefaultKeyMappings);
 		}
 
 		private static HashSet<string>? _installedFonts = null;

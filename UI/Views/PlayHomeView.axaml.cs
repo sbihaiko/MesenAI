@@ -1,24 +1,17 @@
-using System.ComponentModel;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
-using Avalonia.Threading;
-using Avalonia.VisualTree;
-using Mesen.Config;
-using Mesen.Config.Shortcuts;
-using Mesen.Interop;
+using Mesen.Utilities;
 using Mesen.ViewModels;
 
 namespace Mesen.Views
 {
-	//G.2 (W-P1/W-P2): thin code-behind - Open a ROM… reuses the existing
-	//Open-ROM shortcut/dialog (ShortcutHandler.OpenFile), Continue resumes the
-	//most recent game exactly like clicking its tile.
+	//G.2 (W-P1/W-P2): thin code-behind - Open a ROM… opens the in-app ROM picker
+	//(#845, ADR-0256 Decision 9), Continue resumes the most recent game exactly
+	//like clicking its tile.
 	public class PlayHomeView : UserControl
 	{
-		private RecentGamesViewModel? _observed;
-
 		public PlayHomeView()
 		{
 			InitializeComponent();
@@ -31,71 +24,46 @@ namespace Mesen.Views
 
 		private RecentGamesViewModel? Model => DataContext as RecentGamesViewModel;
 
+		//ADR-0256 Decision 3: the home keeps its own triggers - it is the one that
+		//knows it has appeared - and gives up the decision. It used to pick its
+		//own first control and carry its own "has another surface already taken
+		//the focus" test (#625), which was the same question the pause overlay,
+		//the sheets and the slot grid were each answering for themselves.
+		//PlayFocusOnOpen answers it once, for all of them, so a surface that is up
+		//wins however the two posts interleave.
 		protected override void OnDataContextChanged(System.EventArgs e)
 		{
 			base.OnDataContextChanged(e);
-			if(_observed != null) {
-				_observed.PropertyChanged -= OnModelPropertyChanged;
-			}
-			_observed = Model;
-			if(_observed != null) {
-				_observed.PropertyChanged += OnModelPropertyChanged;
-			}
-			FocusPrimary();
+			PlayFocusOnOpen.ContentChanged(this);
 		}
 
 		protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
 		{
 			base.OnAttachedToVisualTree(e);
-			FocusPrimary();
+			PlayFocusOnOpen.ContentChanged(this);
 		}
 
-		//#625: Visible too - the home also comes back without a home-kind change
-		//(Quit game with recents already listed, a DisplayMessageHelper message
-		//that hid it), after GameLoaded moved focus to RendererPanel.
-		private void OnModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
-		{
-			if(e.PropertyName == nameof(RecentGamesViewModel.ShowFirstRunHome) || e.PropertyName == nameof(RecentGamesViewModel.ShowRecentsHome) || e.PropertyName == nameof(RecentGamesViewModel.Visible)) {
-				FocusPrimary();
-			}
-		}
-
-		//Keyboard/gamepad (rule 9): the screen's primary action has focus when
-		//the home appears, so A/Enter acts without a pointer. Posted after the
-		//StateGrid's own attach-time Focus() and the layout pass (Focus() on a
-		//not-yet-visible control is a no-op).
-		private void FocusPrimary()
-		{
-			Dispatcher.UIThread.Post(() => {
-				if(!IsEffectivelyVisible || AnotherSurfaceHasFocus()) {
-					return;
-				}
-				if(Model?.ShowFirstRunHome == true) {
-					this.FindControl<Button>("PlayHomeOpenRomPrimary")?.Focus();
-				} else if(Model?.ShowRecentsHome == true) {
-					this.FindControl<Button>("PlayHomeContinueButton")?.Focus();
-				}
-			});
-		}
-
-		//A picker, the pause overlay or a sheet painted over the home already
-		//focused its own first control (MainWindow); the home must not steal it.
-		//Nothing focused, the renderer panel or a StateGrid is fair game - in
-		//this window only: keyboard focus is one for the app, so the home coming
-		//back while another window (a debugger, a tool) has it leaves it there.
-		private bool AnotherSurfaceHasFocus()
-		{
-			TopLevel? topLevel = TopLevel.GetTopLevel(this);
-			object? focused = topLevel?.FocusManager?.GetFocusedElement();
-			if(focused is Visual elsewhere && TopLevel.GetTopLevel(elsewhere) != topLevel) {
-				return true;
-			}
-			return focused is Button or CheckBox or TextBox && focused is Visual visual && !this.IsVisualAncestorOf(visual);
-		}
-
+		//#845 (ADR-0256 Decision 9): the home's own action opens the in-app
+		//picker instead of EmuApi.ExecuteShortcut(OpenFile). That reached
+		//ShortcutHandler -> FileDialogHelper -> Avalonia's StorageProvider - a
+		//native dialog that owns the screen once it opens, so the focus engine
+		//(and the pad with it) could not drive the choice, and a machine with a
+		//pad and nothing else could not load a game. Every other file choice in
+		//the app, and Advanced's own Open, still go there.
 		private void OnOpenRom(object? sender, RoutedEventArgs e)
 		{
-			EmuApi.ExecuteShortcut(new ExecuteShortcutParams() { Shortcut = EmulatorShortcut.OpenFile });
+			if(Window() is MainWindowViewModel model) {
+				model.OpenRomPicker();
+			}
+		}
+
+		//The window this home belongs to. The home's own DataContext is the
+		//recent-games list, so the sheet - one per window - is reached through
+		//the window's; a home drawn outside a MainWindow (a render, a preview)
+		//has no picker to open and says so by doing nothing.
+		private MainWindowViewModel? Window()
+		{
+			return TopLevel.GetTopLevel(this)?.DataContext as MainWindowViewModel;
 		}
 
 		//G.5 (W-P14): the alert's next step is the same Open a ROM… dialog.

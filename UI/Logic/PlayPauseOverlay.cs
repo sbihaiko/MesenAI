@@ -158,7 +158,15 @@ public enum PlaySheet
 	//(W-P4 is at its seven controls, so the list merges into that row).
 	Replays,
 	//ADR-0249 (W-P8, W-P10): Settings, a sheet in the main window.
-	Settings
+	Settings,
+	//ADR-0255 slice 1 (W-P17): the Controller sheet, opened from Settings'
+	//Controls row over the paused game.
+	Controller,
+	//#845 (ADR-0256 Decision 9): the ROM picker, opened by the Play home's own
+	//*Open a ROM…*. It is the one Play sheet that is not opened from W-P4 - it
+	//sits over the home, with no game under it - so it is not in the
+	//close-to-the-overlay family: Back ascends it and dismisses at the roots.
+	RomPicker
 }
 
 public enum PlayEscAction
@@ -169,7 +177,17 @@ public enum PlayEscAction
 	//Rule 8: a sheet opened from the pause overlay closes back to it.
 	CloseSheetToOverlay,
 	CloseOverlayAndResume,
-	OpenOverlayAndPause
+	OpenOverlayAndPause,
+	//ADR-0255 slice 3: the Controller sheet is capturing "press a control", so
+	//Esc cancels the capture and leaves the sheet up. A state of this chain, not a
+	//second key handler racing it - Esc means one thing per context, and here the
+	//context is the capture.
+	CancelCapture,
+	//#845 (ADR-0256 Decision 9): the ROM picker's own step back - up one folder,
+	//or out of the roots list, which dismisses. One state of this chain rather
+	//than a second key handler: Esc is already a router, and the picker only
+	//adds what "back" means inside it.
+	RomPickerBack
 }
 
 //Rule 8 / W-P4: Esc does one thing per context. The order is game → W-P4 →
@@ -177,11 +195,20 @@ public enum PlayEscAction
 //On the Play home (no game) Esc does nothing - there is nothing to pause.
 public static class PlayEsc
 {
-	public static PlayEscAction Next(bool gameLoaded, PlaySheet sheet, bool overlayVisible)
+	public static PlayEscAction Next(bool gameLoaded, PlaySheet sheet, bool overlayVisible, bool capturing = false)
 	{
 		switch(sheet) {
 			case PlaySheet.PackPickerOnLoad:
 				return PlayEscAction.DismissPackPicker;
+			//#845: the picker over the home walks folders, so Esc is a step and
+			//not a close until there is nowhere left to step.
+			case PlaySheet.RomPicker:
+				return PlayEscAction.RomPickerBack;
+			//ADR-0255 slice 3: a capture is the Controller sheet's own state, so Esc
+			//releases the capture before it would close the sheet. It is the same
+			//chain PlayEsc has always run, with one state more.
+			case PlaySheet.Controller when capturing:
+				return PlayEscAction.CancelCapture;
 			case PlaySheet.PackPickerFromOverlay:
 			case PlaySheet.Enhancements:
 			case PlaySheet.Cheats:
@@ -191,6 +218,7 @@ public static class PlayEsc
 			case PlaySheet.PackDep:
 			case PlaySheet.Replays:
 			case PlaySheet.Settings:
+			case PlaySheet.Controller:
 				return PlayEscAction.CloseSheetToOverlay;
 		}
 		if(overlayVisible) {

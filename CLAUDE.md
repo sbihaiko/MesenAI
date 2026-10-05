@@ -5,7 +5,7 @@
 Everything written for humans other than the chat itself is **en-US**:
 
 - **Docs** — anything versioned under `docs/` (specs, `docs/adr/`),
-  `README.md`, `CONTRIBUTING.md`, `MIGRATION.md`.
+  `README.md`, `CONTRIBUTING.md`, `docs/MIGRATION.md`.
 - **Agent instruction files** — this file, every `AGENTS.md`,
   `.claude/skills/*/SKILL.md`.
 - **Messages to users/collaborators** — Issue and PR titles/bodies/comments,

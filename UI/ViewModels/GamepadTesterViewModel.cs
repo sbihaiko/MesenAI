@@ -29,6 +29,20 @@ namespace Mesen.ViewModels
 
 		public ObservableCollection<GamepadTestItem> Gamepads { get; } = new();
 
+		//Where the poll reads the host: the connected count, a pad's static info
+		//and its live state. Injectable for the headless tests, which have no
+		//physical pad - and cannot otherwise simulate a pad swapped in at an index
+		//the count still covers (ADR-0255's reconnect), the case the match keys
+		//must survive.
+		public Func<uint> ConnectedGamepadCount { get; set; } = InputApi.GetConnectedGamepadCount;
+		public Func<uint, GamepadInfo?> GamepadInfoOf { get; set; } = ReadGamepadInfo;
+		public Func<uint, GamepadState?> GamepadStateOf { get; set; } = ReadGamepadState;
+
+		private static GamepadInfo? ReadGamepadInfo(uint index) =>
+			InputApi.GetGamepadInfo(index, out GamepadInfo info) ? info : null;
+		private static GamepadState? ReadGamepadState(uint index) =>
+			InputApi.GetGamepadState(index, out GamepadState state) ? state : null;
+
 		private DispatcherTimer? _pollTimer;
 
 		public GamepadTesterViewModel()
@@ -67,12 +81,9 @@ namespace Mesen.ViewModels
 
 		public void Refresh()
 		{
-			uint count = InputApi.GetConnectedGamepadCount();
+			uint count = ConnectedGamepadCount();
 			uint globalDeadzoneSize = ConfigManager.Config.Input.ControllerDeadzoneSize;
 			IReadOnlyList<DeviceDeadzoneOverride> overrides = ConfigManager.Config.Input.PerDeviceDeadzones;
-			//The static identity (name/backend/VID:PID) is re-read only when the
-			//set of connected pads changes; each 60 Hz tick reads just the state.
-			bool countChanged = Gamepads.Count != count;
 			while(Gamepads.Count < count) {
 				Gamepads.Add(new GamepadTestItem((uint)Gamepads.Count));
 			}
@@ -80,10 +91,16 @@ namespace Mesen.ViewModels
 				Gamepads.RemoveAt(Gamepads.Count - 1);
 			}
 			foreach(GamepadTestItem item in Gamepads) {
-				if(countChanged) {
-					item.RefreshInfo();
-				}
-				item.RefreshState(globalDeadzoneSize, overrides);
+				//The static identity (name/backend/VID:PID) is re-read EVERY tick,
+				//not only when the count changes: a pad swapped in at an index the
+				//count still covers - ADR-0255's reconnect, or one joystick replacing
+				//another on the same port - changes Backend/Slot under a "count
+				//changed" rule, and a sheet that matches a port's pad by its block
+				//(#813) would then name or move the wrong physical pad. The count
+				//says nothing about which pad an index holds, and there is no
+				//cheaper signal than the read itself.
+				item.RefreshInfo(GamepadInfoOf(item.Index));
+				item.RefreshState(globalDeadzoneSize, overrides, GamepadStateOf(item.Index));
 			}
 			HasPads = Gamepads.Count > 0;
 			ShowNoPadsHint = !HasPads;
@@ -91,13 +108,18 @@ namespace Mesen.ViewModels
 	}
 
 	//One connected pad as shown by the Test tab. Constructing an item reads no
-	//device state; RefreshState() fills everything from the interop layer.
+	//device state; the tester hands it the info (RefreshInfo) and the live state
+	//(RefreshState) it read for the item's index.
 	public partial class GamepadTestItem : DisposableViewModel
 	{
 		public uint Index { get; }
 
 		[ObservableProperty] public partial string Name { get; set; } = "";
-		[ObservableProperty] public partial string Backend { get; set; } = "";
+		//The input backend the pad came through. Kept as the enum, not its name:
+		//which family a pad's key codes are numbered in is a property of the
+		//backend (Windows has two - XInput and DirectInput), and matching a port's
+		//keys to a pad needs the family, not the label (ADR-0255 slice 2/#813).
+		[ObservableProperty] public partial GamepadBackend Backend { get; set; }
 		[ObservableProperty] public partial uint Slot { get; set; }
 		[ObservableProperty] public partial string VendorId { get; set; } = "";
 		[ObservableProperty] public partial string ProductId { get; set; } = "";
@@ -144,41 +166,50 @@ namespace Mesen.ViewModels
 		private readonly GamepadCircularity _circularity = new();
 		private readonly GamepadDriftDetector _drift = new();
 
-		private static readonly string[] _buttonNames = {
-			"A", "B", "X", "Y", "LB", "RB", "Menu", "Options",
-			"DUp", "DDown", "DLeft", "DRight", "LT", "RT", "L3", "R3",
-			"LUp", "LDown", "LLeft", "LRight", "RUp", "RDown", "RLeft", "RRight"
-		};
+		//One chip per bit GamepadState carries; the labels are the core's own names
+		//for this pad's backend (ControllerLivePad), so a press lights the chip that
+		//names the same button the Controller sheet's drawn key lights (#817). An
+		//unplaced pad shows the console order until RefreshInfo reads a backend.
+		private const int ButtonCount = 24;
 
 		private DispatcherTimer? _rumbleStopTimer;
 
 		public GamepadTestItem(uint index)
 		{
 			Index = index;
-			for(int i = 0; i < _buttonNames.Length; i++) {
-				Buttons.Add(new GamepadButtonState(_buttonNames[i]));
+			for(int i = 0; i < ButtonCount; i++) {
+				Buttons.Add(new GamepadButtonState(ControllerLivePad.NameList(Backend)[i]));
 			}
 		}
 
-		//Static identity of the pad - called once per item (and again when the
-		//connected set changes), never per poll tick.
-		public void RefreshInfo()
+		partial void OnBackendChanged(GamepadBackend value)
 		{
-			if(InputApi.GetGamepadInfo(Index, out GamepadInfo info)) {
-				Name = info.Name;
-				Backend = info.Backend.ToString();
-				Slot = info.Slot;
-				VendorId = info.VendorId.ToString("X4");
-				ProductId = info.ProductId.ToString("X4");
-				VendorIdValue = info.VendorId;
-				ProductIdValue = info.ProductId;
-				HasRumble = info.HasRumble;
+			string[] names = ControllerLivePad.NameList(value);
+			for(int i = 0; i < Buttons.Count; i++) {
+				Buttons[i].Label = names[i];
+			}
+		}
+
+		//Static identity of the pad. Re-read every poll tick from the info the
+		//tester read for this item's index: a pad swapped in at an index the count
+		//still covers must not keep the previous pad's identity (ADR-0255/#813).
+		public void RefreshInfo(GamepadInfo? info)
+		{
+			if(info is GamepadInfo i) {
+				Name = i.Name;
+				Backend = i.Backend;
+				Slot = i.Slot;
+				VendorId = i.VendorId.ToString("X4");
+				ProductId = i.ProductId.ToString("X4");
+				VendorIdValue = i.VendorId;
+				ProductIdValue = i.ProductId;
+				HasRumble = i.HasRumble;
 				InfoText = $"{Backend} · Pad{Slot + 1} · VID:{VendorId} · PID:{ProductId}";
 			}
 		}
 
 		//Live state (buttons/axes) + the effective deadzone ring - the per-tick path.
-		public void RefreshState(uint globalDeadzoneSize, IReadOnlyList<DeviceDeadzoneOverride> overrides)
+		public void RefreshState(uint globalDeadzoneSize, IReadOnlyList<DeviceDeadzoneOverride> overrides, GamepadState? state)
 		{
 			//Resolve the effective deadzone from the per-device overrides before
 			//rendering the ring, so a pad with its own setting shows that ring.
@@ -186,14 +217,14 @@ namespace Mesen.ViewModels
 			IsUsingPerDeviceDeadzone = PerDeviceDeadzone.HasOverride(overrides, VendorIdValue, ProductIdValue);
 			EffectiveDeadzoneSize = PerDeviceDeadzone.Resolve(globalDeadzoneSize, overrides, VendorIdValue, ProductIdValue);
 
-			if(InputApi.GetGamepadState(Index, out GamepadState state)) {
+			if(state is GamepadState s) {
 				for(int i = 0; i < Buttons.Count; i++) {
-					Buttons[i].IsPressed = (state.Buttons & (1u << i)) != 0;
+					Buttons[i].IsPressed = (s.Buttons & (1u << i)) != 0;
 				}
-				LeftX = state.Axes[0];
-				LeftY = state.Axes[1];
-				RightX = state.Axes[2];
-				RightY = state.Axes[3];
+				LeftX = s.Axes[0];
+				LeftY = s.Axes[1];
+				RightX = s.Axes[2];
+				RightY = s.Axes[3];
 			}
 
 			UpdateStickDiagnostics(EffectiveDeadzoneSize);
@@ -309,7 +340,9 @@ namespace Mesen.ViewModels
 		private static readonly IBrush _pressedBrush = new SolidColorBrush(Color.FromArgb(0xCC, 0x33, 0xCC, 0x66));
 		private static readonly IBrush _idleBrush = new SolidColorBrush(Color.FromArgb(0x22, 0x22, 0x22, 0x22));
 
-		public string Label { get; }
+		//Settable: the label is the pad's own button name, which depends on the
+		//backend RefreshInfo reads a moment after the item is built (#817).
+		[ObservableProperty] public partial string Label { get; set; }
 		[ObservableProperty] public partial bool IsPressed { get; set; }
 		[ObservableProperty] public partial IBrush IsPressedBrush { get; set; } = _idleBrush;
 

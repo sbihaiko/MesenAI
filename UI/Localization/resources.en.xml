@@ -19,12 +19,20 @@
 			<Control ID="btnOverlayCheats">Cheats</Control>
 			<Control ID="btnOverlaySettings">Settings</Control>
 			<Control ID="btnOverlayQuitGame">Quit Game</Control>
-			<Control ID="lblOverlayEscHint">Esc to resume</Control>
 			<Control ID="lblSaveStatesSheetTitle">Save States</Control>
 			<Control ID="btnSaveStatesSave">Save to a slot…</Control>
 			<Control ID="btnSaveStatesLoad">Load a slot…</Control>
 			<Control ID="btnSaveStatesReplays">Shared replays…</Control>
 			<Control ID="btnSaveStatesBack">Back</Control>
+		</Form>
+		<!--#845 (ADR-0256 Decision 9): the in-app ROM picker, opened by Play's
+		home. Back ascends a folder and closes the sheet on the first list. Its
+		heading and its empty line are here because {l:Translate} is what reads
+		this section; the two strings the view-model asks for by name are in
+		<Messages> below, which is what ResourceHelper.GetMessage reads.-->
+		<Form ID="PlayerRomPickerView">
+			<Control ID="lblRomPickerHint">Pick a folder, then a game.</Control>
+			<Control ID="btnRomPickerBack">Back</Control>
 		</Form>
 		<Form ID="PlayerPackPickerSheetView">
 			<Control ID="lblPackPickerRemembered">Remembered for this game. Change it any time from the pause menu.</Control>
@@ -59,7 +67,7 @@
 			<Control ID="chkEnhancementsWideScrn">Widescreen</Control>
 			<Control ID="chkEnhancementsOverclock">Overclock</Control>
 			<Control ID="lblEnhancementsAppliesOnReload">Applies on reload</Control>
-			<Control ID="lblEnhancementsLookHint">How the picture looks: Settings › Look</Control>
+			<Control ID="lblEnhancementsLookHint">How the picture looks: Settings › Video</Control>
 		</Form>
 		<Form ID="PlayHomeView">
 			<Control ID="lblPlayHomeDropTitle">Drop a game here</Control>
@@ -245,6 +253,26 @@
 			<Control ID="btnCheatsShare">Share This Cheat ↗</Control>
 			<Control ID="lblCheatsCodePlaceholder">Code, e.g. SXIOPO or 0032:09</Control>
 			<Control ID="lblCheatsDescriptionPlaceholder">What it does (optional)</Control>
+		</Form>
+		<Form ID="PlayerControllerSheetView">
+			<Control ID="lblControllerSheetTitle">Controller</Control>
+			<Control ID="lblControllerSheetIntro">Press any button on a controller — the pad below lights up as it reads.</Control>
+			<Control ID="lblControllerSheetNoPad">No controller connected. Plug one in — a new one offers to set itself up.</Control>
+			<Control ID="lblControllerSheetLeftStick">Left stick</Control>
+			<Control ID="lblControllerSheetRightStick">Right stick</Control>
+			<Control ID="lblControllerSheetPlayers">PLAYERS</Control>
+			<Control ID="lblControllerSheetPlayersHint">Pick a controller above, then tap the player it should play as.</Control>
+			<Control ID="lblControllerSheetKeyboard">KEYBOARD</Control>
+			<Control ID="btnControllerSheetKeyboardRestore">Use the keyboard preset</Control>
+			<Control ID="lblControllerSheetRemap">REMAP</Control>
+			<Control ID="lblControllerSheetRemapHint">Pick a control, then press the controller button you want on it. Esc cancels.</Control>
+			<Control ID="lblControllerSheetRemapPadLight">What the controller sends</Control>
+			<Control ID="lblControllerSheetRemapPortLight">What the game receives</Control>
+			<Control ID="lblControllerSheetExtra">EXTRA BUTTONS</Control>
+			<Control ID="lblControllerSheetExtraHint">A controller button the console has no use for can carry one of the emulator's own actions. Pick a row, then press the button you want on it. Esc cancels.</Control>
+			<Control ID="btnControllerSheetExtraClear">Clear</Control>
+			<Control ID="btnControllerSheetMoreInOptions">More in Options…</Control>
+			<Control ID="btnControllerSheetDone">Done</Control>
 		</Form>
 		<Form ID="AudioConfigView">
 			<Control ID="tpgGeneral">General</Control>
@@ -970,7 +998,7 @@
 			<Control ID="colBinding1">Keys</Control>
 		</Form>
 
-		<Form ID="PlayerDisplaySettingsView">
+		<Form ID="PlayerWindowSettingsView">
 			<Control ID="lblDisplayFullscreen">Full screen</Control>
 			<Control ID="lblDisplayAspectRatio">Aspect ratio</Control>
 			<Control ID="lblDisplayScale">Scale</Control>
@@ -985,12 +1013,23 @@
 			<Control ID="lblControlsRumble">Rumble</Control>
 			<Control ID="lblControlsDeadzone">Stick deadzone</Control>
 		</Form>
+		<Form ID="PlayerSystemSettingsView">
+			<Control ID="lblSystemStorageRow">Keep your saves and settings</Control>
+			<Control ID="radSystemUserFolder">In your user folder</Control>
+			<Control ID="radSystemPortable">Next to the app (portable)</Control>
+			<Control ID="lblSystemKeyboardRow">Keyboard</Control>
+			<Control ID="cboSystemArrows">Arrow keys + S / A</Control>
+			<Control ID="cboSystemWasd">WASD + K / J</Control>
+			<Control ID="lblSystemGamepads">Xbox and PlayStation controllers work as soon as you plug them in. Another controller asks to be set up the first time you press a button.</Control>
+			<Control ID="btnSystemRestart">Restart now</Control>
+		</Form>
 		<Form ID="PlayerSettingsSheetView">
 			<Control ID="lblPlayerSettingsTitle">Settings</Control>
-			<Control ID="tabDisplay">Display</Control>
-			<Control ID="tabLook">Look</Control>
+			<Control ID="tabDisplay">Window</Control>
+			<Control ID="tabLook">Video</Control>
 			<Control ID="tabAudio">Audio</Control>
 			<Control ID="tabPlayerControls">Controls</Control>
+			<Control ID="tabSystem">System</Control>
 			<Control ID="btnPlayerSettingsMoreInOptions">More in Options…</Control>
 			<Control ID="lblPlayerSettingsEverythingElse">Everything else: Classic › Settings</Control>
 			<Control ID="btnPlayerSettingsDone">Done</Control>
@@ -1224,23 +1263,6 @@
 			<Control ID="lblReleaseNotes">Release notes</Control>
 			<Control ID="btnUpdate">Update</Control>
 			<Control ID="btnCancel">Cancel</Control>
-		</Form>
-		<Form ID="SetupWizardWindow">
-			<Control ID="wndTitle">MesenAI</Control>
-			<Control ID="lblFirstRunTitle">Welcome to MesenAI</Control>
-			<Control ID="lblFirstRunIntro">Two choices, then you can play. Both can be changed later in Settings.</Control>
-			<Control ID="lblFirstRunStorage">Keep your saves and settings</Control>
-			<Control ID="radFirstRunUserFolder">In your user folder</Control>
-			<Control ID="radFirstRunPortable">Next to the app (portable)</Control>
-			<Control ID="lblFirstRunPortableHint">Move the app folder and everything comes with it</Control>
-			<Control ID="lblFirstRunKeyboard">Keyboard</Control>
-			<Control ID="cboFirstRunArrows">Arrow keys + S / A</Control>
-			<Control ID="cboFirstRunWasd">WASD + K / J</Control>
-			<Control ID="lblFirstRunGamepads">Xbox and PlayStation controllers work as soon as you plug them in. Another controller asks to be set up the first time you press a button.</Control>
-			<Control ID="chkFirstRunCheckForUpdates">Check for updates</Control>
-			<Control ID="lblUpdateCheckUnavailable">MesenAI has no update feed yet. New builds are published on the MesenAI releases page (Help &gt; Check for updates opens it).</Control>
-			<Control ID="chkFirstRunDesktopShortcut">Desktop shortcut</Control>
-			<Control ID="btnFirstRunStartPlaying">Start Playing</Control>
 		</Form>
 		<Form ID="MovieRecordWindow">
 			<Control ID="wndTitle">Movie Recording Settings</Control>
@@ -2144,6 +2166,22 @@
 		<Message ID="PlayerControllersNone">No controller connected</Message>
 		<Message ID="PlayerControllersOne">1 controller connected</Message>
 		<Message ID="PlayerControllersMany">{0} controllers connected</Message>
+		<Message ID="ControllerSheetPlayer">Player {0}</Message>
+		<Message ID="ControllerSheetNoDevice">No controller</Message>
+		<Message ID="ControllerSheetUnnamedDevice">Controller {0}</Message>
+		<Message ID="ControllerSheetAssigned">{0} now plays as {1}.</Message>
+		<Message ID="ControllerSheetNotBound">{0} has no keys bound yet — set it up first.</Message>
+		<Message ID="ControllerSheetNoSlot">That player has no free mapping slot.</Message>
+		<Message ID="ControllerSheetKeyboardPlays">The keyboard plays: {0}.</Message>
+		<Message ID="ControllerSheetKeyboardNothing">No controller connected, and no keyboard keys are bound.</Message>
+		<Message ID="ControllerSheetRemapUnbound">Not bound</Message>
+		<Message ID="ControllerSheetRemapArm">Press the controller button for {0} — Esc cancels.</Message>
+		<Message ID="ControllerSheetRemapBound">{0} is now {1}.</Message>
+		<Message ID="ControllerSheetRemapNoSlot">Every mapping slot of that player is taken — free one in Options first.</Message>
+		<Message ID="ControllerSheetRemapNonRebindable">That control works the menus — Confirm, Back and the D-pad can't be rebound.</Message>
+		<Message ID="ControllerSheetExtraArm">Press the controller button for {0} — Esc cancels.</Message>
+		<Message ID="ControllerSheetExtraBound">{0} is now on {1}.</Message>
+		<Message ID="ControllerSheetExtraCleared">{0} no longer has a controller button.</Message>
 		<Message ID="PlayerRumbleOff">Off</Message>
 		<Message ID="LookPixelsMore">More in Options…</Message>
 		<Message ID="LookCurrentFromOptions">{0} (set in Options)</Message>
@@ -2174,6 +2212,8 @@
 		<Message ID="OverlayRowNone">none</Message>
 		<Message ID="OverlayPackCommunityAvailable">Community pack available</Message>
 		<Message ID="OverlayRowCountOn">{0} on</Message>
+		<Message ID="OverlayResumeHint">{0} to resume</Message>
+		<Message ID="OverlayResumeHintNeutral">Leave the menu to resume</Message>
 		<Message ID="SaveStatesRowEmpty">empty</Message>
 		<Message ID="SaveStatesRowSlot">Slot {0} · {1}</Message>
 		<Message ID="AgeJustNow">just now</Message>
@@ -2568,6 +2608,7 @@ E
 		<Message ID="PlayLoadWaitReloading">Reloading {0}…</Message>
 		<Message ID="PlayLoadWaitReloadingGame">Reloading the game…</Message>
 		<!--G.5 (PRD Part B §13.5.2 W-P12–W-P16): the Play edge flows.-->
+		<Message ID="SystemRestartPending">The settings file is in the folder you chose. Restart to use it.</Message>
 		<Message ID="FirstRunCannotWrite">MesenAI cannot write to {0}. Choose the other place, or move the app somewhere you can write to.</Message>
 		<Message ID="BiosSheetBodyFds">Famicom Disk System games start from the console's own BIOS. MesenAI does not include it — choose your copy once and it is kept for every disk game.</Message>
 		<Message ID="BiosSheetBodyGbaBios">Game Boy Advance games start from the console's own BIOS. MesenAI does not include it — choose your copy once and it is kept for every Game Boy Advance game.</Message>
@@ -2587,6 +2628,8 @@ E
 		<Message ID="BiosShortNameGameBoyBootRom">the Game Boy boot ROM</Message>
 		<Message ID="BiosShortNameOther">the BIOS file</Message>
 		<Message ID="BiosNeededStatus">{0} needs {1}</Message>
+		<Message ID="RomPickerTitle">Open a ROM</Message>
+		<Message ID="RomPickerEmpty">No games in this folder.</Message>
 		<Message ID="LoadFailedTitleNotAGame">“{0}” is not a game MesenAI can open.</Message>
 		<Message ID="LoadFailedBodyNotAGame">MesenAI opens NES, Game Boy, Game Boy Color, Master System and Game Boy Advance games, or a zip holding one.</Message>
 		<Message ID="LoadFailedTitleZipWithoutGame">“{0}” has no game in it.</Message>
@@ -2656,6 +2699,7 @@ E
 			<Value ID="SetScale9x">Set Scale 9x</Value>
 			<Value ID="SetScale10x">Set Scale 10x</Value>
 			<Value ID="ToggleFullscreen">Toggle Fullscreen Mode</Value>
+			<Value ID="ToggleOverlay">Pause Menu</Value>
 			<Value ID="ToggleFps">Toggle FPS Counter</Value>
 			<Value ID="ToggleDebugInfo">Toggle Debug Information</Value>
 			<Value ID="ToggleGameTimer">Toggle Game Timer</Value>

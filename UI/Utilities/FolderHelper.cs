@@ -1,4 +1,5 @@
 ﻿using Mesen.Config;
+using Mesen.Logic;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -10,23 +11,18 @@ namespace Mesen.Utilities
 {
 	public static class FolderHelper
 	{
-		private static HashSet<string> _romExtensions = new HashSet<string>() {
-			".gb", ".gbc", ".gbx",
-			".nes", ".unif", ".unf", ".fds", ".qd", ".studybox",
-			".sms", ".gg", ".sg",
-			".gba"
-		};
-
+		//#845 (ADR-0256 Decision 9): the extension table moved to
+		//Mesen.Logic.RomFileKinds, which is host-free and so reachable from the
+		//ROM picker's dual-compiled rules (ADR-0123). These two stay as the
+		//call sites' names, delegating, so there is still one table.
 		public static bool IsRomFile(string path)
 		{
-			string ext = Path.GetExtension(path).ToLower();
-			return _romExtensions.Contains(ext);
+			return RomFileKinds.IsRomFile(path);
 		}
 
 		public static bool IsArchiveFile(string path)
 		{
-			string ext = Path.GetExtension(path).ToLower();
-			return ext == ".7z" || ext == ".zip";
+			return RomFileKinds.IsArchiveFile(path);
 		}
 
 		public static bool CheckFolderPermissions(string folder, bool checkWritePermission = true)

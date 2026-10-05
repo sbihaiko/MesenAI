@@ -417,25 +417,28 @@ DebugConfig& EmuSettings::GetDebugConfig()
 
 void EmuSettings::ClearShortcutKeys()
 {
-	_emulatorKeys[0].clear();
-	_emulatorKeys[1].clear();
-	_emulatorKeys[2].clear();
-	_shortcutSupersets[0].clear();
-	_shortcutSupersets[1].clear();
-	_shortcutSupersets[2].clear();
+	for(int i = 0; i < ShortcutKeySetCount; i++) {
+		_emulatorKeys[i].clear();
+		_shortcutSupersets[i].clear();
+	}
 
 	//Add Alt-F4 as a fake shortcut to prevent Alt-F4 from triggering Alt or F4 key bindings. (e.g load save state 4)
+	//ADR-0255 slice 4: it goes in the one set ShortcutKeyHandler does not poll,
+	//so the guard shadows the polled shortcuts without firing Exit itself.
 	KeyCombination keyComb;
 	keyComb.Key1 = KeyManager::GetKeyCode("Left Alt");
 	keyComb.Key2 = KeyManager::GetKeyCode("F4");
-	SetShortcutKey(EmulatorShortcut::Exit, keyComb, 2);
+	SetShortcutKey(EmulatorShortcut::Exit, keyComb, ShortcutKeySetCount - 1);
 }
 
 void EmuSettings::SetShortcutKey(EmulatorShortcut shortcut, KeyCombination keyCombination, int keySetIndex)
 {
 	_emulatorKeys[keySetIndex][(uint32_t)shortcut] = keyCombination;
 
-	for(int i = 0; i < 3; i++) {
+	//Every set, guard included: this loop is what registers the guard as a
+	//superset of the shortcuts it must shadow, and it runs again for each
+	//shortcut added afterwards.
+	for(int i = 0; i < ShortcutKeySetCount; i++) {
 		for(std::pair<const uint32_t, KeyCombination>& kvp : _emulatorKeys[i]) {
 			if(keyCombination.IsSubsetOf(kvp.second)) {
 				_shortcutSupersets[keySetIndex][(uint32_t)shortcut].push_back(kvp.second);
@@ -452,11 +455,17 @@ void EmuSettings::SetShortcutKeys(vector<ShortcutKeyInfo> shortcuts)
 	ClearShortcutKeys();
 
 	for(ShortcutKeyInfo& shortcut : shortcuts) {
-		if(_emulatorKeys[0][(uint32_t)shortcut.Shortcut].GetKeys().empty()) {
-			SetShortcutKey(shortcut.Shortcut, shortcut.Keys, 0);
-		} else {
-			SetShortcutKey(shortcut.Shortcut, shortcut.Keys, 1);
+		//The first free set, so a binding lands beside the ones already there
+		//rather than on top of the last one. The UI pushes a shortcut's two key
+		//combinations and then its pad slot (PreferencesConfig.ApplyConfig), so
+		//a shortcut that uses all three fills 0, 1 and 2 in that order - and the
+		//pad slot is the third binding the sheet shows and no longer a silent
+		//overwrite of the second key (ADR-0255 slice 4).
+		int keySet = 0;
+		while(keySet < ShortcutKeySets - 1 && !_emulatorKeys[keySet][(uint32_t)shortcut.Shortcut].GetKeys().empty()) {
+			keySet++;
 		}
+		SetShortcutKey(shortcut.Shortcut, shortcut.Keys, keySet);
 	}
 }
 
@@ -474,6 +483,36 @@ vector<KeyCombination> EmuSettings::GetShortcutSupersets(EmulatorShortcut shortc
 {
 	auto lock = _updateShortcutsLock.AcquireSafe();
 	return _shortcutSupersets[keySetIndex][(uint32_t)shortcut];
+}
+
+void EmuSettings::SetPadAxisThresholds(vector<PadAxisThreshold> thresholds)
+{
+	auto lock = _updateShortcutsLock.AcquireSafe();
+	_padAxisThresholds.clear();
+	for(PadAxisThreshold& threshold : thresholds) {
+		//Two shortcuts may name one direction; the last one read wins, which is
+		//the one the player's list ends on - the same "the config is the
+		//authority" answer every other shortcut conflict gets.
+		_padAxisThresholds[threshold.Direction] = threshold.ThresholdUnits;
+	}
+	_hasPadAxisThresholds = !_padAxisThresholds.empty();
+}
+
+int32_t EmuSettings::GetPadAxisThresholdUnits(uint16_t direction)
+{
+	//The common case, and the one the backends pay for on every axis of every
+	//poll: no binding names an axis, so there is nothing to look up (see the flag
+	//in EmuSettings.h). Not a shortcut: the answer for this config is 0 whatever
+	//the direction is.
+	if(!_hasPadAxisThresholds) {
+		return 0;
+	}
+
+	auto lock = _updateShortcutsLock.AcquireSafe();
+	auto result = _padAxisThresholds.find(direction);
+	//0 is "no threshold of the player's", never "0%" - a zero threshold would be
+	//a direction held while the stick rests, which PadAxisAction refuses to store.
+	return result != _padAxisThresholds.end() ? result->second : 0;
 }
 
 OverscanDimensions EmuSettings::GetOverscan()

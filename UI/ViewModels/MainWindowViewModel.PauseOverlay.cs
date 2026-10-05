@@ -25,6 +25,20 @@ namespace Mesen.ViewModels
 		[ObservableProperty] public partial string PackSummary { get; private set; } = "";
 		[ObservableProperty] public partial string EnhancementsSummary { get; private set; } = "";
 
+		//ADR-0256 Decision 6 ("Segue o controle na mão"): W-P4's footer names the
+		//control in the player's hand, not the keyboard's Esc.
+		[ObservableProperty] public partial string OverlayResumeHint { get; private set; } = "";
+
+		//Which device the player is holding: the pad's family, or null for the
+		//keyboard and for a pad the app cannot tell apart (the two the footer must
+		//not guess between - ADR-0256 Decision 4's reason). The pad navigation
+		//bridge (ADR-0256 Decision 2, next to ShortcutHandler) owns the tracker
+		//that answers this in the running app and assigns it there; until that
+		//lands the answer is the keyboard, which is what the footer said before.
+		//The headless tests replace it to drive every state.
+		public Func<(PlayInputDevice Device, PadFamily? Family)> InHandDevice { get; set; }
+			= () => (PlayInputDevice.Keyboard, null);
+
 		//The Save states sheet (W-P4's merged Save/Load row). It offers today's
 		//two slot grids (GameScreenMode.SaveState / LoadState); Esc closes it,
 		//and either grid, back to the overlay.
@@ -40,8 +54,31 @@ namespace Mesen.ViewModels
 
 		//PlayGameLayer: a Play surface is up over the game, so the native picture,
 		//drawn above every Avalonia control, has to step aside for it.
-		private bool IsPlaySurfaceOverGame => PlayGameLayer.SurfaceOverGame(IsPlayerOverlayVisible, CurrentPlaySheet() != PlaySheet.None, BiosSheet.IsVisible, ControllerSetup.IsVisible, IsLoadWaitActive)
+		//
+		//Public because it is also ADR-0256 Decision 2's authority input - "is a
+		//Play surface up" is what hands the pad to the GUI - and that question is
+		//already answered here, once, for the renderer. PlayPadNavigationWiring
+		//reads this rather than re-deriving it from the same surfaces.
+		public bool IsPlaySurfaceOverGame => PlayGameLayer.SurfaceOverGame(IsPlayerOverlayVisible, CurrentPlaySheet() != PlaySheet.None, BiosSheet.IsVisible, ControllerSetup.IsVisible, IsLoadWaitActive)
 			|| SelectRomSheet.IsVisible || IsShaderSheetVisible || ToolSheet.IsVisible;
+
+		//ADR-0256 (accepted 2026-10-04) Decisions 1 and 2: the W-P13 BIOS sheet and
+		//the #734 load card share the same load - IsLoadWaitActive is true under
+		//both - but they are not the same surface to the pad. The card is the one
+		//Play surface with no focusable control of its own (the home stays under
+		//it), so the pad has nothing to drive there and authority would only let a
+		//Confirm reach the home and launch a game through the card; the BIOS sheet
+		//does have a focusable control and is the pad's. Named apart so the
+		//authority rule is handed the distinction instead of the coarse load flag.
+		public bool IsLoadCardVisible => IsLoadWaitActive && !BiosSheet.IsVisible;
+
+		//P.5 (W-P5): the picker opened by itself over an un-enhanced first start,
+		//never from W-P4. It is up over a game that is NOT paused
+		//(EvaluatePlayerPackPicker never pauses) and still has to be answered
+		//before play, so it is the one unpaused surface the pad drives (ADR-0256
+		//Decision 2). W-P4's own picker sits over the pause the overlay took, so
+		//the ordinary pause pair already covers it.
+		public bool IsOnLoadPackPickerVisible => IsPlayerPackPickerVisible && !_packPickerFromOverlay;
 
 		private static readonly HashSet<string> PlaySurfaceProperties = new() {
 			nameof(IsPlayerOverlayVisible), nameof(IsSaveStatesSheetVisible), nameof(IsEnhancementsPanelVisible),
@@ -56,7 +93,7 @@ namespace Mesen.ViewModels
 					UpdateRendererVisibility();
 				}
 			};
-			foreach(INotifyPropertyChanged sheet in new INotifyPropertyChanged[] { CheatsSheet, ReplaysSheet, PackDepSheet, BiosSheet, ControllerSetup, SelectRomSheet, ToolSheet }) {
+			foreach(INotifyPropertyChanged sheet in new INotifyPropertyChanged[] { CheatsSheet, ReplaysSheet, PackDepSheet, BiosSheet, ControllerSetup, SelectRomSheet, ToolSheet, ControllerSheet, RomPicker }) {
 				sheet.PropertyChanged += (s, e) => {
 					if(e.PropertyName == "IsVisible") {
 						UpdateRendererVisibility();
@@ -69,6 +106,11 @@ namespace Mesen.ViewModels
 		{
 			if(IsPlayerSettingsVisible) {
 				return PlaySheet.Settings;
+			}
+			//ADR-0255 slice 1: it replaces the Settings sheet's Controls landing,
+			//so the two are never up together.
+			if(_controllerSheet?.IsVisible == true) {
+				return PlaySheet.Controller;
 			}
 			if(PackDepSheet.IsVisible) {
 				return PlaySheet.PackDep;
@@ -94,6 +136,11 @@ namespace Mesen.ViewModels
 			if(_stateGridFromOverlay && RecentGames.Visible && RecentGames.Mode != GameScreenMode.RecentGames) {
 				return PlaySheet.SaveStateGrid;
 			}
+			//#845: over the home rather than over the game, so it is read last -
+			//it is the one Play sheet that is not opened from W-P4.
+			if(_romPicker?.IsVisible == true) {
+				return PlaySheet.RomPicker;
+			}
 			return PlaySheet.None;
 		}
 
@@ -111,10 +158,24 @@ namespace Mesen.ViewModels
 				return;
 			}
 			PlaySheet sheet = CurrentPlaySheet();
-			switch(PlayEsc.Next(IsGameLoaded, sheet, IsPlayerOverlayVisible)) {
+			switch(PlayEsc.Next(IsGameLoaded, sheet, IsPlayerOverlayVisible, IsControllerCapturing)) {
+				case PlayEscAction.CancelCapture:
+					//ADR-0255 slice 3: Esc releases the capture and the sheet stays
+					//up, ready for another row. The sheet's own tail decides what
+					//"cancelled" means on screen.
+					ControllerSheet.CancelCapture();
+					break;
+
 				case PlayEscAction.DismissPackPicker:
 					//P.5: Esc on the first-start picker plays un-enhanced this session.
 					DismissPlayerPackPicker();
+					break;
+
+				case PlayEscAction.RomPickerBack:
+					//#845: one step up the tree, or - on the roots - the dismiss,
+					//which the picker performs itself. Never the overlay: this
+					//sheet is over the home, and there is no game to come back to.
+					RomPicker.Back();
 					break;
 
 				case PlayEscAction.CloseSheetToOverlay:
@@ -158,6 +219,7 @@ namespace Mesen.ViewModels
 				case PlaySheet.SaveStates: IsSaveStatesSheetVisible = false; break;
 				case PlaySheet.PackDep: PackDepSheet.CloseOnEsc(); break;
 				case PlaySheet.Settings: ClosePlayerSettings(); break;
+				case PlaySheet.Controller: CloseControllerSheet(); break;
 				case PlaySheet.SaveStateGrid:
 					//Init with the grid's own mode hides it (RecentGamesViewModel);
 					//the overlay had already paused, so nothing resumes.
@@ -188,6 +250,10 @@ namespace Mesen.ViewModels
 			EnhancementsSummary = on == 0 ? ResourceHelper.GetMessage("OverlayRowNone") : ResourceHelper.GetMessage("OverlayRowCountOn", on);
 
 			SaveStatesRowValue = BuildSaveStatesSummary();
+
+			(PlayInputDevice device, PadFamily? family) = InHandDevice();
+			PlayResumeHint hint = PlayMenuHint.ResumeHint(device, family);
+			OverlayResumeHint = ResourceHelper.GetMessage(hint.Message, hint.Param);
 		}
 
 		//"Slot 1 · 2 min ago": the newest of the ten manual slots (the auto-save
@@ -287,6 +353,8 @@ namespace Mesen.ViewModels
 			HideCheatsSheet();
 			HideReplaysSheet();
 			ClosePlayerSettings();
+			CloseControllerSheet();
+			RomPicker.Hide();
 			IsSaveStatesSheetVisible = false;
 			EndEnhancementsDraftVisit();
 			IsEnhancementsPanelVisible = false;

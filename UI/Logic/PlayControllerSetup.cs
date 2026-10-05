@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Mesen.Interop;
 
 namespace Mesen.Logic;
 
@@ -15,9 +16,78 @@ public static class ControllerDevices
 	//gamepad key as 0x1000 + device * 0x100 + button.
 	public const int BaseGamepadIndex = 0x1000;
 
+	//IKeyManager::BaseDirectInputIndex: Windows is the only backend with a
+	//second pad family, the DirectInput joysticks above the XInput slots. A
+	//joystick's key is 0x2000 + device * 0x100 + button, with `device` its own
+	//ordinal - not the family-relative index XInput keys carry. Mirrored from
+	//the core so DeviceReconnect can read a key within its family.
+	public const int BaseDirectInputIndex = 0x2000;
+
+	//The pad index this file's detection rule and setup session key on. It reads
+	//EVERY pad key against BaseGamepadIndex, so a Windows joystick key (0x2000+)
+	//comes out as device 16 and up rather than as the joystick's own ordinal -
+	//that is this file's private numbering and it is consistent with itself
+	//(#813's family-relative index is not what it answers; see
+	//DeviceReconnect.DeviceOf, which takes the backend for exactly that reason).
+	//It is safe only while nothing hands the result to family-aware code, which
+	//is true today: the setup session compares it against its own
+	//ControllerDevices.DeviceOf and the pad drawing is keyed by SetupButton.
 	public static int? DeviceOf(ushort keyCode)
 	{
 		return keyCode >= BaseGamepadIndex ? (keyCode - BaseGamepadIndex) >> 8 : null;
+	}
+
+	//The key-code family a backend numbers its pads in. XInput, evdev and
+	//GameController use the base family; Windows' DirectInput joysticks are the one
+	//second family. The mapping is by backend and never read off the code: a macOS
+	//or Linux pad at device 16 (codes at 0x2000) is still the base family, and a
+	//rule that looked at the code alone would take it for DirectInput device 0.
+	//
+	//That collision is real, and a block cannot resolve it: PadBlock adds the slot
+	//to the family base, so PadBlock(Evdev, 16) == 0x2000 == PadBlock(DirectInput,
+	//0), and KeyBlock reads the same 0x2000 off the code. The two are
+	//indistinguishable by block - not "rejected", as an earlier comment here
+	//claimed. They are safe only because no host runs two backends numbering in the
+	//same family: HostOf records which host each backend belongs to, and
+	//ControllerSheetPlayersTests.No_host_runs_two_backends_in_the_same_family pins
+	//that, failing if a same-family backend is ever added to a host.
+	public static int FamilyOf(GamepadBackend backend)
+	{
+		return backend == GamepadBackend.DirectInput ? BaseDirectInputIndex : BaseGamepadIndex;
+	}
+
+	//The host whose pads a backend enumerates. Every real host runs one backend per
+	//family - Windows has XInput and DirectInput, on *different* families - and that
+	//is the one thing keeping a key-code block from being ambiguous between two
+	//backends (see FamilyOf). This table exists so the assumption is data a test can
+	//check, not prose a reader must trust.
+	public static HostPlatform HostOf(GamepadBackend backend)
+	{
+		return backend switch {
+			GamepadBackend.XInput or GamepadBackend.DirectInput => HostPlatform.Windows,
+			GamepadBackend.Evdev => HostPlatform.Linux,
+			GamepadBackend.GameController => HostPlatform.MacOS,
+			_ => HostPlatform.None
+		};
+	}
+
+	//The key-code block a pad's keys live in, from what the host knows about it:
+	//its backend's family plus its family-relative slot (GamepadInfo.Slot, #813).
+	//This is the same value KeyBlock reads off the key codes, so a pad matches the
+	//slot it was written into. The host's enumeration ordinal (GamepadTestItem.Index)
+	//is NOT this on Windows, where XInput is enumerated before DirectInput and the
+	//ordinal is therefore global.
+	public static int PadBlock(GamepadBackend backend, int slot)
+	{
+		return FamilyOf(backend) + (slot << 8);
+	}
+
+	//The block a pad key code sits in (the code with its button byte cleared), or
+	//null for a key no pad sent - a keyboard scancode, a mouse button. Matches
+	//PadBlock for the same pad however the host enumerated it.
+	public static int? KeyBlock(ushort keyCode)
+	{
+		return keyCode >= BaseGamepadIndex ? keyCode & 0xFF00 : null;
 	}
 
 	//The detection rule: a device none of whose keys appear in any mapping.
@@ -61,6 +131,17 @@ public static class ControllerDevices
 			|| button.Equals("Menu", StringComparison.OrdinalIgnoreCase)
 			|| button.Equals("Options", StringComparison.OrdinalIgnoreCase);
 	}
+}
+
+//The host whose pads a GamepadBackend enumerates (ControllerDevices.HostOf). One
+//backend per family per host is what keeps a key-code block unambiguous between
+//backends; the enumeration names the hosts MesenCE runs on.
+public enum HostPlatform
+{
+	None,
+	Windows,
+	Linux,
+	MacOS
 }
 
 public enum DetectorEvent

@@ -22,7 +22,11 @@ public static class PlayerSettingsEssentials
 		ConfigWindowTab.Display,
 		ConfigWindowTab.Look,
 		ConfigWindowTab.Audio,
-		ConfigWindowTab.Input
+		ConfigWindowTab.Input,
+		//ADR-0256 Decision 8: the first run's two questions (storage, keyboard
+		//preset) are a Settings surface the pad can drive, and this is the strip
+		//it lives on. Not a fifth door (ADR-0250): the tab is inside Settings.
+		ConfigWindowTab.System
 	};
 
 	public static bool IsEssentials(ConfigWindowTab tab) => Array.IndexOf(Tabs, tab) >= 0;
@@ -37,9 +41,12 @@ public static class PlayerSettingsEssentials
 
 	//W-P8 is a 340 px sheet - three rows, then the "Everything else" hint (or,
 	//on Audio and Controls, the "More in Options..." link in the hint's place)
-	//right under the group, and Done; only Look is W-P10's taller 480 px sheet
-	//(ADR-0249: a sheet in the main window, not a window).
-	public static double SheetHeight(ConfigWindowTab tab) => tab == ConfigWindowTab.Look ? 480 : 340;
+	//right under the group, and Done; Look is W-P10's taller 480 px sheet
+	//(ADR-0249: a sheet in the main window, not a window), and Play's System tab
+	//(ADR-0256 Decision 8) needs the same room: two storage choices with their
+	//folder lines, two keyboard choices, and the restart line a folder change
+	//puts there.
+	public static double SheetHeight(ConfigWindowTab tab) => tab is ConfigWindowTab.Look or ConfigWindowTab.System ? 480 : 340;
 
 	//PRD rule 2: an inset list of at most three rows per essentials tab.
 	public const int MaxRows = 3;
@@ -76,7 +83,9 @@ public static class PlayerSettingsEssentials
 	public static bool EmbedsClassicPage(ConfigWindowTab tab) => false;
 
 	//The classic Options page "More in Options..." expands to; null when the tab
-	//has no such link (Display keeps the hint).
+	//has no such link (Display keeps the hint). Controls' row asks the window for
+	//the Play Controller sheet first (ADR-0255 slice 1); its Input page is what a
+	//view nobody wired still expands to.
 	public static ConfigWindowTab? OptionsTabFor(ConfigWindowTab tab) => tab switch {
 		ConfigWindowTab.Audio => ConfigWindowTab.Audio,
 		ConfigWindowTab.Input => ConfigWindowTab.Input,

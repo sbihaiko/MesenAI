@@ -130,6 +130,35 @@ public class RendererLetterboxTests
 		Assert.True(leftover > 1, $"no letterbox/pillarbox band: {width}x{height} in {panel.Bounds.Width}x{panel.Bounds.Height}");
 	}
 
+	//#792: a layout pass that runs before the panel has been given any space -
+	//window setup, a Play transition - must not shrink the native host to 0x0.
+	//Avalonia's NativeControlHost.TryUpdateNativeControlPosition refuses to show
+	//a 0x0 view and reports nothing, so the game area goes black and stays black
+	//until something else forces a resize (which is why changing the scale or
+	//entering fullscreen "brought the picture back").
+	[AvaloniaFact]
+	public void A_layout_pass_without_panel_space_keeps_the_last_picture_size()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+
+		(MainWindow window, _, Panel panel) = ShowWindow();
+		double width = window.Renderer.Width;
+		double height = window.Renderer.Height;
+		Assert.True(width > 0 && height > 0, $"the renderer was never sized ({width}x{height})");
+
+		//A pass the panel cannot answer: it has no bounds yet.
+		panel.Width = 0;
+		panel.Height = 0;
+		panel.InvalidateArrange();
+		Dispatcher.UIThread.RunJobs();
+
+		Assert.Equal(0, panel.Bounds.Width);
+		Assert.True(window.Renderer.Width > 0 && window.Renderer.Height > 0,
+			$"a layout pass with no panel shrank the picture to {window.Renderer.Width}x{window.Renderer.Height}");
+		Assert.Equal(width, window.Renderer.Width, 3);
+		Assert.Equal(height, window.Renderer.Height, 3);
+	}
+
 	//FullscreenForceIntegerScale is a fullscreen/maximized-only rule, so the
 	//window state is part of the wiring. In a Normal window it must be inert
 	//even when the setting is on - i.e. the conjunction MainWindow resolves

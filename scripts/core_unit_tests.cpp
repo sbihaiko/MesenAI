@@ -69,6 +69,7 @@
 #include "Shared/MovieSyncGate.h"
 #include "Shared/Movies/ShareRecordingSettings.h"
 #include "Shared/ShortcutKeyRules.h"
+#include "Shared/GamepadButtonOrder.h"
 #include "Debugger/CdlFileCheck.h"
 #include "NES/NesScanlineTraceValidity.h"
 #include "NES/NesWidescreenReveal.h"
@@ -5892,7 +5893,7 @@ namespace
 	bool FiresWithEsc(EmulatorShortcut shortcut, bool keyboardConnected, bool paused)
 	{
 		return ShortcutKeyRules::IsShortcutPressed(shortcut, SingleKey(kEscKey), {}, keyboardConnected, paused,
-			true, ProbeFor({ kEscKey }));
+			true, ProbeFor({ kEscKey }), { kEscKey }, ShortcutKeyRules::SinglePadFamily());
 	}
 
 	void TestToggleOverlayStaysReachableInAKeyboardGame()
@@ -5931,12 +5932,12 @@ namespace
 		//The block is keyboard-only: a shortcut bound to a mouse button or a
 		//pad input (>= BaseMouseButtonIndex) keeps working in a keyboard game
 		bool mouseBound = ShortcutKeyRules::IsShortcutPressed(EmulatorShortcut::Reset, SingleKey(kMouseKey), {},
-			true, false, true, ProbeFor({ kMouseKey }));
+			true, false, true, ProbeFor({ kMouseKey }), { kMouseKey }, ShortcutKeyRules::SinglePadFamily());
 		Check(mouseBound, "BlocoO: a shortcut bound to a mouse/pad input is not affected by the keyboard block");
 
 		//And with nothing pressed at all, nothing fires
 		bool nothingDown = ShortcutKeyRules::IsShortcutPressed(EmulatorShortcut::ToggleOverlay, SingleKey(kEscKey), {},
-			false, false, false, ProbeFor({}));
+			false, false, false, ProbeFor({}), {}, ShortcutKeyRules::SinglePadFamily());
 		Check(!nothingDown, "BlocoO: no key down means no shortcut fires");
 	}
 
@@ -5948,8 +5949,431 @@ namespace
 		superset.Key1 = 116; //left ctrl
 		superset.Key2 = kEscKey;
 		bool fires = ShortcutKeyRules::IsShortcutPressed(EmulatorShortcut::ToggleOverlay, SingleKey(kEscKey), { superset },
-			true, false, true, ProbeFor({ kEscKey, (uint16_t)116, (uint16_t)117 }));
+			true, false, true, ProbeFor({ kEscKey, (uint16_t)116, (uint16_t)117 }),
+			{ kEscKey, (uint16_t)116, (uint16_t)117 }, ShortcutKeyRules::SinglePadFamily());
 		Check(!fires, "BlocoO: a pressed superset still shadows ToggleOverlay in a keyboard game");
+	}
+
+	//--- Bloco O.2 (#800): a pad binding names a button, not device 0 ----------
+	//The pause-menu gesture is seeded from "Pad1 Select" + "Pad1 Start", and a pad
+	//key code carries its device: BaseGamepadIndex + device * 0x100 + button.
+	//Read literally, the chord only ever fires on the pad that was device 0 when
+	//the binding was written - so with two pads connected the one in the player's
+	//hand cannot open the overlay at all, and the overlay is the only surface that
+	//reaches the menus while a game runs. What the binding names is the *button*;
+	//the device byte is whoever is holding a pad (ADR-0256 Decision 5,
+	//"Qualquer controle").
+	//
+	//The button byte is the platform's own ordering (on this one 7 is Select and 6
+	//is Start); the rule only compares it, so the constants below are two distinct
+	//buttons rather than a promise about any platform's numbering.
+	const uint16_t kPadSelectButton = 7;
+	const uint16_t kPadStartButton = 6;
+	const uint16_t kPadOtherButton = 4;
+
+	uint16_t PadKey(int device, uint16_t button)
+	{
+		return (uint16_t)(IKeyManager::BaseGamepadIndex + device * 0x100 + button);
+	}
+
+	//The binding as the seeder writes it: both keys on device 0.
+	KeyCombination PadChord(uint16_t first, uint16_t second)
+	{
+		KeyCombination comb = {};
+		comb.Key1 = PadKey(0, first);
+		comb.Key2 = PadKey(0, second);
+		return comb;
+	}
+
+	bool PadChordFires(vector<uint16_t> down, const ShortcutKeyRules::PadFamilies& families)
+	{
+		return ShortcutKeyRules::IsShortcutPressed(EmulatorShortcut::ToggleOverlay,
+			PadChord(kPadSelectButton, kPadStartButton), {}, false, false, true, ProbeFor(down), down, families);
+	}
+
+	bool PadChordFires(vector<uint16_t> down)
+	{
+		return PadChordFires(down, ShortcutKeyRules::SinglePadFamily());
+	}
+
+	void TestPadChordFiresOnWhicheverPadIsInHand()
+	{
+		Check(PadChordFires({ PadKey(0, kPadSelectButton), PadKey(0, kPadStartButton) }),
+			"BlocoO.2: the chord still fires on the pad the binding was written from");
+		Check(PadChordFires({ PadKey(1, kPadSelectButton), PadKey(1, kPadStartButton) }),
+			"BlocoO.2: Select+Start on the second pad opens the overlay (#800)");
+		Check(PadChordFires({ PadKey(3, kPadSelectButton), PadKey(3, kPadStartButton) }),
+			"BlocoO.2: ...and on the fourth, because the device is not what a binding names");
+	}
+
+	//A backend with one pad family reports every device it has in that family, and
+	//its own device indices do not stop at 15: device 16 reaches code 0x2000, which
+	//is Windows' DirectInput base but, on macOS and Linux, is just "the 17th pad".
+	//What a code means is knowable only from the backend that produced it, so the
+	//families are supplied by the caller (ShortcutKeyHandler::GetPadFamilies)
+	//instead of being inferred from a mask over the code.
+	void TestTheWholePadFamilyAnswersTheChord()
+	{
+		Check(PadChordFires({ PadKey(15, kPadSelectButton), PadKey(15, kPadStartButton) }),
+			"BlocoO.2: the sixteenth pad of a one-family backend answers the chord");
+		Check(PadChordFires({ PadKey(16, kPadSelectButton), PadKey(16, kPadStartButton) }),
+			"BlocoO.2: ...and the seventeenth, whose codes reach 0x2000");
+		Check(PadChordFires({ PadKey(19, kPadSelectButton), PadKey(19, kPadStartButton) }),
+			"BlocoO.2: ...and Pad20, the last device the backends name");
+	}
+
+	//Windows enumerates a pad twice over, and the two families number their
+	//buttons independently: XInput's table (WindowsKeyManager's `buttonNames`) has
+	//Start at suffix 5 and Back at suffix 6, while DirectInput's `diButtonNames`
+	//has suffix 5 = "Y2-" and suffix 6 = "X2-" - axis directions, and
+	//WindowsKeyManager::GetPressedKeys reports DirectInput offsets 0..143, which
+	//covers them. Equal suffixes are a coincidence, not an identity: 5 is Start in
+	//one table and an axis direction in the other. This codebase has no
+	//XInput<->DirectInput button mapping to resolve it with, because DirectInput's
+	//own name table carries no semantic pad-button names at all, so the page a
+	//binding was written from has to be part of what its buttons are.
+	uint16_t JoystickKey(int device, uint16_t button)
+	{
+		return (uint16_t)(0x2000 + device * 0x100 + button);
+	}
+
+	KeyCombination TwoKeys(uint16_t first, uint16_t second)
+	{
+		KeyCombination comb = {};
+		comb.Key1 = first;
+		comb.Key2 = second;
+		return comb;
+	}
+
+	//The two-family backend, i.e. Windows: XInput pads and DirectInput joysticks.
+	//It is the header's own list, not a copy - the two numbers are the fix, and a
+	//copy here would keep this suite green while production drifted.
+	const ShortcutKeyRules::PadFamilies& TwoPadFamilies()
+	{
+		return ShortcutKeyRules::TwoPadFamilies();
+	}
+
+	//A shortcut bound to these two codes, held on the given keys.
+	bool ChordFires(KeyCombination binding, vector<uint16_t> down, const ShortcutKeyRules::PadFamilies& families)
+	{
+		return ShortcutKeyRules::IsShortcutPressed(EmulatorShortcut::ToggleOverlay,
+			binding, {}, false, false, true, ProbeFor(down), down, families);
+	}
+
+	bool ChordFires(KeyCombination binding, vector<uint16_t> down)
+	{
+		return ChordFires(binding, down, TwoPadFamilies());
+	}
+
+	void TestPadChordIsNotAnsweredAcrossPadFamilies()
+	{
+		//The Windows chord as the seeder writes it: XInput Start + Back.
+		KeyCombination xinput = TwoKeys(PadKey(0, 5), PadKey(0, 6));
+
+		//The regression this guards: matching on the button byte alone let one
+		//joystick's Y2-/X2- axes fire that chord, because DirectInput numbers them
+		//5 and 6 too.
+		Check(!ChordFires(xinput, { JoystickKey(0, 5), JoystickKey(0, 6) }),
+			"BlocoO.2: a joystick's Y2-/X2- axes do not satisfy an XInput Start+Back chord");
+		Check(!ChordFires(xinput, { JoystickKey(0, 5), JoystickKey(1, 6) }),
+			"BlocoO.2: ...nor two joysticks' worth of them, one key each");
+
+		//The other direction, for the same reason: a joystick binding is not
+		//answered by the XInput pad that happens to share its button bytes.
+		KeyCombination joystick = TwoKeys(JoystickKey(0, 5), JoystickKey(0, 6));
+		Check(!ChordFires(joystick, { PadKey(0, 5), PadKey(0, 6) }),
+			"BlocoO.2: ...and an XInput pad does not satisfy a joystick's binding");
+
+		//Same family, second device: the #800 fix, and it is unaffected by the rule
+		//above.
+		Check(ChordFires(xinput, { PadKey(1, 5), PadKey(1, 6) }),
+			"BlocoO.2: the chord still fires on the second XInput pad");
+		Check(ChordFires(joystick, { JoystickKey(2, 5), JoystickKey(2, 6) }),
+			"BlocoO.2: ...and on the third joystick, in its own family");
+
+		//A one-family backend keeps every device in that family even where the
+		//codes cross 0x2000: device 16 is Pad17, not a joystick. Read as a second
+		//family by a mask over the code, Pad17..Pad20 would be unreachable from the
+		//seeded Pad1 binding - the same class of bug as #800, one device higher.
+		Check(ChordFires(xinput, { PadKey(16, 5), PadKey(16, 6) }, ShortcutKeyRules::SinglePadFamily()),
+			"BlocoO.2: on macOS/Linux the 17th pad is in the same family as the first");
+		//...and the same code on the two-family backend is a joystick, so there it
+		//must not answer the XInput binding.
+		Check(!ChordFires(xinput, { JoystickKey(0, 5), JoystickKey(0, 6) }, TwoPadFamilies()),
+			"BlocoO.2: on Windows that same code is DirectInput and still does not answer it");
+	}
+
+	//A combination may mix the pad with the keyboard, and each half is asked in its
+	//own terms: the pad key resolves per pad, the keyboard key stays an exact host
+	//lookup. The pad half of this is also what keeps a mixed binding from being
+	//answered by the pad the binding was *not* written from.
+	void TestAMixedCombinationAsksEachHalfItsOwnWay()
+	{
+		KeyCombination mixed = TwoKeys(PadKey(0, kPadSelectButton), kEscKey);
+
+		Check(ChordFires(mixed, { PadKey(2, kPadSelectButton), kEscKey }),
+			"BlocoO.2: a pad+keyboard combo fires when both halves are down, the pad being any pad");
+		Check(!ChordFires(mixed, { PadKey(2, kPadSelectButton) }),
+			"BlocoO.2: ...but not with the keyboard half missing");
+		Check(!ChordFires(mixed, { kEscKey }),
+			"BlocoO.2: ...nor with the pad half missing");
+		//The keyboard half is exact: a keyboard key that is not the one bound does
+		//not stand in, even with the pad half held.
+		Check(!ChordFires(mixed, { PadKey(2, kPadSelectButton), (uint16_t)(kEscKey + 1) }),
+			"BlocoO.2: ...and the keyboard half is still an exact lookup");
+	}
+
+	//A superset shadows its subset on the pad path too, and across pads of the same
+	//family: whatever pad a player holds, the more specific binding wins.
+	void TestAPadSupersetShadowsItsSubsetOnAnyPad()
+	{
+		KeyCombination subset = PadChord(kPadSelectButton, kPadStartButton);
+		KeyCombination superset = TwoKeys(PadKey(0, kPadSelectButton), PadKey(0, kPadOtherButton));
+
+		bool shadows = ShortcutKeyRules::IsShortcutPressed(EmulatorShortcut::ToggleOverlay, subset, { superset },
+			false, false, true, ProbeFor({ PadKey(1, kPadSelectButton), PadKey(1, kPadOtherButton) }),
+			{ PadKey(1, kPadSelectButton), PadKey(1, kPadOtherButton) }, ShortcutKeyRules::SinglePadFamily());
+		Check(!shadows, "BlocoO.2: a pad superset pressed on the second pad shadows the subset");
+
+		//The subset alone still fires - the shadow is the superset's presence, not
+		//the pad.
+		Check(PadChordFires({ PadKey(1, kPadSelectButton), PadKey(1, kPadStartButton) }),
+			"BlocoO.2: ...and with only the subset down, it fires again");
+	}
+
+	//#813: Windows hands GetGamepadInfo a GLOBAL ordinal - it walks the four
+	//XInput slots and only then the joysticks - while a mapping's key code carries
+	//the device index WITHIN its family, which is also what DirectInputManager
+	//takes. The two have to be reconciled or anything comparing a recorded device
+	//index against the host reads the wrong pad: the reconnect repair of ADR-0255
+	//slice 5, and any surface that labels a pad by the device its keys belong to.
+	void TestAJoysticksDeviceIndexIsItsOwnFamilyNotTheHostsOrdinal()
+	{
+		//No XInput pad ahead of it: the host's ordinal already is the device index.
+		Check(ShortcutKeyRules::DirectInputDeviceOf(0, 0) == 0,
+			"BlocoO.3: with no XInput pad, the first joystick is device 0");
+		Check(ShortcutKeyRules::DirectInputDeviceOf(2, 0) == 2,
+			"BlocoO.3: ...and the third is device 2");
+
+		//The case that was wrong: two XInput pads enumerated first, so the host
+		//calls the first joystick ordinal 2 while its own key codes - and
+		//DirectInputManager's GetVendorId - call it device 0.
+		Check(ShortcutKeyRules::DirectInputDeviceOf(2, 2) == 0,
+			"BlocoO.3: with two XInput pads ahead of it, the first joystick is still device 0");
+		Check(ShortcutKeyRules::DirectInputDeviceOf(3, 2) == 1,
+			"BlocoO.3: ...and the second joystick is device 1");
+
+		//The whole point of the index: it names the same pad the key code does, so
+		//a code built from it must land inside the DirectInput family and on that
+		//device.
+		uint32_t device = ShortcutKeyRules::DirectInputDeviceOf(5, 4);
+		uint16_t code = (uint16_t)(IKeyManager::BaseDirectInputIndex + device * 0x100 + kPadStartButton);
+		Check(ShortcutKeyRules::PadFamilyOf(code, TwoPadFamilies()) == (uint16_t)IKeyManager::BaseDirectInputIndex,
+			"BlocoO.3: the reconciled index builds a code in the DirectInput family");
+		Check(ShortcutKeyRules::PadButtonOf(code) == kPadStartButton && code == JoystickKey(1, kPadStartButton),
+			"BlocoO.3: ...on device 1, the one the host enumerated fifth behind four XInput pads");
+	}
+
+	//ADR-0255 slice 4 (the third answer, "Sim, com um limiar"): a stick
+	//direction a shortcut's spare binding names fires at the player's own
+	//threshold, and every other direction keeps the magnitude the backend derived
+	//from the deadzone setting. The whole "zero behaviour change for anyone who
+	//has not bound an axis" claim is these two functions: PadDirectionOf is the key
+	//the EmuSettings table is stored under (device-free, so a threshold belongs to
+	//the direction), and AxisThresholdRatio is the one place a host turns the
+	//stored units back into the magnitude it compares.
+	void TestAnAxisThresholdAppliesOnlyToTheDirectionABindingNames()
+	{
+		//No entry in the table (0) is "no binding names this direction": the
+		//backend's own expression stands untouched. This is the case every config
+		//that never used the feature takes, including macOS' own
+		//GetControllerDeadzoneRatio() * 0.4 and DirectInput's INT16_MAX/2 * ratio -
+		//whatever `host` is, it comes back as it went in.
+		Check(ShortcutKeyRules::AxisThresholdRatio(0, 0.4) == 0.4,
+			"BlocoO.5: with no binding on the direction, the host's own ratio stands");
+		Check(ShortcutKeyRules::AxisThresholdRatio(0, 0.75) == 0.75,
+			"BlocoO.5: ...at any deadzone setting, and not only the default one");
+		Check(ShortcutKeyRules::AxisThresholdRatio(0, 0) == 0,
+			"BlocoO.5: ...including a host expression that is itself zero");
+
+		//A direction a binding names takes the player's threshold, expressed as
+		//the fraction of full travel the host compares against - the same
+		//conversion PadAxisAction.ThresholdUnits makes on the C# side (100% is
+		//short.MaxValue, so 40% is 13107 and 100% is 32767).
+		Check(ShortcutKeyRules::AxisThresholdRatio(13107, 0.4) == 13107.0 / INT16_MAX,
+			"BlocoO.5: a named direction fires at the stored threshold's fraction of travel");
+		Check(ShortcutKeyRules::AxisThresholdRatio(32767, 1.0) == 1.0,
+			"BlocoO.5: ...and 100% is full travel, whatever the deadzone says");
+		Check(ShortcutKeyRules::AxisThresholdRatio(3277, 1.0) < 1.0 && ShortcutKeyRules::AxisThresholdRatio(3277, 1.0) > 0.0,
+			"BlocoO.5: ...and a low threshold is a fraction, not clamped to the host's ratio");
+
+		//The ratio rule is for the two backends that compare a *ratio* (macOS'
+		//HandleThumbstick, Linux' CheckAxis): 40% of travel is 0.4 either way, so
+		//the default threshold lands where the default deadzone already put the
+		//line. Not an exact equality - the stored threshold is an integer count of
+		//the axis' own units, so 40% is 13107 of 32767 and lands a hair under 0.4.
+		//
+		//It is NOT what DirectInput does: that backend compares a magnitude, and
+		//the magnitude rule is asserted below. The two are separate functions for
+		//exactly this reason.
+		Check(std::fabs(ShortcutKeyRules::AxisThresholdRatio(13107, 0.4) - 0.4) < 1e-5,
+			"BlocoO.5: the default threshold's fraction is the default deadzone's own 0.4");
+
+		//The magnitude rule, for Windows' DirectInput: `state.lX` is a signed
+		//16-bit axis and 100% of travel is INT16_MAX on both sides, so a stored
+		//threshold is already in the unit the backend compares - no conversion at
+		//all. Every case here is the reason AxisThresholdRatio cannot be reused:
+		//handed the same magnitude it returns a fraction of 1.0, which as an int
+		//truncates to 0 and makes every direction count as pressed.
+		Check(ShortcutKeyRules::AxisThresholdMagnitude(0, 16383) == 16383,
+			"BlocoO.5: with no binding on the direction, DirectInput's own magnitude stands");
+		Check(ShortcutKeyRules::AxisThresholdMagnitude(0, 0) == 0,
+			"BlocoO.5: ...including the zero a fully-open deadzone setting produces");
+		Check(ShortcutKeyRules::AxisThresholdMagnitude(13107, 16383) == 13107,
+			"BlocoO.5: a named direction fires at the stored units, the number itself");
+		Check(ShortcutKeyRules::AxisThresholdMagnitude(32767, 16383) == 32767,
+			"BlocoO.5: ...and 100% is full travel, past whatever the deadzone says");
+		Check((int)ShortcutKeyRules::AxisThresholdRatio(13107, 16383) == 0,
+			"BlocoO.5: the ratio rule on the same magnitude truncates to 0 - the bug this pair exists to prevent");
+
+		//PadDirectionOf is the code with the device cleared, which is what makes
+		//the threshold the direction's rather than the pad's: two pads of one
+		//family must answer to the same key.
+		Check(ShortcutKeyRules::PadDirectionOf((uint16_t)IKeyManager::BaseGamepadIndex, 16) == (uint16_t)(IKeyManager::BaseGamepadIndex + 16),
+			"BlocoO.5: the direction key is the family base plus the button byte");
+		Check(ShortcutKeyRules::PadDirectionOf((uint16_t)IKeyManager::BaseGamepadIndex, ShortcutKeyRules::PadButtonOf(PadKey(3, 16))) ==
+			ShortcutKeyRules::PadDirectionOf((uint16_t)IKeyManager::BaseGamepadIndex, ShortcutKeyRules::PadButtonOf(PadKey(0, 16))),
+			"BlocoO.5: ...so the third pad's X+ and the first pad's share one threshold");
+		Check(ShortcutKeyRules::PadDirectionOf((uint16_t)IKeyManager::BaseDirectInputIndex, 0) !=
+			ShortcutKeyRules::PadDirectionOf((uint16_t)IKeyManager::BaseGamepadIndex, 0),
+			"BlocoO.5: ...and the two families' first directions stay apart");
+	}
+
+	//ADR-0255 slice 1 correction: GamepadState.Buttons is numbered per backend,
+	//and the Play Controller sheet draws the pad's own keys from it. The order is
+	//written once in Core/Shared/GamepadButtonOrder.h; this pins that header's
+	//BitOf to the header's own rows, so a row and the lookup cannot drift apart.
+	//It does NOT read the backends - the literals below are the header's values
+	//again, and the core unit tests cannot compile the Windows arm here. The
+	//backend -> header link (and the C# mirror the sheet really reads, in
+	//UI/Logic/ControllerSheet.cs) is closed in
+	//UI.HeadlessTests/PlayerControllerSheetTests, whose
+	//Every_backends_key_table_matches_ControllerLivePad parses the three backends'
+	//buttonNames tables off disk.
+	void TestThePadsButtonOrderIsPerBackend()
+	{
+		using namespace GamepadButtonOrder;
+
+		//macOS / GameController: the console order itself (MacOSGameController.mm).
+		Check(BitOf(GamepadBackend::GameController, PadButton::A) == 0 &&
+			BitOf(GamepadBackend::GameController, PadButton::B) == 1 &&
+			BitOf(GamepadBackend::GameController, PadButton::L) == 4 &&
+			BitOf(GamepadBackend::GameController, PadButton::R) == 5 &&
+			BitOf(GamepadBackend::GameController, PadButton::Start) == 6 &&
+			BitOf(GamepadBackend::GameController, PadButton::Select) == 7,
+			"BlocoO.4: the GameController backend numbers the console buttons at their own bits");
+		Check(BitOf(GamepadBackend::GameController, PadButton::Up) == 8 &&
+			BitOf(GamepadBackend::GameController, PadButton::Down) == 9 &&
+			BitOf(GamepadBackend::GameController, PadButton::Left) == 10 &&
+			BitOf(GamepadBackend::GameController, PadButton::Right) == 11,
+			"BlocoO.4: ...and its D-pad at 8..11");
+
+		//Windows XInput: xinput button j is bit j-1, so bit 0 is D-pad Up - which
+		//is what the sheet's A key lit from before this rule existed
+		//(Windows/XInputManager.cpp).
+		Check(BitOf(GamepadBackend::XInput, PadButton::Up) == 0 &&
+			BitOf(GamepadBackend::XInput, PadButton::Down) == 1 &&
+			BitOf(GamepadBackend::XInput, PadButton::Left) == 2 &&
+			BitOf(GamepadBackend::XInput, PadButton::Right) == 3,
+			"BlocoO.4: the XInput backend puts the D-pad at bits 0..3");
+		Check(BitOf(GamepadBackend::XInput, PadButton::Start) == 4 &&
+			BitOf(GamepadBackend::XInput, PadButton::Select) == 5 &&
+			BitOf(GamepadBackend::XInput, PadButton::L) == 8 &&
+			BitOf(GamepadBackend::XInput, PadButton::R) == 9 &&
+			BitOf(GamepadBackend::XInput, PadButton::A) == 12 &&
+			BitOf(GamepadBackend::XInput, PadButton::B) == 13,
+			"BlocoO.4: ...Start/Back at 4/5, the shoulders at 8/9 and A/B at 12/13");
+
+		//Linux / evdev: BTN_A..BTN_THUMBR at 0..13, and no console D-pad button -
+		//the hat is reported as axes at bits 26..29, outside the 24 GamepadState
+		//carries (Linux/LinuxGameController.cpp).
+		Check(BitOf(GamepadBackend::Evdev, PadButton::A) == 0 &&
+			BitOf(GamepadBackend::Evdev, PadButton::B) == 1 &&
+			BitOf(GamepadBackend::Evdev, PadButton::L) == 6 &&
+			BitOf(GamepadBackend::Evdev, PadButton::R) == 7 &&
+			BitOf(GamepadBackend::Evdev, PadButton::Select) == 10 &&
+			BitOf(GamepadBackend::Evdev, PadButton::Start) == 11,
+			"BlocoO.4: the evdev backend numbers A/B at 0/1 and TL/TR/SELECT/START at 6/7/10/11");
+		Check(BitOf(GamepadBackend::Evdev, PadButton::Up) == -1 &&
+			BitOf(GamepadBackend::Evdev, PadButton::Right) == -1,
+			"BlocoO.4: ...and its D-pad has no GamepadState bit, so the key stays dark");
+
+		//A raw joystick has no console button to name, so the sheet lights nothing
+		//rather than guessing; an unknown backend is the same.
+		Check(BitOf(GamepadBackend::DirectInput, PadButton::A) == -1,
+			"BlocoO.4: DirectInput's raw buttons light no sheet key");
+		Check(BitOf(GamepadBackend::None, PadButton::A) == -1,
+			"BlocoO.4: ...and neither does an unplaced pad");
+
+		//Every listed backend's bits are distinct, so no press lights two keys.
+		for(GamepadBackend backend : { GamepadBackend::GameController, GamepadBackend::XInput, GamepadBackend::Evdev }) {
+			vector<int> bits;
+			for(PadButton button : { PadButton::Up, PadButton::Down, PadButton::Left, PadButton::Right,
+				PadButton::Select, PadButton::Start, PadButton::B, PadButton::A, PadButton::L, PadButton::R }) {
+				int bit = BitOf(backend, button);
+				if(bit >= 0) {
+					Check(std::find(bits.begin(), bits.end(), bit) == bits.end(),
+						"BlocoO.4: two sheet keys share a bit on one backend");
+					bits.push_back(bit);
+				}
+			}
+		}
+	}
+
+	//A binding may name pad keys from two families at once, and no single pad can
+	//answer it: the button bytes are only buttons inside their own family, so an
+	//XInput pad holding buttons 7 and 4 must not stand in for a binding written as
+	//"XInput button 7 plus joystick button 4". Only a Windows user can write such a
+	//binding, and the rule has to keep the families apart inside the pad probe too,
+	//not just when choosing which pads to ask.
+	void TestABindingAcrossTwoFamiliesIsNotAnsweredByOnePad()
+	{
+		KeyCombination spanned = TwoKeys(PadKey(0, kPadSelectButton), JoystickKey(0, kPadOtherButton));
+
+		Check(!ChordFires(spanned, { PadKey(1, kPadSelectButton), PadKey(1, kPadOtherButton) }),
+			"BlocoO.2: an XInput pad does not answer a binding that also names a joystick button");
+		Check(!ChordFires(spanned, { JoystickKey(1, kPadOtherButton) }),
+			"BlocoO.2: ...nor does the joystick half alone");
+	}
+
+	void TestPadChordIsStillAChord()
+	{
+		Check(!PadChordFires({ PadKey(1, kPadSelectButton) }),
+			"BlocoO.2: one button of the chord on its own does not fire");
+		Check(!PadChordFires({ PadKey(1, kPadSelectButton), PadKey(1, kPadOtherButton) }),
+			"BlocoO.2: the wrong second button on the same pad does not fire");
+		//The device is dropped, the pad is not: two players each resting a finger on
+		//one button of the chord must not open the overlay between them.
+		Check(!PadChordFires({ PadKey(0, kPadSelectButton), PadKey(1, kPadStartButton) }),
+			"BlocoO.2: half the chord on one pad and half on another does not fire");
+	}
+
+	void TestPadRuleLeavesTheKeyboardAndMouseExact()
+	{
+		//Only a pad key is resolved per device: the keyboard stays an exact lookup,
+		//so a shortcut bound to a pad button is not satisfied by some unrelated
+		//keyboard key that happens to share its button byte.
+		bool keyboardSatisfiesPadBinding = ShortcutKeyRules::IsShortcutPressed(EmulatorShortcut::Reset,
+			SingleKey(PadKey(0, kPadSelectButton)), {}, false, false, true,
+			ProbeFor({ kPadSelectButton }), { kPadSelectButton }, ShortcutKeyRules::SinglePadFamily());
+		Check(!keyboardSatisfiesPadBinding, "BlocoO.2: a keyboard key does not stand in for a pad button");
+
+		//...and a pad button does not stand in for a mouse button, which sits below
+		//the pad range
+		bool padSatisfiesMouseBinding = ShortcutKeyRules::IsShortcutPressed(EmulatorShortcut::Reset,
+			SingleKey(kMouseKey), {}, false, false, true,
+			ProbeFor({ PadKey(1, kPadSelectButton) }), { PadKey(1, kPadSelectButton) }, ShortcutKeyRules::SinglePadFamily());
+		Check(!padSatisfiesMouseBinding, "BlocoO.2: a pad button does not stand in for a mouse button");
 	}
 
 	//--- Bloco P: artist-legible sheet pipeline (ADR-0153) -------------------
@@ -16574,6 +16998,17 @@ TestW6TheFiltersAcceptTheExtendedFrame();
 	TestKeyboardBlockOnlyAppliesWhileRunning();
 	TestKeyboardBlockSparesNonKeyboardInputs();
 	TestSupersetStillShadowsTheExemptShortcut();
+	TestPadChordFiresOnWhicheverPadIsInHand();
+	TestTheWholePadFamilyAnswersTheChord();
+	TestPadChordIsNotAnsweredAcrossPadFamilies();
+	TestPadChordIsStillAChord();
+	TestABindingAcrossTwoFamiliesIsNotAnsweredByOnePad();
+	TestAMixedCombinationAsksEachHalfItsOwnWay();
+	TestAPadSupersetShadowsItsSubsetOnAnyPad();
+	TestAJoysticksDeviceIndexIsItsOwnFamilyNotTheHostsOrdinal();
+	TestAnAxisThresholdAppliesOnlyToTheDirectionABindingNames();
+	TestThePadsButtonOrderIsPerBackend();
+	TestPadRuleLeavesTheKeyboardAndMouseExact();
 
 	TestSheetStableScreensCollapseRepeats();
 	TestSheetHudRowsSurviveAChangingScore();

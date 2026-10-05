@@ -15,10 +15,11 @@ namespace Mesen.ViewModels
 		//The last entry toast shown (null when the start showed none).
 		public PlayEntryToast? LastEntryToast { get; private set; }
 
-		//Where the toast reads the ToggleOverlay slots' key names and the
-		//connected pad count. The headless tests replace them: they run the
-		//Core without a key manager, where every key name is empty.
-		public Func<(List<string> First, List<string> Second)> OverlayBindingKeyNames { get; set; } = () => ConfigManager.Config.Preferences.OverlayBindingKeyNames();
+		//Where the toast reads the ToggleOverlay slots' key names (the two key
+		//combinations and the pad slot - ADR-0255 slice 4) and the connected pad
+		//count. The headless tests replace them: they run the Core without a key
+		//manager, where every key name is empty.
+		public Func<(List<string> First, List<string> Second, List<string> Pad)> OverlayBindingKeyNames { get; set; } = () => ConfigManager.Config.Preferences.OverlayBindingKeyNames();
 		public Func<uint> ConnectedGamepadCount { get; set; } = InputApi.GetConnectedGamepadCount;
 
 		//gameStart is false for a power-cycle reload, which is not a new start.
@@ -35,9 +36,9 @@ namespace Mesen.ViewModels
 				packText = CurrentPackName + (string.IsNullOrEmpty(CurrentPackLayers) ? "" : " — " + CurrentPackLayers);
 			}
 
-			(List<string> first, List<string> second) = OverlayBindingKeyNames();
+			(List<string> first, List<string> second, List<string> pad) = OverlayBindingKeyNames();
 			PlayInputDevice device = PlayMenuHint.ActiveDevice(ConnectedGamepadCount());
-			string? binding = PlayMenuHint.BindingName(device, first, second);
+			string? binding = PlayMenuHint.BindingName(device, first, second, pad);
 
 			PlayEntryToast? toast = PlayMenuHint.EntryToast(packText, gameStart, IsPlayWorkspace, prefs.PlayMenuHintsShown, binding);
 			if(toast != null) {

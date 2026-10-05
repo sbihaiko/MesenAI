@@ -62,7 +62,7 @@ public class PlaySheetsContrastTests : IDisposable
 
 	public static IEnumerable<object[]> Sheets()
 	{
-		string[] sheets = { "PlayerOverlay", "PlayerSaveStatesSheet", "PlayerPackDetailSheet", "PlayerPackPicker", "PlayerEnhancementsPanel", "PlayerCheatsSheet", "PlayerReplaysSheet", "PlayHomeSlotSheet", "PackDepSheet", "BiosSheet", "PlayHomeLoadAlert", "PlayerSettingsSheet" };
+		string[] sheets = { "PlayerOverlay", "PlayerSaveStatesSheet", "PlayerPackDetailSheet", "PlayerPackPicker", "PlayerEnhancementsPanel", "PlayerCheatsSheet", "PlayerReplaysSheet", "PlayHomeSlotSheet", "PackDepSheet", "BiosSheet", "PlayHomeLoadAlert", "PlayerSettingsSheet", "PlayerControllerSheet", "PlayerRomPickerSheet" };
 		foreach(string theme in new[] { "Light", "Dark" }) {
 			foreach(string sheet in sheets) {
 				yield return new object[] { theme, sheet };
@@ -108,9 +108,10 @@ public class PlaySheetsContrastTests : IDisposable
 		window.ShowStarted();
 		Dispatcher.UIThread.RunJobs();
 		MainWindowViewModel model = Assert.IsType<MainWindowViewModel>(window.DataContext);
-		//ADR-0249 wave 2: the BIOS sheet and the load alert sit on Play's home,
-		//with no game running; every other surface is over a paused game.
-		if(sheet is not ("BiosSheet" or "PlayHomeLoadAlert")) {
+		//ADR-0249 wave 2: the BIOS sheet, the load alert and #845's ROM picker
+		//sit on Play's home, with no game running; every other surface is over a
+		//paused game.
+		if(sheet is not ("BiosSheet" or "PlayHomeLoadAlert" or "PlayerRomPickerSheet")) {
 			model.RomInfo = new RomInfo() { ConsoleType = ConsoleType.Nes, Format = RomFormat.iNes };
 			model.OpenPauseOverlay();
 		}
@@ -125,6 +126,11 @@ public class PlaySheetsContrastTests : IDisposable
 			case "PlayerSettingsSheet":
 				//ADR-0249 (W-P8): W-P4's Settings row, a sheet in this window.
 				window.FindNamed<Button>("OverlaySettingsButton").RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+				break;
+			case "PlayerControllerSheet":
+				//ADR-0255 slice 1 (W-P17): the Controller sheet, over the same
+				//paused game (its own suite covers the row that opens it).
+				model.OpenControllerSheet();
 				break;
 			case "PlayerPackDetailSheet":
 				model.OpenPackFromOverlay(OnePack, Sha1, "/packs", "", installedSourceSha256: "abc123");
@@ -157,6 +163,10 @@ public class PlaySheetsContrastTests : IDisposable
 			case "PlayHomeLoadAlert":
 				model.RecentGames.Init(GameScreenMode.RecentGames);
 				model.RecentGames.ShowLoadFailure(LoadFailureCause.NotAGame, "Contra.txt");
+				break;
+			case "PlayerRomPickerSheet":
+				//#845: the home's own action, which is what opens it in the app.
+				model.OpenRomPicker();
 				break;
 			case "PlayerReplaysSheet":
 				CommunityReplay replay = new(301, "https://github.com/user-attachments/files/301/run.mmo", new string('c', 64), 4096, "nes", "Contra (USA)", "alice", "stage skip", 3600,

@@ -27,8 +27,10 @@ private:
 	atomic<bool> _repeatStarted;
 	atomic<bool> _needRepeat;
 
-	unordered_set<uint32_t> _keysDown[2];
-	unordered_set<uint32_t> _prevKeysDown[2];
+	//One slot per polled key set (ADR-0255 slice 4): the Alt-F4 guard's own set
+	//is deliberately not polled, so it stops at ShortcutKeySets.
+	unordered_set<uint32_t> _keysDown[ShortcutKeySets];
+	unordered_set<uint32_t> _prevKeysDown[ShortcutKeySets];
 
 	void CheckMappedKeys();
 

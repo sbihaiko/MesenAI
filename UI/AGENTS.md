@@ -141,12 +141,15 @@ can be exercised by real xunit tests without Avalonia or the native
   picker is dismissed, and Esc on the home does nothing. *Quit game* powers
   the game off (`LoadRomHelper.PowerOff`, after the existing
   `ConfirmExitResetPower` prompt) and never closes the app.
-- The Play edge flows (G.5, ADR-0241, PRD Part B §13.5.2 W-P12–W-P16) are
-  host-free in `UI/Logic/PlayFirstRun.cs`, `PlayBiosPrompt.cs`,
-  `PlayLoadFailure.cs`, `PlayPackDepPrompt.cs` and `PlayControllerSetup.cs`.
-  W-P12 is `SetupWizardWindow` redrawn: it still runs before `MainWindow`
-  (the storage choice decides `HomeFolder`), always applies both gamepad
-  presets, and its close/Esc applies the choice (no Cancel). W-P13, W-P14,
+- The Play edge flows (G.5, ADR-0241, PRD Part B §13.5.2 W-P13–W-P16) are
+  host-free in `UI/Logic/PlayFirstRun.cs`,
+  `PlayBiosPrompt.cs`, `PlayLoadFailure.cs`, `PlayPackDepPrompt.cs` and
+  `PlayControllerSetup.cs`. W-P12's sheet is retired (ADR-0256 Decision 8):
+  nothing runs before `MainWindow` any more, and the two questions it asked -
+  the storage folder and the keyboard preset - are Settings › System
+  (`PlayerSystemSettingsViewModel` + `PlaySystemSettingsPadTests`); what stays
+  in `PlayFirstRun.cs` is the choice, its defaults and the mappings.
+  W-P13, W-P14,
   W-P15 and W-P16 are Player-mode only, in Play; Advanced keeps the
   `FirmwareNotFound` dialog loop, the OSD load error with the home hidden,
   and the OSD pending-dep line. `PlaySheet.PackDep` closes back to W-P4; the
@@ -157,8 +160,7 @@ can be exercised by real xunit tests without Avalonia or the native
   thread blocks on `MissingFirmware` holding its load locks, so every wait
   goes through `CoreRequestWaits` (`UI/Logic`): `CloseEmu` dismisses the BIOS
   sheet and closes the waits before `EmuApi.Stop`, and another open or a
-  power off dismisses the sheet (#658). The first-run sheet never cancels an
-  application/OS shutdown close and writes nothing then (#661). Every open
+  power off dismisses the sheet (#658). Every open
   starts with no BIOS cancel (`PlayBiosSheetViewModel.ClearCancelled`, #674),
   and a failure is reported only for the latest open
   (`PlayLoadFailure.IsCurrentOpen`), so a cancel never outlives its open. The
@@ -176,6 +178,70 @@ can be exercised by real xunit tests without Avalonia or the native
   (`InterruptionKind.ForcedPatch`, docked above the game) up in Player mode
   only; *Reload Without Patch* is `EmuApi.SuppressForcedPackPatch` (that
   ROM, this session, the setting untouched) plus a power cycle.
+- The pad drives the Play GUI (ADR-0256 Decisions 2 and 3, plus the held
+  repeat the slice of 2026-10-04 carried). The rules are host-free in
+  `UI/Logic` and tested without a pad or a window: `PadInHand` (which pad is in
+  the player's hand, off the last *new* press), `PadNaming` (the family comes
+  from the backend's `GetKeyName` — a code cannot say it, since
+  `(code - 0x1000) >> 8` reads a Windows DirectInput `Joy` code as pad 16),
+  `PadNavControls.Resolve` (the codes that pad's preset binds),
+  `PlayPadNavigation.HasAuthority/Next` (when the pad is the GUI's rather than
+  the console's, and what one press means) and `PadNavRepeat` (400 ms before
+  the first repeat, one step every 100 ms after it; Confirm and Back never
+  repeat — a repeating Confirm activates whatever it just scrolled onto).
+  `UI/Windows/PlayPadNavigationWiring.cs` is the only host half: a 50 ms
+  `DispatcherTimer` on the app's own poll cadence (the W-P15 poll's) samples
+  `InputApi.GetPressedKeys()` — never an event, so nothing hooks
+  `OnPreviewKeyDown`, whose macOS path returns early — feeds the rules and
+  applies the answer through `IFocusManager.FindNextElement` +
+  `PlayFocusOnOpen.Enter`. `PlayPadNavigation.HasAuthority(playSurfaceUp,
+  gameLoaded, gamePaused, loadCardUp, firstRunPickerUp)` is what says whether
+  the pad is the GUI's at all: the on-load pack picker outranks the load card
+  (it is posted while the card is still on screen, and it has to be answerable),
+  the load card itself refuses (it carries no focusable control, so authority
+  over it would only let a Confirm reach the home and launch a game *through*
+  the card), and otherwise the pad is the GUI's when no game is loaded, or when
+  a surface that took the console away is up — the pause is what makes it the
+  pad's, not the surface's, which is what keeps a surface that never pauses
+  (the barcode tool sheet, Settings from a task door) from handing the pad the
+  menus over a running game. `IsBackEdge` is asked **outside** that rule: the
+  tick hands the authority answer to `PadNavRepeat.Next`, and only when it
+  answers `None` does it test the Back edge, which needs no authority at all —
+  Back is the one press no authority rule may gate, because the slot grid the
+  Load/Save-state shortcuts open sits over a game `CurrentPlaySheet()` does not
+  name and has no other exit. `StateGrid` is scoped **out** — it moves its own
+  `SelectedIndex` from the pad in its own timer, through `GridAction` (the pad's
+  own preset inside the Play door, never the console mapping the port carries,
+  so rebinding or clearing the D-pad cannot change or lose grid navigation and a
+  second pad can drive it — and the console mapping outside it, which is how
+  Advanced draws its own game-selection and Save/Load screens from the same
+  control), its slots are not individually focusable, and "owning" it here
+  would mean the roving-focus container Decision 3 rules out — except for Back,
+  which is the bridge's: the grid's loop has no exit, and a player stuck in the
+  slot grid is the failure ADR-0256 exists to prevent.
+- `PlayFocusOnOpen` (`UI/Utilities`) is Decision 3's one focus path. A Play
+  surface registers a claim in the order `TogglePlayerOverlay` walks it
+  (`HandleEdgeFlowEsc`, then `CurrentPlaySheet`'s chain), so two surfaces up at
+  once — Look's Adjust… opens the shader sheet over Settings, which stays open
+  beneath — resolve the way Esc would; the arbiter re-reads the claims on a
+  close as well as an open, which is what hands the focus back down the stack.
+  Every surface that chain can reach has a claim, and the claim opens on the
+  same predicate the surface stands for — a claim narrower than the surface
+  (the tool sheet's, which opened on the barcode kind alone, or the Controller
+  sheet having none at all) leaves the arbiter focusing what is *under* the
+  sheet, so the ring is drawn on a surface the player cannot reach and Confirm
+  fires that surface's action instead of the sheet's. One claim is re-read by
+  something other than visibility: #845's ROM picker watches its `PathText`
+  beside `IsVisible`, because a step inside the picker rebuilds its list and
+  takes the row that held the focus with it — so the step is also what
+  re-arbitrates, and the ring lands on the new first row. Without it the sheet
+  would answer the first step and no other.
+  `Enter` is the only place focus is taken, and always with
+  `NavigationMethod.Directional`: that is what makes it a `:focus-visible`
+  focus, which is what paints `PlayerFocusRing`. Before it, each surface posted
+  its own `Focus()` (the `MainWindow` constructor, `PlayEdgeFlowsWiring`,
+  `PlayHomeView`, `StateGrid`) and they raced; #625's cross-window guard lives
+  here once now.
 - The Remaster workspace (G.3, ADR-0241/ADR-0243, PRD Part B §13.5.3
   W-R0–W-R3) keeps every decision host-free in `UI/Logic/Remaster*.cs`:
   `RemasterProjectReader` reads `project.json` + `auto/rec-NNN/` the way
@@ -222,7 +288,7 @@ can be exercised by real xunit tests without Avalonia or the native
   UI thread and the sentence goes to the core HUD (`EmuApi.DisplayMessage`,
   the native renderer draws over Avalonia) and the status line. The sheets
   are `UI/Views/PlayerPackPickerSheetView`, `PlayerPackDetailSheetView`,
-  `PlayerEnhancementsSheetView` and `PlayerDisplaySettingsView`; their names
+  `PlayerEnhancementsSheetView` and `PlayerWindowSettingsView`; their names
   are in the UserControls' scopes, so `MainWindow` finds them through the
   visual tree (`MainWindow.PlaySheets.cs`), not `GetControl`.
 - The Share workspace (G.8, ADR-0241/ADR-0205/ADR-0154, PRD Part B
@@ -562,8 +628,9 @@ drawn by `scripts/render_gui_wireframes.py`), not classic Mesen. The theme is
   `RemasterWorkspaceHost` and `RemasterRecordingStripHost` (which also carry
   `remaster`), and on the Share views themselves (`ShareWorkspace`,
   `ShareRecordingStrip`, whose DataContext is Share, hence a cast binding);
-  outside MainWindow only the first-run card (`SetupWizardWindow`'s
-  `FirstRunCard`) carries it. Player-mode Settings is a sheet inside
+  outside MainWindow no window carries it any more — the first-run card went
+  with the retired `SetupWizardWindow` (ADR-0256 Decision 8, its two questions
+  are Settings › System now). Player-mode Settings is a sheet inside
   `PlayWorkspace` (`PlayerSettingsSheetView`, W-P8/W-P10), not a window. A component class outside the
   scope does nothing, so classic windows, dialogs, the debugger and Advanced
   mode keep `MesenStyles` (radius 0, MesenFont). A local `Background`,

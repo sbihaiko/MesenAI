@@ -25,8 +25,8 @@ using Xunit.Sdk;
 namespace Mesen.HeadlessTests;
 
 //ADR-0249 Decision 5, wave 2 "settings": the render gate for Settings ›
-//Display (W-P8) and Look (W-P10) in Player mode, the first-run sheet (W-P12),
-//the pad-driven controller setup (W-P15) and the shared in-place banner the
+//Display (W-P8) and Look (W-P10) in Player mode, the pad-driven controller
+//setup (W-P15) and the shared in-place banner the
 //confirmations, errors and interruptions use (W-X1, W-X2, W-X3). Each test
 //renders with Skia, writes the PNG (PlayerRender.OutputFolder, printed) and
 //asserts font, size, radius, tint, background and the render's "N controls at
@@ -282,46 +282,6 @@ public class PlayerThemeSettingsRenderTests : IDisposable
 			Assert.DoesNotContain("ART", shown);
 			Assert.DoesNotContain("PIXELS", shown);
 			Assert.DoesNotContain("drawn by an artist", shown);
-		} finally {
-			window.Close();
-		}
-	}
-
-	private sealed class StubFirstRun : SetupWizardViewModel
-	{
-		public override bool Confirm() => true;
-	}
-
-	[AvaloniaFact]
-	public void First_run_renders_as_the_W_P12_card()
-	{
-		SetupWizardWindow window = new(new StubFirstRun());
-		window.Show();
-		Dispatcher.UIThread.RunJobs();
-		try {
-			Border card = window.FindNamed<Border>("FirstRunCard");
-			Assert.Contains("player", card.Classes);
-			Assert.Equal(Card, PlayerRender.SolidColor(card.Background));
-			Border badge = window.FindNamed<Border>("FirstRunBadge");
-			Assert.Equal(40, badge.Bounds.Width, 0.5);
-			Assert.Equal(PlayTint, PlayerRender.SolidColor(badge.Background));
-			AssertText(window.FindNamed<TextBlock>("FirstRunTitle"), 20, FontWeight.Bold, Text);
-			AssertText(window.FindNamed<TextBlock>("FirstRunStorageTitle"), 13.5, FontWeight.SemiBold, Text);
-			RadioButton user = window.FindNamed<RadioButton>("FirstRunUserFolder");
-			Assert.Contains("choice", user.Classes);
-			Assert.Equal("Inter", LabelOf(user).FontFamily.Name);
-			Assert.Equal(13.5, LabelOf(user).FontSize);
-			AssertPopup(window.FindNamed<ComboBox>("FirstRunKeyboard"), 220);
-			Button start = window.FindNamed<Button>("FirstRunStartPlaying");
-			AssertButton(start, 36, 11, 14, PlayTint);
-			Assert.Equal("Start Playing", LabelOf(start).Text);
-			//Off macOS the update check is disabled (not a control at rest) when the build has no feed.
-			bool updateCheckDisabled = !OperatingSystem.IsMacOS() && !UpdateChannel.HasFeed;
-			Assert.Equal(PlayFirstRun.ControlCount(OperatingSystem.IsMacOS()) - (updateCheckDisabled ? 1 : 0), ControlsAtRest(window));
-
-			Bitmap frame = PlayerRender.Capture(window);
-			PlayerRender.Save(frame, "W-P12");
-			PlayerRender.AssertPixel(Card, frame, 4, (int)window.Bounds.Height / 2);
 		} finally {
 			window.Close();
 		}

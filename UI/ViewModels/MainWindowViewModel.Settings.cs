@@ -1,5 +1,6 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using Mesen.Config;
+using Mesen.Logic;
 
 namespace Mesen.ViewModels
 {
@@ -10,10 +11,40 @@ namespace Mesen.ViewModels
 	//is no Cancel in Player mode).
 	public partial class MainWindowViewModel
 	{
-		[ObservableProperty, NotifyPropertyChangedFor(nameof(IsPlayerSettingsVisible))]
+		[ObservableProperty, NotifyPropertyChangedFor(nameof(IsPlayerSettingsVisible)), NotifyPropertyChangedFor(nameof(IsPlayerSystemTabVisible))]
 		public partial ConfigViewModel? PlayerSettings { get; private set; }
 
 		public bool IsPlayerSettingsVisible => PlayerSettings != null;
+
+		//ADR-0256 Decision 8: the sheet's System tab is a surface of its own for
+		//the pad - the storage choice is what it lands on when the sheet is
+		//showing that tab, instead of the tab strip every other tab opens on
+		//(PlayPadNavigationWiring's claim order). The tab's view model is built
+		//per open (ConfigViewModel.System), so the answer is read off the sheet's
+		//own tab index rather than registered on the view model itself.
+		public bool IsPlayerSystemTabVisible => PlayerSettings is { PlayerMode: true } settings
+			&& settings.PlayerTabIndex == PlayerSettingsEssentials.IndexOf(ConfigWindowTab.System);
+
+		//The tab index is the sheet's own state and nothing on this view model
+		//changes when the player picks another tab, so the claim above would
+		//never be re-asked without this: the sheet tells the window, which
+		//re-raises the one property the arbiter watches.
+		private void OnPlayerSettingsPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+		{
+			if(e.PropertyName == nameof(ConfigViewModel.PlayerTabIndex)) {
+				OnPropertyChanged(nameof(IsPlayerSystemTabVisible));
+			}
+		}
+
+		partial void OnPlayerSettingsChanging(ConfigViewModel? oldValue, ConfigViewModel? newValue)
+		{
+			if(oldValue != null) {
+				oldValue.PropertyChanged -= OnPlayerSettingsPropertyChanged;
+			}
+			if(newValue != null) {
+				newValue.PropertyChanged += OnPlayerSettingsPropertyChanged;
+			}
+		}
 
 		public void OpenPlayerSettings(ConfigViewModel settings)
 		{

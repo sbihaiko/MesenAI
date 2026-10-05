@@ -13,7 +13,12 @@ class Emulator;
 class WindowsKeyManager : public IKeyManager
 {
 private:
-	static constexpr int BaseDirectInputIndex = 0x2000;
+	//An alias, not a second literal: the value lives in IKeyManager next to
+	//BaseGamepadIndex because the host-free pad rule in ShortcutKeyRules has to
+	//tell the two pad families apart and cannot include a Windows header. Keeping
+	//the name is what lets the code below keep saying
+	//WindowsKeyManager::BaseDirectInputIndex.
+	static constexpr int BaseDirectInputIndex = IKeyManager::BaseDirectInputIndex;
 
 	HWND _hWnd;
 	Emulator* _emu;

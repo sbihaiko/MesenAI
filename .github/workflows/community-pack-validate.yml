@@ -426,7 +426,7 @@ jobs:
             echo ""
             echo "Pack SHA-256: \`$PACK_SHA256\` — pin this against the pack link; a link that starts serving a different file changes this hash, and this verdict is stale until \`/revalidate\` runs again."
             echo ""
-            echo "See also: [MIGRATION.md](https://github.com/${REPO}/blob/main/MIGRATION.md) for the general MEP folder-convention transformation rule."
+            echo "See also: [MIGRATION.md](https://github.com/${REPO}/blob/main/docs/MIGRATION.md) for the general MEP folder-convention transformation rule."
             echo ""
             echo "<details><summary>Lint summary</summary>"
             echo ""

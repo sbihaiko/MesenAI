@@ -40,8 +40,19 @@ enum class GamepadBackend : uint8_t
 struct GamepadInfo
 {
 	std::string Name;
+	//0 when the backend does not expose them, which is not an edge case: macOS
+	//(GameController) and Windows XInput both report 0:0000 for every pad, so a
+	//reader that keys on VID/PID has no identity there. See ADR-0255's second
+	//correction.
 	uint32_t VendorId = 0;
 	uint32_t ProductId = 0;
+	//The pad's slot WITHIN ITS BACKEND's own numbering - an XInput slot, a
+	//DirectInput ordinal, an index into the GameController or evdev list - which
+	//is the `device` a mapping's key code carries (base + device * 0x100 +
+	//button). It is deliberately NOT the ordinal `GetGamepadInfo` was handed:
+	//Windows enumerates the four XInput slots and only then the joysticks, so
+	//that ordinal is global. Issue #813 was Slot carrying the global one for
+	//DirectInput; ShortcutKeyRules::DirectInputDeviceOf is the rule.
 	uint32_t Slot = 0;
 	bool HasRumble = false;
 	GamepadBackend Backend = GamepadBackend::None;
@@ -61,6 +72,12 @@ class IKeyManager
 public:
 	static constexpr int BaseMouseButtonIndex = 0x200;
 	static constexpr int BaseGamepadIndex = 0x1000;
+	//Windows is the only backend with a second pad family: XInput above, and
+	//DirectInput joysticks here. It lives in the shared key-code namespace rather
+	//than in WindowsKeyManager because the pad rule in ShortcutKeyRules has to
+	//tell the two apart - the families number their buttons independently, so the
+	//same button byte is "Start" in one and an axis direction in the other.
+	static constexpr int BaseDirectInputIndex = 0x2000;
 
 	virtual ~IKeyManager() {}
 

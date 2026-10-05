@@ -5,6 +5,8 @@ using Avalonia.Markup.Xaml;
 using Avalonia.Threading;
 using Mesen.Config;
 using Mesen.Interop;
+using Mesen.Logic;
+using Mesen.Utilities;
 using Mesen.ViewModels;
 using CommunityToolkit.Mvvm.ComponentModel;
 using System;
@@ -86,7 +88,7 @@ namespace Mesen.Controls
 
 			IsVisibleProperty.Changed.AddClassHandler<StateGrid>((x, e) => {
 				if(x.IsVisible) {
-					x.Focus();
+					x.FocusWhenUncovered();
 				}
 			});
 		}
@@ -135,7 +137,21 @@ namespace Mesen.Controls
 		{
 			base.OnAttachedToVisualTree(e);
 			_timerInput.Start();
-			Focus();
+			FocusWhenUncovered();
+		}
+
+		//ADR-0256 Decision 3: the grid asks for the focus through the one path,
+		//which focuses it with a NavigationMethod (the ring the theme paints on
+		//:focus-visible) and refuses while a Play surface is up over it. It keeps
+		//asking on its own - it is a content-area screen, not a surface in the Esc
+		//stack, and it also runs in Advanced, where no Play claim is ever open -
+		//so this is the same focus it always took, minus the case where a sheet
+		//over the game would have lost the keyboard to it.
+		private void FocusWhenUncovered()
+		{
+			if(!PlayFocusOnOpen.SurfaceIsUp(this)) {
+				PlayFocusOnOpen.Enter(this);
+			}
 		}
 
 		protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
@@ -144,7 +160,17 @@ namespace Mesen.Controls
 			_timerInput.Stop();
 		}
 
-		private void OnCloseClick(object sender, RoutedEventArgs e)
+		//ADR-0256 Decision 2, the grid's exit: the pad's Back reaches a slot grid
+		//opened by the Load/Save-state shortcuts, which never goes through the Esc
+		//router. A grid with no close box (the Play home's row of tiles, W-P2) has
+		//ShowClose false and nothing for Back to leave.
+		public bool CanCloseFromPad => ShowClose;
+
+		public void CloseFromPad() => RequestClose();
+
+		private void OnCloseClick(object sender, RoutedEventArgs e) => RequestClose();
+
+		private void RequestClose()
 		{
 			//#692 (G.2): a grid opened from the pause overlay closes back to it.
 			if(MainWindowViewModel.Instance?.CloseSlotGridToOverlay() == true) {
@@ -286,45 +312,76 @@ namespace Mesen.Controls
 				return;
 			}
 
-			List<KeyMapping> mappings = new List<ControllerConfig>() {
+			List<ushort> keyCodes = InputApi.GetPressedKeys();
+
+			//The player's own console mapping (port 1, plus GB/GBA/SMS), for the
+			//keyboard's codes only - built on first use, so a pad-only session never
+			//reads the config.
+			List<KeyMapping>? mappings = null;
+			List<KeyMapping> ConsoleMappings() => mappings ??= new List<ControllerConfig>() {
 				ConfigManager.Config.Nes.Port1,
 				ConfigManager.Config.Gameboy.Controller, ConfigManager.Config.Gba.Controller, ConfigManager.Config.Sms.Port1
 			}.SelectMany((a) => new List<KeyMapping>() { a.Mapping1, a.Mapping2, a.Mapping3, a.Mapping4 }).ToList();
 
-			List<ushort> keyCodes = InputApi.GetPressedKeys();
-
 			foreach(ushort keyCode in keyCodes) {
-				//Use player 1's controls to navigate the recent game selection screen
-				if(keyCode > 0 && _pressedKeyCodes.Add(keyCode)) {
-					foreach(KeyMapping mapping in mappings) {
-						if(mapping.Left == keyCode) {
-							if(SelectedIndex == 0) {
-								SelectedIndex = Entries.Count - 1;
-							} else {
-								SelectedIndex--;
-							}
-							break;
-						} else if(mapping.Right == keyCode) {
-							SelectedIndex = (SelectedIndex + 1) % Entries.Count;
-							break;
-						} else if(mapping.Down == keyCode) {
-							if(SelectedIndex + _colCount < Entries.Count) {
-								SelectedIndex += _colCount;
-							} else {
-								SelectedIndex = Math.Min(SelectedIndex % _colCount, Entries.Count - 1);
-							}
-							break;
-						} else if(mapping.Up == keyCode) {
-							if(SelectedIndex < _colCount) {
-								SelectedIndex = Entries.Count - (_colCount - (SelectedIndex % _colCount));
-							} else {
-								SelectedIndex -= _colCount;
-							}
-							break;
-						} else if(mapping.A == keyCode || mapping.B == keyCode || mapping.X == keyCode || mapping.Y == keyCode || mapping.Select == keyCode || mapping.Start == keyCode) {
-							_loadRequested = true;
-							break;
-						}
+				if(keyCode == 0 || !_pressedKeyCodes.Add(keyCode)) {
+					continue;
+				}
+
+				//ADR-0256 Decision 4: a pad's code means what the pad's own preset
+				//binds (PadNavControls), resolved for the device the code came from
+				//(PadNaming reads the backend's own name - "Pad1 A", "Joy1 But2") -
+				//never the rebindable console mapping. That is what lets a second pad
+				//drive this grid at all, and what keeps a player who clears or moves
+				//their console D-pad from losing grid navigation.
+				//
+				//Scoped to the Play door, which is the same gate the bridge asks
+				//(PlayPadNavigation.InPlayDoor): this one control draws both doors'
+				//grids - W-P2's tiles and the Save/Load screens in Play, Advanced's
+				//game-selection and Save/Load screens in the classic GUI - and the
+				//ADR is the Play GUI's. Ungated, the branch silently ate every pad
+				//button in Advanced: the preset's Back has no GridAction, so the
+				//`continue` below dropped it, and the bridge's own Back edge is
+				//gated off there - while the pad buttons the console mapping does
+				//bind to A/B/X/Y/Select/Start no longer reached the mapping that
+				//loaded the entry, which is how Advanced navigated this screen
+				//before ADR-0256 and how it still does.
+				MainWindowViewModel? playDoor = MainWindowViewModel.Instance;
+				if(PlayPadNavigation.InPlayDoor(playDoor?.IsPlayerMode == true, playDoor?.IsPlayWorkspace == true)
+					&& PadNaming.Of(keyCode, InputApi.GetKeyName) is PadId pad
+					&& PadNavControls.Resolve(pad.Family, pad.Device, InputApi.GetKeyCode) is PadNavMapping padNav) {
+					switch(PlayPadNavigation.GridAction(keyCode, padNav)) {
+						case PadNavAction.Left: MoveLeft(); break;
+						case PadNavAction.Right: MoveRight(); break;
+						case PadNavAction.Down: MoveDown(); break;
+						case PadNavAction.Up: MoveUp(); break;
+						//The preset's Confirm (the pad's A), not the console's A/B/X/Y/
+						//Select/Start: the pad's B is the preset's Back and is the
+						//bridge's (it leaves the grid), so reading the load off the
+						//console mapping would collide with it (the B ambiguity).
+						case PadNavAction.Confirm: _loadRequested = true; break;
+					}
+					continue;
+				}
+
+				//Keyboard: the player's own console mapping is theirs (Decision 4 is
+				//about the pad), so the classic port-1 walk is unchanged.
+				foreach(KeyMapping mapping in ConsoleMappings()) {
+					if(mapping.Left == keyCode) {
+						MoveLeft();
+						break;
+					} else if(mapping.Right == keyCode) {
+						MoveRight();
+						break;
+					} else if(mapping.Down == keyCode) {
+						MoveDown();
+						break;
+					} else if(mapping.Up == keyCode) {
+						MoveUp();
+						break;
+					} else if(mapping.A == keyCode || mapping.B == keyCode || mapping.X == keyCode || mapping.Y == keyCode || mapping.Select == keyCode || mapping.Start == keyCode) {
+						_loadRequested = true;
+						break;
 					}
 				}
 			}
@@ -339,6 +396,35 @@ namespace Mesen.Controls
 					entry.Load();
 				}
 				_loadRequested = false;
+			}
+		}
+
+		private void MoveLeft()
+		{
+			if(SelectedIndex == 0) {
+				SelectedIndex = Entries.Count - 1;
+			} else {
+				SelectedIndex--;
+			}
+		}
+
+		private void MoveRight() => SelectedIndex = (SelectedIndex + 1) % Entries.Count;
+
+		private void MoveDown()
+		{
+			if(SelectedIndex + _colCount < Entries.Count) {
+				SelectedIndex += _colCount;
+			} else {
+				SelectedIndex = Math.Min(SelectedIndex % _colCount, Entries.Count - 1);
+			}
+		}
+
+		private void MoveUp()
+		{
+			if(SelectedIndex < _colCount) {
+				SelectedIndex = Entries.Count - (_colCount - (SelectedIndex % _colCount));
+			} else {
+				SelectedIndex -= _colCount;
 			}
 		}
 	}

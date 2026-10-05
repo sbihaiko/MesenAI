@@ -8,7 +8,6 @@ using System.Threading.Tasks;
 using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
-using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Media;
 using Avalonia.Threading;
@@ -25,12 +24,14 @@ using Xunit.Sdk;
 
 namespace Mesen.HeadlessTests;
 
-//G.5 (PRD Part B §8, ADR-0241, §13.5.2 W-P12–W-P16): the Play edge flows'
-//XAML wiring. The rules (first-run defaults, BIOS kinds and sizes, the load
+//G.5 (PRD Part B §8, ADR-0241, §13.5.2 W-P13–W-P16): the Play edge flows'
+//XAML wiring. The rules (the first-run choice, BIOS kinds and sizes, the load
 //failure causes, the pack file check, controller detection and steps) are
 //pinned host-free in UI.Tests/Play; this checks they reach the realized tree:
 //control counts (rule 2), focus on open (rule 9), Esc (rule 8), and that a
-//failure leaves the home on screen with its sentence (rule 5, W-X2).
+//failure leaves the home on screen with its sentence (rule 5, W-X2). W-P12's
+//first-run sheet was retired with the wizard (ADR-0256 Decision 8); what it
+//asked is the Settings sheet's System tab now, driven from the pad.
 //
 //The W-P13–W-P16 tests need a MainWindow (EmuApi.InitDll in its constructor),
 //so they self-skip on the core-less CI runner like the other MainWindow tests.
@@ -86,19 +87,10 @@ public partial class PlayEdgeFlowsTests : IDisposable
 		}
 	}
 
-	//W-P12's Confirm writes a settings file into the user's folder; the tests
-	//record the call instead.
-	private sealed class RecordingFirstRun : SetupWizardViewModel
+	private static void Click(Control root, string button)
 	{
-		public int Confirms;
-		public bool Succeeds = true;
-
-		public override bool Confirm()
-		{
-			Confirms++;
-			ErrorText = Succeeds ? "" : "MesenAI cannot write to /nowhere.";
-			return Succeeds;
-		}
+		root.FindNamed<Button>(button).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+		Dispatcher.UIThread.RunJobs();
 	}
 
 	private static void WaitFor(Func<bool> condition, string failure)
@@ -122,12 +114,6 @@ public partial class PlayEdgeFlowsTests : IDisposable
 	private static void RunJobsAndDueTimers()
 	{
 		Dispatcher.UIThread.Post(static () => { }, DispatcherPriority.Background);
-		Dispatcher.UIThread.RunJobs();
-	}
-
-	private static void Click(Control root, string button)
-	{
-		root.FindNamed<Button>(button).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
 		Dispatcher.UIThread.RunJobs();
 	}
 
@@ -164,119 +150,6 @@ public partial class PlayEdgeFlowsTests : IDisposable
 		WaitFor(() => EmuApi.IsRunning() && model.RomInfo.Format != RomFormat.Unknown, "the ROM never reported as loaded");
 		EmuApi.Resume();
 		WaitFor(() => !EmuApi.IsPaused() && !model.IsGamePaused && !model.RecentGames.Visible, "the game never ran unpaused");
-	}
-
-	//W-P12: 2 radios, the keyboard popup and Start Playing (plus the two
-	//desktop checkboxes off macOS); Start Playing has focus; no Cancel.
-	[AvaloniaFact]
-	public void First_run_sheet_shows_the_wireframe_controls_and_focuses_Start_Playing()
-	{
-		RecordingFirstRun model = new();
-		SetupWizardWindow window = new(model);
-		window.Show();
-		Dispatcher.UIThread.RunJobs();
-		try {
-			Assert.Equal(PlayFirstRun.ControlCount(OperatingSystem.IsMacOS()), ControlsOnScreen(window));
-			Assert.True(window.FindNamed<RadioButton>("FirstRunUserFolder").IsChecked);
-			Assert.Equal((int)FirstRunKeyboard.ArrowKeys, window.FindNamed<ComboBox>("FirstRunKeyboard").SelectedIndex);
-			Assert.True(window.FindNamed<Button>("FirstRunStartPlaying").IsFocused);
-			Assert.DoesNotContain(window.FindAll<Button>(), b => b.IsOnScreen() && (b.Content as string)?.Contains("Cancel") == true);
-			Assert.False(window.FindNamed<TextBlock>("FirstRunError").IsOnScreen());
-
-			//The popup is the one keyboard choice; picking WASD reaches the model.
-			window.FindNamed<ComboBox>("FirstRunKeyboard").SelectedIndex = (int)FirstRunKeyboard.Wasd;
-			Assert.Equal(FirstRunKeyboard.Wasd, model.Choice.Keyboard);
-		} finally {
-			model.Succeeds = true;
-			window.Close();
-		}
-	}
-
-	//#672: with no fork update feed, Check for updates is unchecked and
-	//disabled, and says why (rule: UI.Tests UpdateChannelTests).
-	[AvaloniaFact]
-	public void First_run_sheet_disables_check_for_updates_while_there_is_no_feed()
-	{
-		RecordingFirstRun model = new();
-		SetupWizardWindow window = new(model);
-		window.Show();
-		Dispatcher.UIThread.RunJobs();
-		try {
-			CheckBox check = window.FindNamed<CheckBox>("FirstRunCheckForUpdates");
-			Assert.Equal(UpdateChannel.HasFeed, check.IsEnabled);
-			Assert.Equal(UpdateChannel.HasFeed, check.IsChecked);
-			Assert.True(ToolTip.GetShowOnDisabled(check));
-			Assert.False(string.IsNullOrEmpty(ToolTip.GetTip(check) as string));
-		} finally {
-			model.Succeeds = true;
-			window.Close();
-		}
-	}
-
-	//Esc keeps the defaults and continues: the close applies the choice once.
-	[AvaloniaFact]
-	public void Esc_on_the_first_run_sheet_applies_the_choice_and_continues()
-	{
-		RecordingFirstRun model = new();
-		SetupWizardWindow window = new(model);
-		window.Show();
-		Dispatcher.UIThread.RunJobs();
-
-		window.KeyPressQwerty(PhysicalKey.Escape, RawInputModifiers.None);
-		Dispatcher.UIThread.RunJobs();
-
-		Assert.Equal(1, model.Confirms);
-		Assert.False(window.IsVisible);
-		Assert.Equal(PlayFirstRun.Defaults, model.Choice);
-	}
-
-	//W-X2: a folder that cannot be written keeps the sheet with its sentence.
-	[AvaloniaFact]
-	public void A_storage_folder_that_cannot_be_written_keeps_the_sheet_open_with_a_sentence()
-	{
-		RecordingFirstRun model = new() { Succeeds = false };
-		SetupWizardWindow window = new(model);
-		window.Show();
-		Dispatcher.UIThread.RunJobs();
-		try {
-			Click(window, "FirstRunStartPlaying");
-			Assert.True(window.IsVisible);
-			TextBlock error = window.FindNamed<TextBlock>("FirstRunError");
-			Assert.True(error.IsOnScreen());
-			Assert.Contains("cannot write", error.Text);
-		} finally {
-			model.Succeeds = true;
-			window.Close();
-		}
-	}
-
-	//Confirm's two halves, without touching the real settings or Desktop.
-	private sealed class ShortcutFailsFirstRun : SetupWizardViewModel
-	{
-		public bool FolderWritable = true;
-
-		protected override void WriteSettings(string targetFolder, FirstRunChoice choice)
-		{
-			if(!FolderWritable) {
-				throw new UnauthorizedAccessException(targetFolder);
-			}
-		}
-
-		protected override void CreateShortcutFile() => throw new DirectoryNotFoundException("no Desktop");
-	}
-
-	//The settings are written: a Desktop shortcut that fails is not an
-	//unwritable folder and must not keep the sheet open.
-	[AvaloniaFact]
-	public void A_failed_desktop_shortcut_does_not_block_the_first_run_sheet()
-	{
-		ShortcutFailsFirstRun model = new() { ShowsDesktopOptions = true, CreateShortcut = true };
-		Assert.True(model.Confirm());
-		Assert.Equal("", model.ErrorText);
-
-		model.FolderWritable = false;
-		Assert.False(model.Confirm());
-		Assert.Contains("cannot write", model.ErrorText);
 	}
 
 	//W-P13: the sheet names the file and its size, a wrong size is an inline

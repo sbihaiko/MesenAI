@@ -22,17 +22,20 @@ AOT/publish flow (see `.github/AGENTS.md` for the CI split).
     build (SDL2/native dependency, Windows-only publish flags) and breaks
     the "cheap, cross-platform `dotnet test`" contract this project exists
     for.
-  - `EnableDefaultCompileItems=false` with three explicit `<Compile Include>`
-    entries: this project's own `**/*.cs`, `../UI/Logic/**/*.cs`, and the
-    single file `../UI/Interop/InteropEnums.cs`. The `UI/Logic/` glob
+  - `EnableDefaultCompileItems=false` with four explicit `<Compile Include>`
+    entries: this project's own `**/*.cs`, `../UI/Logic/**/*.cs`, the
+    single file `../UI/Interop/InteropEnums.cs`, and the single file
+    `../UI/Config/Shortcuts/EmulatorShortcut.cs`. The `UI/Logic/` glob
     dual-compiles that folder into this assembly instead of referencing
     `UI.csproj` — any file under `UI/Logic/` that accidentally pulls in
-    `Avalonia`/`EmuApi` fails `dotnet test` immediately. The `InteropEnums.cs`
-    include is a single named file, not a folder glob, because it is the
-    only host-free file inside the otherwise Avalonia/EmuApi-tainted
-    `UI/Interop/` (it holds the `ConsoleType`/`CheatType` enums moved out of
-    `EmuApi.cs`, Phase 2 of the now-completed unit-test plan) — a
-    folder glob there would risk pulling in an Avalonia-tainted file later.
+    `Avalonia`/`EmuApi` fails `dotnet test` immediately. The other two
+    includes are single named files, not folder globs, because each is the
+    only host-free file inside an otherwise Avalonia/EmuApi-tainted folder
+    (`InteropEnums.cs` holds the `ConsoleType`/`CheatType` enums moved out of
+    `EmuApi.cs`; `EmulatorShortcut.cs` holds the `EmulatorShortcut` enum split
+    from its extension methods, which `UI/Logic` names when it filters the
+    shortcut list) — a folder glob there would risk pulling in an
+    Avalonia-tainted file later.
 - **Compile-affecting properties stay at parity with (or stricter than)
   `UI/UI.csproj`** (ADR-0123, H5). The dual-compile is only the
   authoritative gate while the test-side compile conditions match the

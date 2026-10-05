@@ -360,8 +360,40 @@ int32_t SaveStateManager::GetSaveStatePreview(string saveStatePath, uint8_t* png
 			return -1;
 		}
 
-		//Skip console type field
-		stream.seekg(4, ios::cur);
+		if(fileFormatVersion <= 3) {
+			//Skip over old SHA1 field, as LoadState does: it sits between the
+			//format version and the console type. The preview never skipped it, so
+			//a state at the oldest format this accepts had its console type read
+			//out of the SHA1 and its frame length read 40 bytes early - a garbage
+			//size, which GetVideoData refuses. Those states showed no thumbnail at
+			//all rather than a wrong one, and the skip is what gives them one.
+			stream.seekg(40, ios::cur);
+		}
+
+		//The state's own console, which these four bytes are read for as of #832:
+		//the frame below is rendered through the loaded console's filter, so a
+		//state that came from another console has nothing to render it with - a
+		//Game Boy frame decoded through the NES palette is noise, and no
+		//assertion downstream can tell.
+		ConsoleType stateConsoleType = (ConsoleType)ReadValue(stream);
+
+		//One read of the console, used both for the comparison and for the filter
+		//the frame is rendered through: two reads are two answers, and a Stop()
+		//between them would compare the state against one console and render it
+		//through the filter of no console at all.
+		shared_ptr<IConsole> console = _emu->GetConsole();
+
+		//With no console the filter that renders is NesDefaultVideoFilter, which
+		//is Emulator::GetVideoFilter's own answer for that case - not "whatever
+		//was loaded last" (Emulator::GetConsoleType keeps answering that, and its
+		//zero default is Snes), so it is written down here as the console type
+		//that filter belongs to. A state from another console has nothing to
+		//render it with either way, and answering a bitmap for it is the noise
+		//this guard exists to refuse.
+		ConsoleType filterConsoleType = console ? console->GetConsoleType() : ConsoleType::Nes;
+		if(filterConsoleType != stateConsoleType) {
+			return -1;
+		}
 
 		vector<uint8_t> frameData;
 		RenderedFrame frame;
@@ -370,7 +402,10 @@ int32_t SaveStateManager::GetSaveStatePreview(string saveStatePath, uint8_t* png
 			baseFrameInfo.Width = frame.Width;
 			baseFrameInfo.Height = frame.Height;
 
-			unique_ptr<BaseVideoFilter> filter(_emu->GetVideoFilter(true));
+			//The console the guard above compared against, held for the whole
+			//render; with none, GetVideoFilter's own answer, which is the NES
+			//default filter the type above was written as.
+			unique_ptr<BaseVideoFilter> filter(console ? console->GetVideoFilter(true) : _emu->GetVideoFilter(true));
 			filter->SetBaseFrameInfo(baseFrameInfo);
 			FrameInfo frameInfo = filter->SendFrame((uint16_t*)frameData.data(), 0, 0, nullptr);
 
@@ -380,7 +415,16 @@ int32_t SaveStateManager::GetSaveStatePreview(string saveStatePath, uint8_t* png
 			string data = pngStream.str();
 			memcpy(pngData, data.c_str(), data.size());
 
-			return (int32_t)frameData.size();
+			//The caller's buffer holds a PNG, so the length it is told is the
+			//PNG's - not the decompressed frame's, which is what this returned
+			//until #833. The two differ by two orders of magnitude (a 256x240
+			//uint16 frame is ~123 KB, the PNG written from it a few tens of KB),
+			//and every caller sizes a buffer with the answer: the app resizes the
+			//managed array to it before handing it to the PNG decoder, which
+			//therefore decoded with tens of thousands of stray zero bytes behind
+			//the image. It survived only while the frame stayed larger than the
+			//PNG, which is an accident of the NES's resolution.
+			return (int32_t)data.size();
 		}
 	}
 	return -1;

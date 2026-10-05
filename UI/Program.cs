@@ -52,22 +52,18 @@ namespace Mesen
 
 			Environment.CurrentDirectory = ConfigManager.HomeFolder;
 
-			if(!File.Exists(ConfigManager.GetConfigFile())) {
-				//Could not find configuration file, show wizard
-				DependencyHelper.ExtractNativeDependencies(ConfigManager.HomeFolder);
-				App.ShowConfigWindow = true;
-				try {
-					BuildAvaloniaApp().StartWithClassicDesktopLifetime(args, ShutdownMode.OnMainWindowClose);
-				} catch(Exception ex) {
-					LogStartupException(ex);
-					throw;
-				}
-				if(File.Exists(ConfigManager.GetConfigFile())) {
-					//Configuration done, restart process
-					Process.Start(Program.ExePath);
-				}
-				return 0;
-			}
+			//ADR-0256 Decision 8: no settings file is not a state this process
+			//stops on any more. There is no SetupWizardWindow before the main
+			//window and no relaunch after it: ConfigManager.HomeFolder is the
+			//default folder (the one next to the app when it already holds
+			//settings, otherwise the documents folder - HomeFolderChoice), the
+			//config is created in memory and saved on exit, and the first-run
+			//home (W-P1) asks what the wizard used to ask.
+			//
+			//The wizard branch also extracted the native dependencies, and it
+			//needed its own call only because that branch returned before this
+			//one - the call below is unchanged and is now the only one, on the
+			//single startup path.
 
 			//Start loading config file in a separate thread
 			Task.Run(() => ConfigManager.LoadConfig());
