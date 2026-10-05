@@ -13,8 +13,10 @@
 
 A player can designate a games folder, and the app opens on it: the `Open ROM`
 dialog starts there, the picker's roots list leads with it, and at startup it is
-registered with the core as a known game folder. Every one of those guards asked
-`Directory.Exists`.
+registered with the core as a known game folder. Two of those guards asked
+`Directory.Exists` — the dialog's and the startup registration's — and the third
+asked nothing at all: the picker led with the raw path whenever
+`OverrideGameFolder` was set.
 
 That is not the question they meant. A path can be a directory and hold nothing,
 and on macOS that is not a corner case — `/home` is an **autofs node**:
@@ -82,8 +84,10 @@ been corrected — this paragraph is what both of them mean.
 - **The setting is never changed.** The rule chooses where to open; it does not
   clear, refuse or rewrite `Preferences.GameFolder`. A folder that answers nothing
   today may answer something tomorrow — a stick that was unplugged, a library
-  still being copied — so the moment it holds a file it is used again with no
-  action from the player.
+  still being copied — so the moment it holds anything at all it is used again
+  with no action from the player. Anything, not any *file*: a library laid out
+  one folder per console is a games folder with no game file in it, and
+  `GamesFolderChoiceTests` pins that a folder of subfolders answers.
 
 ## Consequences
 
@@ -111,17 +115,21 @@ been corrected — this paragraph is what both of them mean.
   with it, and the sheet's focus arbiter watches `IsVisible`, `PathText` and
   `SuggestionRevision`. A folder that answers nothing is deliberately not made a
   root, so `PathText` reads the same shortened path before and after — the signal
-  the one-outcome version leaned on does not move, and the pad is left with
-  nothing focused: the direction keys and Confirm return immediately, and only
-  Back still works. `SuggestionRevision++` is the signal that exists for exactly
+  the one-outcome version leaned on does not move. **Without the bump the pad is
+  left with nothing focused** — the direction keys and Confirm return immediately
+  because there is no control to act on, and only Back still works, out through
+  the window rather than through the sheet. That was the state of the first fix,
+  not of this one: `SuggestionRevision++` is the signal that exists for exactly
   this, and the second review of PR #894 traced the ring rather than the rule to
-  find it.
+  find that it was missing.
 - **A legitimately empty games folder is no longer led with either.** That is the
-  cost of the rule and it is deliberate. In the picker the folder is simply not a
-  root — the last-played folder is *not* substituted for it there, and the roots
-  list is shorter by one — and `Open ROM` starts at the last game's folder only
-  when that folder answers something too, otherwise at the dialog's own default.
-  The alternative was telling an autofs node apart from an empty folder, which is
-  not knowable from the path.
+  cost of the rule and it is deliberate. In the picker the folder loses its
+  `Your games` root — the last-played folder is *not* substituted for it there —
+  and `Open ROM` starts at the last game's folder only when that folder answers
+  something too, otherwise at the dialog's own default. The roots list is usually
+  shorter by one, but not always: `PlayRomPicker.Roots` dedupes by path, so a
+  games folder that is also the app's own ROM folder or a volume is still a root,
+  under that other label. The alternative was telling an autofs node apart from an
+  empty folder, which is not knowable from the path.
 - The guard is now one function instead of three inline `Directory.Exists` calls,
   so the next entry point that needs it asks the same question.

@@ -443,8 +443,11 @@ namespace Mesen.Windows
 				ConfigManager.Config.ApplyConfig();
 
 				//#887: the same rule as Open ROM's start folder - a games folder that
-				//answers nothing is not registered with the core as a known folder,
-				//so the core's own file dialogs do not lead there either.
+				//answers nothing is not registered with the core as a known folder.
+				//What that list feeds is RomFinder alone (Core/Shared/RomFinder.h),
+				//which resolves a ROM by name and CRC; registering a folder that
+				//holds nothing buys nothing there and is the other half of the same
+				//write MakeGamesFolder makes in the picker.
 				string? gamesFolder = GamesFolderChoice.Usable(
 					ConfigManager.Config.Preferences.OverrideGameFolder ? ConfigManager.Config.Preferences.GameFolder : null);
 				if(gamesFolder != null) {
