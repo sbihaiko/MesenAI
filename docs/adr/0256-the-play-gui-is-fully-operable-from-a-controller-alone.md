@@ -25,11 +25,15 @@
   on 2026-10-04, later the same day**, by the user's pick *"Tirar o wizard do
   caminho"*: the pre-core `SetupWizardWindow` leaves the startup path and the two
   choices it asked - storage and keyboard preset - move into Settings, which the
-  bridge already drives. The ROM picker was never the gap (Play's home is
-  drivable from the pad through the bridge's content claim), so retiring the
-  wizard is what the first run came down to. Decision 8's own paragraph carries
-  the pick, its reasoning and what it costs, and the work is dispatched on the
-  strength of it.
+  bridge already drives. Decision 8's own paragraph carries the pick, its
+  reasoning and what it costs. **Implemented 2026-10-04** (#846): nothing
+  stands before the main window any more, Settings › System is a pad-drivable
+  surface like the rest of Play, and the ROM picker is the one first-run surface
+  still needing a keyboard - `PlayHomeView.OnOpenRom` calls
+  `EmuApi.ExecuteShortcut(EmulatorShortcut.OpenFile)`, which reaches
+  `FileDialogHelper.OpenFile` and a native OS dialog the focus engine cannot
+  drive. That is #845, still open, and it is why the stop rule is not signed off
+  yet.
   **Amended 2026-10-04**, the same day, after the work started: four more
   questions were put to the user and answered — the focus mechanism (Decision
   7's paragraph: the focus engine, not synthetic key events), what "one
@@ -148,10 +152,21 @@ heading are answered by them and by the section after.**
    directions and `But1..But128`), so "the Select+Start gesture" has no
    spelling in that family, and guessing two high-numbered buttons would put a
    default chord on top of the player's own controls. What that pad gets instead
-   is Decision 2 plus ADR-0255 slice 4: **with no game loaded the pad drives the
-   GUI**, so it reaches Play › Settings › Controls › the sheet and binds its own
-   menu button from the one shortcut list. #804 is therefore closed by this work
-   rather than by a second default, and the stop rule below covers it.
+   is Decision 2 plus ADR-0255 slice 4: Play › Settings › Controls has an **Extra
+   buttons** section, a filtered view of the one shortcut list, so the pad binds
+   its own menu button there by hand. #804 is closed by that surface.
+   **The route to it has a gap, measured 2026-10-04 after #844 landed, and it is
+   written down rather than papered over:** `OpenControllerSheet()`
+   (`UI/ViewModels/MainWindowViewModel.ControllerSheet.cs`) returns false unless
+   `IsGameLoaded && Shell.IsPlay` - the sheet reads a paused game and both its
+   Done and its Esc go back to W-P4 - so with no game loaded the sheet a pad
+   could reach does not exist, and the first bind needs W-P4 open once. Opening
+   it is exactly what a DirectInput pad cannot do, so a keyboard-less cabinet
+   needs Esc or ADR-0254's focus-loss auto-pause once before the pad can finish
+   the job itself. And before that, it cannot load a game at all: the ROM picker
+   is a native OS dialog (#845). Making the Controller sheet reachable with no
+   game loaded is the option that closes the asymmetry, and it is not decided
+   here.
 6. **On-screen text names the control in the player's hand**, not the keyboard
    (the user's answer, 2026-10-04: *"Segue o controle na mão"*). W-P4's footer
    reads "Esc to resume" today, which is a lie on the cabinet this ADR is about:
@@ -218,12 +233,31 @@ heading are answered by them and by the section after.**
      setting the wizard wrote; a switch that the running process cannot absorb
      offers the restart the wizard's own flow performed (write, then relaunch)
      rather than pretending the move happened.
-   - **The keyboard preset lives there too**, next to it, reusing the preset
-     writers `KeyPresets` already has and the Controller sheet's
-     `RestoreKeyboardPreset` rule instead of a second copy.
+   - **The keyboard preset lives there too**, next to it: the surface sets
+     `DefaultKeyMappings` and then writes the keys through the seeding path the
+     first run and the Controller sheet's restore both use
+     (`Configuration.SeedConsoleKeyDefaults`, which the implementation extracted
+     from the two places that duplicated it - `KeyPresets`' writers, one call
+     site). The Controller sheet's `RestoreKeyboardPresetIfNothingIsBound` is
+     **not** what this reuses: its guard is `DefaultKeyMappings == None &&
+     NothingIsBound()`, which is a no-op on a fresh config whose default is
+     already `Xbox | ArrowKeys`.
    - **`DependencyHelper.ExtractNativeDependencies(ConfigManager.HomeFolder)`
-     is the wizard path's other job** and has to run on the normal startup path
-     - it is the one thing the retired screen did that a player never saw.
+     is the wizard path's other job**, and on the normal startup path it was
+     already there - the wizard's own call existed only because that branch
+     returned before reaching it. The implementation therefore deleted the call
+     with the branch rather than adding a second one, and the fact is pinned by
+     `UI.Tests`' `FirstRunStartupTests`, which reads `Program.cs` and refuses any
+     `return` between the working directory being fixed and the extract call.
+   - **Two things go with the screen and are a real, if small, loss**: the
+     Windows/Linux *Desktop shortcut* checkbox, which no surface offers any more,
+     and *Check for updates*, which was already inert (`UpdateChannel.HasFeed` is
+     false while the fork has no feed, #672). The Advanced door's Preferences tab
+     keeps both checkboxes.
+   - **`App.ShowConfigWindow` did more than pick a first window**: it skipped
+     `EmuApi.TestDll()`, so retiring the flag is also what puts the core-load
+     error path back on first boot - a machine whose core cannot load gets the
+     message instead of a wizard that starts and then fails.
    - **The PRD's drawn W-P12 sheet is retired with it**, and the PRD line says
      so: the sheet kept the question and moved it inside the window, this pick
      drops the question from the first run altogether and answers it in Settings
