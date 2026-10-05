@@ -9,7 +9,7 @@
 [![Community packs](https://img.shields.io/badge/community%20packs-15%20validated-2ea043.svg)](docs/community-packs.md)
 [![Open specs: CC0](https://img.shields.io/badge/open%20specs-CC0-lightgrey.svg)](docs/specs/)
 
-**[Download](https://github.com/sbihaiko/MesenAI/releases/latest)** · **[Remaster a game](docs/remastering-a-game.md)** · [Hear it](#hear-it) · [See it](#see-it) · [Widen it](#widen-it) · [Quick start](#quick-start) · [What's real today](#whats-real-today) · [FAQ](#faq)
+**[Download](#download)** · **[Remaster a game](docs/remastering-a-game.md)** · [Hear it](#hear-it) · [See it](#see-it) · [Widen it](#widen-it) · [Quick start](#quick-start) · [What's real today](#whats-real-today) · [FAQ](#faq)
 
 </div>
 
@@ -39,19 +39,20 @@ Not included: SNES (incl. Super Game Boy), PC Engine, WonderSwan, ColecoVision.
 
 ## Download
 
-**[Releases](https://github.com/sbihaiko/MesenAI/releases/latest)** ship the emulator plus `mesenai-tools-<version>.zip` (the remastering CLI as of that tag). **v0.1.0 (2026-09-15) is macOS Apple Silicon only**, cut locally from a tagged commit. That build predates the Play / Remaster / Share / Classic workspaces (it opens in the earlier Player shell) and its tools zip predates scripts added since — those come from a checkout. No installer: unzip and run. macOS needs SDL2 (`brew install sdl2`); the app is ad-hoc signed, so open it once, then **System Settings → Privacy & Security → Open Anyway**.
-
-Platforms without a tagged release use the on-demand CI channel (`ci-latest` pre-release, ADR-0204), unzip and run:
+**The current build is the on-demand CI channel** (`ci-latest` pre-release, ADR-0204). It carries what **`prod` held when its run compiled** — the promoted line, including the Play / Remaster / Share / Classic workspaces — for every platform below. No installer: unzip and run.
 
 | Platform | Build | Notes |
 |---|---|---|
+| **macOS Apple Silicon** | [Download](https://github.com/sbihaiko/MesenAI/releases/download/ci-latest/MesenAI-ci-macos-arm64.zip) | Not code-signed (ADR-0203): Gatekeeper needs `xattr -dr com.apple.quarantine Mesen.app`. Needs SDL2 (`brew install sdl2`) |
 | **Linux x64** | [Download](https://github.com/sbihaiko/MesenAI/releases/download/ci-latest/MesenAI-ci-linux-x64.zip) · [AppImage](https://github.com/sbihaiko/MesenAI/releases/download/ci-latest/MesenAI-ci-linux-x64.AppImage) | `sudo apt install libsdl2-2.0-0` |
 | **Linux ARM64** | [Download](https://github.com/sbihaiko/MesenAI/releases/download/ci-latest/MesenAI-ci-linux-arm64.zip) · [AppImage](https://github.com/sbihaiko/MesenAI/releases/download/ci-latest/MesenAI-ci-linux-arm64.AppImage) | `sudo apt install libsdl2-2.0-0` |
-| **macOS Apple Silicon (CI)** | [Download](https://github.com/sbihaiko/MesenAI/releases/download/ci-latest/MesenAI-ci-macos-arm64.zip) | Not code-signed (ADR-0203); Gatekeeper needs `xattr -dr com.apple.quarantine Mesen.app`. The signed tagged build is above. `brew install sdl2` |
-| **macOS Apple Silicon (release)** | [Releases](https://github.com/sbihaiko/MesenAI/releases/latest) | arm64; ad-hoc signed, first-open step above. `brew install sdl2` |
 | **Windows x64** | [Download](https://github.com/sbihaiko/MesenAI/releases/download/ci-latest/MesenAI-ci-windows-x64-aot.zip) | Windows 10 (1607) or newer |
 
-`ci-latest` is a pre-release, so [Releases](https://github.com/sbihaiko/MesenAI/releases/latest) still resolves to the tagged build. The channel is **built on demand** — `build.yml` on a pull request against `prod` or a manual dispatch (ADR-0200, ADR-0203), not on every push. Assets are whatever `prod` held when that run compiled. Code on `main` that has not been promoted is [built from source](docs/COMPILING.md).
+The channel is **built on demand** — `build.yml` on a pull request against `prod`, or a manual dispatch (ADR-0200, ADR-0203), never on a push to `main`. Code on `main` that has not been promoted is [built from source](docs/COMPILING.md).
+
+### Previous, signed build
+
+The only tagged release is **[v0.1.0 (2026-09-15)](https://github.com/sbihaiko/MesenAI/releases/latest)**: macOS Apple Silicon only, cut locally from a tagged commit, ad-hoc signed (open it once, then **System Settings → Privacy & Security → Open Anyway**). It predates the three task workspaces — it opens in the earlier Player shell — and its `mesenai-tools-<version>.zip` predates scripts added since; for those, use the CI build above or a checkout. Because `ci-latest` is a pre-release, [Releases](https://github.com/sbihaiko/MesenAI/releases/latest) still resolves to this tag.
 
 **Help → Check for updates** never offers an upstream Mesen build: the fork publishes no update feed, so the startup check does nothing and the menu item offers to open [this repository's releases page](https://github.com/sbihaiko/MesenAI/releases).
 
@@ -161,7 +162,7 @@ Plain **Mesen `hires.txt`** packs and full **MEP `pack.json`** packs are both ac
 - macOS shaders: RetroArch `.slangp` through librashader on Metal (ADR-0237). Two named looks ship (*CRT TV* / `crt-geom`, *Handheld LCD* / `zfast-lcd`), picked in **Settings → Look → Screen**. Headless checks pass; the on-screen Retina/vsync/fullscreen check is still a human row. Extra presets: copy [libretro/slang-shaders](https://github.com/libretro/slang-shaders) into the data directory `Shaders` folder (not bundled; mixed licenses). A failed load keeps the unfiltered picture. `UseSoftwareRenderer` keeps the old path.
 - A changed `hires.txt` still needs the ROM reopened for a cell's first paint (ADR-0231). The layered `.ora` is write-only; the flat PNG is the return path.
 - Route search (`scripts/route_search.py`) ships. The optional Jev stall helper is a **measured spike, not adopted** (ADR-0238).
-- Only macOS Apple Silicon is a tagged release. Windows, Linux, and the macOS CI zip come from [Download](#download).
+- The current build is the CI channel, for every platform ([Download](#download)). The only tagged release, macOS Apple Silicon, is the older Player-shell build described there.
 
 Decisions: [docs/adr/](docs/adr/). Roadmap: [docs/roadmap/PRD-mesence-enhancement-ecosystem.md](docs/roadmap/PRD-mesence-enhancement-ecosystem.md).
 
