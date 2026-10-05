@@ -69,7 +69,30 @@ void NesNtscFilter::OnBeforeApplyFilter()
 	NesConfig& nesCfg = _emu->GetSettings()->GetNesConfig();
 
 	shared_ptr<IConsole> console = _emu->GetConsole();
-	PpuModel model = ((NesConsole*)console.get())->GetPpu()->GetPpuModel();
+
+	//#831: the same read NesDefaultVideoFilter guarded in #829. The model lives
+	//on a console this filter only has while a game is loaded, and #829 proved
+	//the cost of assuming one: an access violation at the Ppu field's offset of a
+	//null NesConsole.
+	//
+	//The path #829's fix runs on - the save state preview - cannot reach this
+	//filter: SaveStateManager::GetSaveStatePreview asks for the *default* filter
+	//(Emulator::GetVideoFilter(true)) and NesConsole answers a
+	//NesDefaultVideoFilter for that, NTSC selected or not. This filter comes out
+	//of the other question, GetVideoFilter(false), and its callers are
+	//VideoDecoder::UpdateVideoFilter (the filter the decoder holds across a Stop,
+	//driven by UpdateFrame) and LuaApi::InternalGetScreenSize/GetRenderedFrame.
+	//Both of those drive it with a console loaded today, which is the whole of
+	//what can be said for them - and it is not a property of this filter, which
+	//cannot tell who is holding it. #831's Game Boy sibling is the same read at a
+	//site that *is* reachable and was called unreachable for exactly this kind of
+	//reason (GbDefaultVideoFilter::OnBeforeApplyFilter, its own default filter),
+	//so this one falls back to its own last model rather than to an argument,
+	//the way NesDefaultVideoFilter does (#829).
+	PpuModel model = _ppuModel;
+	if(console) {
+		model = ((NesConsole*)console.get())->GetPpu()->GetPpuModel();
+	}
 
 	if(GenericNtscFilter::NtscFilterOptionsChanged(_ntscSetup, _emu->GetSettings()->GetVideoConfig()) || model != _ppuModel || memcmp(_nesConfig.UserPalette, nesCfg.UserPalette, sizeof(nesCfg.UserPalette)) != 0) {
 		GenericNtscFilter::InitNtscFilter(_ntscSetup, _emu->GetSettings()->GetVideoConfig());
