@@ -46,6 +46,18 @@ the subject's own file is a tombstone naming the claimed target. An id with no
 file is skipped in both passes: deleted and retired ids are
 `verify_adr_refs.py`'s business, not this one's.
 
+A fold claim wrapped in inline code or in a fenced block is a QUOTATION of the
+bad sentence, not an assertion of it, and is skipped. Prose that asserts a fold
+- "ADR-0231 was consolidated into ADR-0230" - is never backticked; the register
+backticks a string precisely to show it as one. Without this rule the check
+convicts the writing that documents it: the makefile comment wiring this very
+script names the sentence it exists to catch, and the first version to read the
+makefile failed on it. That is the same false positive the docstring above
+records, where prose quoting the pattern was excused by exempting this whole
+file from its own scan - a blunt fix that a quotation rule replaces with the
+actual distinction. It stays strict in the direction that matters: a claim is
+skipped only when the backticks pair up, so a stray delimiter leaves it checked.
+
 Usage: python3 scripts/checks/verify_adr_citations.py
 Exit 0 on PASS, 1 on any citation or fold claim the register does not support.
 """
@@ -59,7 +71,14 @@ ADR_DIR = ROOT / "docs/adr"
 if not ADR_DIR.is_dir():
     sys.exit(f"not a MesenAI checkout: {ROOT} has no docs/adr")
 
-CITE = re.compile(r"ADR-(\d{4})\s*§+\s*(\d+(?:\.\d+)*)")
+#A citation carries a RUN of sections as often as a single one: `ADR-0138 §2/§7`,
+#`§1/§4`, `§12/§6`. Matching only up to the first `§` left every later element
+#unchecked, so `ADR-0138 §1/§8888` passed - and the register writes these chains
+#constantly.
+CITE = re.compile(r"ADR-(\d{4})\s*((?:§+\s*\d+(?:\.\d+)*)(?:\s*[/,]\s*§+\s*\d+(?:\.\d+)*)*)")
+#The elements of that run, pulled apart after the fact so one citation can report
+#several broken sections.
+SEC = re.compile(r"§+\s*(\d+(?:\.\d+)*)")
 ADR_REF = re.compile(r"ADR-(\d{4})")
 #The register's own vocabulary for "this ADR is now part of that one". All four
 #verbs are accepted because they mean the same thing to a reader, and a guard
@@ -86,7 +105,46 @@ SKIP_PARTS = {"roms", "out", "obj", "bin", "build", "node_modules", ".git",
 #scanned; only this one is its own input.
 SELF = Path(__file__).resolve()
 EXTS = {".md", ".cs", ".cpp", ".h", ".hpp", ".mm", ".m", ".cc", ".cxx", ".c",
-        ".py", ".sh", ".json", ".yml", ".yaml", ".axaml", ".xml", ".txt", ".cfg"}
+        ".py", ".sh", ".json", ".yml", ".yaml", ".axaml", ".xml", ".txt", ".cfg",
+        ".csproj", ".props", ".targets"}
+
+
+def is_scanned(path: Path) -> bool:
+    """Whether a file may carry a citation.
+
+    The extension list alone was not enough. `makefile` has no extension and
+    `UI/UI.csproj` is not C#, and between them they hold 15 live `ADR-NNNN §M`
+    citations - including the ones wiring the tests. Mutating `ADR-0138 §41` to
+    `§9999` inside `makefile` left this check reporting PASS, which is the worst
+    shape a guard can take: silent exactly where the work is done. An
+    extensionless file is read as text when it has no NUL byte, so the next
+    `makefile`-like file is covered without anyone remembering to add it here.
+    """
+    if path.suffix.lower() in EXTS:
+        return True
+    if path.suffix:
+        return False
+    try:
+        return b"\x00" not in path.read_bytes()[:4096]
+    except OSError:
+        return False
+
+
+#Inline code and fenced blocks. Both mark a string AS a string - a specimen of
+#text being shown, not a statement being made - which is the whole difference
+#between quoting the bug and committing it.
+INLINE_CODE = re.compile(r"`+[^`]*`+")
+FENCE = re.compile(r"^\s*(?:```|~~~)")
+
+
+def quoted_spans(line: str):
+    """The [start, end) ranges of `line` that are inline code.
+
+    Only paired delimiters count. An unpaired backtick leaves the remainder of
+    the line unquoted, which is the strict direction to fail in: a malformed
+    quotation gets checked rather than excusing everything after it.
+    """
+    return [(m.start(), m.end()) for m in INLINE_CODE.finditer(line)]
 
 
 def sections_of(text: str):
@@ -106,7 +164,7 @@ def sections_of(text: str):
 
 def candidate_files():
     for path in ROOT.rglob("*"):
-        if not path.is_file() or path.suffix.lower() not in EXTS:
+        if not path.is_file() or not is_scanned(path):
             continue
         if path.resolve() == SELF:
             continue  # see SELF
@@ -131,17 +189,36 @@ def scan(failures):
             lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
         except OSError:
             continue
+        in_fence = False
         for lineno, line in enumerate(lines, 1):
+            if FENCE.match(line):
+                in_fence = not in_fence
+                continue  # the delimiter itself carries no citation
+            #Only the fold pass consults this. A SECTION citation stays checked
+            #inside backticks, and the asymmetry is the point: `ADR-0138 §41` is
+            #a reference, and backticks around it are typographic, whereas
+            #`ADR-0231, consolidated into ADR-0230` in backticks is a sentence
+            #being exhibited. Reading the second as a claim convicts whoever
+            #documents the rule - which is exactly what happened here.
+            spans = quoted_spans(line) if not in_fence else [(0, len(line))]
             for m in CITE.finditer(line):
-                num, sec = m.group(1), m.group(2)
-                have = sections.get(num)
+                have = sections.get(m.group(1))
                 if have is None:
                     continue  # no such file: verify_adr_refs.py's job
-                if sec in have or sec.split(".")[0] in have:
-                    continue
-                hits[num].append((rel, lineno, sec))
+                for sm in SEC.finditer(m.group(2)):
+                    sec = sm.group(1)
+                    #Both directions of the prefix rule, which the docstring
+                    #promises and the code used to implement only one of: `§9.1`
+                    #passes when the ADR has a §9, and `§9` passes when it has
+                    #only §9.1.
+                    if sec in have or sec.split(".")[0] in have \
+                            or any(h.startswith(sec + ".") for h in have):
+                        continue
+                    hits[m.group(1)].append((rel, lineno, sec))
 
             for m in FOLD_CLAIM.finditer(line):
+                if any(s <= m.start() < e for s, e in spans):
+                    continue  # quoted, so exhibited rather than asserted
                 target = m.group(1)
                 refs = list(ADR_REF.finditer(line[:m.start()]))
                 if not refs:
