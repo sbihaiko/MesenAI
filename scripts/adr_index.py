@@ -5,7 +5,7 @@ ADRs are not loaded into a Claude Code session automatically, and the whole
 register (60+ files) is far too large to inject. This prints one line per
 `accepted` ADR — id, date and title — so a session always knows which
 decisions exist and can read the bodies it actually needs
-(`docs/adr/NNNN-*.md`). Wired as a `SessionStart` hook in
+(`docs/adr/<area>/NNNN-*.md`). Wired as a `SessionStart` hook in
 `.claude/settings.json`; also runnable by hand.
 
 `proposed` and `superseded` ADRs are deliberately omitted: only `accepted`
@@ -52,7 +52,7 @@ def main():
         print(f"No ADR register at {ADR_DIR}.")
         return 0
 
-    adrs = sorted((parse(p) for p in ADR_DIR.glob("[0-9][0-9][0-9][0-9]-*.md")),
+    adrs = sorted((parse(p) for p in ADR_DIR.rglob("[0-9][0-9][0-9][0-9]-*.md")),
                   key=lambda a: a["id"])
     groups = ["accepted"] if not show_all else \
         ["accepted", "proposed", "superseded", "unknown"]
@@ -62,7 +62,7 @@ def main():
         if not rows:
             continue
         print(f"# {status.capitalize()} ADRs ({len(rows)}) — binding decisions; "
-              f"read docs/adr/NNNN-*.md before changing the area one covers."
+              f"read docs/adr/<area>/NNNN-*.md before changing the area one covers."
               if status == "accepted" else f"# {status.capitalize()} ADRs ({len(rows)})")
         for a in rows:
             print(f"- {a['id']} ({a['date']}) {a['title']}")

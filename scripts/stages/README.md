@@ -64,7 +64,7 @@ against, or the unattended job cannot use it:
   verified them against (2026-09-19); `contra/`, `metroid/`, `zelda2/` and
   `excitebike/` are pinned to the user's library dumps they were authored on
   and were each run once through the library job (F14.3, 2026-09-23,
-  `docs/validation/f14.3-route-sets-2026-09-23.md`); `punchout/` and
+  `docs/validation/slices/f14.3-route-sets-2026-09-23.md`); `punchout/` and
   `castlevania/` (2026-09-24), `smb3/` and `ninjagaiden/` (2026-09-25, #497)
   are pinned to the user's library dumps they were authored and recorded on —
   `punchout/` by hand (below), which since #465 the job mints at the same
@@ -92,8 +92,8 @@ against, or the unattended job cannot use it:
   sweep measured. `lifeforce/`'s dump is CHR RAM, so its coverage carries no
   §5.2 denominator and the `n/a` in its summary is the console, not a missing
   figure. Everything those sweeps measured is in
-  `docs/validation/f1417-coverage-expansion-2026-09-26.md` and
-  `docs/validation/f1418-coverage-wave-three-2026-09-26.md`.
+  `docs/validation/slices/f1417-coverage-expansion-2026-09-26.md` and
+  `docs/validation/slices/f1418-coverage-wave-three-2026-09-26.md`.
   `scripts/test_library_job.py` fails if a folder here has no manifest, a
   malformed SHA1, a SHA1 another set also claims, no recordable route, or no
   route the job can start.
@@ -435,7 +435,7 @@ never reads Glass Joe's tells — so it loses: Little Mac is knocked down around
 `fight1.mss`; past that the run records the "you lost" screen. Two 70 s passes
 of the block repeated 18 times (5580 f; the file's header rebuilds it) gave a
 byte-identical `hires.txt` and `auto/`
-(docs/validation/punchout-deep-measurement-2026-09-24.md); the trimmed 60 s
+(docs/validation/measurements/punchout-deep-measurement-2026-09-24.md); the trimmed 60 s
 route stops before the count-out and was not measured.
 
 **Through the library job (#465, 2026-09-25).** `record_library.sh` used to
@@ -447,7 +447,7 @@ The job now runs each mint for the smallest whole number of seconds that
 covers its script - `34` here, the hand-mint duration - so it stops at frame
 2 044 as above, with the same RAM as the hand mint run from the repository
 root, and the 60 s `fight1` run keeps 633 frames
-(`docs/validation/issue-465-mint-at-script-end-2026-09-25.md`). Padding the
+(`docs/validation/issues/issue-465-mint-at-script-end-2026-09-25.md`). Padding the
 mint so the bell lands on frame 3 607 was tried before the fix and does not
 help: the fight it starts is not the measured one (35 RAM bytes differ at the
 bell; 255 of the measured 1 655 drawn keys are missing from a 70 s recording
@@ -498,7 +498,7 @@ beside its routes:
   each, so the level's position is `level_page($002D) * 256 + camera_scroll_x`
   plus `(player_x_low - camera_scroll_x) % 256` — three fields, two of them
   `expr`, and the modulo is what keeps a column a column while both bytes wrap
-  (F14.15, `docs/validation/f1415-jev-adoption-2026-09-26.md` §3).
+  (F14.15, `docs/validation/slices/f1415-jev-adoption-2026-09-26.md` §3).
   Two of its top-level keys name the fields the run judges on — `progress` (the
   number the search maximises and a stall is measured against) and `screen`, with
   `screen_width`, so "the start of the current screen" is a boundary the rewind

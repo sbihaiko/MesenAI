@@ -5,7 +5,7 @@ description: Write or amend an Architecture Decision Record in docs/adr/. Use wh
 
 # Architecture Decision Records
 
-`docs/adr/` is this project's decision register: `NNNN-<kebab-title>.md`,
+`docs/adr/` is this project's decision register: `<area>/NNNN-<kebab-title>.md`,
 versioned like any other doc, owned by `docs/AGENTS.md`. Accepted ADRs are
 **binding** — see CLAUDE.md, "Architecture Decision Records".
 
@@ -16,24 +16,39 @@ versioned like any other doc, owned by `docs/AGENTS.md`. Accepted ADRs are
    Grep the register for the area (`grep -ril "<term>" docs/adr/`) and read
    the candidates. Amending or superseding an existing ADR is almost always
    better than minting a second one on the same topic.
-2. **Decide which shape applies:**
+2. **Pick the area.** The register is split into seven subfolders by the
+   decision's **subject** — `packs` (MEP/HD pack storage, discovery, install,
+   catalogue, and the on-disk formats), `sprites` (tile and sprite capture,
+   identity, sheets), `recorder` (recording, the TAS driver, coverage sweeps),
+   `ci-build` (the makefile, CI wiring, unit tests, guards, release
+   packaging), `audio` (export, replacement, enhanced audio), `gui` (the
+   Avalonia player), `core` (the emulator core's own behaviour — rendering and
+   the PPU, and the shared services behind them). A decision that touches two
+   goes where its subject is, not where its effect lands; `formats` was folded
+   into `packs` for exactly that reason, and `core` exists because three
+   decisions (ADR-0208, ADR-0237, ADR-0253) had no honest home among the other
+   six — each was filed by where its effect landed, which is the mistake this
+   rule names.
+3. **Decide which shape applies:**
    - *new decision* → new file;
    - *the same decision, refined* → edit that ADR in place and extend its
      Context/Decision; note the change and its date;
    - *the decision is reversed* → the old one becomes `superseded` with a
      `- Superseded by: ADR-NNNN` line, and the new one carries the rationale.
-3. **Confirm the status with the user when it isn't obvious.** `accepted`
+4. **Confirm the status with the user when it isn't obvious.** `accepted`
    means decided, and accepting one is a request for work. An open
    question or an either/or stays `proposed` until a human picks.
 
 ## Allocating the id
 
-Ids are never reused (ADR-0035). Take the next one:
+Ids are never reused (ADR-0035). Take the next one — `rglob`, never `glob`:
+the files live one directory down, so a flat glob silently finds nothing and
+`max()` then fails on an empty sequence.
 
 ```bash
 python3 - <<'EOF'
 import pathlib, re
-ids = sorted(int(p.name[:4]) for p in pathlib.Path("docs/adr").glob("[0-9][0-9][0-9][0-9]-*.md"))
+ids = sorted(int(p.name[:4]) for p in pathlib.Path("docs/adr").rglob("[0-9][0-9][0-9][0-9]-*.md"))
 print(f"next: {max(ids) + 1:04d}")
 EOF
 ```

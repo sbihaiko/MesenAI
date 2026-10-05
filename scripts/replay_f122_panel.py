@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Mechanical replay of the F12.2 "Copy as MEP sheet cell" panel script.
 
-`docs/validation/f12.2-copy-sheet-cell-panel-script.md` is the *dispatcher*
+`docs/validation/slices/f12.2-copy-sheet-cell-panel-script.md` is the *dispatcher*
 script. ADR-0214 assigns the remaining cold read to a fresh Opus session
-briefed by `docs/validation/f12.2-fable-evaluator-briefing.md`. This replay
+briefed by `docs/validation/slices/f12.2-fable-evaluator-briefing.md`. This replay
 does NOT replace that run: it never finds the menu item by its visible label
 (that is the headless test plus the evaluator on the dump), never scores criterion 4
 or P15, and cannot be surprised by the UI.

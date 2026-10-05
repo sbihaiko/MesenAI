@@ -162,7 +162,7 @@ scripts/headless_record roms/Castlevania.nes 400 out/tas bootstrap hdpack-off \
 repeatable and checked only while the movie drives the pad. Add
 `sync-movie-frames=<n>` when you know how many frames the movie's input covers.
 Both are RAM **reads** — see the cheat rules below. The design and its measured
-false-positive behaviour are in [ADR-0185](adr/0185-a-published-tas-movie-is-an-admissible-recording-driver-when-it-matches-our-rom.md).
+false-positive behaviour are in [ADR-0185](adr/recorder/0185-a-published-tas-movie-is-an-admissible-recording-driver-when-it-matches-our-rom.md).
 
 ### Driver C — a RAM cheat (`cheat=`)
 
@@ -176,7 +176,7 @@ stage select, infinite lives. Two rules, both load-bearing:
   stage without drawing anything foreign.
 - **A cheated run feeds only the background surfaces of the kit — never the
   sprites.** A tile the game drew only because a cheat was on is not a tile the
-  game draws. [ADR-0184](adr/0184-a-recording-may-use-a-ram-only-cheat-and-a-cheated-run-feeds-only-the-background-surfaces.md)
+  game draws. [ADR-0184](adr/recorder/0184-a-recording-may-use-a-ram-only-cheat-and-a-cheated-run-feeds-only-the-background-surfaces.md)
   has the measurement behind this.
 
 ### Driver D — start from a save state (`state=`, `save-state=`)
@@ -213,7 +213,7 @@ sessions — 15 hops take 31.5 s at `--sessions 1` and 6.9 s at `--sessions 8` �
 which is the parallelism a search that used to run eight recorder processes
 wants. Those numbers, and the check that the ported search finds what the old
 scratch driver found, are in
-[the F14.12 log](validation/f1412-step-mode-emulator-2026-09-26.md).
+[the F14.12 log](validation/slices/f1412-step-mode-emulator-2026-09-26.md).
 
 ```sh
 # Mint the state the search starts from (Driver D), then search from it.
@@ -230,14 +230,14 @@ rightward press and no plain jump moves him, and the way out is a wall hop —
 `4f LA` then `25f RA`, window after window — which carried the search past the
 pin to abs x 3 035 and replaced `scripts/stages/ninjagaiden/stage1-run.txt` with
 a route that replays to byte-identical RAM over two runs per checkpoint. That is
-[the F14.13 log](validation/f1413-ninjagaiden-search-2026-09-26.md).
+[the F14.13 log](validation/slices/f1413-ninjagaiden-search-2026-09-26.md).
 
 **The stall helper — `scripts/jev_harness.py`.** A search stalls where the game
 needs a move its candidate set never tries. This harness plays the same kind of
 search, and when the game's own progress stays flat for `--stall-seconds`
 emulated seconds it asks **Jev** (TypeSafe's `typesafe/jev-1.13`, through
 OpenRouter) to pick one macro from a fixed set — the seven of
-[ADR-0238](adr/0238-jev-via-openrouter-is-a-stuck-point-input-generator-behind-a-persistent-step-mode-emulator.md),
+[ADR-0238](adr/recorder/0238-jev-via-openrouter-is-a-stuck-point-input-generator-behind-a-persistent-step-mode-emulator.md),
 whose durations are fixed in the code and never chosen by the model. Nothing
 about the answer is trusted: the macro is played, and only a path that raises the
 progress watermark survives into the script.
@@ -261,7 +261,7 @@ python3 scripts/jev_harness.py --rom "$NG_ROM" --game ninjagaiden \
   (`--budget`); the harness stops at it (exit 5). One seven-option Choice
   measured US$ 0.000023 at the vendor, and a spike run's decisions cost
   US$ 0.000047 each (`runs/f1414/e2e4/decisions.jsonl`, not versioned, written up
-  in [the F14.14 log](validation/f1414-jev-stall-helper-2026-09-26.md)). Latency,
+  in [the F14.14 log](validation/slices/f1414-jev-stall-helper-2026-09-26.md)). Latency,
   not money, is the constraint — about half a second per call — which is why the
   model is asked only at a stall. Exit codes: 0 the goal was reached, 1 the run
   ended without it, 2 a refusal, 5 the cap.
@@ -275,11 +275,11 @@ python3 scripts/jev_harness.py --rom "$NG_ROM" --game ninjagaiden \
   current screen** — with up to `--max-questions` (3) per rung. A macro that
   failed at a checkpoint is withdrawn from that checkpoint's later questions. The
   floor is the screen's start alone
-  ([ADR-0238](adr/0238-jev-via-openrouter-is-a-stuck-point-input-generator-behind-a-persistent-step-mode-emulator.md)
+  ([ADR-0238](adr/recorder/0238-jev-via-openrouter-is-a-stuck-point-input-generator-behind-a-persistent-step-mode-emulator.md)
   §3, amended 2026-09-26): "or the last real progress" was dropped because the
   watermark rises on every window that moves, so that second floor sat a fraction
   of a second behind the head and collapsed every rung onto one checkpoint
-  ([F14.15 §0](validation/f1415-jev-adoption-2026-09-26.md)). When the screen is
+  ([F14.15 §0](validation/slices/f1415-jev-adoption-2026-09-26.md)). When the screen is
   younger than a rung, several rungs land on its start: at a wall whose screen is
   ~6 s long, F14.15 measured four distinct checkpoints and no rungs of 8 or 16 s.
 - **Situation tips.** A game may carry `scripts/stages/<game>/jev-tips.json`:
@@ -289,7 +289,7 @@ python3 scripts/jev_harness.py --rom "$NG_ROM" --game ninjagaiden \
   file's hash. `ninjagaiden/jev-tips.json` is the worked example, and
   [`scripts/stages/README.md`](../scripts/stages/README.md) has the file's shape.
   A tip is advice, never evidence
-  ([ADR-0188](adr/0188-an-ai-judges-the-rendered-surface-and-its-judgement-is-a-proposal-that-never-becomes-evidence.md)).
+  ([ADR-0188](adr/recorder/0188-an-ai-judges-the-rendered-surface-and-its-judgement-is-a-proposal-that-never-becomes-evidence.md)).
 - **Loop guard.** Three detectors, each logged per decision: a state fingerprint
   (position rounded to 8 px, camera, room, HP) seen three times in one stall, a
   progress watermark flat for 60 emulated seconds, and a period-2..4 cycle
@@ -303,7 +303,7 @@ python3 scripts/jev_harness.py --rom "$NG_ROM" --game ninjagaiden \
   `--tools WebSearch,WebFetch` plus a deny-list of every other built-in tool and
   `--safe-mode`, and the run's log records the tool list the CLI's own init event
   reports back — measured `["WebFetch", "WebSearch"]` on every pass
-  ([F14.15 §11.1](validation/f1415-jev-adoption-2026-09-26.md)). `--max-research-passes N`
+  ([F14.15 §11.1](validation/slices/f1415-jev-adoption-2026-09-26.md)). `--max-research-passes N`
   bounds how many passes a run may pay for (0 keeps research out of a ladder
   measurement entirely), and the cap covers **both** roads into the worker — the
   spent ladder and the loop guard. A live pass costs **US$ 0.086–0.30 and 30–60 s
@@ -316,7 +316,7 @@ python3 scripts/jev_harness.py --rom "$NG_ROM" --game ninjagaiden \
   having reached its goal (ADR-0238's rule: a tip is promoted only after the
   stall it was written for passed).
 - **Cheats** (`--cheat AAAA:VV[:CC]`, repeatable) follow
-  [ADR-0184](adr/0184-a-recording-may-use-a-ram-only-cheat-and-a-cheated-run-feeds-only-the-background-surfaces.md):
+  [ADR-0184](adr/recorder/0184-a-recording-may-use-a-ram-only-cheat-and-a-cheated-run-feeds-only-the-background-surfaces.md):
   RAM addresses below `$0800` only, with Game Genie letters and mirror addresses
   refused by name. A cheated script is a **coverage-pass** artifact — it ships
   with its cheat list beside it and replays only with it, and a search-versus-Jev
@@ -326,14 +326,14 @@ python3 scripts/jev_harness.py --rom "$NG_ROM" --game ninjagaiden \
   and not the value the CPU sees — verify a cheat by its effect on the run, never
   by reading its address. A step-mode session applies its cheats and reports each
   one before it prints `ready`, so a cheated session run is an ordinary run
-  ([the F14.14 log](validation/f1414-jev-stall-helper-2026-09-26.md)); and a
+  ([the F14.14 log](validation/slices/f1414-jev-stall-helper-2026-09-26.md)); and a
   cheat does not remove a **position** stall — measured on a stall that *is*
   passed, the coverage pass under `00A2:9C` reached the same abs x 906 in the
   same 208 frames as the uncheated run
-  ([F14.15 §5](validation/f1415-jev-adoption-2026-09-26.md)).
+  ([F14.15 §5](validation/slices/f1415-jev-adoption-2026-09-26.md)).
 
 **What it has been measured to do.** On two real stalls
-([F14.15](validation/f1415-jev-adoption-2026-09-26.md)): Mega Man 3's Snake Man
+([F14.15](validation/slices/f1415-jev-adoption-2026-09-26.md)): Mega Man 3's Snake Man
 stage, page 3 at abs x 824, where the search alone stops — Jev passed it in 5 of
 5 arms, tips on and off, at 3.57–3.62× real time, and the route it wrote goes on
 to abs x 984 uncheated; and Ninja Gaiden's section 1-2 death window, one hit from
@@ -351,7 +351,7 @@ path that flat replay reaches ships (otherwise the run ends as
 `headless_record` with no AI in it and compares RAM checkpoints. **Replay never
 calls the model**: same ROM, same state, same inputs, same frames. Jev's answer
 is an input, never evidence
-([ADR-0185](adr/0185-a-published-tas-movie-is-an-admissible-recording-driver-when-it-matches-our-rom.md)).
+([ADR-0185](adr/recorder/0185-a-published-tas-movie-is-an-admissible-recording-driver-when-it-matches-our-rom.md)).
 
 ### Recording a whole folder of ROMs, unattended
 
@@ -1515,6 +1515,6 @@ where the split-distribution flow lives, if your pack is too large for one zip.
 - [`ai-kit-review.md`](ai-kit-review.md) — the AI proposer protocol and how a review is scored.
 - [`enhancement-ecosystem.md`](enhancement-ecosystem.md) — what MEP is, for newcomers.
 - [`../scripts/stages/README.md`](../scripts/stages/README.md) — route script format and how stages are reached headlessly.
-- `docs/adr/0238` — the search and the stall helper of the route search: why the model is confined to a stall, what it is allowed to see, and why the artifact stays a plain input script.
-- `docs/adr/0182`–`0189` — the decisions behind per-stage coverage, the kit's four surfaces, the RAM-cheat rule, the TAS driver, the CDL map, the AI reviewer and the emitted conditions.
-- `docs/adr/0209`–`0236` — the decisions behind what this guide describes since then: naming a figure and returning its paint (0209), the static kit (0219), the layered `.ora` (0220), the behind-background flag (0224), the sheet reaching every palette a shape was drawn in (0230), the untouched cell keeping its recorded rule (0231), the CHR RAM bank's identity (0232) and the per-cell capture record (0236).
+- `ADR-0238` — the search and the stall helper of the route search: why the model is confined to a stall, what it is allowed to see, and why the artifact stays a plain input script.
+- `ADR-0182`–`ADR-0189` — the decisions behind per-stage coverage, the kit's four surfaces, the RAM-cheat rule, the TAS driver, the CDL map, the AI reviewer and the emitted conditions.
+- `ADR-0209`–`ADR-0236` — the decisions behind what this guide describes since then: naming a figure and returning its paint (0209), the static kit (0219), the layered `.ora` (0220), the behind-background flag (0224), the sheet reaching every palette a shape was drawn in (0230), the untouched cell keeping its recorded rule (0231), the CHR RAM bank's identity (0232) and the per-cell capture record (0236).

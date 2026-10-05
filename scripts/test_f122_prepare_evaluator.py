@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Regression test for the 2026-09-19 Sonnet sweep's "coverage-count mismatch"
-finding (`docs/validation/f12.2-sonnet-sweep-2026-09-19.md`) and for #494.
+finding (`docs/validation/slices/f12.2-sonnet-sweep-2026-09-19.md`) and for #494.
 
 The second one is a frame the *recorder* had already claimed: a pack's
 `textures/backgrounds/screenNNN.png` is an opaque picture of the whole screen

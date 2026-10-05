@@ -141,7 +141,7 @@ labelled set produced by a human who knew the game: its file names (`BillRizer`,
 ```
 scripts/artist_ai_review.py truth <kit> \
     --reference-pack "<pack folder>" \
-    --subjects docs/validation/artist-ai-review-contra-subjects.json \
+    --subjects docs/validation/process/artist-ai-review-contra-subjects.json \
     --out truth.json
 scripts/artist_ai_review.py score --proposals kit-proposals.json --truth truth.json \
     [--alias alias.json] [--kind figure]

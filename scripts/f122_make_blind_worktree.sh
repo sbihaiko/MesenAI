@@ -8,7 +8,7 @@
 # dispatches, based on the *dispatching session's own primary working
 # directory* -- not on any path a prompt names, and not on a path a `cd` in
 # the same session switches to afterwards (both were tested empirically on
-# 2026-09-20; see docs/validation/f12.2-sonnet-sweep-2026-09-19.md for the
+# 2026-09-20; see docs/validation/slices/f12.2-sonnet-sweep-2026-09-19.md for the
 # leak this fixes). If the dispatching session's checkout has a recent commit
 # like "feat(ui): Copy as MEP sheet cell puts a cell on the clipboard,
 # unplaced", every evaluator it dispatches sees that line before it opens a

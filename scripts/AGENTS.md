@@ -906,7 +906,7 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   patch). Verification: `python3 scripts/test_mep_import.py` (synthetic
   pack, synthetic iNES + IPS; PASS/FAIL per check, exit 0 only if all
   pass); the measured round-trips are in
-  `docs/validation/adr0198-s3-patched-rom-import-2026-09-22.md`.
+  `docs/validation/adr/adr0198-s3-patched-rom-import-2026-09-22.md`.
   `gen_mep_recipe_fixture.py` (F6.4a) writes the real-bytes MEP-recipe-v1
   golden under `docs/specs/golden/mep-recipe/fixture/` (`primary.zip`,
   `audio-dep.zip`, `recipe.json`, `recipe-missing-dep.json`) that a
@@ -1417,12 +1417,12 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   the poses of one figure, and the source crop's recorded art would erase
   paint an earlier instance had already routed there. Covered by
   `test_mep_figure.py`; measured on Contra in
-  `docs/validation/issue-413-kit-figure-reload-2026-09-24.md` and
-  `docs/validation/issue-435-kit-recipe-order-2026-09-24.md`, and on
+  `docs/validation/issues/issue-413-kit-figure-reload-2026-09-24.md` and
+  `docs/validation/issues/issue-435-kit-recipe-order-2026-09-24.md`, and on
   Castlevania in
-  `docs/validation/issue-452-453-figure-import-blank-tiles-and-recipe-order-2026-09-24.md`
-  and `docs/validation/issue-463-figure-mirror-2026-09-25.md` and
-  `docs/validation/issue-478-routed-cell-owner-merge-2026-09-25.md`.
+  `docs/validation/issues/issue-452-453-figure-import-blank-tiles-and-recipe-order-2026-09-24.md`
+  and `docs/validation/issues/issue-463-figure-mirror-2026-09-25.md` and
+  `docs/validation/issues/issue-478-routed-cell-owner-merge-2026-09-25.md`.
 - `sheet_keys_audit.py <pack-dir>...` (#181/#183) - for every sprite-sheet
   tile entry (`sheets/sprNNN.json`, `sheets/sprites.json`, a cell's own
   `tiles` and its `aliases[].tiles`) looks up the
@@ -1596,7 +1596,7 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   expression (`cancel-in-progress` parsed as
   `${{ github.event_name == 'issues' }}`, not a comment grep).
   `verify_mep_fallback_adr.sh` (AC-7 of the MEP zip-fallback task) checks
-  `docs/adr/0120-*.md` documents the subfolder fallback as an additive
+  `docs/adr/packs/0120-*.md` documents the subfolder fallback as an additive
   last-priority extension of ADR-0040/ADR-0049's precedence, a pure I/O-free
   function `PrepareZip` consults with its `outFolder` contract held fixed,
   the C++ (name match) vs C#/Python (structural match) asymmetry with its
@@ -1667,7 +1667,7 @@ recording; a `jev_harness.py` script replayed by the recorder is `ai`.
 - `python3 scripts/validate-specs.py` - specs/goldens under `docs/specs/`.
 - `python3 scripts/checks/verify_adr_refs.py` (also in `make doc-checks`) -
   every `ADR-NNNN` cited in `docs/`, `.github/`, `CLAUDE.md` or any
-  `AGENTS.md` resolves to `docs/adr/NNNN-*.md`.
+  `AGENTS.md` resolves to `docs/adr/<area>/NNNN-*.md`.
 - `python3 scripts/checks/verify_adr_citations.py` (also in `make
   doc-checks`) - the companion of the line above: that one checks the id
   resolves, this one checks the citation is *true*. Two ways a consolidation
@@ -1679,6 +1679,19 @@ recording; a `jev_harness.py` script replayed by the recorder is `ai`.
   numbered paragraph, bold or not); a fold claim's subject is the last
   `ADR-NNNN` before the phrase on that line, and it passes only when that
   ADR's own file is a tombstone naming the claimed target. No allow-list.
+- `python3 scripts/checks/verify_md_links.py` (also in `make doc-checks`) -
+  every markdown `](target)` in the repo resolves from the file that writes
+  it. A link target is relative to its own file, so moving a file changes
+  what its links must say even when their targets never moved, and the
+  2026-10-05 area split (283 files, one directory deeper) was swept four
+  times, each sweep missing a shape the next one found: a repo-relative
+  literal split across two lines; a `../`-relative path in a code span; a
+  link's visible *label*; and a target written `adr/core/0237-….md` with no
+  `docs/` prefix. Resolving every target is the one formulation with no shape
+  to miss, and it is the only one of the four that needed no allow-list -
+  over the tree it replaced it reported exactly the two links that were
+  broken and nothing else. Fenced code blocks and non-repo schemes
+  (`http(s)`, `mailto`, `ftp`, `tel`) and bare `#anchor` links are skipped.
 - `python3 scripts/checks/verify_prd_live_rows.py` (PRD slice C.2, also in
   `make doc-checks`) - no row of a *live* slice table in
   `docs/roadmap/PRD-mesence-enhancement-ecosystem.md` (Part A section 4,
@@ -1764,7 +1777,7 @@ recording; a `jev_harness.py` script replayed by the recorder is `ai`.
   `mei_rules.STATUS_TO_KIND`; see `checks/` above.
 - `python3 scripts/checks/verify_adr_refs.py` (PRD slice D1, 2026-09-01) -
   every `ADR-NNNN` cited in `docs/adr/`, `docs/`, `.github/`,
-  `CLAUDE.md` and any `AGENTS.md` resolves to `docs/adr/NNNN-*.md`;
+  `CLAUDE.md` and any `AGENTS.md` resolves to `docs/adr/<area>/NNNN-*.md`;
   the ADR-0035 retired ids and the 2026-08-27 consolidated ids
   (0045/0046/0048, 0053-0119) are tolerated only with former/retired/
   consolidated/superseded/deleted context on the line (or, for the

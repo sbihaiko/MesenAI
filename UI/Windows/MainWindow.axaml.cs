@@ -866,7 +866,7 @@ namespace Mesen.Windows
 			//shader seam) and snaps width/height to whole device pixels here.
 			//Both rules live in RendererViewportFit instead, rounding down so
 			//the picture never overflows the panel (P.7) - see
-			//docs/validation/upstream-sync-3924215-2026-09-24.md.
+			//docs/validation/process/upstream-sync-3924215-2026-09-24.md.
 
 			if(WindowState == WindowState.FullScreen && !ConfigManager.Config.Video.UseExclusiveFullscreen && ConfigManager.Config.Video.EnableVariableRefreshRate) {
 				//When VRR is enabled, set the renderer to the same size as the monitor when in fullscreen mode

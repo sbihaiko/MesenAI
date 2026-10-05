@@ -444,7 +444,7 @@ doc-checks-2:
 	#is the target that actually fetches them.
 	./scripts/checks/verify_download_channel.sh
 	#ADR reference integrity (PRD slice D1): every ADR-NNNN cited in docs/ADRs/
-	#AGENTS.md/CLAUDE.md must resolve to docs/adr/NNNN-*.md.
+	#AGENTS.md/CLAUDE.md must resolve to docs/adr/<area>/NNNN-*.md.
 	python3 scripts/checks/verify_adr_refs.py
 	#The companion of the line above: that one checks the ID resolves, this one
 	#checks the citation is TRUE. Two ways a consolidation makes a citation that
@@ -459,6 +459,17 @@ doc-checks-2:
 	#four accepted ADRs were missing from it (0209, 0212, 0213, 0214) because
 	#the Status parser anchored on the first word. That guard is this one.
 	python3 scripts/checks/verify_adr_index.py
+	#Every `](target)` resolves from the file that writes it. A link target is
+	#relative to its own file, so moving a file changes what its links must say
+	#even when the targets never moved - and the 2026-10-05 area split (283
+	#files, one directory deeper) was swept FOUR times, each sweep missing a
+	#shape the next one found: repo-relative literals split across lines;
+	#`../`-relative paths in code spans; a link's visible LABEL; and a target
+	#written `adr/core/0237-….md` with no `docs/` prefix. Resolving every target
+	#is the one formulation with no shape to miss, and over the tree it replaced
+	#it reports exactly the two links that were broken and nothing else. It has
+	#no allow-list, which is why it is the one worth keeping.
+	python3 scripts/checks/verify_md_links.py
 	#Roadmap freshness (PRD slice C.2): a slice that has shipped loses its row
 	#in the PRD's live tables and gains one line in the shipped record, so a
 	#live row whose Decision cell opens with "shipped" is a contract breach.

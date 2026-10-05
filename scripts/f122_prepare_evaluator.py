@@ -2,7 +2,7 @@
 """Build the evaluator sandbox for one ROM: frame, state, tilemap, copy table.
 
 The F12.2 dispatcher script
-(`docs/validation/f12.2-copy-sheet-cell-panel-script.md`, S1-S7) was written
+(`docs/validation/slices/f12.2-copy-sheet-cell-panel-script.md`, S1-S7) was written
 for two games whose routes already existed and whose reference frame had
 already been measured. This is the same thing for a ROM with no route at all,
 which is 25 of the 30 in the library: the frame has to be *found* before it can
@@ -67,7 +67,7 @@ nothing, and the logo sitting in VRAM is never fetched. So:
   which the capture's own pixels then hide. Tetris 2's F14.2 re-score is the
   measured case - a 40 s frame that is `screen002.png` came back "drawing 3
   background rule(s)", the panel's cell (14,18) was under the capture, and
-  painting it changed no pixel (`docs/validation/`
+  painting it changed no pixel (`docs/validation/slices/`
   `f14.2-rescore-after-431-gauntlet-tetris2-2026-09-24.md`). A candidate whose
   frame a recorded screen owns is dropped, and a game whose every sampled second
   is owned is refused by name instead of handed over;
