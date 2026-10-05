@@ -529,12 +529,12 @@ place.
      which folders are found.
 
    **Amendment, 2026-10-05 (third, same day): the configured games folder is
-   used only while it answers something.** The user, verbatim, asked which rule
-   he wanted for a games folder that resolves to a directory holding nothing
-   (issue #887; macOS `/home` is an autofs node - `isdir` true, `listdir` empty)
-   and picked **"Degradar no uso"**: *accept any folder as the games folder, and
-   never open on one that lists nothing*. That is the go-ahead this narrowing
-   records, and ADR-0260 is the decision it belongs to.
+   used only while it answers something.** The rule for a games folder that
+   resolves to a directory holding nothing was put to the user as a choice
+   (issue #887; macOS `/home` is an autofs node - `isdir` true, `listdir` empty),
+   and he picked **"Degradar no uso"**, verbatim: *accept any folder as the games
+   folder, and never open on one that lists nothing*. That is the go-ahead this
+   narrowing records, and ADR-0260 is the decision it belongs to.
 
    Three clauses written above stop being literally true, and this is where they
    are narrowed rather than left to contradict the code. Each was a promise the
@@ -570,13 +570,17 @@ place.
      it holds anything - the focus rule that keeps the ring off the action row,
      and every refusal above. The rule is one function in the dual-compiled
      `UI/Logic` (`GamesFolderChoice`), so the next entry point that needs it asks
-     the same question instead of a fourth inline `Directory.Exists`.
+     the same question instead of an inline `Directory.Exists` of its own.
    - **The cost, stated where the sheet's own rules live**: a legitimately empty
      games folder stops being led with. A player who has just created an empty
-     library gets the last-opened folder from `Open ROM` and one fewer root in
-     this sheet, rather than their new empty one. That is deliberate - telling an
-     autofs node apart from an empty folder is not knowable from the path - and
-     the alternative (refusing at save) would refuse a folder that is full
+     library is not led to their new empty one - `Open ROM` starts at the
+     last-opened folder only when that folder answers something too, and
+     otherwise at the dialog's own default, and the roots list is usually one
+     root shorter but not always, because `PlayRomPicker.Roots` dedupes by path
+     and the folder is still a root under another label when it is also the app's
+     own ROM folder or a mounted volume. That is deliberate - telling an autofs
+     node apart from an empty folder is not knowable from the path - and the
+     alternative (refusing at save) would refuse a folder that is full
      tomorrow. ADR-0260 carries the full argument and the three ways out that
      were put to the user.
 
