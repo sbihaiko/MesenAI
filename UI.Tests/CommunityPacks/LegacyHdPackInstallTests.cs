@@ -395,5 +395,75 @@ namespace Mesen.Tests.CommunityPacks
 				LegacyHdPackInstall.HdLegacyOutputFolderVerdict.Proceed,
 				LegacyHdPackInstall.DecideOutputFolderHandling(stampExists: false, folderExists: false, folderNonEmpty: false));
 		}
+
+		// --- the write that MEP-izes the extracted pack (#886) ----------------
+
+		//The two writes that end an hd-legacy install used to run unguarded, so a
+		//failure there (a full disk is the realistic case) escaped the coordinator
+		//with the extracted textures already on disk and no .mep-install.json
+		//beside them - and the next install of the same pack then read that folder
+		//as the user's own work (RefuseNonEmptyUnstamped above) and refused it.
+		//A directory cannot be opened for writing on any platform, which makes the
+		//failure deterministic here instead of needing a full disk.
+		[Fact]
+		public void A_write_that_fails_is_reported_rather_than_thrown()
+		{
+			string outFolder = NewTempDir();
+			try {
+				Directory.CreateDirectory(Path.Combine(outFolder, "pack.json"));
+
+				bool ok = LegacyHdPackInstall.WriteInstallOutputs(outFolder, "{}", "{}", out string error);
+
+				Assert.False(ok);
+				Assert.NotEmpty(error);
+			} finally {
+				Directory.Delete(outFolder, true);
+			}
+		}
+
+		[Fact]
+		public void A_write_that_fails_leaves_no_stamp_behind()
+		{
+			//The stamp is what tells the *next* install the folder is ours, so a
+			//half-written install must not leave one: the caller clears the folder
+			//on a reported failure, and this pins that the second write is not what
+			//turned a bad folder into a stamped one.
+			string outFolder = NewTempDir();
+			try {
+				Directory.CreateDirectory(Path.Combine(outFolder, "pack.json"));
+
+				bool ok = LegacyHdPackInstall.WriteInstallOutputs(outFolder, "{}", "{}", out string error);
+
+				Assert.False(ok);
+				Assert.NotEmpty(error);
+				Assert.False(File.Exists(Path.Combine(outFolder, LegacyHdPackInstall.InstallStampFileName)));
+			} finally {
+				Directory.Delete(outFolder, true);
+			}
+		}
+
+		//TryExtractPack is the boundary the coordinator trusts to run its cleanup
+		//(ClearFolderForReinstall) whenever extraction did not complete, so it has
+		//to honour its own name for *any* input. The four archive exceptions it
+		//named - IOException, UnauthorizedAccessException, InvalidDataException,
+		//ObjectDisposedException - do not cover the ArgumentException family, which
+		//is what an unusable path raises before a file handle ever exists.
+		//Measured on .NET 10: the compression method the issue named as a
+		//NotSupportedException ("bad compression method") is raised as an
+		//InvalidDataException, which was already caught; the ArgumentException
+		//below is the gap that was actually left.
+		[Fact]
+		public void An_unusable_pack_path_is_reported_rather_than_thrown()
+		{
+			string dest = NewTempDir();
+			try {
+				bool ok = LegacyHdPackInstall.TryExtractPack("", dest, "Game", out string error);
+
+				Assert.False(ok);
+				Assert.NotEmpty(error);
+			} finally {
+				Directory.Delete(dest, true);
+			}
+		}
 	}
 }

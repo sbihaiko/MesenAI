@@ -1,7 +1,8 @@
 # ADR-0258: A failed MEP recipe install restores the output folder to how it was found
 
 - Status: accepted 2026-10-05 (go-ahead: “resolva os bugs que aparecerem”, the
-  session's standing instruction)
+  session's standing instruction); amended 2026-10-05 (the legacy HD path,
+  #886 — go-ahead: “tem um bug aberto ainda, corrija”)
 - Date: 2026-10-05
 - Related: ADR-0138 (MEP recipe external assets and client auto-install),
   ADR-0147 (sibling auto and MEP pack folders), ADR-0211 (a declared
@@ -61,6 +62,37 @@ This changes no success path and no refusal path: `PrepareOutputFolder` still
 refuses a non-empty folder, and a failure before it (a recipe version, a hash
 mismatch) still writes nothing and removes nothing.
 
+**The legacy HD path follows the same rule, from its own equivalent moment
+(#886, amending).** `InstallHdLegacy` (`CommunityPackInstallCoordinator`) is
+the sibling of the recipe path and produces the same residue: it extracts the
+pack root into `mep/textures/` and only then writes `pack.json` and the stamp,
+so a failure in those two writes — a full disk is the realistic case — used to
+escape the coordinator with the extracted textures on disk and no stamp beside
+them. That is precisely the folder the next install reads as the user's own.
+Both of the path's other failure branches (a failed extraction, a
+contradicting `supportedRom`) already call `ClearFolderForReinstall`, so the
+rule was the path's own and only the third branch was missing it. The writes
+now report a failure instead of throwing one, and the caller clears on it, so
+all three branches state one invariant.
+
+`TryExtractPack` is a `Try*` boundary whose caller runs that cleanup only when
+it reports false, so it catches `Exception` rather than a list of archive
+types. The list it named — `IOException`, `UnauthorizedAccessException`,
+`InvalidDataException`, `ObjectDisposedException` — is what the extraction
+actually raises; the gap is the `ArgumentException` family, which is what an
+unusable path raises before a file handle exists. Measured on .NET 10 while
+writing the tests: the "bad compression method" case named in #886 arrives as
+an `InvalidDataException`, already covered. The catch is therefore widened to
+the method's contract, not to a crash anyone reproduced.
+
+Two consequences recorded so they are not mistaken for oversights.
+`ClearFolderForReinstall` removes the folder rather than emptying it, so the
+legacy path hands back no entry where the recipe path hands back the caller's
+own — pre-existing behaviour of the sibling branches, unchanged here and not
+covered by this decision. And the stamp is written *after* `pack.json`,
+deliberately: a stamp beside a `pack.json` that never landed would claim a
+folder the install did not finish, which is worse than no stamp at all.
+
 ## Consequences
 
 - The two states a caller can hand the core now converge on one rule, so the
@@ -82,9 +114,7 @@ mismatch) still writes nothing and removes nothing.
   `create_directories` fails partway, the leaf is absent — as it was — but any
   ancestor directories it already created are left behind. That is
   `create_directories`' own behaviour and this decision does not address it.
-- Still open on the same path, and deliberately not decided here: the legacy HD
-  install path (`InstallHdLegacy`) writes its `pack.json` and stamp after
-  extraction without a guard of its own (ADR-0147's path, issue #881), and
-  `TryExtractLegacyPack` catches a fixed list of exception types, so a throw
-  outside that list skips the cleanup. Both are host-side and need their own
-  decision.
+- Both residues this ADR left open on the legacy HD path are decided in the
+  Decision above (#886): the unguarded post-extraction writes, and the fixed
+  exception list on the extract. The asymmetry that survives — a cleared folder
+  rather than an emptied one — is recorded there with it.
