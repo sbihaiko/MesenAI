@@ -1,6 +1,7 @@
 using Avalonia.Platform;
 using Avalonia.Threading;
 using Mesen.Interop;
+using Mesen.Logic;
 using Mesen.Utilities;
 using Microsoft.Win32;
 using System;
@@ -93,10 +94,12 @@ namespace Mesen.Config
 				UpdateLinuxShortcutFileMimeTypes(desktopFile, mimeTypes);
 			}
 
-			//Update databases
+			//Update databases. The folder goes through ArgumentList, never a joined
+			//command line: a path with a space would otherwise arrive as several
+			//argv entries and the helper would never see it (#862).
 			try {
-				Process.Start("update-mime-database", mimeFolder).WaitForExit();
-				Process.Start("update-desktop-database", desktopFolder);
+				Process.Start(LinuxFileAssociation.DatabaseUpdateStartInfo("update-mime-database", mimeFolder))?.WaitForExit();
+				Process.Start(LinuxFileAssociation.DatabaseUpdateStartInfo("update-desktop-database", desktopFolder));
 			} catch {
 				try {
 					EmuApi.WriteLogEntry("An error occurred while updating file associations");
@@ -140,7 +143,7 @@ namespace Mesen.Config
 				"Comment=Emulator" + Environment.NewLine +
 				"Keywords=game;emulator;emu" + Environment.NewLine +
 				"Categories=GNOME;GTK;Game;Emulator;" + Environment.NewLine +
-				"Exec=" + mainModule.FileName + " %f" + Environment.NewLine +
+				"Exec=" + LinuxFileAssociation.ExecValue(mainModule.FileName, "%f") + Environment.NewLine +
 				"NoDisplay=false" + Environment.NewLine +
 				"StartupNotify=true" + Environment.NewLine +
 				"Icon=MesenIcon" + Environment.NewLine;
