@@ -1,3 +1,5 @@
+using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using Mesen.Logic;
 using Xunit;
@@ -112,5 +114,104 @@ public class LinuxFileAssociationTests
 	public void A_literal_percent_f_in_the_path_is_not_the_field_code()
 	{
 		Assert.Equal("\"/home/%%f/Mesen\" %f", LinuxFileAssociation.ExecValue("/home/%f/Mesen", "%f"));
+	}
+
+	//#877: the Exec key cannot carry every path, and the writer used to emit one
+	//anyway. An "=" is refused by the specification outright - "The name or path
+	//of the executable program may not contain the equal sign (=)" - and no
+	//quoting removes it. The rule is a property of the PATH, not of arguments in
+	//general, so ExecValue is what refuses.
+	[Theory]
+	[InlineData("/home/u/apps/foo=1/Mesen")]
+	[InlineData("/home/u/a\u0001b/Mesen")]
+	[InlineData("/home/u/a\u007fb/Mesen")]
+	public void A_path_the_exec_key_cannot_carry_is_refused(string path)
+	{
+		Assert.Throws<ArgumentException>(() => LinuxFileAssociation.ExecValue(path, "%f"));
+	}
+
+	//Tab, newline and carriage return are RESERVED characters the value type
+	//carries through its own escapes ("a string value may contain all ASCII
+	//characters except for control characters" and the five escapes are \s, \n,
+	//\t, \r, \\), so such a path IS writable: raw it would end the line-based
+	//Exec= line, but the escape reaches the argument as the character itself once
+	//the general rule - applied before the quoting rule - has run. Refusing these
+	//would be over-rejection (#877).
+	[Theory]
+	[InlineData("/home/u/a\tb/Mesen", "\"/home/u/a\\tb/Mesen\"")]
+	[InlineData("/home/u/a\nb/Mesen", "\"/home/u/a\\nb/Mesen\"")]
+	[InlineData("/home/u/a\rb/Mesen", "\"/home/u/a\\rb/Mesen\"")]
+	public void A_whitespace_control_in_the_path_is_escaped_not_refused(string path, string expected)
+	{
+		Assert.True(LinuxFileAssociation.CanWriteExecutablePath(path, out string reason));
+		Assert.Empty(reason);
+		Assert.Equal(expected, LinuxFileAssociation.ExecArgument(path));
+	}
+
+	//The escape above must not be confused with a literal backslash followed by
+	//the same letter: a backslash is written as four, so "\t" in the path arrives
+	//as a backslash and a "t", never as a tab.
+	[Fact]
+	public void A_literal_backslash_before_a_t_is_not_a_tab()
+	{
+		Assert.Equal("\"/home/u/a\\\\\\\\tb/Mesen\"", LinuxFileAssociation.ExecArgument("/home/u/a\\tb/Mesen"));
+	}
+
+	//The rule is a property of the path alone, so the caller can ask before it
+	//starts building the entry. The reason is what reaches the log: the
+	//alternative - a desktop entry the environment silently rejects - is exactly
+	//the failure #877 is about.
+	[Theory]
+	[InlineData("/home/u/apps/foo=1/Mesen", "=")]
+	[InlineData("/home/u/a\u0001b/Mesen", "control character")]
+	public void An_unrepresentable_path_reports_why(string path, string expectedInReason)
+	{
+		Assert.False(LinuxFileAssociation.CanWriteExecutablePath(path, out string reason));
+		Assert.Contains(expectedInReason, reason);
+	}
+
+	//The complement, and the one that keeps this fix from being a regression:
+	//everything #862 and #870 taught the quoting to handle is still writable.
+	//Only what has no encoding at all is refused.
+	[Theory]
+	[InlineData(SpacedExecutable)]
+	[InlineData("/home/50%off/Mesen")]
+	[InlineData("/tmp/a\"b/`c/$d\\e/Mesen")]
+	[InlineData("/usr/bin/Mesen")]
+	public void A_path_the_exec_key_can_carry_is_not_refused(string path)
+	{
+		Assert.True(LinuxFileAssociation.CanWriteExecutablePath(path, out string reason));
+		Assert.Empty(reason);
+	}
+
+	//The "=" prohibition is about the executable's path; an ordinary argument may
+	//hold one, and the quoter must not refuse it.
+	[Fact]
+	public void An_argument_may_contain_an_equal_sign()
+	{
+		Assert.Equal("\"x=y\"", LinuxFileAssociation.ExecArgument("x=y"));
+	}
+
+	//#877, the half the writer owns: BuildDesktopEntry turns "write a broken
+	//entry or write nothing" into a return value, so it is assertable without a
+	//Linux run - the branch used to sit behind Process.GetCurrentProcess()
+	//.MainModule, which no test can reach.
+	[Fact]
+	public void An_unrepresentable_path_yields_no_desktop_entry()
+	{
+		Assert.Null(LinuxFileAssociation.BuildDesktopEntry("/home/u/apps/foo=1/Mesen", null, out string reason));
+		Assert.Contains("=", reason);
+	}
+
+	[Fact]
+	public void A_representable_path_yields_a_full_desktop_entry()
+	{
+		string? content = LinuxFileAssociation.BuildDesktopEntry(SpacedExecutable, new List<string> { "x-mesen-nes" }, out string reason);
+
+		Assert.Empty(reason);
+		Assert.NotNull(content);
+		Assert.Contains("[Desktop Entry]", content);
+		Assert.Contains("Exec=\"/home/John Doe/Applications/Mesen\" %f", content);
+		Assert.Contains("MimeType=application/x-mesen-nes", content);
 	}
 }

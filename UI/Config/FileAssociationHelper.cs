@@ -136,20 +136,16 @@ namespace Mesen.Config
 				return;
 			}
 
-			string content =
-				"[Desktop Entry]" + Environment.NewLine +
-				"Type=Application" + Environment.NewLine +
-				"Name=Mesen" + Environment.NewLine +
-				"Comment=Emulator" + Environment.NewLine +
-				"Keywords=game;emulator;emu" + Environment.NewLine +
-				"Categories=GNOME;GTK;Game;Emulator;" + Environment.NewLine +
-				"Exec=" + LinuxFileAssociation.ExecValue(mainModule.FileName, "%f") + Environment.NewLine +
-				"NoDisplay=false" + Environment.NewLine +
-				"StartupNotify=true" + Environment.NewLine +
-				"Icon=MesenIcon" + Environment.NewLine;
-
-			if(mimeTypes != null) {
-				content += "MimeType=" + string.Join(";", mimeTypes.Select(type => "application/" + type)) + Environment.NewLine;
+			string? content = LinuxFileAssociation.BuildDesktopEntry(mainModule.FileName, mimeTypes, out string reason);
+			if(content == null) {
+				//#877: the Exec key cannot carry this path - an "=" in it, or a
+				//control character with no escape - so there is no valid desktop
+				//entry to write. Writing one anyway produces a file the desktop
+				//environment rejects, and the failure is silent, so report why.
+				try {
+					EmuApi.WriteLogEntry("[FileAssociation] not writing " + filename + ": " + reason);
+				} catch { }
+				return;
 			}
 
 			FileHelper.WriteAllText(filename, content, new UTF8Encoding(false));
