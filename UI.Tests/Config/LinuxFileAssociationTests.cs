@@ -369,6 +369,38 @@ public class LinuxFileAssociationTests
 		Assert.True(mimeType >= 0 && mimeType < action, $"the missing MimeType should be added to [Desktop Entry], got:\n{fixedUp}");
 	}
 
+	//Process.GetCurrentProcess().MainModule is null where the running executable
+	//cannot be read. The path this replaced refreshed MimeType without ever asking
+	//for the executable, so an unknown path must not stop the update: only the
+	//Exec key is out of reach, MimeType is still ours.
+	[Fact]
+	public void An_update_still_reconciles_the_mime_types_without_an_executable_path()
+	{
+		string entry = Entry("[Desktop Entry]", "Exec=\"/opt/old/Mesen\" %f", "MimeType=application/x-mesen-nes;");
+
+		string? fixedUp = LinuxFileAssociation.ReconcileDesktopEntry(entry, null, new List<string> { "x-mesen-gb" }, out string reason);
+
+		Assert.NotNull(fixedUp);
+		Assert.Contains("MimeType=application/x-mesen-gb", fixedUp);
+		Assert.Contains("Exec=\"/opt/old/Mesen\" %f", fixedUp);
+	}
+
+	//A file with no [Desktop Entry] group at all is not loadable as it stands, and
+	//appending the keys would file them under whichever group is last.
+	[Fact]
+	public void An_update_gives_a_headerless_entry_the_group_its_keys_belong_to()
+	{
+		string entry = Entry("Exec=\"/opt/old/Mesen\" %f", "Type=Application");
+
+		string? fixedUp = LinuxFileAssociation.ReconcileDesktopEntry(entry, "/opt/new/Mesen", null, out string reason);
+
+		Assert.NotNull(fixedUp);
+		string[] lines = fixedUp!.Split(Environment.NewLine);
+		int header = Array.IndexOf(lines, "[Desktop Entry]");
+		int exec = Array.IndexOf(lines, "Exec=\"/opt/new/Mesen\" %f");
+		Assert.True(header >= 0 && exec > header, $"the group header should precede the keys, got:\n{fixedUp}");
+	}
+
 	//Whitespace around the `=` is not in the desktop entry grammar, but a line
 	//like this is not a reason to append a second Exec= for the loader to choose
 	//between - the key is recognised and rewritten in place.

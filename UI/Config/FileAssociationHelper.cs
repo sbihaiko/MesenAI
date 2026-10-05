@@ -118,12 +118,13 @@ namespace Mesen.Config
 				return;
 			}
 
-			ProcessModule? mainModule = Process.GetCurrentProcess().MainModule;
-			if(mainModule == null) {
-				return;
-			}
+			//Null where the running executable cannot be read (MainModule resolves
+			//through /proc). The Exec key is then out of reach, but MimeType is
+			//still ours - the path this replaced refreshed it without ever asking
+			//for the executable, so returning here would stop doing that (#882).
+			string? executablePath = Process.GetCurrentProcess().MainModule?.FileName;
 
-			string? updated = LinuxFileAssociation.ReconcileDesktopEntry(content, mainModule.FileName, mimeTypes, out string reason);
+			string? updated = LinuxFileAssociation.ReconcileDesktopEntry(content, executablePath, mimeTypes, out string reason);
 			if(updated == null) {
 				//#882: the entry is left as it stands rather than replaced with one
 				//whose Exec= the loader rejects - the same choice CreateLinuxShortcutFile
