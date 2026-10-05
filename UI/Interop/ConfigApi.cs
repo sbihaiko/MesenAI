@@ -35,6 +35,13 @@ namespace Mesen.Interop
 		[DllImport(DllPath)] public static extern void SetAudioPlayerConfig(InteropAudioPlayerConfig config);
 		[DllImport(DllPath)] public static extern void SetShortcutKeys([MarshalAs(UnmanagedType.LPArray, SizeParamIndex = 1)] InteropShortcutKeyInfo[] shortcuts, UInt32 count);
 
+		//ADR-0255 slice 4: what the core holds for one shortcut in one key set.
+		//SetShortcutKeys is the only writer and the engine is the only reader, so
+		//a binding the engine dropped was invisible from here - which is how a
+		//shortcut with both key combinations already filled lost its pad slot
+		//while the sheet showed it bound. The Sheet's own test reads it back.
+		[DllImport(DllPath)] public static extern InteropKeyCombination GetShortcutKey(EmulatorShortcut shortcut, Int32 keySetIndex);
+
 		//ADR-0255 slice 4: pushed right after the shortcut list, in the same
 		//ApplyConfig(), so the direction a spare binding names and the threshold
 		//that governs it reach the core together.
@@ -149,6 +156,10 @@ namespace Mesen.Interop
 	//field order (Core/Shared/SettingTypes.h's PadAxisThreshold). Direction is
 	//PadAxisAction.DirectionKey - the family base plus the button byte; the units
 	//are PadAxisAction.ThresholdUnits of the binding's effective percent.
+	//Sequential, like every other struct crossing this boundary (InteropShaderParam
+	//spells it out); the two fields are 2+4 bytes, so the layout is the same
+	//either way and the attribute is what says so.
+	[StructLayout(LayoutKind.Sequential)]
 	public struct InteropPadAxisThreshold
 	{
 		public UInt16 Direction;

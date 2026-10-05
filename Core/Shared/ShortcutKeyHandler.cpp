@@ -396,7 +396,10 @@ void ShortcutKeyHandler::ProcessKeys()
 
 	if(!noChange) {
 		//Only run this if the keys have changed
-		for(int i = 0; i < 2; i++) {
+		//ADR-0255 slice 4: every set a config may fill (ShortcutKeySets), so a
+		//shortcut's pad slot is polled like its two key combinations. The guard
+		//set above them is not part of this loop.
+		for(int i = 0; i < ShortcutKeySets; i++) {
 			_keysDown[i].clear();
 			_keySetIndex = i;
 			CheckMappedKeys();

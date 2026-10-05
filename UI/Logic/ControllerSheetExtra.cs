@@ -15,7 +15,11 @@ namespace Mesen.Logic;
 //the shortcut's own spare slot (ShortcutKeyInfo.PadBinding), so the classic
 //Input page and this sheet edit the same object, and a shortcut that already had
 //a keyboard combination keeps it - the pad slot is a third binding beside the
-//two key sets, not a replacement for them.
+//two key sets, not a replacement for them. The engine holds three key sets for
+//exactly this (ShortcutKeySets, Core/Shared/SettingTypes.h): with two, the slot
+//of a shortcut that already had both filled was overwritten before it reached
+//the core, and the three actions this section exists for - Rewind, FastForward,
+//ToggleOverlay - are the three that ship with both filled.
 //
 //This file is the host-free half, so it speaks in a pair and not in the config
 //type: UI/Logic dual-compiles into UI.Tests, which globs that folder, and

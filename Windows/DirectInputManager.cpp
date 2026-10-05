@@ -19,10 +19,15 @@
 //pressed. `hostRange` is this backend's own expression (half of full travel,
 //scaled by the deadzone ratio) and stands unchanged unless a shortcut's spare
 //binding names that direction - then the player's threshold replaces it and only
-//the magnitude moves, never the sign (ShortcutKeyRules::AxisThresholdRatio; 0
-//from the table means no binding names the direction, i.e. behave as before).
-//The direction key is the DirectInput family's, the same family the binding was
-//written from.
+//the magnitude moves, never the sign. The direction key is the DirectInput
+//family's, the same family the binding was written from.
+//
+//This backend's rule is AxisThresholdMagnitude and not the ratio the other two
+//use, and the difference is the unit: `state.lX` is a signed 16-bit axis, so
+//`deadRange` is already a magnitude in the same units a threshold is stored in
+//(100% of travel = INT16_MAX = 32767). Handing that magnitude to the ratio rule
+//would return 0.4 for a 40% threshold and truncate to 0 - every direction
+//pressed. Found in review the same day, before it shipped.
 //
 //Windows is not built or run on the macOS machine this was written on - CI
 //compiles it - so this edit is deliberately the smallest one that mirrors the
@@ -31,7 +36,7 @@ static int AxisThresholdRange(Emulator* emu, int direction, int hostRange)
 {
 	int32_t units = emu->GetSettings()->GetPadAxisThresholdUnits(
 		ShortcutKeyRules::PadDirectionOf((uint16_t)IKeyManager::BaseDirectInputIndex, (uint16_t)direction));
-	return (int)ShortcutKeyRules::AxisThresholdRatio(units, hostRange);
+	return (int)ShortcutKeyRules::AxisThresholdMagnitude(units, hostRange);
 }
 
 LPDIRECTINPUT8 DirectInputManager::_directInput = nullptr;

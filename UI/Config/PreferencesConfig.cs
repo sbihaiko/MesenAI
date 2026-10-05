@@ -329,11 +329,15 @@ namespace Mesen.Config
 			//ADR-0255 slice 4: the thresholds of the directions those shortcuts'
 			//spare bindings name, pushed in the same call pair below.
 			List<InteropPadAxisThreshold> axisThresholds = new List<InteropPadAxisThreshold>();
-			//The core holds two key sets per shortcut - EmuSettings::SetShortcutKeys
-			//fills sets 0 and 1 and ShortcutKeyHandler polls exactly those two, so a
-			//third binding for one shortcut would overwrite the second instead of
-			//adding to it. The pad slot has to fit under that ceiling.
-			const int coreKeySetsPerShortcut = 2;
+			//The core holds three key sets per shortcut - EmuSettings::SetShortcutKeys
+			//fills the first free one and ShortcutKeyHandler polls all three
+			//(ShortcutKeySets, Core/Shared/SettingTypes.h; the engine's fourth set is
+			//the fake Alt-F4 guard's and is never a config's). The pad slot is pushed
+			//as a set of its own, so it sits *beside* the two key combinations rather
+			//than overwriting the second - which is what the sheet shows and what a
+			//shortcut shipping with both combinations already filled (Rewind,
+			//FastForward, ToggleOverlay) needs.
+			const int coreKeySetsPerShortcut = 3;
 			foreach(ShortcutKeyInfo shortcutInfo in ShortcutKeys) {
 				bool isOverlay = shortcutInfo.Shortcut == EmulatorShortcut.ToggleOverlay;
 				int pushed = 0;

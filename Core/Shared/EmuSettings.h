@@ -47,13 +47,23 @@ private:
 	string _saveStateFolder;
 	string _screenshotFolder;
 
-	std::unordered_map<uint32_t, KeyCombination> _emulatorKeys[3];
-	std::unordered_map<uint32_t, vector<KeyCombination>> _shortcutSupersets[3];
+	//ADR-0255 slice 4: ShortcutKeySetCount sets, of which ShortcutKeySets are
+	//polled and the last holds the Alt-F4 guard (SettingTypes.h).
+	std::unordered_map<uint32_t, KeyCombination> _emulatorKeys[ShortcutKeySetCount];
+	std::unordered_map<uint32_t, vector<KeyCombination>> _shortcutSupersets[ShortcutKeySetCount];
 	//ADR-0255 slice 4: the player's press threshold per pad axis direction, keyed
 	//by ShortcutKeyRules::PadDirectionOf. Guarded by _updateShortcutsLock, which
 	//is also what makes a direction's threshold and the binding that names it
 	//arrive together from one ApplyConfig().
 	std::unordered_map<uint16_t, int32_t> _padAxisThresholds;
+	//...and the same fact as a flag the readers can check without the lock. The
+	//three backends ask for a direction's threshold on *every* axis they poll -
+	//the input path, at poll rate - and for a config that bound no axis, which is
+	//every config that never used this feature, the answer is always "none". This
+	//lets that case out before the lock; it is written inside the lock with the
+	//map, so a push and the map it describes are never seen apart (review,
+	//2026-10-04).
+	atomic<bool> _hasPadAxisThresholds = false;
 
 	SimpleLock _updateShortcutsLock;
 	SimpleLock _shaderCfgLock;

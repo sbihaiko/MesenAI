@@ -101,6 +101,18 @@ extern "C"
 		_emu->GetSettings()->SetShortcutKeys(shortcutList);
 	}
 
+	//ADR-0255 slice 4: what the core ended up holding for one shortcut in one key
+	//set. SetShortcutKeys is the only writer and the engine is the only reader, so
+	//without this a binding the engine dropped was invisible from the GUI side -
+	//and a shortcut whose two key combinations were already filled had its pad
+	//slot dropped exactly that way, silently, while the sheet showed it bound.
+	//The Play Controller sheet's own test reads this back to prove the third
+	//binding survives beside the other two.
+	DllExport KeyCombination __stdcall GetShortcutKey(EmulatorShortcut shortcut, int keySetIndex)
+	{
+		return _emu->GetSettings()->GetShortcutKey(shortcut, keySetIndex);
+	}
+
 	//ADR-0255 slice 4: the player's axis thresholds, pushed with the shortcut
 	//list so the binding that names a direction and its threshold land in one
 	//config apply. The platform game controllers read it off the settings object

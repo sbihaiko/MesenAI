@@ -6207,13 +6207,34 @@ namespace
 		Check(ShortcutKeyRules::AxisThresholdRatio(3277, 1.0) < 1.0 && ShortcutKeyRules::AxisThresholdRatio(3277, 1.0) > 0.0,
 			"BlocoO.5: ...and a low threshold is a fraction, not clamped to the host's ratio");
 
-		//The default 40% is what the backends already do at the default deadzone
-		//setting (2 -> ratio 1), which is why a binding that never names a number
-		//behaves as it always did: 40% of travel is 0.4 either way. Not an exact
-		//equality - the stored threshold is an integer count of the axis' own
-		//units, so 40% is 13107 of 32767 and lands a hair under 0.4.
+		//The ratio rule is for the two backends that compare a *ratio* (macOS'
+		//HandleThumbstick, Linux' CheckAxis): 40% of travel is 0.4 either way, so
+		//the default threshold lands where the default deadzone already put the
+		//line. Not an exact equality - the stored threshold is an integer count of
+		//the axis' own units, so 40% is 13107 of 32767 and lands a hair under 0.4.
+		//
+		//It is NOT what DirectInput does: that backend compares a magnitude, and
+		//the magnitude rule is asserted below. The two are separate functions for
+		//exactly this reason.
 		Check(std::fabs(ShortcutKeyRules::AxisThresholdRatio(13107, 0.4) - 0.4) < 1e-5,
 			"BlocoO.5: the default threshold's fraction is the default deadzone's own 0.4");
+
+		//The magnitude rule, for Windows' DirectInput: `state.lX` is a signed
+		//16-bit axis and 100% of travel is INT16_MAX on both sides, so a stored
+		//threshold is already in the unit the backend compares - no conversion at
+		//all. Every case here is the reason AxisThresholdRatio cannot be reused:
+		//handed the same magnitude it returns a fraction of 1.0, which as an int
+		//truncates to 0 and makes every direction count as pressed.
+		Check(ShortcutKeyRules::AxisThresholdMagnitude(0, 16383) == 16383,
+			"BlocoO.5: with no binding on the direction, DirectInput's own magnitude stands");
+		Check(ShortcutKeyRules::AxisThresholdMagnitude(0, 0) == 0,
+			"BlocoO.5: ...including the zero a fully-open deadzone setting produces");
+		Check(ShortcutKeyRules::AxisThresholdMagnitude(13107, 16383) == 13107,
+			"BlocoO.5: a named direction fires at the stored units, the number itself");
+		Check(ShortcutKeyRules::AxisThresholdMagnitude(32767, 16383) == 32767,
+			"BlocoO.5: ...and 100% is full travel, past whatever the deadzone says");
+		Check((int)ShortcutKeyRules::AxisThresholdRatio(13107, 16383) == 0,
+			"BlocoO.5: the ratio rule on the same magnitude truncates to 0 - the bug this pair exists to prevent");
 
 		//PadDirectionOf is the code with the device cleared, which is what makes
 		//the threshold the direction's rather than the pad's: two pads of one

@@ -1248,6 +1248,23 @@ struct ShortcutKeyInfo
 	KeyCombination Keys;
 };
 
+//ADR-0255 slice 4: how many key sets one shortcut may occupy. Two was the
+//whole engine until the Play Controller sheet's EXTRA BUTTONS section gave a
+//shortcut a pad slot beside its key combinations (ShortcutKeyInfo.PadBinding
+//on the UI side), and the two numbers below are the difference between "the
+//slot is a third binding" and "the slot silently overwrites the second key".
+//
+//ShortcutKeySetCount is one more than the sets a config may fill, and the
+//extra one is not a shortcut set at all: it is where ClearShortcutKeys seeds
+//the fake Alt-F4 Exit binding that keeps Alt+F4 from firing Alt+F4 shortcuts
+//(Load State 4 and friends). The guard has to sit *outside* the range
+//ShortcutKeyHandler polls, or the guard would fire Exit on its own - it is
+//there to shadow, not to trigger. SetShortcutKey's superset wiring iterates
+//the whole count, which is what lets the guard shadow the shortcuts in the
+//polled sets.
+constexpr int ShortcutKeySets = 3;
+constexpr int ShortcutKeySetCount = ShortcutKeySets + 1;
+
 //ADR-0255 slice 4 (the third answer, "Sim, com um limiar"): the point at which
 //one stick *direction* counts as pressed, as the player set it. The direction is
 //keyed the way a pad key code names it with its device cleared
