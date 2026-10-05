@@ -27,6 +27,12 @@ namespace Mesen.Logic
 	//   executable's path, which the spec forbids outright, and a control
 	//   character with no escape of its own. Both are refused rather than
 	//   written into an entry every loader rejects.
+	//4. Which keys an update reconciles in an entry that already exists, and
+	//   which it leaves alone (#882). CreateLinuxShortcutFile runs only when the
+	//   file is absent, so an entry an older build wrote kept its invalid Exec=
+	//   forever - the quoting rules above could not reach a user who had already
+	//   run Mesen. ReconcileDesktopEntry closes that: Exec= and MimeType= are
+	//   reconciled, every other key is carried through.
 	public static class LinuxFileAssociation
 	{
 		public static ProcessStartInfo DatabaseUpdateStartInfo(string command, string folder)
@@ -137,6 +143,139 @@ namespace Mesen.Logic
 			}
 			reason = "";
 			return true;
+		}
+
+		//Reconcile the keys this writer owns in a desktop entry that already
+		//exists. CreateLinuxShortcutFile is only reached when the file is absent,
+		//so an entry written by an older build kept whatever Exec= it had (#882) -
+		//which is how the quoting fix of #877 could pass a user by entirely: the
+		//file was never rewritten.
+		//
+		//An update reconciles the two keys this writer owns - Exec= and MimeType= -
+		//and carries every other key through untouched. Name=, Comment=, Icon= and
+		//anything the user added are preserved: the file is ours to maintain, not
+		//ours to overwrite. Both keys are replaced where they stand rather than
+		//appended, so a second Exec= never appears for a loader to choose between;
+		//a key the entry lacks is appended - inside [Desktop Entry], which is the
+		//group those keys belong to.
+		//
+		//The scoping is the correction of a real clobber: a .desktop file may hold
+		//more than one group, and a `[Desktop Action ...]` group carries its OWN
+		//Exec= for a different command line. Reconciling "every line that starts
+		//with Exec=" turns that action into a second copy of the application
+		//command and drops its arguments - a key the user added, which this writer
+		//therefore does not own.
+		//
+		//The #877 refusal applies here too: a path the Exec key cannot carry is no
+		//reason to replace a working entry with one no loader accepts. The function
+		//returns null and the caller leaves the file exactly as it stands. A null
+		//`executablePath` is a different case and not a refusal: the caller could
+		//not read the running executable, so the Exec key is out of reach while
+		//MimeType is still ours to reconcile.
+		public static string? ReconcileDesktopEntry(string content, string? executablePath, IReadOnlyList<string>? mimeTypes, out string reason)
+		{
+			reason = "";
+			bool reconcileExec = executablePath != null;
+			if(reconcileExec && !CanWriteExecutablePath(executablePath!, out reason)) {
+				return null;
+			}
+
+			string execValue = reconcileExec ? ExecValue(executablePath!, "%f") : "";
+			string mimeTypeValue = MimeTypeValue(mimeTypes);
+
+			List<string> lines = new(content.Split(Environment.NewLine));
+			List<(int Start, int End)> groups = FindDesktopEntryGroups(lines);
+			if(groups.Count == 0) {
+				//A file with keys but no [Desktop Entry] header is not loadable, and
+				//the header has to go BEFORE those keys: put after them they stay
+				//outside any group, the loader still rejects the file, and the stale
+				//Exec= this is meant to repair survives outside the group.
+				lines.Insert(0, DesktopEntryGroup);
+				groups = FindDesktopEntryGroups(lines);
+			}
+
+			//Every group of that name, not just the first. Two are forbidden by the
+			//spec, but GLib merges same-named groups with the LAST key winning, so
+			//reconciling one leaves a stale Exec= the loader prefers.
+			bool execReplaced = false;
+			bool mimeTypeReplaced = false;
+			foreach((int start, int end) in groups) {
+				for(int i = start + 1; i < end; i++) {
+					if(reconcileExec && IsKey(lines[i], "Exec")) {
+						lines[i] = "Exec=" + execValue;
+						execReplaced = true;
+					} else if(IsKey(lines[i], "MimeType")) {
+						lines[i] = "MimeType=" + mimeTypeValue;
+						mimeTypeReplaced = true;
+					}
+				}
+			}
+
+			int insertAt = groups[0].End;
+			if(reconcileExec && !execReplaced) {
+				lines.Insert(insertAt, "Exec=" + execValue);
+				insertAt++;
+			}
+			if(!mimeTypeReplaced) {
+				lines.Insert(insertAt, "MimeType=" + mimeTypeValue);
+			}
+
+			return string.Join(Environment.NewLine, lines);
+		}
+
+		private const string DesktopEntryGroup = "[Desktop Entry]";
+
+		//Every `[Desktop Entry]` group and the line it ends at. The name is matched
+		//exactly: group names are case-sensitive, so a `[desktop entry]` is a
+		//different (and invalid) group rather than this one.
+		private static List<(int Start, int End)> FindDesktopEntryGroups(List<string> lines)
+		{
+			List<(int Start, int End)> groups = new();
+			for(int i = 0; i < lines.Count; i++) {
+				if(lines[i].Trim() == DesktopEntryGroup) {
+					groups.Add((i, FindGroupEnd(lines, i)));
+				}
+			}
+			return groups;
+		}
+
+		//The line the group ends at: the next header, or the end of the file.
+		private static int FindGroupEnd(List<string> lines, int groupStart)
+		{
+			for(int i = groupStart + 1; i < lines.Count; i++) {
+				if(lines[i].TrimStart().StartsWith("[", StringComparison.Ordinal)) {
+					return i;
+				}
+			}
+			return lines.Count;
+		}
+
+		//`key=`, tolerating whitespace before the `=`. That whitespace is not in
+		//the desktop entry grammar, but a line carrying it is a line whose key the
+		//loader will not read - appending a second Exec= beside it would leave two
+		//for the loader to choose between, so it is recognised and rewritten.
+		private static bool IsKey(string line, string key)
+		{
+			string trimmed = line.Trim();
+			if(!trimmed.StartsWith(key, StringComparison.Ordinal)) {
+				return false;
+			}
+			return trimmed.Substring(key.Length).TrimStart().StartsWith("=", StringComparison.Ordinal);
+		}
+
+		private static string MimeTypeValue(IReadOnlyList<string>? mimeTypes)
+		{
+			if(mimeTypes == null || mimeTypes.Count == 0) {
+				return "";
+			}
+			StringBuilder sb = new();
+			for(int i = 0; i < mimeTypes.Count; i++) {
+				if(i > 0) {
+					sb.Append(';');
+				}
+				sb.Append("application/").Append(mimeTypes[i]);
+			}
+			return sb.ToString();
 		}
 
 		//The mesen.desktop text, or null when the Exec key cannot carry the path -

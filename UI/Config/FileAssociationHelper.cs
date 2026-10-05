@@ -8,7 +8,6 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
-using System.Linq;
 using System.Text;
 
 namespace Mesen.Config
@@ -91,7 +90,7 @@ namespace Mesen.Config
 			if(!File.Exists(desktopFile)) {
 				CreateLinuxShortcutFile(desktopFile, mimeTypes);
 			} else {
-				UpdateLinuxShortcutFileMimeTypes(desktopFile, mimeTypes);
+				UpdateLinuxShortcutFile(desktopFile, mimeTypes);
 			}
 
 			//Update databases. The folder goes through ArgumentList, never a joined
@@ -107,26 +106,36 @@ namespace Mesen.Config
 			}
 		}
 
-		private static void UpdateLinuxShortcutFileMimeTypes(string desktopFile, List<string> mimeTypes)
+		//#882: the line work moved into LinuxFileAssociation.ReconcileDesktopEntry
+		//so the decision is testable without a Linux run - the same reason
+		//BuildDesktopEntry is there (#877). What is reconciled, and what is left
+		//alone, is now a return value instead of a branch behind
+		//Process.GetCurrentProcess().MainModule.
+		private static void UpdateLinuxShortcutFile(string desktopFile, List<string> mimeTypes)
 		{
 			string? content = FileHelper.ReadAllText(desktopFile);
-
-			if(content != null) {
-				List<string> lines = new List<string>(content.Split(Environment.NewLine));
-				bool replaced = false;
-				for(int i = 0; i < lines.Count; i++) {
-					if(lines[i].Trim().StartsWith("MimeType=")) {
-						lines[i] = "MimeType=" + string.Join(";", mimeTypes.Select(type => "application/" + type));
-						replaced = true;
-					}
-				}
-
-				if(!replaced) {
-					lines.Add("MimeType=" + string.Join(";", mimeTypes.Select(type => "application/" + type)));
-				}
-
-				FileHelper.WriteAllText(desktopFile, string.Join(Environment.NewLine, lines), new UTF8Encoding(false));
+			if(content == null) {
+				return;
 			}
+
+			//Null where the running executable cannot be read (MainModule resolves
+			//through /proc). The Exec key is then out of reach, but MimeType is
+			//still ours - the path this replaced refreshed it without ever asking
+			//for the executable, so returning here would stop doing that (#882).
+			string? executablePath = Process.GetCurrentProcess().MainModule?.FileName;
+
+			string? updated = LinuxFileAssociation.ReconcileDesktopEntry(content, executablePath, mimeTypes, out string reason);
+			if(updated == null) {
+				//#882: the entry is left as it stands rather than replaced with one
+				//whose Exec= the loader rejects - the same choice CreateLinuxShortcutFile
+				//makes, and reported for the same reason: the failure is otherwise silent.
+				try {
+					EmuApi.WriteLogEntry("[FileAssociation] not repairing " + desktopFile + ": " + reason);
+				} catch { }
+				return;
+			}
+
+			FileHelper.WriteAllText(desktopFile, updated, new UTF8Encoding(false));
 		}
 
 		static public void CreateLinuxShortcutFile(string filename, List<string>? mimeTypes = null)
