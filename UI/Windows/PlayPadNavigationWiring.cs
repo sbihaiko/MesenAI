@@ -210,7 +210,16 @@ namespace Mesen.Windows
 			//leave it, and only the first root or the alphabetically first entry of a
 			//folder was reachable with a pad (found by the second review of #845,
 			//2026-10-05; the case below presses Down).
-			focus.When(model.RomPicker, [nameof(PlayerRomPickerViewModel.IsVisible), nameof(PlayerRomPickerViewModel.PathText)],
+			//
+			//SuggestionRevision is watched beside those two because the scan's
+			//deep pass REPLACES the rows the shallow one published (ADR-0256
+			//Decision 9 amendment: a shallow answer now, the measured one when it
+			//lands). A replaced row takes its container - and the ring on it - with
+			//it, and without this the pad would be left with nothing focused to
+			//press Confirm on.
+			focus.When(model.RomPicker,
+				[nameof(PlayerRomPickerViewModel.IsVisible), nameof(PlayerRomPickerViewModel.PathText),
+				 nameof(PlayerRomPickerViewModel.SuggestionRevision)],
 				() => model.RomPicker.IsVisible, () => RomPickerFirstRow(window) ?? Named(window, "RomPickerBack"),
 				() => Named(window, "PlayerRomPickerSheet"));
 
@@ -255,9 +264,17 @@ namespace Mesen.Windows
 		//docked to the bottom, which does not move it in the tree), so "the first
 		//focusable control" is the way out rather than the way in. Fall back to
 		//that button only when the list has no rows at all.
+		//
+		//#845 amendment: the action row now LEADS a folder's list, and the ring
+		//must never land on it on a descend - otherwise a stray Confirm would
+		//silently repoint the games folder. So the first non-Action row wins; a
+		//folder with no content rows at all answers null, which the caller turns
+		//into the Back button rather than the action row.
 		private static Control? RomPickerFirstRow(MainWindow window)
 		{
-			return (Named(window, "RomPickerList") as ItemsControl)?.GetVisualDescendants().OfType<Button>().FirstOrDefault();
+			IEnumerable<Button> rows = (Named(window, "RomPickerList") as ItemsControl)?.GetVisualDescendants().OfType<Button>()
+				?? Enumerable.Empty<Button>();
+			return rows.FirstOrDefault(b => b.DataContext is not PlayerRomPickerRow row || row.Kind != RomPickerRowKind.Action);
 		}
 
 		//W-P5: the stored choice, else the first row.

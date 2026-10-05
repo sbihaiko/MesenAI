@@ -2630,6 +2630,10 @@ E
 		<Message ID="BiosNeededStatus">{0} needs {1}</Message>
 		<Message ID="RomPickerTitle">Open a ROM</Message>
 		<Message ID="RomPickerEmpty">No games in this folder.</Message>
+		<Message ID="RomPickerThisComputer">This computer</Message>
+		<Message ID="RomPickerSearching">Looking for your games…</Message>
+		<Message ID="RomPickerMakeGamesFolder">Make this my games folder</Message>
+		<Message ID="RomPickerGamesFolderSaved">Saved — this is now your games folder.</Message>
 		<Message ID="LoadFailedTitleNotAGame">“{0}” is not a game MesenAI can open.</Message>
 		<Message ID="LoadFailedBodyNotAGame">MesenAI opens NES, Game Boy, Game Boy Color, Master System and Game Boy Advance games, or a zip holding one.</Message>
 		<Message ID="LoadFailedTitleZipWithoutGame">“{0}” has no game in it.</Message>
