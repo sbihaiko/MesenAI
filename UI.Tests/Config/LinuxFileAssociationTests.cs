@@ -385,8 +385,10 @@ public class LinuxFileAssociationTests
 		Assert.Contains("Exec=\"/opt/old/Mesen\" %f", fixedUp);
 	}
 
-	//A file with no [Desktop Entry] group at all is not loadable as it stands, and
-	//appending the keys would file them under whichever group is last.
+	//A file with no [Desktop Entry] group at all is not loadable as it stands.
+	//The header has to go BEFORE the keys that were already there: put after
+	//them, they stay outside any group - the loader rejects the file, and the
+	//stale Exec= the update was meant to repair survives outside the group.
 	[Fact]
 	public void An_update_gives_a_headerless_entry_the_group_its_keys_belong_to()
 	{
@@ -395,10 +397,26 @@ public class LinuxFileAssociationTests
 		string? fixedUp = LinuxFileAssociation.ReconcileDesktopEntry(entry, "/opt/new/Mesen", null, out string reason);
 
 		Assert.NotNull(fixedUp);
-		string[] lines = fixedUp!.Split(Environment.NewLine);
-		int header = Array.IndexOf(lines, "[Desktop Entry]");
-		int exec = Array.IndexOf(lines, "Exec=\"/opt/new/Mesen\" %f");
-		Assert.True(header >= 0 && exec > header, $"the group header should precede the keys, got:\n{fixedUp}");
+		Assert.Equal("[Desktop Entry]", fixedUp!.Split(Environment.NewLine)[0]);
+		Assert.Contains("Exec=\"/opt/new/Mesen\" %f", fixedUp);
+		Assert.Single(Regex.Matches(fixedUp, "^Exec=", RegexOptions.Multiline));
+	}
+
+	//The desktop spec forbids two groups with the same name, so such a file is
+	//invalid - but GLib merges same-named groups with the last key winning, so
+	//reconciling only the first one leaves a stale Exec= that the loader picks.
+	[Fact]
+	public void An_update_reconciles_every_desktop_entry_group()
+	{
+		string entry = Entry("[Desktop Entry]", "Exec=\"/opt/old/Mesen\" %f", "",
+			"[Desktop Entry]", "Exec=\"/opt/stale/Mesen\" %f", "Name=Second");
+
+		string? fixedUp = LinuxFileAssociation.ReconcileDesktopEntry(entry, "/opt/new/Mesen", null, out string reason);
+
+		Assert.NotNull(fixedUp);
+		Assert.DoesNotContain("/opt/old/Mesen", fixedUp);
+		Assert.DoesNotContain("/opt/stale/Mesen", fixedUp);
+		Assert.Equal(2, Regex.Matches(fixedUp!, "^Exec=", RegexOptions.Multiline).Count);
 	}
 
 	//Whitespace around the `=` is not in the desktop entry grammar, but a line
