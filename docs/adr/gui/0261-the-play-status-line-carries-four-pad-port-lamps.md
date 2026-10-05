@@ -63,12 +63,17 @@ source ADR-0255's Controller sheet reads.**
 
 ## Consequences
 
-- **The lamps follow the status bar's own visibility rule, which excludes
-  unpaused play.** They are on screen on the home and with the pause overlay
-  up, and off while a game runs with nothing over it. That is the honest
-  consequence of the surface chosen, and it is also what a cabinet does: the
-  panel is read while the machine is idle. Making them visible during play
-  means a different surface (W-P4's card), which this decision does not do.
+- **The lamps follow the status bar's own visibility rule, and "unpaused play"
+  is not the whole of it.** `WorkspaceShell.IsBarVisible` keeps the bar while a
+  game runs unpaused *with a sheet over it* (`sheetOpen`), which is the shape
+  ADR-0256 names: the on-load pack picker is posted over a game that is **not**
+  paused, and the bar - and therefore the strip - stays on screen over it. So
+  the lamps are up on the home, with the pause overlay, and over a non-pausing
+  surface; they are off only while a game fills the window with nothing over it.
+  That is the honest consequence of the surface chosen, and it is also what a
+  cabinet does: the panel is read while the machine is idle. Making them visible
+  in every running-game case means a different surface (W-P4's card), which this
+  decision does not do.
 - The gamepad API's count and the key manager's named pads can disagree, and
   the lamps follow the former. A pad lit here is one the app enumerates, not
   necessarily one the bridge can navigate with; that gap is the backend's, and
