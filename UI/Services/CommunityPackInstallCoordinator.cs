@@ -166,6 +166,15 @@ namespace Mesen.Services
 
 			if(!TryExtractLegacyPack(primaryPackPath, texturesFolder, romName, out string error)) {
 				EmuApi.WriteLogEntry("[CommunityPackInstall] hd-legacy extract failed: " + error);
+				//Leave no mep/ behind (#878). The refusal can happen
+				//mid-extraction - MaxExtractedBytes while streaming, or a corrupt
+				//nested archive - so the folder is half-written and unstamped, and
+				//the next install of the same pack would take the
+				//RefuseNonEmptyUnstamped branch above and tell the user their own
+				//folder is in the way. Reaching here means the folder was ours to
+				//clear: the gates above either cleared it, or found it absent or
+				//empty. The Contradicts branch below states the same invariant.
+				ClearFolderForReinstall(outFolder);
 				return CommunityPackInstallOutcome.Failed(error);
 			}
 
