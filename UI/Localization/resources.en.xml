@@ -1004,12 +1004,23 @@
 			<Control ID="lblControlsRumble">Rumble</Control>
 			<Control ID="lblControlsDeadzone">Stick deadzone</Control>
 		</Form>
+		<Form ID="PlayerSystemSettingsView">
+			<Control ID="lblSystemStorageRow">Keep your saves and settings</Control>
+			<Control ID="radSystemUserFolder">In your user folder</Control>
+			<Control ID="radSystemPortable">Next to the app (portable)</Control>
+			<Control ID="lblSystemKeyboardRow">Keyboard</Control>
+			<Control ID="cboSystemArrows">Arrow keys + S / A</Control>
+			<Control ID="cboSystemWasd">WASD + K / J</Control>
+			<Control ID="lblSystemGamepads">Xbox and PlayStation controllers work as soon as you plug them in. Another controller asks to be set up the first time you press a button.</Control>
+			<Control ID="btnSystemRestart">Restart now</Control>
+		</Form>
 		<Form ID="PlayerSettingsSheetView">
 			<Control ID="lblPlayerSettingsTitle">Settings</Control>
 			<Control ID="tabDisplay">Window</Control>
 			<Control ID="tabLook">Video</Control>
 			<Control ID="tabAudio">Audio</Control>
 			<Control ID="tabPlayerControls">Controls</Control>
+			<Control ID="tabSystem">System</Control>
 			<Control ID="btnPlayerSettingsMoreInOptions">More in Options…</Control>
 			<Control ID="lblPlayerSettingsEverythingElse">Everything else: Classic › Settings</Control>
 			<Control ID="btnPlayerSettingsDone">Done</Control>
@@ -1243,23 +1254,6 @@
 			<Control ID="lblReleaseNotes">Release notes</Control>
 			<Control ID="btnUpdate">Update</Control>
 			<Control ID="btnCancel">Cancel</Control>
-		</Form>
-		<Form ID="SetupWizardWindow">
-			<Control ID="wndTitle">MesenAI</Control>
-			<Control ID="lblFirstRunTitle">Welcome to MesenAI</Control>
-			<Control ID="lblFirstRunIntro">Two choices, then you can play. Both can be changed later in Settings.</Control>
-			<Control ID="lblFirstRunStorage">Keep your saves and settings</Control>
-			<Control ID="radFirstRunUserFolder">In your user folder</Control>
-			<Control ID="radFirstRunPortable">Next to the app (portable)</Control>
-			<Control ID="lblFirstRunPortableHint">Move the app folder and everything comes with it</Control>
-			<Control ID="lblFirstRunKeyboard">Keyboard</Control>
-			<Control ID="cboFirstRunArrows">Arrow keys + S / A</Control>
-			<Control ID="cboFirstRunWasd">WASD + K / J</Control>
-			<Control ID="lblFirstRunGamepads">Xbox and PlayStation controllers work as soon as you plug them in. Another controller asks to be set up the first time you press a button.</Control>
-			<Control ID="chkFirstRunCheckForUpdates">Check for updates</Control>
-			<Control ID="lblUpdateCheckUnavailable">MesenAI has no update feed yet. New builds are published on the MesenAI releases page (Help &gt; Check for updates opens it).</Control>
-			<Control ID="chkFirstRunDesktopShortcut">Desktop shortcut</Control>
-			<Control ID="btnFirstRunStartPlaying">Start Playing</Control>
 		</Form>
 		<Form ID="MovieRecordWindow">
 			<Control ID="wndTitle">Movie Recording Settings</Control>
@@ -2605,6 +2599,7 @@ E
 		<Message ID="PlayLoadWaitReloading">Reloading {0}…</Message>
 		<Message ID="PlayLoadWaitReloadingGame">Reloading the game…</Message>
 		<!--G.5 (PRD Part B §13.5.2 W-P12–W-P16): the Play edge flows.-->
+		<Message ID="SystemRestartPending">The settings file is in the folder you chose. Restart to use it.</Message>
 		<Message ID="FirstRunCannotWrite">MesenAI cannot write to {0}. Choose the other place, or move the app somewhere you can write to.</Message>
 		<Message ID="BiosSheetBodyFds">Famicom Disk System games start from the console's own BIOS. MesenAI does not include it — choose your copy once and it is kept for every disk game.</Message>
 		<Message ID="BiosSheetBodyGbaBios">Game Boy Advance games start from the console's own BIOS. MesenAI does not include it — choose your copy once and it is kept for every Game Boy Advance game.</Message>

@@ -22,14 +22,19 @@
 		<DataTemplate DataType="{x:Type vm:PlayerControlsSettingsViewModel}">
 			<v:PlayerControlsSettingsView />
 		</DataTemplate>
+		<DataTemplate DataType="{x:Type vm:PlayerSystemSettingsViewModel}">
+			<v:PlayerSystemSettingsView />
+		</DataTemplate>
 	</UserControl.DataTemplates>
 
 	<!--ADR-0249 (PRD Part B §13.5.2 W-P8, W-P10): Player mode's Settings is a
 	sheet inside the main window, over the dimmed game like the other Play
 	sheets - 480 wide, as high as the tab needs (PlayerSettingsEssentials.
 	SheetHeight), 24 px under the bar. The title, the segmented Window | Video |
-	Audio | Controls strip, the page, and one Done that keeps the changes (Esc
-	does the same, back to W-P4). Advanced keeps the classic ConfigWindow.-->
+	Audio | Controls | System strip, the page, and one Done that keeps the
+	changes (Esc does the same, back to W-P4). Advanced keeps the classic
+	ConfigWindow. ADR-0256 Decision 8 added System: the first run's storage and
+	keyboard-preset choices, which no longer stand in front of the window.-->
 	<Border
 		Name="PlayerSettingsSheet"
 		Classes="sheet"
@@ -62,6 +67,11 @@
 				<TabItem Name="tabPlayerVideo" Header="{l:Translate tabLook}" Content="{Binding Look}" />
 				<TabItem Name="tabPlayerAudio" Header="{l:Translate tabAudio}" Content="{Binding PlayerAudio}" />
 				<TabItem Name="tabPlayerControls" Header="{l:Translate tabPlayerControls}" Content="{Binding PlayerControls}" />
+				<!--ADR-0256 Decision 8: the first run's two questions, moved off
+				the startup path and onto the pad's. Named tabPlayerSystem, not
+				tabPlayerWindow's older `PlayerDisplay` spelling: the names here
+				are the strip's own, and this one is new.-->
+				<TabItem Name="tabPlayerSystem" Header="{l:Translate tabSystem}" Content="{Binding System}" />
 			</TabControl>
 			<!--G.4 (W-P8): rule 10 applied to settings - one line right under the
 			group, then Done. Window shows the Options hint; Audio and Controls

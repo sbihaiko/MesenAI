@@ -20,6 +20,9 @@ namespace Mesen.ViewModels
 		[ObservableProperty] public partial LookConfigViewModel? Look { get; set; }
 		//G.4 (W-P8): Player mode's Display tab (the window), next to Look.
 		[ObservableProperty] public partial PlayerWindowSettingsViewModel? Display { get; set; }
+		//ADR-0256 Decision 8: Player mode's System tab - the first run's storage
+		//and keyboard-preset choices, on a surface the pad drives.
+		[ObservableProperty] public partial PlayerSystemSettingsViewModel? System { get; set; }
 		[ObservableProperty] public partial PreferencesConfigViewModel? Preferences { get; set; }
 		[ObservableProperty] public partial EmulationConfigViewModel? Emulation { get; set; }
 
@@ -59,6 +62,7 @@ namespace Mesen.ViewModels
 		//Supplied by the window: Display's view-model needs the main window's
 		//state and actions, which this class does not reach.
 		private readonly Func<PlayerWindowSettingsViewModel>? _createDisplay;
+		private readonly Func<PlayerSystemSettingsViewModel>? _createSystem;
 		private readonly Func<IReadOnlyList<string>> _audioDevices;
 		private readonly Func<int> _connectedPads;
 
@@ -67,11 +71,12 @@ namespace Mesen.ViewModels
 
 		public ConfigViewModel(ConfigWindowTab selectedTab) : this(selectedTab, playerMode: false) { }
 
-		public ConfigViewModel(ConfigWindowTab selectedTab, bool playerMode = false, Func<PlayerWindowSettingsViewModel>? createDisplay = null, Func<System.Collections.Generic.IReadOnlyList<string>>? audioDevices = null, Func<int>? connectedPads = null)
+		public ConfigViewModel(ConfigWindowTab selectedTab, bool playerMode = false, Func<PlayerWindowSettingsViewModel>? createDisplay = null, Func<System.Collections.Generic.IReadOnlyList<string>>? audioDevices = null, Func<int>? connectedPads = null, Func<PlayerSystemSettingsViewModel>? createSystem = null)
 		{
 			AlwaysOnTop = ConfigManager.Config.Preferences.AlwaysOnTop;
 			PlayerMode = playerMode;
 			_createDisplay = createDisplay;
+			_createSystem = createSystem;
 			_audioDevices = audioDevices ?? (() => ConfigApi.GetAudioDevices());
 			_connectedPads = connectedPads ?? (() => (int)InputApi.GetConnectedGamepadCount());
 			//§6: Player starts on one of the essentials tabs; a non-essentials
@@ -163,6 +168,17 @@ namespace Mesen.ViewModels
 					_originalVideo ??= ConfigManager.Config.Video.Clone();
 					Look ??= AddDisposable(new LookConfigViewModel() { OpenTab = SelectTab });
 					Look.Refresh();
+					break;
+				case ConfigWindowTab.System:
+					//ADR-0256 Decision 8: the three folders are functions, not
+					//values, so the row reads the home folder the process is
+					//actually on - and so a test can hand it a temp folder and a
+					//recording write instead of the real ones.
+					System ??= AddDisposable(_createSystem?.Invoke() ?? new PlayerSystemSettingsViewModel(
+						() => ConfigManager.HomeFolder,
+						() => ConfigManager.DefaultDocumentsFolder,
+						() => ConfigManager.DefaultPortableFolder
+					));
 					break;
 
 				case ConfigWindowTab.Nes:

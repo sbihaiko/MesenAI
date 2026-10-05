@@ -26,7 +26,12 @@ public enum ConfigWindowTab
 	Look = 15,
 	//G.4 (W-P8): Play's Settings › Display - the window, not the pixels. Shown
 	//only in Player mode; not part of ConfigWindowTabOrder (the Advanced tabs).
-	Display = 16
+	Display = 16,
+	//ADR-0256 Decision 8: Play's Settings › System - the two things the retired
+	//first-run wizard asked (where the settings file lives, which keyboard
+	//preset), moved to a surface the pad drives. Player mode only, like Display;
+	//not part of ConfigWindowTabOrder.
+	System = 17
 }
 
 //The ConfigWindow.axaml TabControl, in markup order; null is a separator row

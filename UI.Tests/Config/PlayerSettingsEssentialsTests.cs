@@ -5,18 +5,22 @@ using Xunit;
 namespace Mesen.Tests.Config
 {
 	//PRD Part B §6, §13.5.2 W-P8 (G.4): Player mode's Settings is one strip,
-	//Display | Look | Audio | Controls, and a non-essentials initial selection
-	//(e.g. Preferences from the Advanced GUI path) clamps to Display, so the
-	//window never lands on a hidden tab.
+	//Display | Look | Audio | Controls | System, and a non-essentials initial
+	//selection (e.g. Preferences from the Advanced GUI path) clamps to Display,
+	//so the window never lands on a hidden tab. System is the last of the five:
+	//ADR-0256 Decision 8 moved the retired first-run wizard's two questions
+	//there, and it is a tab of this strip rather than a door of its own
+	//(ADR-0250).
 	public class PlayerSettingsEssentialsTests
 	{
 		[Fact]
-		public void The_strip_is_display_look_audio_controls_in_that_order()
+		public void The_strip_is_display_look_audio_controls_system_in_that_order()
 		{
-			Assert.Equal(new[] { ConfigWindowTab.Display, ConfigWindowTab.Look, ConfigWindowTab.Audio, ConfigWindowTab.Input }, PlayerSettingsEssentials.Tabs);
+			Assert.Equal(new[] { ConfigWindowTab.Display, ConfigWindowTab.Look, ConfigWindowTab.Audio, ConfigWindowTab.Input, ConfigWindowTab.System }, PlayerSettingsEssentials.Tabs);
 			Assert.Equal(1, PlayerSettingsEssentials.IndexOf(ConfigWindowTab.Look));
 			Assert.Equal(ConfigWindowTab.Input, PlayerSettingsEssentials.TabAt(3));
-			Assert.Null(PlayerSettingsEssentials.TabAt(4));
+			Assert.Equal(ConfigWindowTab.System, PlayerSettingsEssentials.TabAt(4));
+			Assert.Null(PlayerSettingsEssentials.TabAt(5));
 			Assert.Null(PlayerSettingsEssentials.TabAt(-1));
 		}
 
@@ -30,9 +34,10 @@ namespace Mesen.Tests.Config
 		}
 
 		[Fact]
-		public void Display_is_not_an_advanced_tab()
+		public void Display_and_System_are_not_advanced_tabs()
 		{
 			Assert.Equal(-1, ConfigWindowTabOrder.IndexOf(ConfigWindowTab.Display));
+			Assert.Equal(-1, ConfigWindowTabOrder.IndexOf(ConfigWindowTab.System));
 		}
 
 		[Fact]
@@ -101,13 +106,16 @@ namespace Mesen.Tests.Config
 		}
 	
 		//W-P8: Display, Audio and Controls are the same 340 px sheet (three rows,
-		//then the hint or the "More in Options..." link, then Done); only Look is
-		//W-P10's taller 480 px sheet.
+		//then the hint or the "More in Options..." link, then Done); Look is
+		//W-P10's taller 480 px sheet, and ADR-0256 Decision 8's System tab needs
+		//the same room - two storage choices with their folder lines, two
+		//keyboard choices, and the restart line a folder change puts there.
 		[Theory]
 		[InlineData(ConfigWindowTab.Display, 340)]
 		[InlineData(ConfigWindowTab.Look, 480)]
 		[InlineData(ConfigWindowTab.Audio, 340)]
 		[InlineData(ConfigWindowTab.Input, 340)]
+		[InlineData(ConfigWindowTab.System, 480)]
 		public void Each_tab_has_its_sheet_height(ConfigWindowTab tab, double height)
 		{
 			Assert.Equal(height, PlayerSettingsEssentials.SheetHeight(tab));

@@ -144,6 +144,13 @@ namespace Mesen.Windows
 			//Settings), PackDep, PackPicker, Enhancements, PackDetail, Cheats,
 			//Replays, SaveStates. (The chain's SaveStateGrid is the grid itself,
 			//which is content, not a sheet.)
+			//ADR-0256 Decision 8: the Settings sheet's System tab (the first
+			//run's storage and keyboard-preset choices) is a surface of its own,
+			//so it is claimed before the sheet that holds it: with the tab
+			//showing, the pad lands on the storage choice; on any other tab this
+			//claim is closed and the one below puts it on the strip, as before.
+			focus.When(model, [nameof(MainWindowViewModel.IsPlayerSystemTabVisible)],
+				() => model.IsPlayerSystemTabVisible, () => Named(window, "SystemStorageUserFolder"));
 			focus.When(model, [nameof(MainWindowViewModel.IsPlayerSettingsVisible)],
 				() => model.IsPlayerSettingsVisible, () => Named(window, "tabPlayerWindow"));
 			//ADR-0255's Controller sheet, which CurrentPlaySheet() reads right
@@ -459,9 +466,19 @@ namespace Mesen.Windows
 				//:focus-visible, which is what paints the ring (Decision 3: an
 				//arcade cabinet has no cursor to fall back on). The traversal
 				//itself is still entirely the engine's.
-				if(TopLevel.GetTopLevel(focused)?.FocusManager is IFocusManager manager
-					&& manager.FindNextElement(Direction(action), new FindNextElementOptions { FocusedElement = focused }) is Control next) {
-					PlayFocusOnOpen.Enter(next);
+				//
+				//Decision 3 also means the search stays inside the surface that
+				//holds the focus: the engine searches the whole window, and what
+				//is under a sheet is on screen on purpose (W-P4's card behind its
+				//sheets, the home behind a sheet opened from a task door), so
+				//without a root a D-pad press walks off the sheet onto a surface
+				//the player can see but is not using. The arbiter answers which
+				//surface that is - the same one whose claim took the focus.
+				if(TopLevel.GetTopLevel(focused)?.FocusManager is IFocusManager manager) {
+					FindNextElementOptions options = new() { FocusedElement = focused, SearchRoot = PlayFocusOnOpen.Of(focused)?.SearchRoot() };
+					if(manager.FindNextElement(Direction(action), options) is Control next) {
+						PlayFocusOnOpen.Enter(next);
+					}
 				}
 			}
 
