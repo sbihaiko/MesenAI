@@ -546,12 +546,17 @@ place.
      is set"** is now "…when it is set **and that folder holds at least one
      entry**". `PlayerRomPickerViewModel.GamesFolder` asks `GamesFolderChoice.Usable`
      instead of reading the setting, so an empty, missing or unreadable folder is
-     not a root at all. The app ROM folder and the mounted volumes are unchanged:
-     they are not the player's setting, and nothing here makes them conditional.
+     not a root **as the games folder**. That is the whole of it, and not "not a
+     root at all": `PlayRomPicker.Roots` dedupes by path, so a folder that is
+     also the app's own ROM folder or a mounted volume is still a root under
+     *that* label. The app ROM folder and the mounted volumes are otherwise
+     unchanged: they are not the player's setting, and nothing here makes them
+     conditional.
    - **The action row "then re-roots in place, turning the path line into *Your
      games* and putting the new root at the head of the list"** is now that,
      **when the folder answers**; when it does not, the setting is saved, the
-     roots are rebuilt without it, the path line keeps the shortened path, and
+     roots are rebuilt without it, the path line keeps what it already read (the
+     shortened path - or another root's own label, in the dedupe case above), and
      the row stays where it was with a notice saying the folder is saved but not
      the one in use. The *save* is untouched - the fence below still holds, and
      the two properties written are the same two - and so is the fence's reason:

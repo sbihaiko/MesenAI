@@ -239,10 +239,11 @@ namespace Mesen.ViewModels
 			//on - the action row this press came from - went with the old one.
 			//
 			//The claim above cannot lean on PathText here the way the class comment
-			//says it can: a folder that answers nothing is deliberately NOT made a
-			//root (#887), so the path line reads the same shortened path before and
-			//after and the arbiter sees no change in any of the three properties it
-			//watches. Without this the pad is left with nothing focused, the
+			//says it can: a folder that answers nothing is deliberately not made a
+			//root as *the games folder* (#887), so the path line reads the same text
+			//before and after - the shortened path, or another root's own label when
+			//the folder is also that root, since Roots dedupes by path - and the
+			//arbiter sees no change in any of the three properties it watches. Without this the pad is left with nothing focused, the
 			//direction keys and Confirm return immediately because there is no
 			//control to act on, and only Back still works - escaped through the
 			//window rather than through the sheet. Found by the second review of
