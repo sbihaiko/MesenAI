@@ -22,9 +22,26 @@ public static class GamesFolderChoice
 	//True when the folder holds anything at all. A path that cannot be read is the
 	//same answer as one that is empty: the app has nothing to open on there, and
 	//the caller's job is to go somewhere else rather than to report why.
+	//
+	//Asking whether the path IS a directory is what this replaced, and it is not
+	//the same question - which is the whole of #887. A folder can be there and hold
+	//nothing, and `/home` is the case that was measured.
 	public static bool HasEntries(string? folder)
 	{
-		return !string.IsNullOrWhiteSpace(folder) && Directory.Exists(folder);
+		if(string.IsNullOrWhiteSpace(folder)) {
+			return false;
+		}
+		try {
+			//Enumerated rather than counted: a folder with a million files answers on
+			//the first one, and this runs on every Open ROM.
+			return Directory.EnumerateFileSystemEntries(folder).Any();
+		} catch(Exception) {
+			//Unreadable, not a directory, gone between the setting and the press, or
+			//a permission this process does not have. None of those is somewhere to
+			//open on. The picker's own rows already treat an unreadable folder the
+			//same way.
+			return false;
+		}
 	}
 
 	//The games folder, or null when it is not one the app can open on. A blank or
