@@ -27,6 +27,12 @@ namespace Mesen.Logic
 	//   executable's path, which the spec forbids outright, and a control
 	//   character with no escape of its own. Both are refused rather than
 	//   written into an entry every loader rejects.
+	//4. Which keys an update reconciles in an entry that already exists, and
+	//   which it leaves alone (#882). CreateLinuxShortcutFile runs only when the
+	//   file is absent, so an entry an older build wrote kept its invalid Exec=
+	//   forever - the quoting rules above could not reach a user who had already
+	//   run Mesen. ReconcileDesktopEntry closes that: Exec= and MimeType= are
+	//   reconciled, every other key is carried through.
 	public static class LinuxFileAssociation
 	{
 		public static ProcessStartInfo DatabaseUpdateStartInfo(string command, string folder)
@@ -145,25 +151,44 @@ namespace Mesen.Logic
 		//which is how the quoting fix of #877 could pass a user by entirely: the
 		//file was never rewritten.
 		//
-		//This is the extraction of what UpdateLinuxShortcutFileMimeTypes did
-		//inline, moved into the dual-compiled tree so the decision is a return
-		//value a test can read. It reconciles the MimeType key and carries every
-		//other key through verbatim, Exec= included - the Exec key is what #882
-		//adds here.
+		//An update reconciles the two keys this writer owns - Exec= and MimeType= -
+		//and carries every other key through untouched. Name=, Comment=, Icon= and
+		//anything the user added are preserved: the file is ours to maintain, not
+		//ours to overwrite. Both keys are replaced where they stand rather than
+		//appended, so a second Exec= never appears for a loader to choose between;
+		//a key the entry lacks is appended.
+		//
+		//The #877 refusal applies here too: a path the Exec key cannot carry is no
+		//reason to replace a working entry with one no loader accepts. The function
+		//returns null and the caller leaves the file exactly as it stands.
 		public static string? ReconcileDesktopEntry(string content, string executablePath, IReadOnlyList<string>? mimeTypes, out string reason)
 		{
+			if(!CanWriteExecutablePath(executablePath, out reason)) {
+				return null;
+			}
+
 			reason = "";
+			string execValue = ExecValue(executablePath, "%f");
+			string mimeTypeValue = MimeTypeValue(mimeTypes);
+
 			List<string> lines = new(content.Split(Environment.NewLine));
-			bool replaced = false;
+			bool execReplaced = false;
+			bool mimeTypeReplaced = false;
 			for(int i = 0; i < lines.Count; i++) {
-				if(lines[i].Trim().StartsWith("MimeType=")) {
-					lines[i] = "MimeType=" + MimeTypeValue(mimeTypes);
-					replaced = true;
+				if(lines[i].Trim().StartsWith("Exec=")) {
+					lines[i] = "Exec=" + execValue;
+					execReplaced = true;
+				} else if(lines[i].Trim().StartsWith("MimeType=")) {
+					lines[i] = "MimeType=" + mimeTypeValue;
+					mimeTypeReplaced = true;
 				}
 			}
 
-			if(!replaced) {
-				lines.Add("MimeType=" + MimeTypeValue(mimeTypes));
+			if(!execReplaced) {
+				lines.Add("Exec=" + execValue);
+			}
+			if(!mimeTypeReplaced) {
+				lines.Add("MimeType=" + mimeTypeValue);
 			}
 
 			return string.Join(Environment.NewLine, lines);

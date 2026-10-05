@@ -8,7 +8,6 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
-using System.Linq;
 using System.Text;
 
 namespace Mesen.Config
@@ -124,10 +123,18 @@ namespace Mesen.Config
 				return;
 			}
 
-			string? updated = LinuxFileAssociation.ReconcileDesktopEntry(content, mainModule.FileName, mimeTypes, out _);
-			if(updated != null) {
-				FileHelper.WriteAllText(desktopFile, updated, new UTF8Encoding(false));
+			string? updated = LinuxFileAssociation.ReconcileDesktopEntry(content, mainModule.FileName, mimeTypes, out string reason);
+			if(updated == null) {
+				//#882: the entry is left as it stands rather than replaced with one
+				//whose Exec= the loader rejects - the same choice CreateLinuxShortcutFile
+				//makes, and reported for the same reason: the failure is otherwise silent.
+				try {
+					EmuApi.WriteLogEntry("[FileAssociation] not repairing " + desktopFile + ": " + reason);
+				} catch { }
+				return;
 			}
+
+			FileHelper.WriteAllText(desktopFile, updated, new UTF8Encoding(false));
 		}
 
 		static public void CreateLinuxShortcutFile(string filename, List<string>? mimeTypes = null)
