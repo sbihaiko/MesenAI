@@ -236,13 +236,16 @@ namespace Mesen.ViewModels
 			}
 		}
 
-		//The Master System pad's two buttons are 1 and 2 (KeyMapping A/B).
+		//The console's own name for a control, off the one rule the Controller
+		//sheet's REMAP rows read too (ControllerSheetRemap.ControlLabel): the two
+		//surfaces bind the same controls, so they have to name them the same -
+		//including the Master System's 1/2, which is the pair whose labels the
+		//console's own button order settles.
 		private string ButtonName(SetupButton button)
 		{
-			if(_console == SetupConsole.MasterSystem && button is SetupButton.A or SetupButton.B) {
-				return button == SetupButton.A ? "1" : "2";
-			}
-			return button.ToString();
+			return _console == SetupConsole.MasterSystem
+				? ControllerSheetRemap.ControlLabel(ConsoleType.Sms, button)
+				: button.ToString();
 		}
 
 		private static string DefaultDeviceName(int device)

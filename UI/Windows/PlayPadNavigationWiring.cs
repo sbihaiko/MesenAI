@@ -348,7 +348,13 @@ namespace Mesen.Windows
 			//the authority path and the grid's Back edge ask the same door.
 			private bool HasAuthority()
 			{
-				return InPlayDoor
+				//ADR-0255 slice 3 adds one clause, and it is the same predicate:
+				//while the Controller sheet is capturing "press a control", the pad
+				//is the capture's, so authority is refused and the capture consumes
+				//the press. Not a second rule - the capture is a state of "the pad
+				//is not the GUI's", which is exactly what this predicate answers,
+				//and the capture reads the same pressed set this bridge does.
+				return InPlayDoor && !_model.IsControllerCapturing
 					&& PlayPadNavigation.HasAuthority(_model.IsPlaySurfaceOverGame, EmuApi.IsRunning(), EmuApi.IsPaused(), _model.IsLoadCardVisible, _model.IsOnLoadPackPickerVisible);
 			}
 

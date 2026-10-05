@@ -218,9 +218,10 @@ public static class ControllerSheetPorts
 
 	//Whether the port holds this device in ANY of its slots. Distinct from
 	//PortDevice, which answers the *first* named slot's device: a pad whose keys
-	//sit in a later slot of the target (with an earlier slot naming another
-	//device) is bound to that player, and "already there" must say so.
-	private static bool TargetHolds(SheetPort port, int device)
+	//sit in a later slot of the port (with an earlier slot naming another device)
+	//is bound to that very player, and "already there" - and the port a rebind
+	//edits - must say so.
+	public static bool HoldsDevice(SheetPort port, int device)
 	{
 		foreach(ushort[] slot in port.Slots) {
 			if(SlotDevice(slot) == device) {
@@ -270,7 +271,7 @@ public static class ControllerSheetPorts
 		}
 
 		if(sources.Count == 0) {
-			return TargetHolds(target, device)
+			return HoldsDevice(target, device)
 				? new(PortMoveOutcome.AlreadyThere, System.Array.Empty<SlotMove>())
 				: new(PortMoveOutcome.NotBound, System.Array.Empty<SlotMove>());
 		}

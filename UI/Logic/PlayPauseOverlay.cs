@@ -172,7 +172,12 @@ public enum PlayEscAction
 	//Rule 8: a sheet opened from the pause overlay closes back to it.
 	CloseSheetToOverlay,
 	CloseOverlayAndResume,
-	OpenOverlayAndPause
+	OpenOverlayAndPause,
+	//ADR-0255 slice 3: the Controller sheet is capturing "press a control", so
+	//Esc cancels the capture and leaves the sheet up. A state of this chain, not a
+	//second key handler racing it - Esc means one thing per context, and here the
+	//context is the capture.
+	CancelCapture
 }
 
 //Rule 8 / W-P4: Esc does one thing per context. The order is game → W-P4 →
@@ -180,11 +185,16 @@ public enum PlayEscAction
 //On the Play home (no game) Esc does nothing - there is nothing to pause.
 public static class PlayEsc
 {
-	public static PlayEscAction Next(bool gameLoaded, PlaySheet sheet, bool overlayVisible)
+	public static PlayEscAction Next(bool gameLoaded, PlaySheet sheet, bool overlayVisible, bool capturing = false)
 	{
 		switch(sheet) {
 			case PlaySheet.PackPickerOnLoad:
 				return PlayEscAction.DismissPackPicker;
+			//ADR-0255 slice 3: a capture is the Controller sheet's own state, so Esc
+			//releases the capture before it would close the sheet. It is the same
+			//chain PlayEsc has always run, with one state more.
+			case PlaySheet.Controller when capturing:
+				return PlayEscAction.CancelCapture;
 			case PlaySheet.PackPickerFromOverlay:
 			case PlaySheet.Enhancements:
 			case PlaySheet.Cheats:

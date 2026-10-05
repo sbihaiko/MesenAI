@@ -181,6 +181,10 @@ namespace Mesen.ViewModels
 			ShowPadPicker = Tester.Gamepads.Count > 1;
 			ShowPlayers = Tester.Gamepads.Count > 1 && ports.Count > 1;
 			RefreshKeyboard(ports);
+			//ADR-0255 slice 3: REMAP reads the same ports this does, so every path
+			//that re-reads the sheet re-reads it too - and the sheet's own 60 Hz
+			//poll keeps its lights and its capture live.
+			RefreshRemap();
 		}
 
 		//Whether two readings of the rows are the same shown surface. Value
@@ -308,6 +312,40 @@ namespace Mesen.ViewModels
 			2 => config.Mapping3,
 			_ => config.Mapping4
 		};
+
+		//ADR-0255 slice 3: one console control's field inside a slot, so the REMAP
+		//mode can read what the row is bound to and write the rebind back into the
+		//same slot. Only the fixed KeyMapping fields: a port type's custom keys are
+		//that device's own buttons, not a console control's, and the sheet's rows
+		//are the console's controls (W-P15's SetupButton list).
+		public static ushort Field(KeyMapping mapping, SetupButton button) => button switch {
+			SetupButton.A => mapping.A,
+			SetupButton.B => mapping.B,
+			SetupButton.Select => mapping.Select,
+			SetupButton.Start => mapping.Start,
+			SetupButton.Up => mapping.Up,
+			SetupButton.Down => mapping.Down,
+			SetupButton.Left => mapping.Left,
+			SetupButton.Right => mapping.Right,
+			SetupButton.L => mapping.L,
+			_ => mapping.R
+		};
+
+		public static void SetField(KeyMapping mapping, SetupButton button, ushort code)
+		{
+			switch(button) {
+				case SetupButton.A: mapping.A = code; break;
+				case SetupButton.B: mapping.B = code; break;
+				case SetupButton.Select: mapping.Select = code; break;
+				case SetupButton.Start: mapping.Start = code; break;
+				case SetupButton.Up: mapping.Up = code; break;
+				case SetupButton.Down: mapping.Down = code; break;
+				case SetupButton.Left: mapping.Left = code; break;
+				case SetupButton.Right: mapping.Right = code; break;
+				case SetupButton.L: mapping.L = code; break;
+				default: mapping.R = code; break;
+			}
+		}
 
 		//Move one slot's every key from `source` to a free slot of `target`. The
 		//PLAYERS surface reads a device off all the keys a slot holds - the fixed

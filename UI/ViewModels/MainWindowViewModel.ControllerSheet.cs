@@ -67,5 +67,12 @@ namespace Mesen.ViewModels
 		{
 			_controllerSheet?.Close();
 		}
+
+		//ADR-0255 slice 3: while the sheet is capturing "press a control", a pad
+		//press is the capture's and must not also be turned into a focus move or a
+		//Confirm by the pad bridge (ADR-0256 Decision 2). The bridge's one
+		//authority predicate asks this, so capture wins without a second rule.
+		//Answered without building the sheet: the bridge ticks in every window.
+		public bool IsControllerCapturing => _controllerSheet?.IsCapturing == true;
 	}
 }

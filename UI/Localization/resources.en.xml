@@ -255,7 +255,10 @@
 			<Control ID="lblControllerSheetPlayersHint">Pick a controller above, then tap the player it should play as.</Control>
 			<Control ID="lblControllerSheetKeyboard">KEYBOARD</Control>
 			<Control ID="btnControllerSheetKeyboardRestore">Use the keyboard preset</Control>
-			<Control ID="lblControllerSheetComing">Remapping a controller is coming; the full Options page stays one link away.</Control>
+			<Control ID="lblControllerSheetRemap">REMAP</Control>
+			<Control ID="lblControllerSheetRemapHint">Pick a control, then press the controller button you want on it. Esc cancels.</Control>
+			<Control ID="lblControllerSheetRemapPadLight">What the controller sends</Control>
+			<Control ID="lblControllerSheetRemapPortLight">What the game receives</Control>
 			<Control ID="btnControllerSheetMoreInOptions">More in Options…</Control>
 			<Control ID="btnControllerSheetDone">Done</Control>
 		</Form>
@@ -2165,6 +2168,11 @@
 		<Message ID="ControllerSheetNoSlot">That player has no free mapping slot.</Message>
 		<Message ID="ControllerSheetKeyboardPlays">The keyboard plays: {0}.</Message>
 		<Message ID="ControllerSheetKeyboardNothing">No controller connected, and no keyboard keys are bound.</Message>
+		<Message ID="ControllerSheetRemapUnbound">Not bound</Message>
+		<Message ID="ControllerSheetRemapArm">Press the controller button for {0} — Esc cancels.</Message>
+		<Message ID="ControllerSheetRemapBound">{0} is now {1}.</Message>
+		<Message ID="ControllerSheetRemapNoSlot">Every mapping slot of that player is taken — free one in Options first.</Message>
+		<Message ID="ControllerSheetRemapNonRebindable">That control works the menus — Confirm, Back and the D-pad can't be rebound.</Message>
 		<Message ID="PlayerRumbleOff">Off</Message>
 		<Message ID="LookPixelsMore">More in Options…</Message>
 		<Message ID="LookCurrentFromOptions">{0} (set in Options)</Message>

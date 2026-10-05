@@ -114,6 +114,13 @@ namespace Mesen.ViewModels
 		public void Close()
 		{
 			IsVisible = false;
+			//ADR-0255 slice 3: the sheet's own mode dies with the sheet. The poll
+			//that would have ended a capture - the pad going away - stops with the
+			//sheet, and the capture is what the pad bridge reads to decide the pad is
+			//not the GUI's (MainWindowViewModel.IsControllerCapturing). Left armed
+			//here it would hold the pad out of the whole Play door for the rest of
+			//the session, so the one path that closes the sheet ends it.
+			EndCapture();
 		}
 
 		//The timer's lifetime follows the sheet's visibility, not the stricter read
@@ -145,6 +152,14 @@ namespace Mesen.ViewModels
 			//start again on a later tick if the game pauses once more.
 			if(ControllerSheetReads.Wanted(IsVisible, IsPaused())) {
 				Refresh();
+			} else if(IsCapturing) {
+				//ADR-0255 slice 3: the capture is a mode of the reads, so it goes
+				//with them - the same rule the pad going away and the sheet closing
+				//already follow. Frozen, its baseline is the pressed set from before
+				//the game resumed, and the first tick after a re-pause reads whatever
+				//the player is holding by then - a button pressed only to play - as a
+				//new press and binds it (found in review).
+				EndCapture();
 			}
 		}
 
