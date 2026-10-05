@@ -8,30 +8,28 @@
 
 ## Context
 
-When a fingerprint match starts an OGG replacement, `NesAudioReplacer::OnFrame`
+A fingerprint match starts an OGG replacement: `NesAudioReplacer::OnFrame`
 (`Core/NES/HdPacks/NesAudioFingerprint.cpp:155`) calls
-`NesSoundMixer::SetReplacementMute(true)`; on stop or when pack audio is
-disabled it calls `SetReplacementMute(false)` (`:130`, `:144`). The mixer
+`NesSoundMixer::SetReplacementMute(true)`; stop or pack audio off calls
+`SetReplacementMute(false)` (`:130`, `:144`). The mixer
 (`Core/NES/NesSoundMixer.h:18`, `_replacementMute` at `:48`) applies it in
-`GetChannelOutput` (`NesSoundMixer.cpp:174`): while set, every channel whose
-index is `<= AudioChannel::Noise` (Square1, Square2, Triangle, Noise) returns
-0; DMC and expansion audio keep playing. This is the F5.3 defect ADR-0052
-names: whole channels are muted during OGG playback, so SFX that the game
-plays on those channels (jumps, hits, menu cues) disappear while the music is
-replaced.
+`GetChannelOutput` (`NesSoundMixer.cpp:174`): while set, every channel with
+index `<= AudioChannel::Noise` (Square1, Square2, Triangle, Noise) returns 0,
+while DMC and expansion audio keep playing. That is the F5.3 defect ADR-0052
+names — whole channels muted during OGG playback, so SFX the game plays on them
+(jumps, hits, menu cues) disappear while the music is replaced.
 
 ADR-0052 decided the *classifier* (`Core/Shared/Audio/ChannelRoleClassifier`,
-Block A, shipped) and states that "this same classifier later lets SFX through
-while an OGG replaces the music (3b)". It did not decide the *mixer API
-contract* that makes that possible. The F5 closeout spec (dev-squad run
-`d662e62e2648`, Block C item 9) planned to replace `SetReplacementMute(bool)`
-with a per-channel `SetReplacementMuteMask` driven by the classifier, and
-claimed no new ADR was needed. ADR-0094 and ADR-0097 dispute that: changing a
-core audio API in the mixer hot path deserves a recorded contract (mask
-semantics, fate of the boolean setter, ownership of the split, behaviour when
-classification is unavailable). That run never executed — `git log -S
-SetReplacementMuteMask` hits only the ADR commit — so the decision is still
-open and must be written before Block C is (re)scheduled.
+Block A, shipped) and says "this same classifier later lets SFX through while
+an OGG replaces the music (3b)". It did not decide the *mixer API contract* that
+makes that possible. The F5 closeout spec (dev-squad run `d662e62e2648`, Block C
+item 9) planned to replace `SetReplacementMute(bool)` with a per-channel
+`SetReplacementMuteMask` driven by the classifier and claimed no new ADR was
+needed. ADR-0094 and ADR-0097 dispute that: changing a core audio API in the
+mixer hot path deserves a recorded contract (mask semantics, fate of the boolean
+setter, ownership of the split, behaviour when classification is unavailable).
+The run never executed — `git log -S SetReplacementMuteMask` hits only the ADR
+commit — so the decision is still open.
 
 ## Decision
 
@@ -47,13 +45,13 @@ Proposed contract for Block C item 9:
    becomes `SetReplacementMuteMask(0x0F)` (the four channels muted today) and
    `SetReplacementMute(false)` becomes `SetReplacementMuteMask(0)`, so
    `NesAudioFingerprint.cpp:130,144,155` compile unchanged in the first commit.
-   Callers are migrated to the mask in the same block and the bool is deleted
-   before Block C closes; no deprecated API survives into a release.
-3. **Ownership.** The mixer owns nothing but the mask; it makes no music/SFX
-   judgement. `NesAudioReplacer` owns the policy: it computes the mask each
-   frame from the `ChannelRoleClassifier` output (channels flagged SFX get their
-   bit cleared so they pass through dry; channels classified as music stay
-   muted while the OGG plays) and pushes it to the mixer only when it changes.
+   Callers migrate in the same block; the bool is deleted before Block C closes —
+   no deprecated API survives into a release.
+3. **Ownership.** The mixer owns nothing but the mask and makes no music/SFX
+   judgement. `NesAudioReplacer` owns the policy: each frame it computes the
+   mask from the `ChannelRoleClassifier` output (SFX-flagged channels get their
+   bit cleared so they pass through dry; music channels stay muted while the OGG
+   plays) and pushes it to the mixer only when it changes.
 4. **Degraded modes.** When classification is unavailable (`EnhancedAudioSfxSeparation`
    off, classifier not warmed up, or role mid-hysteresis) the mask falls back to
    the full `0x0F`, i.e. exactly today's behaviour — never to "unmute all",
@@ -77,18 +75,17 @@ Proposed contract for Block C item 9:
   audible), plus a check that turning `EnhancedAudioSfxSeparation` off restores
   the exact pre-Block-C output.
 - Validation status 2026-09-03 (wave 2 of
-  `docs/validation/manual-validation-automation-plan.md`): the mask contract is
-  now covered by a unit test rather than by listening. The rule lives in the
-  shared header `Core/Shared/Audio/ReplacementMuteMask.h`
+  `docs/validation/manual-validation-automation-plan.md`): the contract is now
+  unit-tested, not listened to. The rule lives in the shared header
+  `Core/Shared/Audio/ReplacementMuteMask.h`
   (`FullTonalMute`/`IsMuted`/`Compute(roles)`) — a template, so the mixer does
   not include `ChannelRoleClassifier` and the "mixer consults the classifier"
-  alternative below stays rejected in code as well as on paper. It is consumed
-  by `NesAudioFingerprint::UpdateReplacementMuteMask` and
+  alternative stays rejected in code too. It is consumed by
+  `NesAudioFingerprint::UpdateReplacementMuteMask` and
   `NesSoundMixer::GetChannelOutput`, and asserted by `scripts/core_unit_tests.cpp`
   Bloco K: exactly the fingerprinted channel is muted, SFX / expansion / DMC
   channels are not, and the degraded mode falls back to the full `0x0F`.
-  Defect-probed. What remains manual is only the audible end-to-end — a real
-  game, real ears.
+  Defect-probed; only the audible end-to-end stays manual.
 - This ADR moves to `accepted` when the mask lands and the bool setter is gone.
 
 ## Alternatives
@@ -106,9 +103,8 @@ Proposed contract for Block C item 9:
 
 ## Amendments (2026-09-06, code-review pass)
 
-- Point 3 (mask recomputed every frame while a replacement track plays,
-  pushed only on change) had regressed: `NesAudioFingerprint::OnFrame`
-  returned early when the matcher reported no new match, so the mask froze at
-  the value computed on the first frame of a track. Restored on 2026-09-06.
+- Point 3 had regressed: `NesAudioFingerprint::OnFrame` returned early when the
+  matcher reported no new match, so the mask froze at the value computed on the
+  first frame of a track. Restored 2026-09-06.
 - `FingerprintStore` tracks whose `Kind`/`Id` are empty or contain `/`, `\`
   or `..` are dropped at load (they were used raw as path components).

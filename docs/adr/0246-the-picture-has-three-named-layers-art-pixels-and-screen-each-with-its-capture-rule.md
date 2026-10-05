@@ -7,8 +7,8 @@
 
 ## Context
 
-Three different mechanisms change how the game looks, and today they sit
-in three places with overlapping names:
+Three mechanisms change how the game looks, in three places with overlapping
+names:
 
 | | What it is in the code | Where it runs | Captured? |
 |---|---|---|---|
@@ -19,60 +19,57 @@ in three places with overlapping names:
 
 Measured facts that make the mix-up costly:
 
-- **`_scaleFilter` runs on top of pack art.** `VideoDecoder.cpp` applies it
-  after the console filter, so HQ4× over a 4× pack blurs the artist's work
-  and multiplies the frame size.
-- **NTSC is silently ignored under a pack.** `NesConsole::GetVideoFilter`
+- **`_scaleFilter` runs on top of pack art**: `VideoDecoder.cpp` applies it after
+  the console filter, so HQ4× over a 4× pack blurs the artist's work and
+  multiplies the frame size.
+- **NTSC is silently ignored under a pack**: `NesConsole::GetVideoFilter`
   returns `HdVideoFilter` whenever the pack has video content.
-- **Screenshots never show the shader**, so "my screenshot doesn't look
-  like my screen" is a real, recurring surprise.
+- **Screenshots never show the shader**, so "my screenshot doesn't look like my
+  screen" is a recurring surprise.
 
 ## Decision
 
-1. **One Settings tab, *Look*, names three layers by what they change, in
-   the order they apply:**
+1. **One Settings tab, *Look*, names three layers by what they change, in the
+   order they apply:**
    - **Art:** the pack, read-only here, with a link to the pack sheet;
-   - **Pixels:** the scale-filter family, one popup: *Sharp (original
-     pixels)*, *Smooth — HQ4×*, *Smooth — xBRZ 4×*, *More in Options…*;
-   - **Screen:** one popup, *Effect*: *None*, *TV signal (NTSC)* (NES
-     only), the named looks, recent `.slangp` files, *Choose a shader
-     file…*.
+   - **Pixels:** the scale-filter family, one popup: *Sharp (original pixels)*,
+     *Smooth — HQ4×*, *Smooth — xBRZ 4×*, *More in Options…*;
+   - **Screen:** one popup, *Effect*: *None*, *TV signal (NTSC)* (NES only), the
+     named looks, recent `.slangp` files, *Choose a shader file…*.
 
-   *Hi-res filter* leaves the quick panel and the shader selector leaves
-   Video settings, so each setting lives in one place.
-2. **Every choice shows where its result goes:** ◉ "shows in screenshots
-   and videos" (Pixels, NTSC, LcdGrid) or ◌ "only on your display" (any
-   shader). The mark follows the selection.
+   *Hi-res filter* leaves the quick panel and the shader selector leaves Video
+   settings, so each setting lives in one place.
+2. **Every choice shows where its result goes:** ◉ "shows in screenshots and
+   videos" (Pixels, NTSC, LcdGrid) or ◌ "only on your display" (any shader). The
+   mark follows the selection.
 3. **Rules from the measurements:**
-   - **Pixels is disabled over pack art** on every console with HD art,
-     with "Off while a pack draws the art". Look never overrides it. Tools
-     ⋯ › Options still can, for an advanced user.
-   - **NTSC is labelled** "Not applied while a pack draws the art" rather
-     than looking active.
-   - **Shaders over pack art are allowed**, and are what Look recommends
-     for "the TV look" on a remastered game.
+   - **Pixels is disabled over pack art** on every console with HD art, with
+     "Off while a pack draws the art". Look never overrides it; Tools ⋯ ›
+     Options still can, for an advanced user.
+   - **NTSC is labelled** "Not applied while a pack draws the art" rather than
+     looking active.
+   - **Shaders over pack art are allowed**, and are what Look recommends for
+     "the TV look" on a remastered game.
 4. **Named looks.** Two or three bundled `.slangp` presets, *CRT TV* and
-   *Handheld LCD* first, each with a GPL-3.0-compatible license recorded
-   with its source and sha256 (ADR-0237 as amended). Adding one is a code
-   change; there is no catalogue browser.
+   *Handheld LCD* first, each with a GPL-3.0-compatible license recorded with its
+   source and sha256 (ADR-0237 as amended). Adding one is a code change; there is
+   no catalogue browser.
 5. **Hold to Compare.** While held, Pixels and Screen drop and the original
-   pixels show; Art stays. No split view. The slice measures the shader
-   swap first, and if it stutters, bypasses the chain for the held frames
-   instead of rebuilding it.
-6. **Unavailable shaders are shown, not hidden.**
-   - When `CheckShaderSupport()` is false, the shader items are disabled
-     with "Shaders are not available in this build".
-   - On macOS with the software renderer they read "Needs the Metal
-     renderer — restart after changing it", because support is decided at
-     startup.
+   pixels show; Art stays. No split view. The slice measures the shader swap
+   first, and if it stutters, bypasses the chain for the held frames instead of
+   rebuilding it.
+6. **Unavailable shaders are shown, not hidden.** When `CheckShaderSupport()` is
+   false the shader items are disabled with "Shaders are not available in this
+   build"; on macOS with the software renderer they read "Needs the Metal
+   renderer — restart after changing it", because support is decided at startup.
 
 ## Consequences
 
-- PRD §6.1's quick panel loses *Hi-res filter*. A value set elsewhere that
-  is not in Look's short list shows as the current item and is never
-  overwritten (restore-not-clobber, kept).
-- A user who had HQx on with a pack sees it disabled after the upgrade.
-  The reason line has to carry that change, and the first slice checks
-  how it reads to someone who never knew it was blurring the art.
-- Bundling presets brings license review into the release. The slice
-  records it per file.
+- PRD §6.1's quick panel loses *Hi-res filter*. A value set elsewhere that is not
+  in Look's short list shows as the current item and is never overwritten
+  (restore-not-clobber, kept).
+- A user who had HQx on with a pack sees it disabled after the upgrade; the
+  reason line has to carry that change, and the first slice checks how it reads
+  to someone who never knew it was blurring the art.
+- Bundling presets brings license review into the release; the slice records it
+  per file.
