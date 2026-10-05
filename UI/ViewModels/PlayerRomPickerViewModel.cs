@@ -365,11 +365,19 @@ namespace Mesen.ViewModels
 				Rows.Remove(row);
 			}
 			_suggestionRows.Clear();
-			foreach(RomPickerRow row in PlayRomPicker.SuggestionRows(_suggestions, ConfigManager.HomeFolder)) {
+			foreach(RomPickerRow row in PlayRomPicker.SuggestionRows(_suggestions, ConfigManager.HomeFolder, ConsoleName)) {
 				PlayerRomPickerRow vm = new(row);
 				_suggestionRows.Add(vm);
 				Rows.Add(vm);
 			}
+		}
+
+		//A console's name is read by the player, so it comes from the locale files
+		//like every other string in this sheet. PlayRomPicker owns the rules and
+		//takes the words, the same split the roots' own labels already use.
+		private static string ConsoleName(RomConsole console)
+		{
+			return console == RomConsole.Unknown ? "" : ResourceHelper.GetMessage("RomConsole" + console);
 		}
 
 		private static bool Same(IReadOnlyList<RomPickerSuggestion> left, IReadOnlyList<RomPickerSuggestion> right)
@@ -378,7 +386,16 @@ namespace Mesen.ViewModels
 				return false;
 			}
 			for(int i = 0; i < left.Count; i++) {
-				if(!string.Equals(left[i].Folder, right[i].Folder, StringComparison.OrdinalIgnoreCase)) {
+				//The whole record, not just the folder: the console and the count
+				//are both rendered into the row's text now, so two answers that
+				//agree on the folder but not on those would leave the label the
+				//previous pass wrote. (Today the walk reads both off the same
+				//listing, so they cannot actually differ for one folder - which is
+				//exactly why a comparison that silently stopped covering them would
+				//not be noticed.)
+				if(!string.Equals(left[i].Folder, right[i].Folder, StringComparison.OrdinalIgnoreCase)
+					|| left[i].RomCount != right[i].RomCount
+					|| left[i].Console != right[i].Console) {
 					return false;
 				}
 			}

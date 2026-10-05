@@ -4,7 +4,10 @@
   on 2026-10-04** and are recorded under Decision, quoted verbatim; the user
   accepted the ADR and asked for the work later the same day, quoted verbatim:
   **"espera a review e mergeia os três. depois que estiver no main pode
-  implementar tudo em paralelo usando workflows"**. So this is a request for the
+  implementar tudo em paralelo usando workflows"**. **Decision 9 amended a
+  second time on 2026-10-05** (a discovered library is named by the console it
+  holds, and there is one row per console), under the user's own ask, quoted
+  verbatim there. So this is a request for the
   work listed under Decision - the decision is made, and at the time of writing
   **nothing implemented it**; the first landing is the Controller sheet
   (ADR-0255), which this ADR's Consequences already names as the cheaper order.
@@ -443,6 +446,87 @@ place.
      works for this sheet and for nothing else until restart, which is precisely
      the "works only after a restart" the action row exists to remove. The
      classic PathSelector keeps the old gap; that is out of scope here.
+
+   **Amendment, 2026-10-05 (second, same day): a discovered library is named by
+   the console it holds, and there is one row per console.** The user, verbatim:
+   *"acho precisamos poder ter uma pasta por console. de qq forma da maneira que
+   esta nao funciona direito. verifique cuidadosamente como melhoramos isso.
+   Quem sabe listar todas as ROMs abaixo do diretorio? agrupando por console? O
+   que vc acha?"*; his picks, verbatim from the questions put to him: *"Varredura,
+   agrupada"* and *"Tudo (rótulo + agrupar + recusar)"*. What the ranking above
+   does was measured before it was changed, and the measurement is the reason
+   this amendment exists.
+
+   - **What was wrong, three things, all measured on the requesting machine.**
+     (a) Every library on disk is a folder called `roms` under a folder named
+     after its console, so the suggestion label `roms  ·  <shortened parent>`
+     made the four libraries the scan found share their **first 51 characters** -
+     and the console, the only discriminating segment, sat exactly where the
+     480 px sheet's `CharacterEllipsis` cuts. Four rows, one reading.
+     (b) The scan found **154 hits**, of which the four libraries above were the
+     top by count and the rest were stray ROMs in working trees; the ranking's
+     "top five hits are exactly his five emulator libraries" (above) no longer
+     holds on a machine that has since accumulated work trees.
+     (c) The Atari 7800 folder - ten `.zip`/`.7z` files of a console this
+     emulator cannot open - was offered as a library, because
+     `RomFileKinds.IsOpenable` accepts an archive by extension and cannot see
+     what console is inside it. Every pick in it fails to load.
+   - **The decision.** `RomConsole` (`UI/Logic/RomConsoleKinds.cs`) is the
+     consoles this emulator runs, and the ONE table of which extension is which:
+     `RomFileKinds.IsRomFile` asks it rather than keeping a second copy. The
+     granularity is the player's, not the core's - the core files Game Gear
+     **and SG-1000** under its one `Sms` type and has no Game Boy Color at all,
+     but `.gg`, `.sg` and `.gbc` libraries are different machines to the person
+     reading the row. The app's own settings already draw that line exactly where
+     the ROM files are associated: `chkSmsRomFiles` is "SMS roms: .sms",
+     `chkGameGearRomFiles` is "Game Gear roms: .gg" and `chkSgRomFiles` is
+     "SG-1000 roms: .sg" - three settings, three platforms.
+     The walk **names each hit's console from the file names it has already
+     listed**, so it costs no extra read, and the suggestions are **one row per
+     console**, the console with the biggest library leading. The label is
+     `<console>  ·  <count> games  ·  <shortened parent>`, so the part that tells
+     two rows apart is the part that survives the trim. A folder whose console
+     cannot be named keeps the older `<name>  ·  <parent>` shape and sorts after
+     every console: it is not a console, so it is not collapsed into one, and two
+     of them are two places.
+   - **One row per console is load-bearing, and this was measured too.** The
+     first version of this change ranked by count with the console only
+     breaking ties, and on the requesting machine that gave **all five rows to
+     five `Nes` folders** - the four stray ones plus the real library - and
+     dropped the Master System and Game Boy Advance libraries entirely. The cap
+     is shared, so the row that stands for a console must not be able to starve
+     another console.
+   - **SG-1000 was folded into Master System, and adversarial review caught it.**
+     The first version of `RomConsoleKinds` mapped `.sg` to
+     `RomConsole.MasterSystem`. That is defensible read off the core alone -
+     `Core/SMS/SmsConsole.cpp` builds one `SmsConsole` for both and picks
+     `SmsModel::Sg` versus `SmsModel::Sms` from the file's extension - but it is
+     wrong against this decision's own rule two paragraphs up, and it was
+     inconsistent with `.gg`, which the same code path files identically under
+     `Sms` and which this table *does* keep separate. The consequence is the one
+     the one-row rule makes severe: a player holding both a `.sms` library and a
+     `.sg` one is offered **only the larger**, and the other machine's games are
+     unreachable from the picker. Found by the review of PR #889 (grok,
+     2026-10-05), which requested changes on exactly this: *"a `roms` folder of
+     only `.sg` files is named Master System ... so beside a `.sms` library the
+     one-row rule keeps only the larger folder and the other console is not
+     offered."* `RomConsole.Sg1000` now exists, `.sg` maps to it, and
+     `An_sg1000_library_is_not_collapsed_into_the_master_system_one` pins it.
+   - **What this deliberately does not do: refuse the Atari folder.** The report
+     asked for it and the extension cannot deliver it. `Asteroids (USA).zip` and
+     a zipped NES library are indistinguishable by name, and the ADR's own rule
+     above wants zipped libraries offered. Refusing archive-only folders would
+     refuse the cabinet's whole library. The honest answer - and the one taken -
+     is that such a folder's console is **Unknown** and the row says so instead
+     of claiming one; the two are no longer conflated at the point the player
+     reads them. Deciding it *exactly* needs the archive's entry list, which the
+     core already produces at pick time (`ArchiveHelper.GetArchiveRomList`) and
+     which the scan does not have; that is its own change and is not made here.
+   - **Unchanged**: the walk itself, its two passes, the budgets, the depth
+     measurements, the network-mount rule, the action row, the `GameFolder`
+     fence and every refusal above. This amendment changes what a discovered
+     library is *called* and *how many rows it may take*, and nothing about
+     which folders are found.
 
 ## The four questions, and how they were answered
 

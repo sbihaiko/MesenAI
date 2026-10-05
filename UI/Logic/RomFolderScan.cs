@@ -119,10 +119,14 @@ public static class RomFolderScan
 					continue;
 				}
 
-				int count = entries.Files.Count(f =>
-					!RomFileKinds.IsHiddenName(Path.GetFileName(f)) && RomFileKinds.IsOpenable(f));
-				if(count > 0) {
-					hits.Add(new RomPickerHit(folder, count));
+				string[] openable = entries.Files
+					.Where(f => !RomFileKinds.IsHiddenName(Path.GetFileName(f)) && RomFileKinds.IsOpenable(f))
+					.ToArray();
+				if(openable.Length > 0) {
+					//The console is read off the files the walk already listed, so
+					//naming it costs no extra read. Archives vote for nothing, so a
+					//folder of them answers Unknown rather than a guess.
+					hits.Add(new RomPickerHit(folder, openable.Length, RomConsoleKinds.OfFiles(openable)));
 				}
 
 				if(depth >= scanBase.MaxDepth) {

@@ -22,6 +22,12 @@ namespace Mesen.Tests.Play
 
 		private static string R(string path) => Path.GetFullPath(path);
 
+		//The console's own name is the caller's in production (it comes from the
+		//locale files), so the tests pass their own - the enum's name, which makes
+		//a wrong console in an assertion read as the wrong console and not as a
+		//missing string.
+		private static string Name(RomConsole console) => console.ToString();
+
 		private static string[] Labels(IReadOnlyList<RomPickerRoot> roots) => roots.Select(r => r.Label).ToArray();
 
 		[Fact]
@@ -264,44 +270,87 @@ namespace Mesen.Tests.Play
 			Assert.Equal(PlayRomPicker.MaxSuggestions, PlayRomPicker.Suggestions(hits, Roots).Count);
 		}
 
-		//A suggestion is a place, so Confirm descends into it exactly like a root,
-		//and its label says where the library is: the folder's own name FIRST, then
-		//the `~`-shortened path it sits in.
+		//A suggestion is a place, so Confirm descends into it exactly like a root.
 		[Fact]
 		public void A_suggestion_row_is_a_folder_that_descends()
 		{
 			IReadOnlyList<RomPickerSuggestion> suggestions = PlayRomPicker.Suggestions(
 				new[] { new RomPickerHit(R("/home/lib"), 4) }, Roots);
-			IReadOnlyList<RomPickerRow> rows = PlayRomPicker.SuggestionRows(suggestions, "/home");
+			IReadOnlyList<RomPickerRow> rows = PlayRomPicker.SuggestionRows(suggestions, "/home", Name);
 
 			Assert.All(rows, r => Assert.Equal(RomPickerRowKind.Folder, r.Kind));
-			//A library directly in the home folder: its name, then `~` alone.
+			//A library whose console could not be named: its own name, then `~`.
 			Assert.Equal("lib  ·  ~", rows[0].Label);
 			Assert.Equal(R("/home/lib"), rows[0].Path);
 		}
 
 		//The sheet is 480 px wide and the label is trimmed with CharacterEllipsis,
-		//so a label that leads with the path loses exactly the segment that says
-		//which library the row is: measured on the requesting machine, its own first
-		//suggestion rendered as
-		//`~/VSCodeProjects/EMULADORES/2. Switch/G3 - Nitendinho/ro…`.
-		//The library's own name comes first, then the parent, shortened.
+		//so the segment that tells two libraries apart has to come first. Every
+		//library on disk is a folder called `roms` under a folder named after its
+		//console, so measured on the requesting machine the four the scan found
+		//rendered as labels sharing their first 51 characters - and the console,
+		//the only discriminating part, sat right at the ellipsis. The console comes
+		//first now, and with it the count.
 		[Fact]
-		public void A_suggestion_label_leads_with_the_librarys_own_name()
+		public void A_suggestion_label_leads_with_the_console_and_the_count()
 		{
 			IReadOnlyList<RomPickerSuggestion> suggestions = PlayRomPicker.Suggestions(new[] {
-				new RomPickerHit(R("/home/VSCodeProjects/EMULADORES/2. Switch/G3 - Nitendinho/roms"), 30)
+				new RomPickerHit(R("/home/VSCodeProjects/EMULADORES/2. Switch/G3 - Nitendinho/roms"), 30, RomConsole.Nes)
 			}, Roots);
 
-			IReadOnlyList<RomPickerRow> rows = PlayRomPicker.SuggestionRows(suggestions, "/home");
+			IReadOnlyList<RomPickerRow> rows = PlayRomPicker.SuggestionRows(suggestions, "/home", Name);
 
-			Assert.Equal("roms  ·  ~/VSCodeProjects/EMULADORES/2. Switch/G3 - Nitendinho", rows[0].Label);
+			Assert.Equal("Nes  ·  30 games  ·  ~/VSCodeProjects/EMULADORES/2. Switch/G3 - Nitendinho", rows[0].Label);
 			Assert.Equal(R("/home/VSCodeProjects/EMULADORES/2. Switch/G3 - Nitendinho/roms"), rows[0].Path);
 		}
 
-		//Outside the home folder there is nothing to shorten to, and the name still
-		//comes first - the rule is "what it is, then where it is", not "`~` or
-		//nothing".
+		//The four libraries the requesting machine's own scan found, and the point
+		//of the whole change: read one under the other, they no longer begin with
+		//the same fifty characters.
+		[Fact]
+		public void Two_libraries_of_different_consoles_do_not_share_their_leading_text()
+		{
+			IReadOnlyList<RomPickerSuggestion> suggestions = PlayRomPicker.Suggestions(new[] {
+				new RomPickerHit(R("/home/VSCodeProjects/EMULADORES/2. Switch/G3 - Nitendinho/roms"), 30, RomConsole.Nes),
+				new RomPickerHit(R("/home/VSCodeProjects/EMULADORES/2. Switch/G3 - MasterSystem/roms"), 10, RomConsole.MasterSystem)
+			}, Roots);
+
+			IReadOnlyList<string> labels = PlayRomPicker.SuggestionRows(suggestions, "/home", Name)
+				.Select(r => r.Label).ToList();
+
+			Assert.Equal(2, labels.Count);
+			Assert.StartsWith("Nes", labels[0], StringComparison.Ordinal);
+			Assert.StartsWith("MasterSystem", labels[1], StringComparison.Ordinal);
+		}
+
+		//One game is not "1 games": the count is a word, not a number with an `s`
+		//glued to it.
+		[Fact]
+		public void A_single_game_library_says_one_game()
+		{
+			IReadOnlyList<RomPickerSuggestion> suggestions = PlayRomPicker.Suggestions(new[] {
+				new RomPickerHit(R("/home/nes"), 1, RomConsole.Nes)
+			}, Roots);
+
+			Assert.Equal("Nes  ·  1 game  ·  ~",
+				PlayRomPicker.SuggestionRows(suggestions, "/home", Name)[0].Label);
+		}
+
+		//A folder of archives cannot have its console read off the names, so it
+		//keeps the older shape: the folder's own name, and no console claimed.
+		[Fact]
+		public void A_library_whose_console_is_unknown_claims_no_console()
+		{
+			IReadOnlyList<RomPickerSuggestion> suggestions = PlayRomPicker.Suggestions(new[] {
+				new RomPickerHit(R("/home/G3 - Atari 7800/roms"), 10)
+			}, Roots);
+
+			Assert.Equal("roms  ·  ~/G3 - Atari 7800",
+				PlayRomPicker.SuggestionRows(suggestions, "/home", Name)[0].Label);
+		}
+
+		//Outside the home folder there is nothing to shorten to, and the rule is
+		//still "what it is, then where it is", not "`~` or nothing".
 		[Fact]
 		public void A_suggestion_label_outside_the_home_folder_is_the_name_then_the_whole_parent()
 		{
@@ -310,7 +359,7 @@ namespace Mesen.Tests.Play
 			}, Roots);
 
 			Assert.Equal("roms  ·  /opt/emuladores",
-				PlayRomPicker.SuggestionRows(suggestions, "/home")[0].Label);
+				PlayRomPicker.SuggestionRows(suggestions, "/home", Name)[0].Label);
 		}
 
 		//The walk counts openable files DIRECTLY in a folder, never a dot-name,
@@ -328,7 +377,8 @@ namespace Mesen.Tests.Play
 				new ScanLimits(200_000, TimeSpan.FromSeconds(5)),
 				FakeLister(tree), () => TimeSpan.Zero, CancellationToken.None);
 
-			Assert.Equal(new[] { new RomPickerHit(R("/a"), 2) }, hits);
+			//`.nes` votes and `.zip` does not, so the folder is named NES.
+			Assert.Equal(new[] { new RomPickerHit(R("/a"), 2, RomConsole.Nes) }, hits);
 		}
 
 		//Depth 5 is measured-load-bearing (the user's library sits at depth 5, and
@@ -353,7 +403,7 @@ namespace Mesen.Tests.Play
 				new ScanLimits(200_000, TimeSpan.FromSeconds(5)),
 				FakeLister(tree), () => TimeSpan.Zero, CancellationToken.None);
 
-			Assert.Contains(new RomPickerHit(deep, 1), hits);
+			Assert.Contains(new RomPickerHit(deep, 1, RomConsole.Nes), hits);
 			Assert.DoesNotContain(hits, h => h.Folder == deeper);
 
 			//A tree wider than the folder budget stops at the budget.
@@ -402,7 +452,7 @@ namespace Mesen.Tests.Play
 				new ScanLimits(200_000, TimeSpan.FromSeconds(5)),
 				lister, () => TimeSpan.Zero, CancellationToken.None);
 
-			Assert.Equal(new[] { new RomPickerHit(R("/good"), 1) }, hits);
+			Assert.Equal(new[] { new RomPickerHit(R("/good"), 1, RomConsole.Nes) }, hits);
 			Assert.True(calls < 20, $"the walk did not terminate promptly ({calls} listings)");
 		}
 
@@ -430,7 +480,7 @@ namespace Mesen.Tests.Play
 				new[] { R("/home/nas") });
 
 			Assert.DoesNotContain(R("/home/nas"), listed);
-			Assert.Equal(new[] { new RomPickerHit(R("/home/lib"), 1) }, hits);
+			Assert.Equal(new[] { new RomPickerHit(R("/home/lib"), 1, RomConsole.Nes) }, hits);
 		}
 
 		//The mount table, in the two shapes the host reads: macOS `mount` output
@@ -502,7 +552,7 @@ namespace Mesen.Tests.Play
 				new ScanLimits(200_000, TimeSpan.FromSeconds(5)),
 				FakeLister(tree, listed.Add), () => TimeSpan.Zero, CancellationToken.None);
 
-			Assert.Equal(new[] { new RomPickerHit(R("/p/roms"), 1) }, hits);
+			Assert.Equal(new[] { new RomPickerHit(R("/p/roms"), 1, RomConsole.Nes) }, hits);
 			Assert.DoesNotContain(R("/p/out"), listed);
 			Assert.DoesNotContain(R("/p/runs"), listed);
 			Assert.DoesNotContain(R("/p/runs-archive"), listed);
@@ -539,7 +589,7 @@ namespace Mesen.Tests.Play
 
 			//The other folder is still a library: this is one folder left out, not a
 			//walk that stops at the first project it meets.
-			Assert.Equal(new[] { new RomPickerHit(R("/lib/other"), 1) }, hits);
+			Assert.Equal(new[] { new RomPickerHit(R("/lib/other"), 1, RomConsole.Nes) }, hits);
 			//The project folder is READ once - that is how the walk learns what it
 			//is - and then not entered: nothing under it is listed at all.
 			string under = R("/lib/Castlevania") + Path.DirectorySeparatorChar;
@@ -567,7 +617,209 @@ namespace Mesen.Tests.Play
 				new ScanLimits(200_000, TimeSpan.FromSeconds(5)),
 				FakeLister(tree), () => TimeSpan.Zero, CancellationToken.None);
 
-			Assert.Equal(new[] { new RomPickerHit(R("/lib"), 1) }, hits);
+			Assert.Equal(new[] { new RomPickerHit(R("/lib"), 1, RomConsole.Nes) }, hits);
+		}
+
+		// --- the console a library holds (RomConsoleKinds) --------------------
+
+		//#886 follow-up: every library on disk is a folder named `roms` under a
+		//folder named after its console, so the extension is the only thing that
+		//says which console a folder is - and it has to be read, not guessed,
+		//because a guess offers the player a game that cannot open.
+		[Theory]
+		[InlineData("contra.nes", RomConsole.Nes)]
+		[InlineData("game.unif", RomConsole.Nes)]
+		[InlineData("game.unf", RomConsole.Nes)]
+		[InlineData("disk.fds", RomConsole.Nes)]
+		[InlineData("tetris.gb", RomConsole.GameBoy)]
+		[InlineData("kirby.gbx", RomConsole.GameBoy)]
+		[InlineData("shantae.gbc", RomConsole.GameBoyColor)]
+		[InlineData("metroid.gba", RomConsole.GameBoyAdvance)]
+		[InlineData("sonic.sms", RomConsole.MasterSystem)]
+		[InlineData("columns.gg", RomConsole.GameGear)]
+		//SG-1000, not Master System: the core runs both out of one SmsConsole
+		//(Core/SMS/SmsConsole.cpp picks SmsModel::Sg for `.sg`), but the app
+		//associates `.sg` with SG-1000 and `.sms` with SMS as two separate
+		//settings, and the two libraries are two machines on disk.
+		[InlineData("flicky.sg", RomConsole.Sg1000)]
+		//An archive, a save, another machine's ROM, and no extension at all.
+		[InlineData("contra.zip", RomConsole.Unknown)]
+		[InlineData("contra.7z", RomConsole.Unknown)]
+		[InlineData("zelda.sav", RomConsole.Unknown)]
+		[InlineData("asteroids.a26", RomConsole.Unknown)]
+		[InlineData("mario.z64", RomConsole.Unknown)]
+		[InlineData("ff7.chd", RomConsole.Unknown)]
+		[InlineData("README", RomConsole.Unknown)]
+		public void A_files_extension_names_its_console_or_nothing(string name, RomConsole expected)
+		{
+			Assert.Equal(expected, RomConsoleKinds.OfFile(name));
+		}
+
+		//A library that grew a few stray files is still that library: the console
+		//is the majority, and the files that name no console do not vote.
+		[Fact]
+		public void A_folders_console_is_the_majority_of_its_files()
+		{
+			Assert.Equal(RomConsole.Nes, RomConsoleKinds.OfFiles(new[] {
+				"contra.nes", "mario.nes", "zelda.nes", "notes.txt", "backup.zip"
+			}));
+		}
+
+		//The archive question decided honestly: a folder of zips is NOT claimed as
+		//NES, because a zip's console is not knowable from its name. Claiming one
+		//is how the Atari 7800 folder on the requesting machine - ten `.zip`/`.7z`
+		//files the emulator cannot open - was offered as a library beside three
+		//real ones.
+		[Fact]
+		public void A_folder_of_archives_names_no_console()
+		{
+			Assert.Equal(RomConsole.Unknown, RomConsoleKinds.OfFiles(new[] {
+				"Asteroids (USA).zip", "Centipede (1987) (Atari).7z"
+			}));
+		}
+
+		//A tie must not depend on the order the host happened to list the files in.
+		[Fact]
+		public void A_tie_between_two_consoles_answers_the_same_either_way()
+		{
+			string[] one = { "contra.nes", "tetris.gb" };
+			string[] other = { "tetris.gb", "contra.nes" };
+
+			Assert.Equal(RomConsoleKinds.OfFiles(one), RomConsoleKinds.OfFiles(other));
+			Assert.Equal(RomConsole.Nes, RomConsoleKinds.OfFiles(one));
+		}
+
+		//"Is this a ROM" and "which console is this" are one list: RomFileKinds
+		//asks RomConsoleKinds rather than keeping a second copy that drifts.
+		[Theory]
+		[InlineData("contra.nes", true)]
+		[InlineData("contra.zip", false)]
+		[InlineData("asteroids.a26", false)]
+		public void The_rom_extension_table_has_one_home(string name, bool isRom)
+		{
+			Assert.Equal(isRom, RomFileKinds.IsRomFile(name));
+		}
+
+		//The walk reads the console off the files it already listed, so naming it
+		//costs no extra read.
+		[Fact]
+		public void The_scan_names_the_consoles_console()
+		{
+			Dictionary<string, (string[] Folders, string[] Files)> tree = new() {
+				[R("/lib")] = (Array.Empty<string>(), new[] { R("/lib/contra.nes"), R("/lib/mario.nes") })
+			};
+
+			IReadOnlyList<RomPickerHit> hits = RomFolderScan.Run(
+				new[] { new ScanBase(R("/lib"), 5) },
+				new ScanLimits(200_000, TimeSpan.FromSeconds(5)),
+				FakeLister(tree), () => TimeSpan.Zero, CancellationToken.None);
+
+			Assert.Equal(new[] { new RomPickerHit(R("/lib"), 2, RomConsole.Nes) }, hits);
+		}
+
+		// --- the suggestions, grouped by console ------------------------------
+
+		//The list reads as a console list: the console with the biggest library
+		//leads, and its own rows follow it before the next console starts.
+		[Fact]
+		public void The_suggestions_are_ordered_by_console()
+		{
+			IReadOnlyList<RomPickerSuggestion> suggestions = PlayRomPicker.Suggestions(new[] {
+				new RomPickerHit(R("/home/sms"), 3, RomConsole.MasterSystem),
+				new RomPickerHit(R("/home/nes"), 30, RomConsole.Nes),
+				new RomPickerHit(R("/home/gba"), 10, RomConsole.GameBoyAdvance)
+			}, Roots);
+
+			Assert.Equal(
+				new[] { RomConsole.Nes, RomConsole.GameBoyAdvance, RomConsole.MasterSystem },
+				suggestions.Select(s => s.Console).ToArray());
+		}
+
+		//One row per console, and the biggest library is the one that stands for
+		//it. This is the rule that keeps the cap from being eaten alive: measured
+		//on the requesting machine, ranking by count alone gave all five rows to
+		//five NES folders and dropped the Master System and Game Boy Advance
+		//libraries the player had actually set up.
+		[Fact]
+		public void One_row_per_console_and_the_biggest_library_stands_for_it()
+		{
+			IReadOnlyList<RomPickerSuggestion> suggestions = PlayRomPicker.Suggestions(new[] {
+				new RomPickerHit(R("/home/nes-small"), 4, RomConsole.Nes),
+				new RomPickerHit(R("/home/sms"), 20, RomConsole.MasterSystem),
+				new RomPickerHit(R("/home/nes-big"), 30, RomConsole.Nes)
+			}, Roots);
+
+			Assert.Equal(
+				new[] { R("/home/nes-big"), R("/home/sms") },
+				suggestions.Select(s => s.Folder).ToArray());
+		}
+
+		//The cap is shared, so the row that stands for a console must not be the
+		//one that starves the others: a machine whose only libraries are many NES
+		//folders still offers one row per console it has, in console order.
+		[Fact]
+		public void Many_libraries_of_one_console_never_starve_another_console()
+		{
+			List<RomPickerHit> hits = Enumerable.Range(0, 8)
+				.Select(i => new RomPickerHit(R("/home/nes" + i), 40 - i, RomConsole.Nes))
+				.ToList();
+			hits.Add(new RomPickerHit(R("/home/gba"), 3, RomConsole.GameBoyAdvance));
+
+			IReadOnlyList<RomPickerSuggestion> suggestions = PlayRomPicker.Suggestions(hits, Roots);
+
+			Assert.Contains(suggestions, s => s.Console == RomConsole.GameBoyAdvance);
+			Assert.Single(suggestions, s => s.Console == RomConsole.Nes);
+		}
+
+		//SG-1000 and Master System are one console to the core and two machines to
+		//the player, so the one-row rule must not merge them. Merged, a player
+		//holding a library of each is offered only the larger one - the other
+		//machine's games cannot be reached from the picker at all. Found by
+		//adversarial review (grok 2026-10-05, PR #889): `.sg` was mapped to
+		//MasterSystem, so this is the case that pins the fix.
+		[Fact]
+		public void An_sg1000_library_is_not_collapsed_into_the_master_system_one()
+		{
+			IReadOnlyList<RomPickerSuggestion> suggestions = PlayRomPicker.Suggestions(new[] {
+				new RomPickerHit(R("/home/sms"), 40, RomConsole.MasterSystem),
+				new RomPickerHit(R("/home/sg1000"), 6, RomConsole.Sg1000)
+			}, Roots);
+
+			Assert.Equal(
+				new[] { R("/home/sms"), R("/home/sg1000") },
+				suggestions.Select(s => s.Folder).ToArray());
+			Assert.Equal(
+				new[] { RomConsole.MasterSystem, RomConsole.Sg1000 },
+				suggestions.Select(s => s.Console).ToArray());
+		}
+
+		//A folder whose console could not be named is not a console, so it cannot
+		//be collapsed into one: two of them are two places the player may mean.
+		[Fact]
+		public void Two_folders_with_no_known_console_are_two_rows()
+		{
+			IReadOnlyList<RomPickerSuggestion> suggestions = PlayRomPicker.Suggestions(new[] {
+				new RomPickerHit(R("/home/atari"), 10),
+				new RomPickerHit(R("/home/switch"), 4)
+			}, Roots);
+
+			Assert.Equal(2, suggestions.Count);
+		}
+
+		//A folder whose console could not be named is the one the picker is least
+		//sure about, so it goes after every console - never displacing a library
+		//whose console it does know.
+		[Fact]
+		public void A_library_with_no_known_console_goes_last()
+		{
+			IReadOnlyList<RomPickerSuggestion> suggestions = PlayRomPicker.Suggestions(new[] {
+				new RomPickerHit(R("/home/atari"), 10),
+				new RomPickerHit(R("/home/nes"), 4, RomConsole.Nes)
+			}, Roots);
+
+			Assert.Equal(
+				new[] { R("/home/nes"), R("/home/atari") },
+				suggestions.Select(s => s.Folder).ToArray());
 		}
 
 		private static FolderLister FakeLister(Dictionary<string, (string[] Folders, string[] Files)> tree, Action<string>? onCall = null)
