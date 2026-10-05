@@ -1,12 +1,20 @@
+using System;
+
 namespace Mesen.Logic;
 
-//G.5 (PRD Part B §8, ADR-0241, §13.5.2 W-P12): the first-run sheet that
-//replaces the setup wizard - same choices, fewer words. Storage is
-//StoreInUserProfile (default the user folder); the keyboard is one popup over
-//the wizard's two exclusive checkboxes (KeyPresets' arrow and WASD layouts);
-//both gamepad presets are always applied, with no checkbox, because they bind
-//different devices and turning one off only hides a pad the user may plug in
-//later. A pad neither preset matches goes through W-P15.
+//ADR-0241, PRD Part B §8: the first-run choices. They used to be asked by the
+//SetupWizardWindow, one screen before the main window; ADR-0256 Decision 8 took
+//that screen out of the startup path, and what it asked moved into Play's
+//Settings sheet (MainWindowViewModel.PlayerSettings' System tab) - the same two
+//questions, on a surface the pad can drive.
+//
+//What survives here is only what is true without the wizard: the choice itself,
+//its defaults, and the mappings it turns into. Storage is
+//StoreInUserProfile (default the user folder); the keyboard is one of
+//KeyPresets' arrow and WASD layouts. Both gamepad presets are always applied,
+//with no checkbox, because they bind different devices and turning one off only
+//hides a pad the user may plug in later. A pad neither preset matches goes
+//through W-P15.
 public enum FirstRunKeyboard
 {
 	//Arrow keys + S / A, the wizard's default.
@@ -22,10 +30,12 @@ public sealed record FirstRunMappings(bool Xbox, bool PlayStation, bool Wasd, bo
 
 public static class PlayFirstRun
 {
-	//Today's wizard defaults. Check for updates and Desktop shortcut are only
-	//shown on Windows/Linux; on macOS they keep the wizard's values (the
-	//shortcut was already a no-op there). Check for updates is off, and its
-	//checkbox disabled, while the fork has no update feed (#672, UpdateChannel).
+	//The wizard's defaults, and still what a fresh install runs on: the user
+	//folder, arrow keys, no update check (UpdateChannel.HasFeed is false while
+	//the fork has no feed, #672), a desktop shortcut. CheckForUpdates and
+	//CreateShortcut were the wizard's two Windows/Linux checkboxes and no
+	//surface asks them any more - the record keeps them because Defaults is
+	//also the first-run record the tests read (UI.Tests/Config/UpdateChannelTests).
 	public static FirstRunChoice Defaults { get; } = new(true, FirstRunKeyboard.ArrowKeys, UpdateChannel.HasFeed, true);
 
 	public static FirstRunMappings Mappings(FirstRunKeyboard keyboard)
@@ -33,19 +43,66 @@ public static class PlayFirstRun
 		return new FirstRunMappings(true, true, keyboard == FirstRunKeyboard.Wasd, keyboard == FirstRunKeyboard.ArrowKeys);
 	}
 
-	//The ASCII is the macOS form; Windows and Linux add the two checkboxes.
-	public static bool ShowsDesktopOptions(bool isMacOS) => !isMacOS;
+	//ADR-0256 Decision 8: what the Settings surface's keyboard row reads off the
+	//running config, the other way round from Mappings. DefaultKeyMappings holds
+	//the Xbox and Ps4 flags alongside the keyboard one, so the keyboard half is
+	//"WASD is set and the arrows are not"; anything else - neither flag, which is
+	//a config that never had a preset, or both - reads as the default.
+	public static FirstRunKeyboard KeyboardOf(bool wasdKeys, bool arrowKeys)
+	{
+		return wasdKeys && !arrowKeys ? FirstRunKeyboard.Wasd : Defaults.Keyboard;
+	}
 
-	//Rule 2: 2 radios + popup + Start Playing = 4 (6 with the checkboxes).
-	public static int ControlCount(bool isMacOS) => ShowsDesktopOptions(isMacOS) ? 6 : 4;
+	//ADR-0256 Decision 8: the folder a storage choice means. The same two folders
+	//ConfigManager resolves at startup (DefaultDocumentsFolder and
+	//DefaultPortableFolder), passed in so this stays host-free.
+	public static string Folder(bool storeInUserProfile, string documentsFolder, string portableFolder)
+	{
+		return storeInUserProfile ? documentsFolder : portableFolder;
+	}
 
-	//Esc and the close button keep what is selected and continue: there is no
-	//Cancel, because the app cannot run without a storage choice.
-	public static FirstRunChoice OnDismiss(FirstRunChoice current) => current;
+	//The same folder, spelled the same way. Path comparison belongs to the host,
+	//so this is case-insensitive as Windows is, and harmless where it is not.
+	public static bool SameFolder(string? left, string? right)
+	{
+		return !string.IsNullOrWhiteSpace(left) && string.Equals(left.Trim(), right?.Trim(), StringComparison.OrdinalIgnoreCase);
+	}
 
-	//#661: quitting the app or shutting the OS down while the sheet is up
-	//closes it without applying the choice - nothing is written, so it shows
-	//again next launch - and never blocks the shutdown, even when the folder
-	//cannot be written. Every other close applies the choice (OnDismiss).
-	public static bool ConfirmsOnClose(bool shuttingDown) => !shuttingDown;
+	//Which storage radio the surface opens on: the folder the process is running
+	//from. Same reading as the Advanced door's Change Folder window
+	//(SelectStorageFolderViewModel), which asks whether HomeFolder is the folder
+	//next to the app.
+	public static bool InUserFolder(string currentFolder, string portableFolder)
+	{
+		return !SameFolder(currentFolder, portableFolder);
+	}
+
+	//ADR-0256 Decision 8: whether a storage choice needs the relaunch the wizard's
+	//flow ended with (write the settings file, start the process again). The home
+	//folder is resolved once, before the main window exists, and everything the
+	//core writes - saves, save states, packs, logs - hangs off it, so a folder
+	//change cannot take effect under a running process. Choosing the folder the
+	//process is already on is not a change and asks for nothing.
+	public static bool NeedsRestart(string currentFolder, string chosenFolder)
+	{
+		return !SameFolder(currentFolder, chosenFolder);
+	}
+
+	//ADR-0256 Decision 8: the startup rule the wizard used to be is gone, and it
+	//is gone from the startup path itself rather than inverted into a flag -
+	//Program.Main asks nothing before the main window now, and
+	//UI.Tests/Play/EdgeFlowsTests' FirstRunStartupTests reads that path rather
+	//than a constant that says so.
+	//
+	//What left with the wizard, and why:
+	//  OnDismiss         - Esc and the close button kept the choice and continued.
+	//                      There is no sheet to dismiss before the app can run.
+	//  ConfirmsOnClose   - the sheet applied the choice on close, except when the
+	//                      app or the OS was shutting down (#661). Nothing is
+	//                      written on a close any more.
+	//  ShowsDesktopOptions / ControlCount
+	//                    - the Windows/Linux checkboxes and the first-run sheet's
+	//                      control count (rule 2). No surface draws that card -
+	//                      the Advanced door's Preferences tab keeps the two
+	//                      checkboxes themselves.
 }

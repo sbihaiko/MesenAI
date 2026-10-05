@@ -1,0 +1,51 @@
+<UserControl
+	xmlns="https://github.com/avaloniaui"
+	xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+	xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+	xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+	xmlns:vm="using:Mesen.ViewModels"
+	xmlns:l="using:Mesen.Localization"
+	mc:Ignorable="d" d:DesignWidth="440" d:DesignHeight="300"
+	x:DataType="vm:PlayerSystemSettingsViewModel"
+	x:Class="Mesen.Views.PlayerSystemSettingsView"
+>
+	<UserControl.Styles>
+		<!-- The folder a choice means, under the radio that picks it.-->
+		<Style Selector=".player TextBlock.system-detail">
+			<Setter Property="TextWrapping" Value="Wrap" />
+			<Setter Property="Margin" Value="42 1 14 0" />
+			<Setter Property="FontSize" Value="{StaticResource PlayerFontSubhead}" />
+			<Setter Property="Foreground" Value="{StaticResource PlayerText2Brush}" />
+		</Style>
+	</UserControl.Styles>
+
+	<!--ADR-0256 Decision 8: Settings › System - the two questions the retired
+	first-run wizard asked, on the surface the pad drives. Storage is the folder
+	the settings file lives in (the wizard's own write, with the relaunch its
+	flow ended with offered as a button); Keyboard is the arrow/WASD preset the
+	first run wrote, with both gamepad layouts always on. Rule 2's shape: an
+	inset group of choice rows, one line under the group, Done under that.-->
+	<Border Name="SystemSettingsGroup" Classes="group inset" VerticalAlignment="Top">
+		<StackPanel XYFocus.NavigationModes="Enabled">
+			<TextBlock Name="lblSystemStorageRow" Classes="callout strong" Text="{l:Translate lblSystemStorageRow}" Margin="14 12 14 2" />
+			<RadioButton Name="SystemStorageUserFolder" Classes="choice" GroupName="SystemStorage" Content="{l:Translate radSystemUserFolder}" IsChecked="{Binding StoreInUserProfile}" Margin="14 0 14 0" />
+			<TextBlock Name="txtSystemUserFolder" Classes="system-detail" Text="{Binding UserFolder}" />
+			<RadioButton Name="SystemStoragePortable" Classes="choice" GroupName="SystemStorage" Content="{l:Translate radSystemPortable}" IsChecked="{Binding !StoreInUserProfile}" Margin="14 8 14 0" />
+			<TextBlock Name="txtSystemPortableFolder" Classes="system-detail" Text="{Binding PortableFolder}" />
+
+			<Separator Classes="hairline" Margin="14 12 14 0" />
+
+			<TextBlock Name="lblSystemKeyboardRow" Classes="callout strong" Text="{l:Translate lblSystemKeyboardRow}" Margin="14 12 14 2" />
+			<RadioButton Name="SystemKeyboardArrows" Classes="choice" GroupName="SystemKeyboard" Content="{l:Translate cboSystemArrows}" IsChecked="{Binding UsesArrowKeys}" Margin="14 0 14 0" />
+			<RadioButton Name="SystemKeyboardWasd" Classes="choice" GroupName="SystemKeyboard" Content="{l:Translate cboSystemWasd}" IsChecked="{Binding UsesWasd}" Margin="14 6 14 0" />
+			<TextBlock Classes="system-detail" Text="{l:Translate lblSystemGamepads}" Margin="42 6 14 0" />
+
+			<TextBlock Name="SystemNotice" Classes="reason" Text="{Binding NoticeText}" IsVisible="{Binding NoticeText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" TextWrapping="Wrap" Margin="14 12 14 0" />
+			<!-- The relaunch the wizard's flow ended with (Program.cs started the
+			executable again once the settings file existed). Only offered for a
+			folder the running process cannot move to, and never for a write that
+			failed. -->
+			<Button Name="SystemRestartButton" Classes="primary medium" HorizontalAlignment="Left" Margin="14 10 14 14" Click="OnRestart" IsVisible="{Binding RestartPending}" Content="{l:Translate btnSystemRestart}" />
+		</StackPanel>
+	</Border>
+</UserControl>

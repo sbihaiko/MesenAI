@@ -182,27 +182,4 @@ public partial class PlayEdgeFlowsTests
 		}
 	}
 
-	//#661: quitting the app or shutting the OS down while the first-run sheet
-	//is up closes it even when the folder cannot be written; nothing is
-	//written, so the sheet shows again next launch.
-	[AvaloniaTheory]
-	[InlineData(WindowCloseReason.ApplicationShutdown)]
-	[InlineData(WindowCloseReason.OSShutdown)]
-	public void The_first_run_sheet_never_blocks_quitting_the_app_or_shutting_the_OS_down(WindowCloseReason reason)
-	{
-		RecordingFirstRun model = new() { Succeeds = false };
-		SetupWizardWindow window = new(model);
-		window.Show();
-		Dispatcher.UIThread.RunJobs();
-		try {
-			MethodInfo handleClosing = typeof(Window).GetMethod("HandleClosing", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public)
-				?? throw new XunitException("Window.HandleClosing not found");
-			bool cancelled = (bool)handleClosing.Invoke(window, new object[] { reason })!;
-			Assert.False(cancelled, $"the first-run sheet cancelled a {reason} close (#661)");
-			Assert.Equal(0, model.Confirms);
-		} finally {
-			model.Succeeds = true;
-			window.Close();
-		}
-	}
 }

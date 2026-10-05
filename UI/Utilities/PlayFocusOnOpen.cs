@@ -2,6 +2,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
@@ -156,6 +157,48 @@ internal sealed class PlayFocusOnOpen
 	public static bool SurfaceIsUp(Visual from)
 	{
 		return Of(from)?.Open() is not null;
+	}
+
+	//Decision 3, read while the pad moves: the surface that holds the focus is
+	//the one the pad walks. The claim above decides who takes the focus when a
+	//surface opens; this is the same decision for the step after that, and it
+	//needs saying because the engine's own directional search is geometric across
+	//the whole window and the surfaces under a sheet are on screen on purpose -
+	//W-P4's card stays behind the sheets opened from it, dimmed, and the home
+	//stays behind a sheet opened from a task door. Measured on a game loaded with
+	//Settings up: one D-pad Down from the storage row landed on the dimmed card's
+	//Resume, which is a surface the player can see but is not using, and Confirm
+	//would have acted on it. (The card is only *drawn* dim: IsHitTestVisible is
+	//false for the pointer, and focus navigation never asks that.)
+	//
+	//The root is the closest ancestor the open surface's own first control and
+	//the focused control share. Both are inside the surface by construction, so
+	//the answer is the surface itself and nothing outside it - for W-P4's card,
+	//OverlayControls; for Settings' System tab, that tab's own panel. Null when
+	//there is no surface (the content area's screens keep the whole window, which
+	//is what they had) or when the two controls are not in one tree yet, and the
+	//bridge then searches as it did before.
+	public Control? SearchRoot()
+	{
+		if(Open() is not Claim claim || claim.Target() is not Control target) {
+			return null;
+		}
+		if(_window.FocusManager?.GetFocusedElement() is not Visual focused) {
+			return null;
+		}
+
+		HashSet<Visual> aboveFocused = new();
+		for(Visual? ancestor = focused; ancestor is not null; ancestor = ancestor.GetVisualParent()) {
+			aboveFocused.Add(ancestor);
+		}
+		//From the target's parent: a surface is never the target alone, or the
+		//first control could not move at all.
+		for(Visual? ancestor = target.GetVisualParent(); ancestor is not null; ancestor = ancestor.GetVisualParent()) {
+			if(aboveFocused.Contains(ancestor)) {
+				return ancestor as Control;
+			}
+		}
+		return null;
 	}
 
 	//A content-area screen saying it is (re)appearing. It keeps its own triggers

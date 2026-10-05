@@ -177,10 +177,7 @@ namespace Mesen.Config
 				return false;
 			}
 			DefaultKeyMappings = DefaultKeyMappingType.Xbox | DefaultKeyMappingType.ArrowKeys;
-			Nes.InitializeDefaults(DefaultKeyMappings);
-			Gameboy.InitializeDefaults(DefaultKeyMappings);
-			Gba.InitializeDefaults(DefaultKeyMappings);
-			Sms.InitializeDefaults(DefaultKeyMappings);
+			SeedConsoleKeyDefaults();
 			return true;
 		}
 
@@ -233,13 +230,23 @@ namespace Mesen.Config
 		public void InitializeDefaults()
 		{
 			if(ConfigUpgrade == (int)ConfigUpgradeHint.FirstRun) {
-				Nes.InitializeDefaults(DefaultKeyMappings);
-				Gameboy.InitializeDefaults(DefaultKeyMappings);
-				Gba.InitializeDefaults(DefaultKeyMappings);
-				Sms.InitializeDefaults(DefaultKeyMappings);
+				SeedConsoleKeyDefaults();
 				ConfigUpgrade = (int)ConfigUpgradeHint.NextValue - 1;
 			}
 			Preferences.InitializeDefaultShortcuts();
+		}
+
+		//Writes DefaultKeyMappings into the four consoles' ports - the one place
+		//that seeding happens, so the first run (InitializeDefaults), the
+		//Controller sheet's restore (RestoreKeyboardPresetIfNothingIsBound) and
+		//Play's Settings › System row (ADR-0256 Decision 8, which sets the
+		//mapping first and then asks for the keys) cannot drift apart.
+		public void SeedConsoleKeyDefaults()
+		{
+			Nes.InitializeDefaults(DefaultKeyMappings);
+			Gameboy.InitializeDefaults(DefaultKeyMappings);
+			Gba.InitializeDefaults(DefaultKeyMappings);
+			Sms.InitializeDefaults(DefaultKeyMappings);
 		}
 
 		private static HashSet<string>? _installedFonts = null;

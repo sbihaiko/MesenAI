@@ -141,12 +141,15 @@ can be exercised by real xunit tests without Avalonia or the native
   picker is dismissed, and Esc on the home does nothing. *Quit game* powers
   the game off (`LoadRomHelper.PowerOff`, after the existing
   `ConfirmExitResetPower` prompt) and never closes the app.
-- The Play edge flows (G.5, ADR-0241, PRD Part B §13.5.2 W-P12–W-P16) are
-  host-free in `UI/Logic/PlayFirstRun.cs`, `PlayBiosPrompt.cs`,
-  `PlayLoadFailure.cs`, `PlayPackDepPrompt.cs` and `PlayControllerSetup.cs`.
-  W-P12 is `SetupWizardWindow` redrawn: it still runs before `MainWindow`
-  (the storage choice decides `HomeFolder`), always applies both gamepad
-  presets, and its close/Esc applies the choice (no Cancel). W-P13, W-P14,
+- The Play edge flows (G.5, ADR-0241, PRD Part B §13.5.2 W-P13–W-P16) are
+  host-free in `UI/Logic/PlayFirstRun.cs`,
+  `PlayBiosPrompt.cs`, `PlayLoadFailure.cs`, `PlayPackDepPrompt.cs` and
+  `PlayControllerSetup.cs`. W-P12's sheet is retired (ADR-0256 Decision 8):
+  nothing runs before `MainWindow` any more, and the two questions it asked -
+  the storage folder and the keyboard preset - are Settings › System
+  (`PlayerSystemSettingsViewModel` + `PlaySystemSettingsPadTests`); what stays
+  in `PlayFirstRun.cs` is the choice, its defaults and the mappings.
+  W-P13, W-P14,
   W-P15 and W-P16 are Player-mode only, in Play; Advanced keeps the
   `FirmwareNotFound` dialog loop, the OSD load error with the home hidden,
   and the OSD pending-dep line. `PlaySheet.PackDep` closes back to W-P4; the
@@ -157,8 +160,7 @@ can be exercised by real xunit tests without Avalonia or the native
   thread blocks on `MissingFirmware` holding its load locks, so every wait
   goes through `CoreRequestWaits` (`UI/Logic`): `CloseEmu` dismisses the BIOS
   sheet and closes the waits before `EmuApi.Stop`, and another open or a
-  power off dismisses the sheet (#658). The first-run sheet never cancels an
-  application/OS shutdown close and writes nothing then (#661). Every open
+  power off dismisses the sheet (#658). Every open
   starts with no BIOS cancel (`PlayBiosSheetViewModel.ClearCancelled`, #674),
   and a failure is reported only for the latest open
   (`PlayLoadFailure.IsCurrentOpen`), so a cancel never outlives its open. The
@@ -621,8 +623,9 @@ drawn by `scripts/render_gui_wireframes.py`), not classic Mesen. The theme is
   `RemasterWorkspaceHost` and `RemasterRecordingStripHost` (which also carry
   `remaster`), and on the Share views themselves (`ShareWorkspace`,
   `ShareRecordingStrip`, whose DataContext is Share, hence a cast binding);
-  outside MainWindow only the first-run card (`SetupWizardWindow`'s
-  `FirstRunCard`) carries it. Player-mode Settings is a sheet inside
+  outside MainWindow no window carries it any more — the first-run card went
+  with the retired `SetupWizardWindow` (ADR-0256 Decision 8, its two questions
+  are Settings › System now). Player-mode Settings is a sheet inside
   `PlayWorkspace` (`PlayerSettingsSheetView`, W-P8/W-P10), not a window. A component class outside the
   scope does nothing, so classic windows, dialogs, the debugger and Advanced
   mode keep `MesenStyles` (radius 0, MesenFont). A local `Background`,

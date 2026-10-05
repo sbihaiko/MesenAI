@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using Mesen.Logic;
 using Xunit;
 
@@ -7,7 +8,13 @@ namespace Mesen.Tests.Play
 {
 	//G.5 (PRD Part B §8, §13.5.2 W-P12-W-P14, W-P16, §13.5.5 W-X1/W-X2): the
 	//host-free rules of the Play edge flows. W-P15 has its own file.
-	public class FirstRunSheetTests
+	//
+	//ADR-0256 Decision 8: the first-run sheet's host-free rules are down to the
+	//choice itself (W-P12's two questions), the storage switch the Settings
+	//surface performs and the startup rule the wizard used to be. The sheet's own
+	//rules - dismissing, closing, the desktop checkboxes and their count - left
+	//with the SetupWizardWindow.
+	public class FirstRunChoiceTests
 	{
 		[Fact]
 		public void Defaults_are_todays_wizard_defaults()
@@ -32,32 +39,115 @@ namespace Mesen.Tests.Play
 			Assert.Equal(arrows, m.Arrows);
 		}
 
-		[Fact]
-		public void Desktop_options_exist_only_off_macOS_and_the_count_follows()
-		{
-			Assert.False(PlayFirstRun.ShowsDesktopOptions(isMacOS: true));
-			Assert.True(PlayFirstRun.ShowsDesktopOptions(isMacOS: false));
-			Assert.Equal(4, PlayFirstRun.ControlCount(isMacOS: true));
-			Assert.Equal(6, PlayFirstRun.ControlCount(isMacOS: false));
-			Assert.True(PlayFirstRun.ControlCount(isMacOS: false) <= 7);
-		}
-
-		[Fact]
-		public void Closing_the_sheet_continues_with_what_is_selected()
-		{
-			FirstRunChoice picked = PlayFirstRun.Defaults with { StoreInUserProfile = false, Keyboard = FirstRunKeyboard.Wasd };
-			Assert.Equal(picked, PlayFirstRun.OnDismiss(picked));
-		}
-
-		//#661: the close button and Esc apply the choice (and an unwritable
-		//folder keeps the sheet); quitting the app or shutting the OS down
-		//writes nothing and never blocks - the sheet shows again next launch.
+		//ADR-0256 Decision 8: the Settings surface's keyboard row reads the
+		//running config's DefaultKeyMappings, the other way round from Mappings.
 		[Theory]
-		[InlineData(false, true)]
-		[InlineData(true, false)]
-		public void Closing_applies_the_choice_unless_the_app_or_the_OS_shuts_down(bool shuttingDown, bool confirms)
+		[InlineData(false, false, FirstRunKeyboard.ArrowKeys)]
+		[InlineData(false, true, FirstRunKeyboard.ArrowKeys)]
+		[InlineData(true, false, FirstRunKeyboard.Wasd)]
+		//Both flags is not a state the first run writes; the default is what the
+		//row shows rather than guessing which half won.
+		[InlineData(true, true, FirstRunKeyboard.ArrowKeys)]
+		public void The_keyboard_row_reads_the_preset_the_config_is_on(bool wasdKeys, bool arrowKeys, FirstRunKeyboard expected)
 		{
-			Assert.Equal(confirms, PlayFirstRun.ConfirmsOnClose(shuttingDown));
+			Assert.Equal(expected, PlayFirstRun.KeyboardOf(wasdKeys, arrowKeys));
+		}
+
+		[Theory]
+		[InlineData(true, "/home/me/.config/MesenAI")]
+		[InlineData(false, "/opt/mesen")]
+		public void A_storage_choice_names_the_folder_the_settings_file_moves_to(bool storeInUserProfile, string expected)
+		{
+			Assert.Equal(expected, PlayFirstRun.Folder(storeInUserProfile, "/home/me/.config/MesenAI", "/opt/mesen"));
+		}
+
+		[Theory]
+		[InlineData("/home/me/.config/MesenAI", true)]
+		[InlineData("/opt/mesen", false)]
+		//The folder next to the app, spelled the way Windows does.
+		[InlineData("/Opt/Mesen", false)]
+		public void The_storage_row_opens_on_the_folder_the_process_runs_from(string currentFolder, bool inUserFolder)
+		{
+			Assert.Equal(inUserFolder, PlayFirstRun.InUserFolder(currentFolder, "/opt/mesen"));
+		}
+
+		//ADR-0256 Decision 8: the home folder is resolved once, before the main
+		//window exists, so a folder the process is not on can only take effect
+		//after the relaunch the wizard's flow ended with. The folder the process
+		//is already on is not a change.
+		[Theory]
+		[InlineData("/home/me/.config/MesenAI", "/opt/mesen", true)]
+		[InlineData("/home/me/.config/MesenAI", "/home/me/.config/MesenAI", false)]
+		[InlineData("/home/me/.config/MesenAI", "/Home/Me/.config/MesenAI", false)]
+		[InlineData("/home/me/.config/MesenAI", "/opt/mesen/", true)]
+		public void A_storage_switch_needs_the_relaunch_and_the_same_folder_does_not(string current, string chosen, bool needsRestart)
+		{
+			Assert.Equal(needsRestart, PlayFirstRun.NeedsRestart(current, chosen));
+		}
+	}
+
+	//ADR-0256 Decision 8: what the startup path is made of, now that the wizard
+	//is out of it. Not a rule inside the app (Program.Main starts a real
+	//application), so it reads the entry point itself - the same way
+	//HudToastStyleRuleTests reads the Core's header and the UI's mirror.
+	public class FirstRunStartupTests
+	{
+		//The wizard's other job: DependencyHelper.ExtractNativeDependencies
+		//unpacks MesenCore.* next to the settings file, and it used to run only
+		//in the branch that show the wizard, before the core could exist. On the
+		//normal path it has to run too - and nothing may return between the home
+		//folder being fixed and it running, or a fresh install boots without the
+		//core.
+		[Fact]
+		public void The_startup_path_extracts_the_native_dependencies_before_it_can_return()
+		{
+			string program = ReadSource("UI", "Program.cs");
+			int home = program.IndexOf("Environment.CurrentDirectory = ConfigManager.HomeFolder;", StringComparison.Ordinal);
+			int extract = program.IndexOf("DependencyHelper.ExtractNativeDependencies(ConfigManager.HomeFolder)", home, StringComparison.Ordinal);
+			Assert.True(home >= 0, "Program.Main no longer fixes the working directory on the home folder");
+			Assert.True(extract > home, "Program.Main no longer extracts the native dependencies on the normal startup path");
+
+			string before = program[home..extract];
+			Assert.DoesNotContain("return ", before);
+			Assert.DoesNotContain("StartWithClassicDesktopLifetime", before);
+		}
+
+		//The wizard left the startup path: no window is built for it, no flag
+		//makes one the app's first window, and the class it lived in is gone.
+		[Fact]
+		public void No_setup_wizard_stands_before_the_main_window()
+		{
+			//Comments name the retired window (that is what they are for), so the
+			//assertions read the code the compiler sees.
+			string program = Code(ReadSource("UI", "Program.cs"));
+			Assert.DoesNotContain("SetupWizardWindow", program);
+			Assert.DoesNotContain("ShowConfigWindow", program);
+
+			string app = Code(ReadSource("UI", "App.axaml.cs"));
+			Assert.DoesNotContain("SetupWizardWindow", app);
+			Assert.DoesNotContain("ShowConfigWindow", app);
+			//The one window the app opens is the main one.
+			Assert.Contains("desktop.MainWindow = new MainWindow();", app);
+		}
+
+		private static string Code(string source)
+		{
+			System.Collections.Generic.List<string> lines = new();
+			foreach(string line in source.Split('\n')) {
+				int comment = line.IndexOf("//", StringComparison.Ordinal);
+				lines.Add(comment < 0 ? line : line[..comment]);
+			}
+			return string.Join('\n', lines);
+		}
+
+		private static string ReadSource(params string[] parts)
+		{
+			DirectoryInfo? dir = new DirectoryInfo(AppContext.BaseDirectory);
+			while(dir != null && !File.Exists(Path.Combine(dir.FullName, "Mesen.sln"))) {
+				dir = dir.Parent;
+			}
+			Assert.NotNull(dir);
+			return File.ReadAllText(Path.Combine(dir!.FullName, Path.Combine(parts)));
 		}
 	}
 
