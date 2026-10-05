@@ -1,8 +1,8 @@
 using System.Diagnostics;
-using Mesen.Config;
+using Mesen.Logic;
 using Xunit;
 
-namespace Mesen.HeadlessTests;
+namespace Mesen.Tests.Config;
 
 //#862: FileAssociationHelper handed a folder to the two update-* helpers as a
 //joined command line, and wrote the Exec= key of mesen.desktop unquoted. Both
@@ -12,7 +12,10 @@ namespace Mesen.HeadlessTests;
 //a ROM does nothing. Neither failure is visible.
 //
 //No process is launched and no Linux is needed here: the two decisions are pure
-//string work, so they live in LinuxFileAssociation and are read back directly.
+//string work, so they live in UI/Logic/LinuxFileAssociation.cs and are read back
+//directly. That placement is the point, not an accident - UI/Logic is what this
+//project dual-compiles, so a rule assertion belongs here and not in
+//UI.HeadlessTests, whose scope is wiring only (UI.HeadlessTests/AGENTS.md).
 //Native-free, so no [Collection] is needed (#432).
 public class LinuxFileAssociationTests
 {

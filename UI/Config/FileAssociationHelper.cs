@@ -1,6 +1,7 @@
 using Avalonia.Platform;
 using Avalonia.Threading;
 using Mesen.Interop;
+using Mesen.Logic;
 using Mesen.Utilities;
 using Microsoft.Win32;
 using System;

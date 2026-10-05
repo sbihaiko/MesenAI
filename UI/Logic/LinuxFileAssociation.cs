@@ -1,7 +1,7 @@
 using System.Diagnostics;
 using System.Text;
 
-namespace Mesen.Config
+namespace Mesen.Logic
 {
 	//Test-facing (ADR-0125, H6): the two pieces of the Linux file-association
 	//writer that can be decided without launching a process, and the two that
