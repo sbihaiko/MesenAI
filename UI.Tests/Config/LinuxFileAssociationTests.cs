@@ -1,3 +1,4 @@
+using System;
 using System.Diagnostics;
 using Mesen.Logic;
 using Xunit;
@@ -112,5 +113,50 @@ public class LinuxFileAssociationTests
 	public void A_literal_percent_f_in_the_path_is_not_the_field_code()
 	{
 		Assert.Equal("\"/home/%%f/Mesen\" %f", LinuxFileAssociation.ExecValue("/home/%f/Mesen", "%f"));
+	}
+
+	//#877: the Exec key cannot represent every path, and the writer used to emit
+	//one anyway. An "=" in the executable's path is refused by the specification
+	//outright - "The name or path of the executable program may not contain the
+	//equal sign (=)" - so no quoting makes the entry valid. Refusing is the fix,
+	//and it belongs where the quoting happens: the value throws instead of
+	//returning an entry the loader rejects.
+	[Theory]
+	[InlineData("/home/u/apps/foo=1/Mesen")]
+	[InlineData("/home/u/a\nb/Mesen")]
+	[InlineData("/home/u/a\rb/Mesen")]
+	[InlineData("/home/u/a\tb/Mesen")]
+	public void A_path_the_exec_key_cannot_represent_is_refused(string path)
+	{
+		Assert.Throws<ArgumentException>(() => LinuxFileAssociation.ExecValue(path, "%f"));
+		Assert.Throws<ArgumentException>(() => LinuxFileAssociation.ExecArgument(path));
+	}
+
+	//The rule is a property of the path alone, so the caller can ask before it
+	//starts building the entry. The reason is what reaches the log: the
+	//alternative - a desktop entry the environment silently rejects - is
+	//exactly the failure #877 is about.
+	[Theory]
+	[InlineData("/home/u/apps/foo=1/Mesen", "=")]
+	[InlineData("/home/u/a\nb/Mesen", "control character")]
+	[InlineData("/home/u/a\tb/Mesen", "control character")]
+	public void An_unrepresentable_path_reports_why(string path, string expectedInReason)
+	{
+		Assert.False(LinuxFileAssociation.CanWriteExecValue(path, out string reason));
+		Assert.Contains(expectedInReason, reason);
+	}
+
+	//The complement, and the one that keeps this fix from being a regression:
+	//everything #862 and #870 taught the quoting to handle is still
+	//representable. Only what has no encoding at all is refused.
+	[Theory]
+	[InlineData(SpacedExecutable)]
+	[InlineData("/home/50%off/Mesen")]
+	[InlineData("/tmp/a\"b/`c/$d\\e/Mesen")]
+	[InlineData("/usr/bin/Mesen")]
+	public void A_path_the_exec_key_can_represent_is_not_refused(string path)
+	{
+		Assert.True(LinuxFileAssociation.CanWriteExecValue(path, out string reason));
+		Assert.Empty(reason);
 	}
 }

@@ -136,6 +136,20 @@ namespace Mesen.Config
 				return;
 			}
 
+			string execValue;
+			try {
+				execValue = LinuxFileAssociation.ExecValue(mainModule.FileName, "%f");
+			} catch(ArgumentException ex) {
+				//#877: the Exec key cannot represent this path (an "=" in it, or a
+				//control character), so there is no valid desktop entry to write.
+				//Writing one anyway produces a file the desktop environment rejects
+				//outright - and the failure is silent, so the reason is logged here.
+				try {
+					EmuApi.WriteLogEntry("[FileAssociation] not writing " + filename + ": " + ex.Message);
+				} catch { }
+				return;
+			}
+
 			string content =
 				"[Desktop Entry]" + Environment.NewLine +
 				"Type=Application" + Environment.NewLine +
@@ -143,7 +157,7 @@ namespace Mesen.Config
 				"Comment=Emulator" + Environment.NewLine +
 				"Keywords=game;emulator;emu" + Environment.NewLine +
 				"Categories=GNOME;GTK;Game;Emulator;" + Environment.NewLine +
-				"Exec=" + LinuxFileAssociation.ExecValue(mainModule.FileName, "%f") + Environment.NewLine +
+				"Exec=" + execValue + Environment.NewLine +
 				"NoDisplay=false" + Environment.NewLine +
 				"StartupNotify=true" + Environment.NewLine +
 				"Icon=MesenIcon" + Environment.NewLine;

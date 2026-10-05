@@ -1,3 +1,4 @@
+using System;
 using System.Diagnostics;
 using System.Text;
 
@@ -60,6 +61,11 @@ namespace Mesen.Logic
 		//must not be processed, so double-clicking a ROM does nothing (#870).
 		public static string ExecArgument(string value)
 		{
+			//Throwing rather than returning an entry the loader rejects: the
+			//caller is what can report the path and skip writing the file (#877).
+			if(!CanWriteExecValue(value, out string reason)) {
+				throw new ArgumentException(reason, nameof(value));
+			}
 			StringBuilder sb = new(value.Length + 2);
 			sb.Append('"');
 			foreach(char c in value) {
@@ -79,6 +85,40 @@ namespace Mesen.Logic
 			}
 			sb.Append('"');
 			return sb.ToString();
+		}
+
+		//The Exec key cannot represent every path, and refusing is the only
+		//honest answer for the two it cannot (#877). Quoting does not help
+		//either of them:
+		//
+		//  - an "=" in the executable's path. The specification's Exec key
+		//    states it outright: "The name or path of the executable program may
+		//    not contain the equal sign (=)". No amount of quoting removes it,
+		//    so the entry is invalid however it is written.
+		//  - a control character, the line breaks above all. A .desktop file is
+		//    line-based, so a raw newline inside the quoted argument ends the
+		//    Exec= line and corrupts every key after it. The general escape rule
+		//    ("\n", "\t", "\r") belongs to string *values* and is not part of
+		//    the Exec quoting rules, so it cannot encode one here.
+		//
+		//A tab and every other character below the printable range are refused
+		//with them: the file is text and the value is one line, and a path
+		//holding a control character is not one a user wrote on purpose. The
+		//caller is what reports the reason and skips writing the desktop entry.
+		public static bool CanWriteExecValue(string executablePath, out string reason)
+		{
+			if(executablePath.Contains('=')) {
+				reason = "the executable path contains '=', which the Exec key forbids";
+				return false;
+			}
+			foreach(char c in executablePath) {
+				if(c < 0x20 || c == 0x7f) {
+					reason = "the executable path contains a control character (U+" + ((int)c).ToString("X4") + "), which a desktop entry cannot carry";
+					return false;
+				}
+			}
+			reason = "";
+			return true;
 		}
 	}
 }
