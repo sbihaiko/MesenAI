@@ -71,6 +71,27 @@ internal static class MainWindowStartup
 				}
 			}
 		} finally {
+			//#840: the windows go with the test that showed them, and this is the
+			//other half of the #619 fix above. Waiting for the work a window started
+			//is not enough while the window itself stays open: an open window keeps a
+			//50 ms DispatcherTimer of its own (PlayPadNavigationWiring.Attach, one per
+			//MainWindow) and whatever else it wired, so a tick can land after this
+			//test ended and the next test's session setup fails in
+			//HeadlessUnitTestSession.EnsureIsolatedApplication with
+			//"The calling thread cannot access this object because a different thread
+			//owns it" - reported at 1 ms, as a *cleanup* failure of the case that
+			//happens to run next, which is what #840 sees.
+			//
+			//Closing runs MainWindow's exit path, which releases the process-global
+			//core (EmuApi.Release cannot be undone in one process), so ReleaseCore is
+			//set first: MainWindow.axaml.cs names the hook for exactly this, and the
+			//tests that follow still need the core. EmuApi.Stop still runs, so a game
+			//a test left loaded is stopped here rather than by the next test's
+			//constructor (#790).
+			foreach(MainWindow window in Shown) {
+				window.ReleaseCore = () => { };
+				window.Close();
+			}
 			Shown.Clear();
 		}
 	}
