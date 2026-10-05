@@ -629,12 +629,19 @@ namespace Mesen.Tests.Play
 		[Theory]
 		[InlineData("contra.nes", RomConsole.Nes)]
 		[InlineData("game.unif", RomConsole.Nes)]
+		[InlineData("game.unf", RomConsole.Nes)]
 		[InlineData("disk.fds", RomConsole.Nes)]
 		[InlineData("tetris.gb", RomConsole.GameBoy)]
+		[InlineData("kirby.gbx", RomConsole.GameBoy)]
 		[InlineData("shantae.gbc", RomConsole.GameBoyColor)]
 		[InlineData("metroid.gba", RomConsole.GameBoyAdvance)]
 		[InlineData("sonic.sms", RomConsole.MasterSystem)]
 		[InlineData("columns.gg", RomConsole.GameGear)]
+		//SG-1000, not Master System: the core runs both out of one SmsConsole
+		//(Core/SMS/SmsConsole.cpp picks SmsModel::Sg for `.sg`), but the app
+		//associates `.sg` with SG-1000 and `.sms` with SMS as two separate
+		//settings, and the two libraries are two machines on disk.
+		[InlineData("flicky.sg", RomConsole.Sg1000)]
 		//An archive, a save, another machine's ROM, and no extension at all.
 		[InlineData("contra.zip", RomConsole.Unknown)]
 		[InlineData("contra.7z", RomConsole.Unknown)]
@@ -762,6 +769,28 @@ namespace Mesen.Tests.Play
 
 			Assert.Contains(suggestions, s => s.Console == RomConsole.GameBoyAdvance);
 			Assert.Single(suggestions, s => s.Console == RomConsole.Nes);
+		}
+
+		//SG-1000 and Master System are one console to the core and two machines to
+		//the player, so the one-row rule must not merge them. Merged, a player
+		//holding a library of each is offered only the larger one - the other
+		//machine's games cannot be reached from the picker at all. Found by
+		//adversarial review (grok 2026-10-05, PR #889): `.sg` was mapped to
+		//MasterSystem, so this is the case that pins the fix.
+		[Fact]
+		public void An_sg1000_library_is_not_collapsed_into_the_master_system_one()
+		{
+			IReadOnlyList<RomPickerSuggestion> suggestions = PlayRomPicker.Suggestions(new[] {
+				new RomPickerHit(R("/home/sms"), 40, RomConsole.MasterSystem),
+				new RomPickerHit(R("/home/sg1000"), 6, RomConsole.Sg1000)
+			}, Roots);
+
+			Assert.Equal(
+				new[] { R("/home/sms"), R("/home/sg1000") },
+				suggestions.Select(s => s.Folder).ToArray());
+			Assert.Equal(
+				new[] { RomConsole.MasterSystem, RomConsole.Sg1000 },
+				suggestions.Select(s => s.Console).ToArray());
 		}
 
 		//A folder whose console could not be named is not a console, so it cannot

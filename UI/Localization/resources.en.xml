@@ -2643,6 +2643,7 @@ E
 		<Message ID="RomConsoleGameBoyColor">Game Boy Color</Message>
 		<Message ID="RomConsoleGameBoyAdvance">Game Boy Advance</Message>
 		<Message ID="RomConsoleMasterSystem">Master System</Message>
+		<Message ID="RomConsoleSg1000">SG-1000</Message>
 		<Message ID="RomConsoleGameGear">Game Gear</Message>
 		<Message ID="LoadFailedTitleNotAGame">“{0}” is not a game MesenAI can open.</Message>
 		<Message ID="LoadFailedBodyNotAGame">MesenAI opens NES, Game Boy, Game Boy Color, Master System and Game Boy Advance games, or a zip holding one.</Message>

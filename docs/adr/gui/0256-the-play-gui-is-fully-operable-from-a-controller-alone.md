@@ -474,10 +474,13 @@ place.
    - **The decision.** `RomConsole` (`UI/Logic/RomConsoleKinds.cs`) is the
      consoles this emulator runs, and the ONE table of which extension is which:
      `RomFileKinds.IsRomFile` asks it rather than keeping a second copy. The
-     granularity is the player's, not the core's - the core files Game Gear under
-     its `Sms` type and has no Game Boy Color at all, but `.gg` and `.gbc`
-     libraries are different machines to the person reading the row, which the
-     exit message (`LoadFailedBodyNotAGame`) already says.
+     granularity is the player's, not the core's - the core files Game Gear
+     **and SG-1000** under its one `Sms` type and has no Game Boy Color at all,
+     but `.gg`, `.sg` and `.gbc` libraries are different machines to the person
+     reading the row. The app's own settings already draw that line exactly where
+     the ROM files are associated: `chkSmsRomFiles` is "SMS roms: .sms",
+     `chkGameGearRomFiles` is "Game Gear roms: .gg" and `chkSgRomFiles` is
+     "SG-1000 roms: .sg" - three settings, three platforms.
      The walk **names each hit's console from the file names it has already
      listed**, so it costs no extra read, and the suggestions are **one row per
      console**, the console with the biggest library leading. The label is
@@ -493,6 +496,22 @@ place.
      dropped the Master System and Game Boy Advance libraries entirely. The cap
      is shared, so the row that stands for a console must not be able to starve
      another console.
+   - **SG-1000 was folded into Master System, and adversarial review caught it.**
+     The first version of `RomConsoleKinds` mapped `.sg` to
+     `RomConsole.MasterSystem`. That is defensible read off the core alone -
+     `Core/SMS/SmsConsole.cpp` builds one `SmsConsole` for both and picks
+     `SmsModel::Sg` versus `SmsModel::Sms` from the file's extension - but it is
+     wrong against this decision's own rule two paragraphs up, and it was
+     inconsistent with `.gg`, which the same code path files identically under
+     `Sms` and which this table *does* keep separate. The consequence is the one
+     the one-row rule makes severe: a player holding both a `.sms` library and a
+     `.sg` one is offered **only the larger**, and the other machine's games are
+     unreachable from the picker. Found by the review of PR #889 (grok,
+     2026-10-05), which requested changes on exactly this: *"a `roms` folder of
+     only `.sg` files is named Master System ... so beside a `.sms` library the
+     one-row rule keeps only the larger folder and the other console is not
+     offered."* `RomConsole.Sg1000` now exists, `.sg` maps to it, and
+     `An_sg1000_library_is_not_collapsed_into_the_master_system_one` pins it.
    - **What this deliberately does not do: refuse the Atari folder.** The report
      asked for it and the extension cannot deliver it. `Asteroids (USA).zip` and
      a zipped NES library are indistinguishable by name, and the ADR's own rule

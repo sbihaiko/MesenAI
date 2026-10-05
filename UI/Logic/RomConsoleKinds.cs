@@ -18,11 +18,22 @@ namespace Mesen.Logic;
 //No display word lives here: a console name is shown to the player, so it comes
 //from the locale files like every other string the player reads (the caller
 //resolves it, the way the roots' labels already do).
-//The granularity is the player's, not the core's: the core files Game Gear
-//under its Sms console type (InteropEnums.ConsoleType) and has no Game Boy
-//Color at all, but a folder of `.gg` files is a different machine to the person
-//reading the row, and the exit message already tells them so
-//(LoadFailedBodyNotAGame lists Game Boy and Game Boy Color separately).
+//The granularity is the player's, not the core's: the core files Game Gear and
+//SG-1000 under its one Sms console type (InteropEnums.ConsoleType, which has no
+//member for either) and has no Game Boy Color at all, but a folder of `.gg`
+//files or of `.sg` files is a different machine to the person reading the row.
+//The app's own settings already draw that line where the ROM files are
+//associated: "Game Gear roms: .gg" and "SG-1000 roms: .sg" are two separate
+//settings beside "SMS roms: .sms" (resources.en.xml, chkGameGearRomFiles /
+//chkSgRomFiles / chkSmsRomFiles).
+//
+//Folding SG-1000 into MasterSystem is the mistake this comment exists to
+//prevent, and it was made: the two are one console to the core
+//(Core/SMS/SmsConsole.cpp reads the file's extension to pick SmsModel::Sg or
+//SmsModel::Sms inside the same SmsConsole), so treating them as one row here
+//looks tidy - until a library of each is on disk and the one-row-per-console
+//rule (PlayRomPicker.Suggestions) offers only the larger one. That is a whole
+//machine's library the player cannot reach.
 public enum RomConsole
 {
 	Unknown = 0,
@@ -31,6 +42,9 @@ public enum RomConsole
 	GameBoyColor,
 	GameBoyAdvance,
 	MasterSystem,
+	//SG-1000 is the Master System's predecessor and shares its core, but not its
+	//library: a `.sg` file is a different machine from a `.sms` one.
+	Sg1000,
 	GameGear
 }
 
@@ -59,7 +73,10 @@ public static class RomConsoleKinds
 		[".gba"] = RomConsole.GameBoyAdvance,
 
 		[".sms"] = RomConsole.MasterSystem,
-		[".sg"] = RomConsole.MasterSystem,
+		//Not MasterSystem: see the enum's own comment. `.sg` is the extension the
+		//app associates with SG-1000, and it is the one that made the core pick
+		//SmsModel::Sg rather than SmsModel::Sms.
+		[".sg"] = RomConsole.Sg1000,
 
 		[".gg"] = RomConsole.GameGear
 	};
