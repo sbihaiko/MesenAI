@@ -190,17 +190,30 @@ namespace
 	//the files this install wrote through it are the ones removed), and a real
 	//directory keeps its inode, mode and owner. `remove_all` on the folder would
 	//do neither.
+	//Deliberately not a range-for: that increments with the *throwing*
+	//`operator++`, so a readdir/FindNextFile failure would escape `Install` as an
+	//exception across the C API, where everything else here reports through
+	//`ec`. `increment(ec)` keeps the failure in the same channel.
 	void RemoveFolderContents(const string& folder, std::error_code& ec)
 	{
-		fs::directory_iterator it(fs::u8path(folder), ec);
-		if(ec) {
+		std::error_code iterEc;
+		fs::directory_iterator it(fs::u8path(folder), iterEc), end;
+		if(iterEc) {
+			ec = iterEc;
 			return;
 		}
-		for(const fs::directory_entry& entry : it) {
+		while(it != end) {
 			std::error_code entryEc;
-			fs::remove_all(entry.path(), entryEc);
+			fs::remove_all(it->path(), entryEc);
 			if(entryEc && !ec) {
 				ec = entryEc;
+			}
+			it.increment(iterEc);
+			if(iterEc) {
+				if(!ec) {
+					ec = iterEc;
+				}
+				return;
 			}
 		}
 	}
