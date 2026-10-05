@@ -506,6 +506,12 @@ namespace Mesen.Services
 					Directory.Delete(outFolder, true);
 				}
 			} catch(Exception ex) when(ex is IOException or UnauthorizedAccessException) {
+				//A partial delete - a scanner holding one of the files, say -
+				//leaves exactly what this is here to prevent: a half-written,
+				//unstamped folder the next install refuses as the user's own
+				//(#878). The swallow stays, since the install that called this
+				//may still be fine, but silence would make the block inexplicable.
+				EmuApi.WriteLogEntry("[CommunityPackInstall] could not clear " + outFolder + ": " + ex.Message);
 			}
 		}
 

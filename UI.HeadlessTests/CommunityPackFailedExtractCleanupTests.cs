@@ -59,9 +59,11 @@ public class CommunityPackFailedExtractCleanupTests : IDisposable
 			LegacyEntry(), WritePartlyExtractableZip(), new Dictionary<string, string>(), _game);
 
 		Assert.Equal(CommunityPackInstallStatus.Failed, failed.Status);
-		//"cannot extract" is the IOException path - the write died partway. A
-		//clean refusal ("not a legacy HD pack") would not carry a half-written
-		//folder, so the test would not be exercising #878 at all.
+		//Pins that this is the mid-write family, the one the issue describes: a
+		//clean refusal returns "not a legacy HD pack" instead. The fix is not
+		//only for it, though - TryExtractLegacyPack creates textures/ before it
+		//even opens the zip, so every extraction failure used to leave a blocking
+		//folder, and they all reach the branch cleared below.
 		Assert.Contains("cannot extract legacy HD pack", failed.Message);
 
 		//The refusal left nothing: the folder is as it was found (absent), so the
