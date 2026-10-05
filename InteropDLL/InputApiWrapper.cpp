@@ -29,10 +29,14 @@ extern "C"
 		}
 	}
 
-	DllExport void __stdcall GetPressedKeys(uint16_t* keyBuffer)
+	//capacity is the host's buffer length, handed over explicitly (#895): the
+	//copy loop stops at the caller's bound, not at a literal repeated here, so
+	//the two sides cannot drift and the host never silently loses a held key
+	//past the third. The caller leaves the remaining slots zero (the sentinel).
+	DllExport void __stdcall GetPressedKeys(uint16_t* keyBuffer, int32_t capacity)
 	{
 		vector<uint16_t> pressedKeys = KeyManager::GetPressedKeys();
-		for(size_t i = 0; i < pressedKeys.size() && i < 3; i++) {
+		for(size_t i = 0; i < pressedKeys.size() && i < (size_t)capacity; i++) {
 			keyBuffer[i] = pressedKeys[i];
 		}
 	}
