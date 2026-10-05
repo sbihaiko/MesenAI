@@ -135,6 +135,13 @@ public class PlayerControllerSheetTests : IDisposable
 			.GetValue(sheet);
 	}
 
+	//The REMAP rows as the player sees them: the ItemsControl's realized containers,
+	//which is what a view-model-level assertion cannot tell apart from a stale list.
+	private static Button[] RemapRows(Visual root)
+	{
+		return root.FindAll<Button>().Where(b => b.Name == "ControllerSheetRemapRow").ToArray();
+	}
+
 	//A gamepad key as the key manager numbers it (0x1000 + device*0x100 + button):
 	//what "which pad" is read from, since a port is only a ControllerConfig.
 	private static ushort PadButton(int device, int button) => (ushort)(ControllerDevices.BaseGamepadIndex + device * 0x100 + button);
@@ -1301,6 +1308,7 @@ public class PlayerControllerSheetTests : IDisposable
 			sheet.ApplyPad();
 
 			sheet.ArmRemap(SetupButton.A);
+			string armNote = sheet.RemapNote;
 			//Released, then the pad's own Confirm is pressed - the control the
 			//player opens menus with, and the one they would be stuck behind if it
 			//were bound here.
@@ -1310,7 +1318,14 @@ public class PlayerControllerSheetTests : IDisposable
 
 			Assert.True(sheet.IsCapturing);
 			Assert.Equal(0, ConfigManager.Config.Nes.Port1.Mapping1.A);
-			Assert.NotEqual("", sheet.RemapNote);
+			//The refusal *replaced* the arm note, and is not a bind. "Something was
+			//said" would not do: the note the arm put there ("Press the controller
+			//button for A - Esc cancels.") is non-empty and carries no "is now", so
+			//that assertion held whether the refusal was shown or swallowed - which
+			//is the one thing this case exists to tell apart. The refusal's own text
+			//is not readable from this project (ResourceHelper is internal), so the
+			//note it replaced is what stands in for it.
+			Assert.NotEqual(armNote, sheet.RemapNote);
 			Assert.DoesNotContain("is now", sheet.RemapNote);
 		} finally {
 			ConfigManager.Config.Nes = saved;
@@ -1464,6 +1479,149 @@ public class PlayerControllerSheetTests : IDisposable
 			//Back where the sheet came from, and the door is the player's again.
 			Assert.False(sheet.IsVisible);
 			Assert.True(model.IsPlayerOverlayVisible);
+		} finally {
+			ConfigManager.Config.Nes = saved;
+		}
+	}
+
+	//The REMAP rows are the loaded console's controls, and the console can change
+	//under one sheet: the view-model is built once per window
+	//(MainWindowViewModel.ControllerSheet) and only toggled, so opening the sheet on
+	//one console, closing it and loading another in the same session takes the
+	//rebuild path. The rows have to be handed over as a *fresh* list - re-assigning
+	//the one already bound notifies nobody (the generated setter skips an equal
+	//reference, and List<T> raises no collection change) - or the ItemsControl keeps
+	//the previous console's containers, frozen, because ApplyRemapRows then only
+	//touches the new objects. Asserted on the containers the player sees, which is
+	//where the difference is: RemapRows itself holds the new rows either way.
+	[AvaloniaFact]
+	public void The_remap_rows_follow_the_console_the_sheet_is_over()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model) = ShowPlayWithGame();
+		OpenFromSettings(window, model);
+		ControllerSheetViewModel sheet = model.ControllerSheet;
+		Poll(sheet)!.Stop();
+
+		NesConfig savedNes = SavedNes();
+		SmsConfig savedSms = ConfigManager.Config.Sms.Clone();
+		try {
+			ConfigManager.Config.Nes.Port1 = new NesControllerConfig();
+			ConfigManager.Config.Nes.Port2 = new NesControllerConfig();
+			ConfigManager.Config.Sms.Port1 = new SmsControllerConfig();
+			ConfigManager.Config.Sms.Port2 = new SmsControllerConfig();
+			sheet.Tester.Gamepads.Add(new GamepadTestItem(0) { Name = "Pad Zero", Backend = GamepadBackend.GameController });
+			sheet.PressedKeys = () => Array.Empty<ushort>();
+			sheet.CurrentConsole = () => ConsoleType.Nes;
+			sheet.ApplyPad();
+			window.UpdateLayout();
+			Dispatcher.UIThread.RunJobs();
+
+			//The NES pad's eight controls, on screen.
+			Assert.Equal(8, RemapRows(window).Length);
+
+			//The game changes under the same sheet.
+			sheet.CurrentConsole = () => ConsoleType.Sms;
+			sheet.ApplyPad();
+			window.UpdateLayout();
+			Dispatcher.UIThread.RunJobs();
+
+			//The Master System pad's six, and none of the NES ones left behind.
+			Button[] rows = RemapRows(window);
+			Assert.Equal(6, rows.Length);
+			Assert.Equal(new[] { "1", "2", "Down", "Left", "Right", "Up" },
+				rows.Select(r => ((ControllerSheetRemapRow)r.DataContext!).Label).OrderBy(l => l, StringComparer.Ordinal).ToArray());
+		} finally {
+			ConfigManager.Config.Nes = savedNes;
+			ConfigManager.Config.Sms = savedSms;
+		}
+	}
+
+	//REMAP edits the port that *holds* the selected pad's keys, in any of its slots.
+	//A port whose first named slot holds one pad and a later slot another is a state
+	//the classic Input page can make, and reading only the first slot (PortDevice)
+	//matched no port and fell back to the first one - writing the rebind over the
+	//other player's bindings (found in review).
+	[AvaloniaFact]
+	public void A_rebind_lands_on_the_port_that_holds_the_pads_keys()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model) = ShowPlayWithGame();
+		OpenFromSettings(window, model);
+		ControllerSheetViewModel sheet = model.ControllerSheet;
+		Poll(sheet)!.Stop();
+		sheet.CurrentConsole = () => ConsoleType.Nes;
+
+		NesConfig saved = SavedNes();
+		try {
+			ConfigManager.Config.Nes.Port1 = new NesControllerConfig();
+			ConfigManager.Config.Nes.Port2 = new NesControllerConfig();
+			//Port2's first slot holds pad 0, its second the pad the sheet shows.
+			ConfigManager.Config.Nes.Port2.Mapping1.A = PadButton(0, 0);
+			ConfigManager.Config.Nes.Port2.Mapping2.A = PadButton(1, 0);
+
+			sheet.Tester.Gamepads.Add(new GamepadTestItem(0) { Name = "Pad Zero", Backend = GamepadBackend.GameController });
+			//The slot is the pad's own key block, and the ctor does not set it.
+			sheet.Tester.Gamepads.Add(new GamepadTestItem(1) { Name = "Pad One", Backend = GamepadBackend.GameController, Slot = 1 });
+			sheet.SelectedPadIndex = 1;
+			sheet.PressedKeys = () => Array.Empty<ushort>();
+			sheet.ApplyPad();
+
+			sheet.ArmRemap(SetupButton.B);
+			ushort x = PadButton(1, 2);
+			sheet.PressedKeys = () => new ushort[] { x };
+			sheet.RefreshRemap();
+
+			//The write went to Port2, where pad 1's keys live, and left Port1 - the
+			//other player's port - alone.
+			Assert.Equal(0, ConfigManager.Config.Nes.Port1.Mapping1.A);
+			Assert.Equal(0, ConfigManager.Config.Nes.Port1.Mapping1.B);
+			Assert.Contains(Enumerable.Range(0, 4),
+				slot => ControllerSheetSlotWrite.Slot(ConfigManager.Config.Nes.Port2, slot).B == x);
+		} finally {
+			ConfigManager.Config.Nes = saved;
+		}
+	}
+
+	//A capture is a mode of the sheet's *reads*, so it goes with them - the same
+	//rule the pad going away and the sheet closing already follow. A pad shortcut
+	//resumes the game under the sheet (the Esc router does not route it), the reads
+	//stop, and the capture's baseline freezes at the pressed set from before the
+	//resume: the first tick after the player pauses again then reads whatever they
+	//are holding by then - a button pressed only to play - as a new press and binds
+	//it (found in review).
+	[AvaloniaFact]
+	public void A_game_that_resumes_under_the_sheet_ends_the_capture()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model) = ShowPlayWithGame();
+		OpenFromSettings(window, model);
+		ControllerSheetViewModel sheet = model.ControllerSheet;
+		Poll(sheet)!.Stop();
+		sheet.CurrentConsole = () => ConsoleType.Nes;
+
+		NesConfig saved = SavedNes();
+		try {
+			ConfigManager.Config.Nes.Port1 = new NesControllerConfig();
+			ConfigManager.Config.Nes.Port2 = new NesControllerConfig();
+			sheet.Tester.Gamepads.Add(new GamepadTestItem(0) { Name = "Pad Zero", Backend = GamepadBackend.GameController });
+			sheet.PressedKeys = () => Array.Empty<ushort>();
+			sheet.ApplyPad();
+
+			sheet.ArmRemap(SetupButton.A);
+			Assert.True(sheet.IsCapturing);
+
+			//The game resumes under the sheet, the player plays, and pauses again.
+			sheet.IsPaused = () => false;
+			Tick(sheet);
+			sheet.PressedKeys = () => new ushort[] { PadButton(0, 2) };
+			sheet.IsPaused = () => true;
+			sheet.ApplyPad();
+
+			Assert.False(sheet.IsCapturing);
+			//Nothing was bound: that button went down while the reads were stopped,
+			//so it is not a press of this capture's.
+			Assert.Equal(0, ConfigManager.Config.Nes.Port1.Mapping1.A);
 		} finally {
 			ConfigManager.Config.Nes = saved;
 		}

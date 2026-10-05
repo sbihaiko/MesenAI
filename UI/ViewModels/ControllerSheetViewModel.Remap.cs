@@ -60,35 +60,29 @@ namespace Mesen.ViewModels
 		public Func<string, ushort> KeyCode { get; set; } = InputApi.GetKeyCode;
 
 		private readonly ControllerSheetCapture _capture = new();
-		private readonly List<ControllerSheetRemapRow> _remapRows = new();
+		private List<ControllerSheetRemapRow> _remapRows = new();
 		private ConsoleType? _remapConsole;
 
-		//Which port the REMAP rows edit: the port the selected pad's keys live in -
-		//the read PLAYERS names a device by, so the row and the player agree - else
-		//the first port, which is where W-P15's setup writes and the port a pad has
-		//to reach before it can be assigned at all. The lights are that port's: what
-		//the console receives for the player this pad plays as.
+		//Which port the REMAP rows edit: the port that *holds* the selected pad's
+		//keys, in any of its slots - not only the slot PLAYERS names it by. A port
+		//whose first named slot holds one pad and a later slot another is a
+		//configuration the classic Input page can make, and reading only the first
+		//(PortDevice) sent that pad's rebind to the first port instead, over the
+		//other player's bindings (found in review). Else the first port, which is
+		//where W-P15's setup writes and the port a pad has to reach before it can be
+		//assigned at all. The lights are that port's: what the console receives for
+		//the player this pad plays as.
 		private int RemapPortIndex(IReadOnlyList<SheetPort> ports)
 		{
 			if(Pad is GamepadTestItem pad) {
 				int block = ControllerDevices.PadBlock(pad.Backend, (int)pad.Slot);
 				for(int i = 0; i < ports.Count; i++) {
-					if(ControllerSheetPorts.PortDevice(ports[i]) == block) {
+					if(ControllerSheetPorts.HoldsDevice(ports[i], block)) {
 						return i;
 					}
 				}
 			}
 			return ports.Count > 0 ? 0 : -1;
-		}
-
-		//The Master System pad's two buttons are 1 and 2 (KeyMapping A/B) - W-P15's
-		//own naming, so the two surfaces read alike.
-		private static string ControlLabel(ConsoleType console, SetupButton button)
-		{
-			if(console == ConsoleType.Sms && button is SetupButton.A or SetupButton.B) {
-				return button == SetupButton.A ? "1" : "2";
-			}
-			return button.ToString();
 		}
 
 		//The code the port's slots bind for this control: the first non-zero field
@@ -144,14 +138,20 @@ namespace Mesen.ViewModels
 
 			//The rows are rebuilt only when the console (or its control list)
 			//changes, so a 60 Hz read updates them in place instead of rebuilding
-			//every row on screen each tick.
+			//every row on screen each tick. The rebuild hands over a *fresh* list:
+			//re-assigning the one already bound notifies nobody ([ObservableProperty]
+			//skips an equal reference and List<T> raises no collection change), so the
+			//section kept the previous console's rows on screen - frozen, because
+			//ApplyRemapRows then only touches the new objects. The PLAYERS rows assign
+			//a fresh list for the same reason (found in review).
 			if(console != _remapConsole || _remapRows.Count != controls.Count) {
 				_remapConsole = console;
-				_remapRows.Clear();
+				List<ControllerSheetRemapRow> rows = new();
 				foreach(SetupButton button in controls) {
-					_remapRows.Add(new ControllerSheetRemapRow(button, ControlLabel(console, button)));
+					rows.Add(new ControllerSheetRemapRow(button, ControllerSheetRemap.ControlLabel(console, button)));
 				}
-				RemapRows = _remapRows;
+				_remapRows = rows;
+				RemapRows = rows;
 			}
 
 			IReadOnlyList<ushort> pressed = PressedKeys();
@@ -205,7 +205,7 @@ namespace Mesen.ViewModels
 			IsCapturing = true;
 			//The armed state is on screen, not only in the model: the note names the
 			//control being captured, and says how to get out.
-			RemapNote = ResourceHelper.GetMessage("ControllerSheetRemapArm", ControlLabel(CurrentConsole(), button));
+			RemapNote = ResourceHelper.GetMessage("ControllerSheetRemapArm", ControllerSheetRemap.ControlLabel(CurrentConsole(), button));
 			RefreshRemap();
 		}
 
@@ -256,7 +256,7 @@ namespace Mesen.ViewModels
 			ControllerSheetSlotWrite.SetField(ControllerSheetSlotWrite.Slot(config, slot), button, code);
 			ConfigManager.Config.ApplyConfig();
 			ConfigManager.Config.Save();
-			RemapNote = ResourceHelper.GetMessage("ControllerSheetRemapBound", ControlLabel(console, button), KeyName(code));
+			RemapNote = ResourceHelper.GetMessage("ControllerSheetRemapBound", ControllerSheetRemap.ControlLabel(console, button), KeyName(code));
 		}
 	}
 }

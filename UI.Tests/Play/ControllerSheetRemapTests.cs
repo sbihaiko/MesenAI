@@ -39,6 +39,26 @@ namespace Mesen.Tests.Play
 			Assert.Empty(ControllerSheetRemap.Controls(ConsoleType.PcEngine));
 		}
 
+		//The Master System's two buttons are the console's own 1 and 2, and which
+		//*field* carries which is the core's answer: GetKeyNames() is "UDLR12P", so
+		//button 1 is the field the core reads as B and button 2 the one it reads as
+		//A (SmsController.h), and the classic page's own view draws Mapping.B as "1"
+		//and Mapping.A as "2" (SmsControllerView.axaml). A row labelled "1" has to
+		//write the field the console calls button 1, or the player binds a button
+		//they did not pick - which is what this surface did while it kept a private
+		//copy of the swap.
+		[Fact]
+		public void The_master_system_rows_are_named_the_way_the_console_names_them()
+		{
+			Assert.Equal("2", ControllerSheetRemap.ControlLabel(ConsoleType.Sms, SetupButton.A));
+			Assert.Equal("1", ControllerSheetRemap.ControlLabel(ConsoleType.Sms, SetupButton.B));
+			//The pad's own controls keep their names, and every other console is
+			//untouched by the rule.
+			Assert.Equal("Up", ControllerSheetRemap.ControlLabel(ConsoleType.Sms, SetupButton.Up));
+			Assert.Equal("A", ControllerSheetRemap.ControlLabel(ConsoleType.Nes, SetupButton.A));
+			Assert.Equal("B", ControllerSheetRemap.ControlLabel(ConsoleType.Gameboy, SetupButton.B));
+		}
+
 		//Where a rebind lands: the slot that already binds the control, so a
 		//rebind replaces its own binding; else the first slot that binds nothing at
 		//all; else nothing, and the sheet refuses rather than overwriting a slot.
@@ -74,6 +94,8 @@ namespace Mesen.Tests.Play
 		[InlineData("Pad1 Up", GamepadBackend.Evdev, null)]   //evdev's D-pad is axes, not a button
 		[InlineData("Joy1 But1", GamepadBackend.DirectInput, null)] //no console name in that family
 		[InlineData("Space", GamepadBackend.GameController, null)]  //a keyboard key: no device prefix
+		[InlineData("Page Up", GamepadBackend.GameController, null)]   //a keyboard key that *ends* in a pad button's name
+		[InlineData("Page Down", GamepadBackend.XInput, null)]
 		[InlineData("Pad1 ", GamepadBackend.GameController, null)]  //nothing after the device
 		[InlineData("Pad1 Foo", GamepadBackend.GameController, null)]
 		public void A_bound_code_names_the_pads_own_button(string keyName, GamepadBackend backend, int? bit)

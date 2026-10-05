@@ -234,6 +234,20 @@ namespace Mesen.Tests.Play
 			Assert.Empty(move.Slots);
 		}
 
+		//The same read, as a question the sheet asks on its own: which port holds
+		//this pad. REMAP picks the port it edits by it, so a pad whose keys sit in a
+		//later slot of a port whose first named slot holds another device is found
+		//where it is instead of falling back to the first port - which would write
+		//the rebind over the other player's bindings.
+		[Fact]
+		public void A_port_holds_a_device_bound_in_a_later_slot_too()
+		{
+			SheetPort port = Port("Port2", 2, new[] { PadKey(1, 0) }, new[] { PadKey(2, 0) });
+			Assert.Equal(0x1100, ControllerSheetPorts.PortDevice(port));
+			Assert.True(ControllerSheetPorts.HoldsDevice(port, 0x1200));
+			Assert.False(ControllerSheetPorts.HoldsDevice(port, 0x1300));
+		}
+
 		//The read/plan half of the assignment the write side must agree with: a pad
 		//whose keys live ONLY in the port type's own custom-button array is still
 		//that device's keys, so the plan must move it out of that slot. PlanMove

@@ -152,6 +152,14 @@ namespace Mesen.ViewModels
 			//start again on a later tick if the game pauses once more.
 			if(ControllerSheetReads.Wanted(IsVisible, IsPaused())) {
 				Refresh();
+			} else if(IsCapturing) {
+				//ADR-0255 slice 3: the capture is a mode of the reads, so it goes
+				//with them - the same rule the pad going away and the sheet closing
+				//already follow. Frozen, its baseline is the pressed set from before
+				//the game resumed, and the first tick after a re-pause reads whatever
+				//the player is holding by then - a button pressed only to play - as a
+				//new press and binds it (found in review).
+				EndCapture();
 			}
 		}
 

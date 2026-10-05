@@ -56,6 +56,18 @@
     the bridge without authority for the rest of the session - the pad moved no
     focus and confirmed nothing anywhere in the Play door. The case is
     `Closing_the_sheet_ends_the_capture_it_was_in`.
+  Four more defects the same review found are fixed in the slice, each with a
+  RED: the Master System rows were labelled with the console's buttons the wrong
+  way round (the core's `GetKeyNames()` is "UDLR12P", so the field it reads as B
+  is button 1 and the field it reads as A is button 2; W-P15's older copy of the
+  swap is fixed with it, through the one rule in
+  `ControllerSheetRemap.ControlLabel`); a game resumed by a pad shortcut left the
+  capture armed with a frozen baseline, so the first tick after a re-pause bound
+  whatever the player was holding by then - a button pressed only to play; a port
+  holding two devices in different slots sent the rebind to the first port instead
+  of the one holding the pad's keys; and a keyboard binding named "Page Up" or
+  "Page Down" lit a row's pad side, because the name was matched from its second
+  word on.
   Three limits are carried rather than solved: a rebind does not clear the same
   pad button from another control, the port light reads the first non-zero field
   across the port's four slots, and the section was never visually evaluated with

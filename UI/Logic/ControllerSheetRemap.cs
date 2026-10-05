@@ -35,6 +35,23 @@ public static class ControllerSheetRemap
 		};
 	}
 
+	//The console's own name for a control, as a row shows it. Almost every control
+	//is its own name; the Master System pad's two buttons are the console's 1 and
+	//2, and which field carries which is the *core's* answer, not a preference:
+	//GetKeyNames() is "UDLR12P" (SmsController.h), so button 1 is the field the
+	//core reads as B and button 2 the one it reads as A, and the classic page's
+	//own view draws Mapping.B as "1" and Mapping.A as "2" (SmsControllerView.axaml).
+	//A row labelled "1" has to write the field the console calls button 1, or the
+	//player binds a button they did not pick - which is what both surfaces did
+	//before this rule was shared (found in review).
+	public static string ControlLabel(ConsoleType console, SetupButton button)
+	{
+		if(console == ConsoleType.Sms && button is SetupButton.A or SetupButton.B) {
+			return button == SetupButton.A ? "2" : "1";
+		}
+		return button.ToString();
+	}
+
 	//Where a rebind lands among the port's four slots: the slot that already
 	//binds this control, so a rebind replaces its own binding and cannot leave
 	//the old key behind in another slot; else the first slot that binds nothing
@@ -59,13 +76,23 @@ public static class ControllerSheetRemap
 
 	//The pad's own button a bound key code names, by the core's name for that
 	//button - the per-backend order slice 1 reads through ControllerLivePad. The
-	//device prefix is ignored on purpose (see Lights): a binding whose device
+	//device *number* is ignored on purpose (see Lights): a binding whose device
 	//index moved still names a button the pad in hand can press. Null when the
 	//code's name is no pad button this backend's table carries - a keyboard key,
 	//or a family whose buttons this backend does not spell (DirectInput's
 	//numbered joystick buttons).
+	//
+	//The name has to be a pad's before any of that: the prefix is the only thing
+	//that says so, and "Page Up" ends in a pad button's own name too (KeyDefinitions
+	//names keyboard codes 19/20 that way, and Page Up ships bound in a default NES
+	//mapping), so reading the tail alone lit a row's pad side for a keyboard binding
+	//the pad sends nothing for. PadNaming.Parse is the same "is this name a pad's"
+	//test the rest of the Play door reads a device by.
 	public static int? ButtonBitOfCodeName(string keyName, GamepadBackend backend)
 	{
+		if(PadNaming.Parse(keyName) is not PadId) {
+			return null;
+		}
 		int space = keyName.IndexOf(' ');
 		if(space <= 0 || space + 1 >= keyName.Length) {
 			return null;
