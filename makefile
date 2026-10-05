@@ -640,8 +640,15 @@ doc-checks-4:
 	#ADR-0246 §5 (Hold to Compare): every renderer that runs a librashader
 	#chain must consult IsLookCompare, or the held frames keep the shader on
 	#that platform. macOS did from the start; Windows and Linux did not until
-	#2026-10-05, which is the bug this guard would have caught. The set is
-	#derived from the sources, so a new platform or renderer is covered.
+	#2026-10-05, which is the bug this guard would have caught. It scans the
+	#repo for the appliers and compares the set it finds against a written-down
+	#list, so a new renderer is a FAILURE until a person adds it - which is when
+	#the read gets checked - and so is an empty set. Before matching it removes
+	#comments, string and char literal contents and `#if 0` regions, so a
+	#mention is not a call. What it cannot see is listed in its docstring:
+	#whether the read's RESULT is used (`metal-presenter-tests` pins that half
+	#on macOS), a read through a member-function pointer, and `#if defined(...)`
+	#other than `#if 0`.
 	python3 scripts/checks/verify_hold_compare_bypass.py
 
 ui: check-manifest InteropDLL/$(OBJFOLDER)/$(SHAREDLIB)
