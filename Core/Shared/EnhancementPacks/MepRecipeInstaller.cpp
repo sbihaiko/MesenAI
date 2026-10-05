@@ -156,18 +156,21 @@ namespace
 		return true;
 	}
 
-	//`existed` records whether the folder was already there. It is not a
-	//rollback gate - see ADR-0258: this call succeeds only on a folder that was
-	//absent or empty (#881 - in production the caller has already created it
-	//empty), so from here on the folder's *contents* are this install's, and a
-	//failure restores the folder to how it was found. `existed` only says which
-	//restoration that is: absent means removed, pre-existing means recreated
-	//empty so the caller still has the folder it handed over.
+	//`existed` says how to restore the folder on a later failure (ADR-0258); it
+	//is deliberately not a rollback gate: succeeding here means the folder was
+	//absent or empty, so its contents are this install's from now on.
 	bool PrepareOutputFolder(const string& outFolder, bool& existed, string& error)
 	{
 		std::error_code ec;
 		existed = fs::exists(fs::u8path(outFolder), ec);
 		if(existed) {
+			//`is_empty` is true for a zero-byte regular file too, so without this
+			//a file at the output path would pass and then be handed to the
+			//rollback's remove_all. A file is not an output folder; leave it be.
+			if(!fs::is_directory(fs::u8path(outFolder), ec)) {
+				error = "output folder is not a directory: " + outFolder;
+				return false;
+			}
 			if(!fs::is_empty(fs::u8path(outFolder), ec)) {
 				error = "output folder is not empty: " + outFolder;
 				return false;
@@ -180,6 +183,26 @@ namespace
 			return false;
 		}
 		return true;
+	}
+
+	//Removes everything inside `folder` and leaves the folder itself, so what the
+	//caller handed over is kept as the same entry: a symlink stays a symlink (and
+	//the files this install wrote through it are the ones removed), and a real
+	//directory keeps its inode, mode and owner. `remove_all` on the folder would
+	//do neither.
+	void RemoveFolderContents(const string& folder, std::error_code& ec)
+	{
+		fs::directory_iterator it(fs::u8path(folder), ec);
+		if(ec) {
+			return;
+		}
+		for(const fs::directory_entry& entry : it) {
+			std::error_code entryEc;
+			fs::remove_all(entry.path(), entryEc);
+			if(entryEc && !ec) {
+				ec = entryEc;
+			}
+		}
 	}
 
 	//--- pack.json (§8, byte-for-byte matching mep_recipe.py's json.dumps) --
@@ -512,9 +535,8 @@ namespace
 		string PrimaryHash;
 		vector<uint8_t> PrimaryBytes; //read once by ParseAndVerify, moved into PrimarySrc
 		MepRecipeSource PrimarySrc;
-		//ADR-0258: `Prepared` is the rollback gate ("we handed out an empty
-		//folder"), `Existed` is only how to restore it - removed if absent,
-		//recreated empty if the caller had made it. A failure before
+		//ADR-0258: `Prepared` is the rollback gate - "we handed out an empty
+		//folder" - and `Existed` only says how to restore it. A failure before
 		//PrepareOutputFolder leaves both false and touches nothing.
 		bool OutFolderPrepared = false;
 		bool OutFolderExisted = false;
@@ -620,27 +642,22 @@ bool MepRecipeInstaller::Install(const string& recipeJson, const string& primary
 		|| !BuildContextAndRun(state, romName, outFolder, result.Error)
 		|| !WriteOutputs(state, recipeJson, outFolder, result.Error)) {
 		if(state.OutFolderPrepared) {
-			//Rollback (ADR-0258), on "we prepared it" rather than "we created
-			//it": #881 - the caller pre-creates mep/ empty, so gating on
-			//creation meant this never ran in production and a failure after
-			//the first op left a half-written, unstamped folder that the next
-			//install refused as the user's own. Restore it to how it was found:
-			//gone if it was absent, empty if the caller had already made it -
-			//which is the state a retry needs.
+			//Rollback (ADR-0258): restore the folder to how it was found, so
+			//never leave a half-written pack where MepPackManager would discover
+			//it on the next scan. A folder the caller handed over is emptied
+			//rather than replaced - it keeps its identity - and one this install
+			//created is removed.
 			std::error_code ec;
-			fs::remove_all(fs::u8path(outFolder), ec);
-			if(ec) {
-				//The residue this ADR exists to prevent, and it would otherwise
-				//be silent: say so rather than report a clean failure
-				Log("could not clear " + outFolder + " after a failed install: " + ec.message());
-			} else if(state.OutFolderExisted) {
-				fs::create_directories(fs::u8path(outFolder), ec);
-				if(ec) {
-					Log("could not restore " + outFolder + " after a failed install: " + ec.message());
-				}
+			if(state.OutFolderExisted) {
+				RemoveFolderContents(outFolder, ec);
+			} else {
+				fs::remove_all(fs::u8path(outFolder), ec);
 			}
-			//Never leave a half-written pack where MepPackManager would
-			//discover it on the next scan
+			if(ec) {
+				//The residue this exists to prevent, and it would otherwise be
+				//silent: say so rather than report a clean failure
+				Log("could not clear " + outFolder + " after a failed install: " + ec.message());
+			}
 		}
 		return false;
 	}

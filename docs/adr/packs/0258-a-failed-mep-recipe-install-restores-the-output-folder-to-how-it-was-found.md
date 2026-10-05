@@ -24,9 +24,13 @@ wrong about production, not merely conservative: the C# side calls
 `TryCreateOutFolder` before `EmuApi.InstallMepRecipe`
 (`CommunityPackInstallCoordinator`), so the folder is *always* pre-existing and
 empty when the core starts. The rollback therefore never ran outside the unit
-tests — and the test harness hid it, because `MakeTempPackDir` pre-creates the
-directory, so the only failure test on this path (a primary sha256 mismatch)
-fails in `ParseAndVerify`, before `PrepareOutputFolder` is reached.
+tests, and the tests did not say so. Those are two separate facts, and neither
+causes the other: every *success* test runs on a directory `MakeTempPackDir` has
+already created — exactly the shape that skips the old gate — so none of them
+could observe a rollback; and the one *failure* test on this path (a primary
+sha256 mismatch) removes its temporary directory and then fails in
+`ParseAndVerify`, before `PrepareOutputFolder` is reached, so it could not
+observe one either.
 
 ## Decision
 
@@ -36,13 +40,22 @@ absent or empty, so anything found in it afterwards was written by this install.
 On failure the folder is restored to exactly how it was found:
 
 - absent before → removed, so a retry creates it fresh;
-- present and empty before → emptied and left in place, so the caller's folder
-  still exists and a retry is not refused as "output folder is not empty".
+- present and empty before → **emptied, not replaced**: the entry the caller
+  handed over survives as the same entry, so a symlink stays a symlink and a
+  real directory keeps its inode, mode and owner. It is left there and empty, so
+  a retry is not refused as "output folder is not empty".
 
 `Install` therefore rolls back on "we prepared it", not on "we created it". The
-rollback is a `remove_all` followed, when the folder pre-existed, by a
-`create_directories`; a `remove_all` that fails is logged rather than swallowed,
-because the residue it leaves is the defect this ADR exists to prevent.
+restoration is a `remove_all` of the folder when the core created it, and a
+removal of its contents when the caller did; a removal that fails is logged
+rather than swallowed, because the residue it leaves is the defect this ADR
+exists to prevent.
+
+**"Empty" means an empty directory, not an empty path.** `is_empty` is true for
+a zero-byte regular file as well, so a version of this that accepted any empty
+path handed a user's file to `remove_all` and replaced it with a directory. A
+path that exists and is not a directory is refused, with the file left exactly
+as it is.
 
 This changes no success path and no refusal path: `PrepareOutputFolder` still
 refuses a non-empty folder, and a failure before it (a recipe version, a hash
@@ -61,6 +74,14 @@ mismatch) still writes nothing and removes nothing.
 - Test harnesses that pre-create the output folder are now exercising the
   production shape rather than hiding it, so the rollback needs its tests to
   assert on the folder's contents, not just on its existence.
+- Restoring by emptying rather than replacing is what keeps the caller's entry
+  intact, and it is also why this decision does not cost file metadata: a real
+  directory the caller made keeps its inode, mode and owner, where a
+  remove-and-recreate would have silently reset them.
+- Not covered, and unchanged from before: when the folder is absent and
+  `create_directories` fails partway, the leaf is absent — as it was — but any
+  ancestor directories it already created are left behind. That is
+  `create_directories`' own behaviour and this decision does not address it.
 - Still open on the same path, and deliberately not decided here: the legacy HD
   install path (`InstallHdLegacy`) writes its `pack.json` and stamp after
   extraction without a guard of its own (ADR-0147's path, issue #881), and
