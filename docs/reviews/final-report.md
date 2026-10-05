@@ -6,7 +6,9 @@ Review of the code `sbihaiko/MesenAI` inherited from `nesdev-org/MesenCE`, under
 
 ## 1. Method & policy (ADR-0163)
 
-Policy (ownership tiers A-D, the "hot" rule, per-tier patch policy, the `Upstream-Delta:` trailer): see ADR-0163. Tiers for this review were computed from the merge-base above with `scripts/upstream_tiers.py`.
+Policy (ownership tiers A-C, the tier-D delete/modify watchlist, the "hot" rule, per-tier patch policy, the `Upstream-Delta:` trailer): see ADR-0163. Tiers for this review were computed from the merge-base above with `scripts/upstream_tiers.py`.
+
+Tier D is deliberately not counted as a tier of tracked files: it is the delete/modify watchlist, reported alongside A-C (ADR-0163 §1).
 
 ## 2. Findings — aggregate
 
