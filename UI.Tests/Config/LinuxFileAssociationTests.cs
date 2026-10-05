@@ -323,4 +323,64 @@ public class LinuxFileAssociationTests
 		Assert.Null(LinuxFileAssociation.ReconcileDesktopEntry(entry, "/home/u/apps/foo=1/Mesen", null, out string reason));
 		Assert.Contains("=", reason);
 	}
+
+	//A .desktop file may hold more than one group, and a `[Desktop Action ...]`
+	//group carries its own Exec= for a different command line. This writer never
+	//writes one, so it is not the writer's to rewrite - reconciling "every line
+	//that starts with Exec=" turns the action into a second copy of the
+	//application command and silently drops whatever arguments it had.
+	private static string EntryWithAnAction()
+	{
+		return Entry("[Desktop Entry]", "Exec=\"/opt/old/Mesen\" %f",
+			"MimeType=application/x-mesen-nes;", "",
+			"[Desktop Action NewWindow]", "Name=New Window",
+			"Exec=\"/opt/old/Mesen\" %f --new-window");
+	}
+
+	[Fact]
+	public void An_update_leaves_an_action_groups_exec_key_alone()
+	{
+		string? fixedUp = LinuxFileAssociation.ReconcileDesktopEntry(EntryWithAnAction(), "/opt/new/Mesen", null, out string reason);
+
+		Assert.NotNull(fixedUp);
+		Assert.Contains("Exec=\"/opt/old/Mesen\" %f --new-window", fixedUp);
+		Assert.Equal("Exec=\"/opt/new/Mesen\" %f", fixedUp!.Split(Environment.NewLine)[1]);
+	}
+
+	//A key the entry lacks belongs to the application group, not to whichever
+	//group happens to be last: appended at the end of the file it lands inside
+	//the action, and the loader reads a MimeType the application group does not
+	//have.
+	[Fact]
+	public void An_update_adds_a_missing_key_inside_the_desktop_entry_group()
+	{
+		string entry = Entry("[Desktop Entry]", "Exec=\"/opt/old/Mesen\" %f", "",
+			"[Desktop Action NewWindow]", "Name=New Window",
+			"Exec=\"/opt/old/Mesen\" %f --new-window");
+
+		string? fixedUp = LinuxFileAssociation.ReconcileDesktopEntry(entry, "/opt/new/Mesen",
+			new List<string> { "x-mesen-nes" }, out string reason);
+
+		Assert.NotNull(fixedUp);
+		string[] lines = fixedUp!.Split(Environment.NewLine);
+		int mimeType = Array.IndexOf(lines, "MimeType=application/x-mesen-nes");
+		int action = Array.IndexOf(lines, "[Desktop Action NewWindow]");
+		Assert.True(action >= 0, "the action group should still be there");
+		Assert.True(mimeType >= 0 && mimeType < action, $"the missing MimeType should be added to [Desktop Entry], got:\n{fixedUp}");
+	}
+
+	//Whitespace around the `=` is not in the desktop entry grammar, but a line
+	//like this is not a reason to append a second Exec= for the loader to choose
+	//between - the key is recognised and rewritten in place.
+	[Fact]
+	public void An_update_repairs_an_exec_key_written_with_spaces_around_the_equals()
+	{
+		string entry = Entry("[Desktop Entry]", "Exec =\"/opt/old/Mesen\" %f", "MimeType=application/x-mesen-nes;");
+
+		string? fixedUp = LinuxFileAssociation.ReconcileDesktopEntry(entry, "/opt/new/Mesen", null, out string reason);
+
+		Assert.NotNull(fixedUp);
+		Assert.Equal("Exec=\"/opt/new/Mesen\" %f", fixedUp!.Split(Environment.NewLine)[1]);
+		Assert.Single(Regex.Matches(fixedUp, "^Exec", RegexOptions.Multiline));
+	}
 }
