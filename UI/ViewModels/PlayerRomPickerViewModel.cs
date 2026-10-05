@@ -365,11 +365,19 @@ namespace Mesen.ViewModels
 				Rows.Remove(row);
 			}
 			_suggestionRows.Clear();
-			foreach(RomPickerRow row in PlayRomPicker.SuggestionRows(_suggestions, ConfigManager.HomeFolder)) {
+			foreach(RomPickerRow row in PlayRomPicker.SuggestionRows(_suggestions, ConfigManager.HomeFolder, ConsoleName)) {
 				PlayerRomPickerRow vm = new(row);
 				_suggestionRows.Add(vm);
 				Rows.Add(vm);
 			}
+		}
+
+		//A console's name is read by the player, so it comes from the locale files
+		//like every other string in this sheet. PlayRomPicker owns the rules and
+		//takes the words, the same split the roots' own labels already use.
+		private static string ConsoleName(RomConsole console)
+		{
+			return console == RomConsole.Unknown ? "" : ResourceHelper.GetMessage("RomConsole" + console);
 		}
 
 		private static bool Same(IReadOnlyList<RomPickerSuggestion> left, IReadOnlyList<RomPickerSuggestion> right)

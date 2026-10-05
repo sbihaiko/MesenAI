@@ -30,13 +30,15 @@ public sealed record RomPickerRow(string Label, string Path, RomPickerRowKind Ki
 	public bool IsFolder => Kind == RomPickerRowKind.Folder;
 }
 
-//A folder the scan found, and how many openable files it holds directly in it.
-public sealed record RomPickerHit(string Folder, int RomCount);
+//A folder the scan found, how many openable files it holds directly in it, and
+//the console those files name (RomConsoleKinds; Unknown when they name none,
+//which is what a folder of archives answers).
+public sealed record RomPickerHit(string Folder, int RomCount, RomConsole Console = RomConsole.Unknown);
 
-//A hit the picker is willing to offer: the same place and count, after ranking,
-//dedupe and the cap. It is a separate type so "found" and "offered" cannot be
-//confused at a call site.
-public sealed record RomPickerSuggestion(string Folder, int RomCount);
+//A hit the picker is willing to offer: the same place, count and console, after
+//ranking, dedupe and the cap. It is a separate type so "found" and "offered"
+//cannot be confused at a call site.
+public sealed record RomPickerSuggestion(string Folder, int RomCount, RomConsole Console = RomConsole.Unknown);
 
 //#845 (ADR-0256 Decision 9): the ROM picker's rules, host-free so UI.Tests can
 //pin them against a fake tree (ADR-0123). The view-model reads the filesystem
@@ -158,23 +160,43 @@ public static class PlayRomPicker
 		return rows.Count(r => r.Kind != RomPickerRowKind.Action);
 	}
 
-	//The hits the picker is willing to offer, in order. Ranked by how many games
-	//the folder holds, then by path; a hit is dropped when a kept one is its
-	//ancestor or its descendant (a folder that contains a better library is not
-	//a second choice), when it is a specific root or under one, and past the cap.
+	//The hits the picker is willing to offer, in order. The order is BY CONSOLE,
+	//and inside a console by how many games the folder holds: the player's
+	//libraries are one per console on disk, so a list of anonymous paths reads as
+	//the same row repeated (measured on the requesting machine, four libraries
+	//whose labels shared their first 51 characters and differed only in a tail
+	//the sheet's ellipsis ate). A folder whose console cannot be named goes last,
+	//after every console - it is the one the picker is least sure about.
+	//
+	//A hit is dropped when a kept one is its ancestor or its descendant (a folder
+	//that contains a better library is not a second choice), when it is a
+	//specific root or under one, and past the cap.
 	//
 	//A root at the whole computer is deliberately NOT part of the exclusion set:
 	//every folder is under it, so excluding its subtree would discard every
 	//suggestion there is.
 	public static IReadOnlyList<RomPickerSuggestion> Suggestions(IEnumerable<RomPickerHit> hits, IReadOnlyList<RomPickerRoot> roots)
 	{
-		//One spelling per folder, the biggest count winning.
-		List<RomPickerHit> ranked = hits
-			.Select(h => new RomPickerHit(Normalize(h.Folder) ?? "", h.RomCount))
+		//One spelling per folder, the biggest count winning - and that hit's own
+		//console, so a folder is never described by a weaker reading of itself.
+		List<RomPickerHit> deduped = hits
+			.Select(h => new RomPickerHit(Normalize(h.Folder) ?? "", h.RomCount, h.Console))
 			.Where(h => h.Folder.Length > 0)
 			.GroupBy(h => h.Folder, StringComparer.OrdinalIgnoreCase)
-			.Select(g => new RomPickerHit(g.Key, g.Max(h => h.RomCount)))
-			.OrderByDescending(h => h.RomCount)
+			.Select(g => g.OrderByDescending(h => h.RomCount).ThenBy(h => (int)h.Console).First())
+			.ToList();
+
+		//A console's weight is its biggest library, so the consoles the player
+		//has most of lead. A folder whose console could not be named has no
+		//weight at all and sorts after every console.
+		Dictionary<RomConsole, int> weight = deduped
+			.Where(h => h.Console != RomConsole.Unknown)
+			.GroupBy(h => h.Console)
+			.ToDictionary(g => g.Key, g => g.Max(h => h.RomCount));
+		List<RomPickerHit> ranked = deduped
+			.OrderByDescending(h => h.Console == RomConsole.Unknown ? -1 : weight[h.Console])
+			.ThenBy(h => (int)h.Console)
+			.ThenByDescending(h => h.RomCount)
 			.ThenBy(h => h.Folder, StringComparer.OrdinalIgnoreCase)
 			.ToList();
 
@@ -194,11 +216,27 @@ public static class PlayRomPicker
 				continue;
 			}
 			//A folder related to one already kept is not a second choice - and
-			//because the walk is count-first, the bigger library is the one kept.
+			//because the walk is count-first inside a console, the bigger library
+			//is the one kept.
 			if(kept.Any(k => IsRelated(k.Folder, hit.Folder))) {
 				continue;
 			}
-			kept.Add(new RomPickerSuggestion(hit.Folder, hit.RomCount));
+			//ONE ROW PER CONSOLE, and this is load-bearing rather than tidy. The
+			//cap is shared, and the requesting machine is the case that proves it:
+			//ranked by count alone, the four folders of stray NES ROMs it keeps
+			//around (Desktop, the app's own folder, two work trees) are all `Nes`,
+			//so they took all five rows and the Master System and Game Boy Advance
+			//libraries - the ones the player actually designated - were not offered
+			//at all. Measured, not reasoned about: the first version of this change
+			//did exactly that.
+			//
+			//A folder whose console could not be named still gets its own row: it
+			//is not a console, so it cannot be collapsed into one, and two of them
+			//are two places.
+			if(hit.Console != RomConsole.Unknown && kept.Any(k => k.Console == hit.Console)) {
+				continue;
+			}
+			kept.Add(new RomPickerSuggestion(hit.Folder, hit.RomCount, hit.Console));
 			if(kept.Count >= MaxSuggestions) {
 				break;
 			}
@@ -211,32 +249,56 @@ public static class PlayRomPicker
 	private const string SuggestionSeparator = "  ·  ";
 
 	//The suggestions as rows: a suggestion is a place, so Confirm descends into
-	//it exactly like a root. Its label leads with the library's OWN NAME and only
-	//then gives the path it sits in, because the sheet is 480 px and trims the
-	//label: a label that led with the path lost exactly the segment that says
-	//which library the row is (measured on the requesting machine, its first
-	//suggestion rendered as `~/VSCodeProjects/EMULADORES/2. Switch/G3 -
-	//Nitendinho/ro…`).
-	public static IReadOnlyList<RomPickerRow> SuggestionRows(IReadOnlyList<RomPickerSuggestion> suggestions, string homeFolder)
+	//it exactly like a root. Its label leads with the CONSOLE and only then gives
+	//the path it sits in, because the sheet is 480 px and trims the label with
+	//CharacterEllipsis: every library on disk is a folder called `roms`, so what
+	//tells two rows apart is the console and it has to be the part that survives
+	//the trim. Measured on the requesting machine before this: four libraries
+	//whose labels shared their first 51 characters, so all four rendered alike.
+	//
+	//`consoleName` is the caller's, because a console's name is read by the
+	//player and so comes from the locale files (the same reason a root's label is
+	//the caller's).
+	public static IReadOnlyList<RomPickerRow> SuggestionRows(
+		IReadOnlyList<RomPickerSuggestion> suggestions, string homeFolder, Func<RomConsole, string> consoleName)
 	{
 		return suggestions
-			.Select(s => new RomPickerRow(SuggestionLabel(s.Folder, homeFolder), s.Folder, RomPickerRowKind.Folder))
+			.Select(s => new RomPickerRow(SuggestionLabel(s, homeFolder, consoleName), s.Folder, RomPickerRowKind.Folder))
 			.ToList();
 	}
 
-	//`<name>  ·  <shortened parent>`, e.g.
-	//`roms  ·  ~/VSCodeProjects/EMULADORES/2. Switch/G3 - Nitendinho`. A folder
-	//with no parent to name (a filesystem root, which the ranking never keeps)
-	//falls back to the shortened path alone.
-	private static string SuggestionLabel(string folder, string homeFolder)
+	//`<console>  ·  <count> games  ·  <shortened parent>`, e.g.
+	//`NES  ·  30 games  ·  ~/VSCodeProjects/EMULADORES/2. Switch/G3 - Nitendinho`.
+	//
+	//A suggestion whose console could not be named keeps the older shape,
+	//`<name>  ·  <shortened parent>` - the folder's own name is the only true
+	//thing left to say about it, and claiming a console there is exactly the
+	//guess this avoids.
+	//
+	//A folder with no parent to name (a filesystem root, which the ranking never
+	//keeps) falls back to the shortened path alone.
+	private static string SuggestionLabel(RomPickerSuggestion suggestion, string homeFolder, Func<RomConsole, string> consoleName)
 	{
-		string full = Normalize(folder) ?? folder;
+		string full = Normalize(suggestion.Folder) ?? suggestion.Folder;
 		string name = Path.GetFileName(full);
 		string? parent = Path.GetDirectoryName(full);
+		string where = string.IsNullOrEmpty(parent) ? Shorten(full, homeFolder) : Shorten(parent, homeFolder);
 		if(name.Length == 0) {
 			return Shorten(full, homeFolder);
 		}
-		return string.IsNullOrEmpty(parent) ? name : name + SuggestionSeparator + Shorten(parent, homeFolder);
+
+		string console = suggestion.Console == RomConsole.Unknown ? "" : consoleName(suggestion.Console);
+		string lead = console.Length == 0
+			? name
+			: console + SuggestionSeparator + CountLabel(suggestion.RomCount);
+		return lead + SuggestionSeparator + where;
+	}
+
+	//The count of games, so a row says how much library it is. Singular is its
+	//own word: "1 games" reads as a bug.
+	private static string CountLabel(int romCount)
+	{
+		return romCount == 1 ? "1 game" : romCount + " games";
 	}
 
 	//One step up. Null means there is nowhere up: the folder is a root, and the
