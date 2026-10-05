@@ -197,7 +197,7 @@ namespace Mesen.ViewModels
 		//dismiss.
 		//
 		//There are two outcomes (#887), and the difference is whether the folder
-		//answers anything. A folder with games in it IS the games folder now: the
+		//answers anything. A folder with entries in it IS the games folder now: the
 		//action row is gone, the path line reads "Your games", and it leads the roots
 		//list. A folder that answers nothing is SAVED but not used - it is not
 		//registered with the core, not made a root, and not led with - so the player
@@ -215,7 +215,7 @@ namespace Mesen.ViewModels
 			ConfigManager.Config.Save();
 
 			//#887: the setting is saved either way - a folder that answers nothing
-			//today is used the moment it holds a game, and this action is the
+			//today is used the moment it holds anything, and this action is the
 			//player's, not the app's to refuse - but a folder the app cannot open on
 			//is not registered with the core and does not become a root. Otherwise
 			//the press that designates an empty folder is also the press that leaves
