@@ -2634,7 +2634,13 @@ E
 		<Message ID="RomPickerSearching">Looking for your games…</Message>
 		<Message ID="RomPickerMakeGamesFolder">Make this my games folder</Message>
 		<Message ID="RomPickerGamesFolderSaved">Saved — this is now your games folder.</Message>
-		<Message ID="RomPickerGamesFolderEmpty">Saved. There are no games in that folder yet, so MesenAI will keep opening where you last played.</Message>
+		<!-- #887: says only what holds on every surface that can show it. It must
+		     not promise where the app will open instead: the picker always opens
+		     on its roots (a folder that answers nothing simply is not a root),
+		     and `Open ROM` falls back to the last game's folder only when that
+		     folder answers something too - so "will keep opening where you last
+		     played" was false here in both cases. -->
+		<Message ID="RomPickerGamesFolderEmpty">Saved. There are no games in that folder yet, so MesenAI is not using it for now.</Message>
 		<!-- The console a discovered library holds, shown first on its row in the
 		     picker's suggestion list. The IDs are `RomConsole` + the RomConsole
 		     member (UI/Logic/RomConsoleKinds.cs), so the enum and this file must

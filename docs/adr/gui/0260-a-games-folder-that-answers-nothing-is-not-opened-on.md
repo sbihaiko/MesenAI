@@ -46,6 +46,12 @@ set up a cabinet on Linux.
 would have opened on the configured games folder and that folder answers nothing,
 it falls back to the folder holding the last game the player opened.**
 
+The fallback is `StartFolder`'s, and it is the file dialog's: the dialog is the
+one place with a single "where to start" answer to give. Everywhere else the
+outcome is the plainer one — the folder is simply not used (`Usable` returns
+null, so it is not a root in the picker and not registered with the core), and
+nothing else takes its place.
+
 - The rule is `UI/Logic/GamesFolderChoice` — BCL and a path, nothing else — so
   `UI.Tests` runs it against real temp folders (ADR-0123). `HasEntries` enumerates
   rather than counting (it runs on every `Open ROM`), and answers false for a path
@@ -78,10 +84,22 @@ it falls back to the folder holding the last game the player opened.**
 - The dead end is gone from all four entry points. The player who designates an
   empty folder keeps the setting but is told which of the two things happened:
   the "Saved — this is now your games folder" notice becomes
-  `RomPickerGamesFolderEmpty` ("Saved. There are no games in that folder yet, so
-  MesenAI will keep opening where you last played."). The action row stays, which
-  is consistent with that message and was not before — the save is real, the
-  folder is simply not the one in use yet.
+  `RomPickerGamesFolderEmpty`. The action row stays, which is consistent with
+  that message and was not before — the save is real, the folder is simply not
+  the one in use yet.
+- **That notice says only what holds on every surface that can show it, and the
+  first version did not.** It read *"…so MesenAI will keep opening where you last
+  played"*, and the third review of PR #894 traced the two ways that is false.
+  The picker is one: it always opens on its roots, and a folder that answers
+  nothing is simply not among them — the last-played folder was never the
+  picker's fallback, so the sentence was untrue on the very sheet that displays
+  it. And `StartFolder` returns nowhere in particular when the last game's folder
+  answers nothing too — the ROM was on a stick that is not plugged in — which
+  `ShortcutHandler.OpenFile` passes on as a null `SuggestedStartLocation`, the
+  native dialog's own default rather than the last game's folder. The notice now
+  reports the outcome of the save — the folder is kept, and it is not the one in
+  use — which is true on all four entry points and still explains why the action
+  row did not go away.
 - **The press has to re-claim the pad's focus by hand, and that is not obvious.**
   `MakeGamesFolder` replaces the rows, which takes the container the ring was on
   with it, and the sheet's focus arbiter watches `IsVisible`, `PathText` and
