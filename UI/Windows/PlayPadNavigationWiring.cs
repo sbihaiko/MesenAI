@@ -64,6 +64,14 @@ namespace Mesen.Windows
 			Bridge bridge = new(window, model);
 			Installed.AddOrUpdate(window, bridge);
 			DispatcherTimer timer = new(PollInterval, DispatcherPriority.Background, (s, e) => bridge.Tick());
+			//The timer goes with the window. Nothing here outlives it, and a tick
+			//that landed after its window closed would run this bridge against a
+			//closed window on whatever dispatcher happened to be current - the
+			//shape #840 reports, where a leaked window's 50 ms tick broke the next
+			//test's Avalonia session setup. Stopping it here rather than in a
+			//caller keeps the two together wherever Attach is used, and stops the
+			//window the player closes from leaving a timer behind too.
+			window.Closed += (_, _) => timer.Stop();
 			timer.Start();
 			return timer;
 		}

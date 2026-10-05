@@ -57,6 +57,17 @@ namespace Mesen.Windows
 		//EmuApi.Release (not an initializer, so the constructor never names it).
 		public Action? ReleaseCore { get; set; }
 
+		//Set by the same caller, for the same reason (#840): a window a test
+		//showed is closed when that test ends, and the quit confirmation -
+		//ConfirmQuit for a recording or a Remaster job, then ValidateExit's
+		//ConfirmExitResetPower or Player mode's stop banner - would *cancel* that
+		//close instead. The window then outlives its test with its 50 ms pad
+		//timer still armed, and the next test's Avalonia session setup fails in
+		//EnsureIsolatedApplication, which is exactly the failure #840 reports.
+		//A window the player closes still asks; only the harness's own close
+		//skips the question.
+		public bool SkipCloseConfirmation { get; set; }
+
 		//#658: the Core's load thread waits here for the UI's answer (W-P13's
 		//BIOS sheet, the classic firmware dialog) while it holds its load locks.
 		private readonly CoreRequestWaits _coreRequests = new();
@@ -205,6 +216,13 @@ namespace Mesen.Windows
 		protected override void OnClosing(WindowClosingEventArgs e)
 		{
 			base.OnClosing(e);
+			if(SkipCloseConfirmation) {
+				//The harness is closing a window it showed (#840): there is no
+				//player to ask, and a cancelled close would leak the window - and
+				//its pad timer - into the next test. The exit path itself is
+				//unchanged: CloseEmu still stops the emulator and runs ReleaseCore.
+				_needCloseValidation = false;
+			}
 			//G.6 (W-X3): a recording or a Remaster job asks first, inline. Its
 			//answer is the one confirmation (rule 7), so ConfirmExit is skipped.
 			if(_needCloseValidation && _model != null && !_model.ConfirmQuit(() => { _needCloseValidation = false; Close(); })) {

@@ -88,11 +88,37 @@ internal static class MainWindowStartup
 			//tests that follow still need the core. EmuApi.Stop still runs, so a game
 			//a test left loaded is stopped here rather than by the next test's
 			//constructor (#790).
-			foreach(MainWindow window in Shown) {
+			//
+			//Two passes, and the reason is the first pass's own: MainWindow.CloseEmu
+			//closes *every other open window* before it stops anything
+			//(MainWindow.axaml.cs), so closing the first window here can close the
+			//second from inside it. A sibling closed that way would still be holding
+			//its own ReleaseCore and would release the core on the way out, which is
+			//the one thing this hook exists to prevent. Every hook is therefore
+			//neutered before any window is closed.
+			List<MainWindow> closing = new(Shown);
+			foreach(MainWindow window in closing) {
 				window.ReleaseCore = () => { };
-				window.Close();
+				//And the close itself has to happen: ConfirmQuit (a recording, a
+				//Remaster job) and ValidateExit (ConfirmExitResetPower, Player
+				//mode's stop banner) each cancel OnClosing and leave the window
+				//open, which is the leak this hook exists to stop.
+				window.SkipCloseConfirmation = true;
 			}
-			Shown.Clear();
+
+			//MainWindow.OnClosing can refuse: a recording or a Remaster job asks
+			//first, and a refused close leaves the window open. Such a window stays
+			//in Shown - the next settle retries it, and a window that never closes is
+			//a leak the suite fails on rather than one this hook quietly forgets.
+			//A throw from one Close must not strand the windows behind it either.
+			foreach(MainWindow window in closing) {
+				try {
+					window.Close();
+				} catch {
+					//Left in Shown below, exactly like a refused close.
+				}
+			}
+			Shown.RemoveAll(window => !window.IsVisible);
 		}
 	}
 

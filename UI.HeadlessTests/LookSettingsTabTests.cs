@@ -88,8 +88,9 @@ public class LookSettingsTabTests : IDisposable
 		return (main, Assert.IsType<ConfigViewModel>(model.PlayerSettings));
 	}
 
-	//A MainWindow is never closed in a test (closing it shuts the core down for
-	//the rest of the run): the sheet is.
+	//The sheet is closed, not the window: the assembly's settle hook closes the
+	//window when the case ends (#840), and a case that closed it here as well
+	//would only be racing that.
 	private void CloseSettings() => (_main?.DataContext as MainWindowViewModel)?.ClosePlayerSettings();
 
 	private static ConfigWindow ShowOptions(ConfigWindowTab tab)
