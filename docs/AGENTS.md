@@ -6,7 +6,7 @@ Durable documentation for this fork: open specs, execution plans, and the enhanc
 
 ## Ownership
 
-Owns `docs/specs/` (CC0), `docs/roadmap/` (the consolidated PRD), `docs/adr/` (the decision register, moved here from `.dev-squad/adr/` on 2026-09-03), `docs/media/`, `docs/validation/` (manual acceptance/validation run scripts), and top-level ecosystem notes. Does not own `AGENTS.md` files in other trees or Core/UI source.
+Owns `docs/specs/` (CC0), `docs/roadmap/` (the consolidated PRD), `docs/adr/` (the decision register, moved here from `.dev-squad/adr/` on 2026-09-03), `docs/media/`, `docs/validation/` (dated acceptance/measurement logs as `.md`, plus one JSON fixture; no scripts), `docs/community-packs/` (the errata store read by `scripts/mep_errata.py` and the validate workflow, ADR-0152), `docs/releases/` (release-zip READMEs copied by `scripts/release_macos.sh`, gated by `scripts/checks/verify_release_asset_names.sh`), `docs/reviews/` (point-in-time review reports), and top-level ecosystem notes. Does not own `AGENTS.md` files in other trees or Core/UI source.
 
 ## Local Contracts
 
@@ -96,5 +96,9 @@ Owns `docs/specs/` (CC0), `docs/roadmap/` (the consolidated PRD), `docs/adr/` (t
 
 - adr/ — the decision register (`NNNN-<kebab-title>.md`); accepted ADRs are binding
 - specs/ — ESP, MEP, MEI, MEP-recipe, hires-gbsms drafts and `golden/`
-- roadmap/ — consolidated PRD (Part A: pack/core; Part B: player shell) (product consoles: NES, GB, SMS-family, GBA)
-- validation/ — acceptance/validation scripts and logs (F6.5, F12.2 dispatcher vs Fable briefing, mechanical-replay logs)
+- roadmap/ — consolidated PRD (Part A: pack/core; Part B: player shell) (product consoles: NES, GB/GBC/GBS, SMS/GG/SG-1000, GBA)
+- validation/ — dated acceptance/measurement logs (F6.5, F12.2 dispatcher vs Fable briefing, mechanical-replay logs)
+- community-packs/ — errata store for known-missing pack assets (`errata/`, ADR-0152)
+- media/ — short demo excerpts and the generated `gui-redesign/` wireframe PNGs
+- releases/ — READMEs shipped inside the release zips
+- reviews/ — point-in-time review reports (fork/upstream inherited-code review)

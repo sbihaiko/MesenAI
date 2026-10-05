@@ -59,9 +59,10 @@ open ecosystem:
 - **Where the inherited upstream toolchain still serves an author better,
   and the slice that answers each row:** [`docs/hd-pack-toolchain-comparison.md`](hd-pack-toolchain-comparison.md)
   ("Gaps this table names") → PRD Part A §4 (Phase 12 delivered those slices).
-  Live in the PRD: Phase 14 (proof at scale), Phase 12's F12.11 human row,
-  Phase 13's shared replays (ADR-0205, R.1/R.2 — nothing implemented), and
-  Phase 7's P.8 (shaders on macOS, ADR-0237 — accepted, unbuilt).
+  Live in the PRD: Phase 14 (proof at scale), Phase 12's F12.11 human row.
+  Shipped since the last revision of this note: Phase 13's shared replays (ADR-0205 — R.1 publish shipped 2026-10-01, R.2
+  consume shipped 2026-10-02; see PRD §3). Phase 7's P.8 (shaders on macOS,
+  ADR-0237) is implemented as of 2026-10-02.
 - **Community catalog:** [`docs/community-packs.md`](community-packs.md) (+ `.json`).
 
 ## Non-goals

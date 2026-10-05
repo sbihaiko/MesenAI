@@ -25,9 +25,14 @@ before telling users which presets work.
   it, so a stale or missing core is rebuilt first.
 - A slang-shaders library: a checkout of
   `https://github.com/libretro/slang-shaders`, or the `Shaders` folder the app
-  uses (`~/Library/Application Support/MesenCE/Shaders`). The sweep only
-  reads it. Write down which revision you swept; the summary records the path,
-  not the revision.
+  uses. That folder is `<data folder>/Shaders`, and the data folder is **not
+  always** named `MesenAI`: `HomeFolderChoice.Resolve` adopts a legacy folder
+  whenever it already holds a `settings.json`, so an install that predates the
+  rename reads from `~/Library/Application Support/MesenCE` (or `Mesen2`).
+  Point `SHADERS` at the one this machine actually uses — a sweep aimed at the
+  wrong folder silently omits every preset installed under the other. The sweep
+  only reads it. Write down which revision you swept; the summary records the
+  path, not the revision.
 - `python3` 3.9 or later, standard library only.
 
 ## Run

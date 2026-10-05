@@ -1,16 +1,14 @@
 # Fork/upstream inherited-code review — final report
 
+> **As of 2026-09-05.** Point-in-time snapshot (upstream `73be5b58`, HEAD `2c58e139`); at least two upstream syncs have happened since, so the per-file tiers are not current. Re-run `scripts/upstream_tiers.py` for today's.
+
 Review of the code `sbihaiko/MesenAI` inherited from `nesdev-org/MesenCE`, under the hard constraint that the fork stays mergeable with upstream. Baseline `HEAD` `2c58e139`; fork/upstream merge-base `73be5b58` (upstream/master is an ancestor of HEAD).
 
 ## 1. Method & policy (ADR-0163)
 
-Ownership tiers are computed mechanically from the merge-base (`scripts/upstream_tiers.py`): A = fork-added, B = fork-modified, C = inherited pristine, D = fork-deleted. Upstream heat (`git log upstream/master --since=1.year`) is the second axis. Working rule for "hot": file under `Core/Debugger/`, `Core/NES/Mappers/`, `Utilities/Audio/`, **or** per-file heat ≥ 5/yr.
+Policy (ownership tiers A-C, the tier-D delete/modify watchlist, the "hot" rule, per-tier patch policy, the `Upstream-Delta:` trailer): see ADR-0163. Tiers for this review were computed from the merge-base above with `scripts/upstream_tiers.py`.
 
-Patch policy per tier (binding):
-- Tier A/B — fix normally (minimal hunks, merge surface minimized).
-- Tier C — only real defects (memory safety, UB, integer overflow, leak, race, injection); cosmetic changes never.
-- Tier C + hot — report-only unless the defect is an *exploitable* vulnerability.
-- Tier C commits touching guarded files carry an `Upstream-Delta:` trailer (enforced by `scripts/checks/verify_upstream_delta.py`); merges (never rebase) on main with rerere on (`scripts/sync-upstream.sh` + scheduled `sync-upstream.yml`).
+Tier D is deliberately not counted as a tier of tracked files: it is the delete/modify watchlist, reported alongside A-C (ADR-0163 §1).
 
 ## 2. Findings — aggregate
 
