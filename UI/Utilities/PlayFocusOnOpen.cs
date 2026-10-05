@@ -37,7 +37,7 @@ internal sealed class PlayFocusOnOpen
 	private readonly List<Claim> _claims = new();
 	private Func<Control?>? _content;
 
-	private sealed record Claim(Func<bool> IsOpen, Func<Control?> Target);
+	private sealed record Claim(Func<bool> IsOpen, Func<Control?> Target, Func<Control?>? Root = null);
 
 	public PlayFocusOnOpen(Window window)
 	{
@@ -49,9 +49,16 @@ internal sealed class PlayFocusOnOpen
 	//as an open: closing a sheet has to hand the focus back to whatever is under
 	//it, and that is the same decision read the other way round. `isOpen` is the
 	//expression the surface is rendered from - never a second copy of it.
-	public void When(INotifyPropertyChanged source, string[] properties, Func<bool> isOpen, Func<Control?> target)
+	//
+	//`root` is for the surface whose first control is a row of its own list, and
+	//it is the answer to a question the inference in SearchRoot cannot give: the
+	//nearest ancestor two controls share, walked from the target's parent, is
+	//then the row's own item container - one row, and a D-pad press inside it has
+	//nowhere to go. A surface that says what its walk stays inside keeps the
+	//presses working past the first row (#845).
+	public void When(INotifyPropertyChanged source, string[] properties, Func<bool> isOpen, Func<Control?> target, Func<Control?>? root = null)
 	{
-		Claim claim = new(isOpen, target);
+		Claim claim = new(isOpen, target, root);
 		_claims.Add(claim);
 		Watch(source, properties);
 	}
@@ -182,6 +189,11 @@ internal sealed class PlayFocusOnOpen
 	{
 		if(Open() is not Claim claim || claim.Target() is not Control target) {
 			return null;
+		}
+		//The surface named its own root: it knows what its walk is, and the
+		//inference below cannot answer for a target that is one row of a list.
+		if(claim.Root is not null) {
+			return claim.Root();
 		}
 		if(_window.FocusManager?.GetFocusedElement() is not Visual focused) {
 			return null;
