@@ -82,6 +82,16 @@ it falls back to the folder holding the last game the player opened.**
   MesenAI will keep opening where you last played."). The action row stays, which
   is consistent with that message and was not before — the save is real, the
   folder is simply not the one in use yet.
+- **The press has to re-claim the pad's focus by hand, and that is not obvious.**
+  `MakeGamesFolder` replaces the rows, which takes the container the ring was on
+  with it, and the sheet's focus arbiter watches `IsVisible`, `PathText` and
+  `SuggestionRevision`. A folder that answers nothing is deliberately not made a
+  root, so `PathText` reads the same shortened path before and after — the signal
+  the one-outcome version leaned on does not move, and the pad is left with
+  nothing focused: the direction keys and Confirm return immediately, and only
+  Back still works. `SuggestionRevision++` is the signal that exists for exactly
+  this, and the second review of PR #894 traced the ring rather than the rule to
+  find it.
 - **A legitimately empty games folder is no longer led with either.** That is the
   cost of the rule and it is deliberate: a fresh player who has just created an
   empty library gets the last-opened folder rather than their new empty one. It is

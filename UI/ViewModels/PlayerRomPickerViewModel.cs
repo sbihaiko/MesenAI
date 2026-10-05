@@ -194,9 +194,17 @@ namespace Mesen.ViewModels
 		//The action row's press: this folder becomes the games folder. It is the
 		//same two properties the classic Advanced Options row writes, saved the
 		//same way, then the picker re-roots in place and STAYS: the sheet does not
-		//dismiss, the action row is gone (this folder IS the games folder now),
-		//the path line reads "Your games", and the new root leads the roots list.
-		//The focus re-claim is free - PathText changes, and the arbiter watches it.
+		//dismiss.
+		//
+		//There are two outcomes (#887), and the difference is whether the folder
+		//answers anything. A folder with games in it IS the games folder now: the
+		//action row is gone, the path line reads "Your games", and it leads the roots
+		//list. A folder that answers nothing is SAVED but not used - it is not
+		//registered with the core, not made a root, and not led with - so the player
+		//keeps the action row and is told why by the notice.
+		//
+		//The first outcome re-claims the ring through PathText, which changes. The
+		//second does not, which is why it bumps SuggestionRevision by hand.
 		private void MakeGamesFolder(string folder)
 		{
 			if(_folder is null) {
@@ -227,6 +235,19 @@ namespace Mesen.ViewModels
 
 			_roots = BuildRoots(usable);
 			ShowFolder(folder);
+			//The rebuilt rows are new containers, so whatever the arbiter had the ring
+			//on - the action row this press came from - went with the old one.
+			//
+			//The claim above cannot lean on PathText here the way the class comment
+			//says it can: a folder that answers nothing is deliberately NOT made a
+			//root (#887), so the path line reads the same shortened path before and
+			//after and the arbiter sees no change in any of the three properties it
+			//watches. Without this the pad is left with nothing focused, the
+			//direction keys and Confirm return immediately because there is no
+			//control to act on, and only Back still works - escaped through the
+			//window rather than through the sheet. Found by the second review of
+			//#894, which traced the ring rather than the rule.
+			SuggestionRevision++;
 			//The notice says which of the two happened, because "Saved" alone would
 			//contradict what the player then sees: the action row is still there
 			//offering to make this the games folder, which is only confusing if
