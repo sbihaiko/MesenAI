@@ -640,8 +640,13 @@ doc-checks-4:
 	#ADR-0246 §5 (Hold to Compare): every renderer that runs a librashader
 	#chain must consult IsLookCompare, or the held frames keep the shader on
 	#that platform. macOS did from the start; Windows and Linux did not until
-	#2026-10-05, which is the bug this guard would have caught. The set is
-	#derived from the sources, so a new platform or renderer is covered.
+	#2026-10-05, which is the bug this guard would have caught. It scans the
+	#whole repo for the appliers, so a chain added anywhere is found, and it
+	#checks two written-down things on top: the three platform directories that
+	#must still yield one (a hidden call fails rather than vanishing), and the
+	#single delegation macOS uses. Comments are stripped, so deleting a real
+	#read while leaving a comment that names it fails. It is a presence guard
+	#and says so - the macOS behaviour is pinned by `metal-presenter-tests`.
 	python3 scripts/checks/verify_hold_compare_bypass.py
 
 ui: check-manifest InteropDLL/$(OBJFOLDER)/$(SHAREDLIB)
