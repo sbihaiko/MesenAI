@@ -55,11 +55,18 @@ it falls back to the folder holding the last game the player opened.**
   folder, else the last game's folder, else nowhere in particular — the caller
   decides what that means. The last-opened folder is the fallback rather than
   nothing because a player who has a games folder set has almost certainly opened
-  something from it.
-- Three call sites use it: `ShortcutHandler.OpenFile` (the dialog's start folder),
-  `MainWindow.axaml.cs` (the known-game-folder registration at startup), and
+  something from it. **The fallback is held to the same rule as the setting** —
+  the last game's folder can answer nothing too, when the ROM was on a stick that
+  is not plugged in, and a fallback that re-creates the dead end it exists to
+  avoid is not a fallback.
+- Four call sites use it: `ShortcutHandler.OpenFile` (the dialog's start folder),
+  `MainWindow.axaml.cs` (the known-game-folder registration at startup),
   `PlayerRomPickerViewModel.GamesFolder` (which the roots list and the action
-  row's "already the games folder" test both read).
+  row's "already the games folder" test both read), and
+  `PlayerRomPickerViewModel.MakeGamesFolder` — the fourth, and the one the review
+  of PR #894 caught: the press that designates an *empty* folder saved the setting
+  and then rebuilt the roots from the raw path, so the same press that stored the
+  dead end was the one that started leading on it.
 - **The setting is never changed.** The rule chooses where to open; it does not
   clear, refuse or rewrite `Preferences.GameFolder`. A folder that answers nothing
   today may answer something tomorrow — a stick that was unplugged, a library
@@ -68,10 +75,13 @@ it falls back to the folder holding the last game the player opened.**
 
 ## Consequences
 
-- The dead end is gone from all three entry points. The player who designates an
-  empty folder sees the picker still offering to make it the games folder, which
-  is honest feedback that it did not take; a message explaining why would be
-  better and is not in this change.
+- The dead end is gone from all four entry points. The player who designates an
+  empty folder keeps the setting but is told which of the two things happened:
+  the "Saved — this is now your games folder" notice becomes
+  `RomPickerGamesFolderEmpty` ("Saved. There are no games in that folder yet, so
+  MesenAI will keep opening where you last played."). The action row stays, which
+  is consistent with that message and was not before — the save is real, the
+  folder is simply not the one in use yet.
 - **A legitimately empty games folder is no longer led with either.** That is the
   cost of the rule and it is deliberate: a fresh player who has just created an
   empty library gets the last-opened folder rather than their new empty one. It is

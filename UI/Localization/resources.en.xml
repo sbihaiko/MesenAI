@@ -2634,6 +2634,7 @@ E
 		<Message ID="RomPickerSearching">Looking for your games…</Message>
 		<Message ID="RomPickerMakeGamesFolder">Make this my games folder</Message>
 		<Message ID="RomPickerGamesFolderSaved">Saved — this is now your games folder.</Message>
+		<Message ID="RomPickerGamesFolderEmpty">Saved. There are no games in that folder yet, so MesenAI will keep opening where you last played.</Message>
 		<!-- The console a discovered library holds, shown first on its row in the
 		     picker's suggestion list. The IDs are `RomConsole` + the RomConsole
 		     member (UI/Logic/RomConsoleKinds.cs), so the enum and this file must

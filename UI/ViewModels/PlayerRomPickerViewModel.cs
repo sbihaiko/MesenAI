@@ -206,6 +206,14 @@ namespace Mesen.ViewModels
 			ConfigManager.Config.Preferences.OverrideGameFolder = true;
 			ConfigManager.Config.Save();
 
+			//#887: the setting is saved either way - a folder that answers nothing
+			//today is used the moment it holds a game, and this action is the
+			//player's, not the app's to refuse - but a folder the app cannot open on
+			//is not registered with the core and does not become a root. Otherwise
+			//the press that designates an empty folder is also the press that leaves
+			//them leading on it, which is the state #887 is about.
+			string? usable = GamesFolderChoice.Usable(folder);
+
 			//The core keeps its own list of folders a game can be found in, and
 			//reads the configured folder only at startup (MainWindow's own
 			//AddKnownGameFolder call). Without this one the folder the player
@@ -213,11 +221,17 @@ namespace Mesen.ViewModels
 			//resolves a ROM by name and CRC - until the next launch. The native
 			//dialog's initial folder reads the config live and was never affected;
 			//this is the other half of the same write.
-			KnownGameFolderSink(folder);
+			if(usable != null) {
+				KnownGameFolderSink(usable);
+			}
 
-			_roots = BuildRoots(folder);
+			_roots = BuildRoots(usable);
 			ShowFolder(folder);
-			NoticeText = ResourceHelper.GetMessage("RomPickerGamesFolderSaved");
+			//The notice says which of the two happened, because "Saved" alone would
+			//contradict what the player then sees: the action row is still there
+			//offering to make this the games folder, which is only confusing if
+			//nothing says why.
+			NoticeText = ResourceHelper.GetMessage(usable is null ? "RomPickerGamesFolderEmpty" : "RomPickerGamesFolderSaved");
 		}
 
 		private void ShowRoots()

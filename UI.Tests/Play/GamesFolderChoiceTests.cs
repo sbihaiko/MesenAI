@@ -92,6 +92,41 @@ namespace Mesen.Tests.Play
 			}
 		}
 
+		//The fallback is held to the same rule, and it has to be: the last game's
+		//folder answers nothing as well when the ROM was on a stick that is not
+		//plugged in, and a fallback that re-creates the dead end it exists to avoid
+		//is not a fallback. Nowhere in particular is the caller's to decide.
+		[Fact]
+		public void A_last_opened_folder_that_answers_nothing_is_not_a_fallback()
+		{
+			string empty = NewTempDir();
+			string alsoEmpty = NewTempDir();
+			try {
+				Assert.Null(GamesFolderChoice.StartFolder(empty, alsoEmpty));
+				Assert.Null(GamesFolderChoice.StartFolder(null, Path.Combine(empty, "gone")));
+			} finally {
+				Directory.Delete(empty, true);
+				Directory.Delete(alsoEmpty, true);
+			}
+		}
+
+		//A library laid out one folder per console is a games folder with no game
+		//file in it at all, and it must count as answering: the picker's whole point
+		//is that descending into it is how the player reaches the games. This is
+		//also what separates "has entries" from a `GetFiles()` that only sees files.
+		[Fact]
+		public void A_folder_of_subfolders_answers()
+		{
+			string root = NewTempDir();
+			try {
+				Directory.CreateDirectory(Path.Combine(root, "G3 - Nitendinho", "roms"));
+				Assert.True(GamesFolderChoice.HasEntries(root));
+				Assert.Equal(root, GamesFolderChoice.Usable(root));
+			} finally {
+				Directory.Delete(root, true);
+			}
+		}
+
 		//The setting itself is never touched: this rule chooses where to open, and
 		//a folder that answers nothing today may answer something tomorrow - a stick
 		//that was unplugged, a library still being copied.

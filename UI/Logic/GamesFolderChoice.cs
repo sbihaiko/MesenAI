@@ -57,9 +57,13 @@ public static class GamesFolderChoice
 	//The fallback is the last-opened game rather than nothing because a player who
 	//has a games folder set has almost certainly opened something from it, so the
 	//folder holding their last game is the closest thing to it that still works.
+	//
+	//The fallback is held to the same rule as the setting, and that is the point of
+	//writing it this way rather than as a plain string: the last game's folder can
+	//answer nothing too - the ROM was on a stick that is not plugged in - and a
+	//fallback that re-creates the dead end it exists to avoid is not one.
 	public static string? StartFolder(string? gameFolder, string? lastOpenedFolder)
 	{
-		string? usable = Usable(gameFolder);
-		return usable ?? (string.IsNullOrWhiteSpace(lastOpenedFolder) ? null : lastOpenedFolder);
+		return Usable(gameFolder) ?? Usable(lastOpenedFolder);
 	}
 }
