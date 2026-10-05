@@ -7,37 +7,30 @@
 
 ## Context
 
-ADR-0201 renamed the runtime surface and stopped short of the published
-release, listing the assets among the things that keep the old name. The
-reason given was real: renaming an asset changes its URL and invalidates the
-`SHA256SUMS`, which carries the file names.
+ADR-0201 renamed the runtime surface but kept the assets' old names, for a real
+reason: renaming an asset changes its URL and invalidates the `SHA256SUMS`,
+which carries the file names. That leaves one visible contradiction: the release
+title `MesenAI v0.1.0` sits above a table offering
+`MesenCE-v0.1.0-macos-arm64.zip` and `mesence-tools-v0.1.0.zip` — the same
+contradiction ADR-0201 set out to end, one layer out.
 
-What that left is visible on one page. The release title is `MesenAI v0.1.0`
-and the table of contents immediately under it offers
-`MesenCE-v0.1.0-macos-arm64.zip` and `mesence-tools-v0.1.0.zip`. A reader who
-has just been told the project is called MesenAI is asked to download a file
-that says otherwise. That is the same contradiction ADR-0201 set out to end,
-one layer further out.
-
-Two facts make the correction cheap, and both were checked rather than
-assumed:
+Two checked facts make the fix cheap:
 
 - **Nothing versioned downloads these files by URL.** A search for
-  `releases/download` across the tree returns no project file — the only hits
-  are unrelated (test fixtures, a vendored virtualenv). `README.md` points at
-  the Releases page, not at an asset URL. No workflow, script or document in
-  the repository fetches an asset by its path.
-- **The bytes do not change.** A rename is a rename: the zips are re-uploaded
-  with new names and the same SHA-256. The only file whose *content* changes
-  is `SHA256SUMS`, which lists names beside hashes.
+  `releases/download` across the tree returns no project file (only test
+  fixtures and a vendored virtualenv); `README.md` points at the Releases page,
+  not an asset URL.
+- **The bytes do not change.** A rename re-uploads the zips with new names and
+  the same SHA-256; only `SHA256SUMS` changes content, since it lists names
+  beside hashes.
 
-Non-goals. This does not rename the tag (`mesence-v0.1.0`), the release URL,
-or the repository. It does not change what is inside either zip.
+Non-goals: no rename of the tag (`mesence-v0.1.0`), the release URL, or the
+repository; no change to either zip's contents.
 
 ## Decision
 
-1. **The artifact names are built from the product name, not from the tag
-   prefix.** `scripts/release_macos.sh` produces:
+1. **Artifact names come from the product name, not the tag prefix.**
+   `scripts/release_macos.sh` produces:
 
    ```
    out/release/MesenAI-<version>-macos-arm64.zip
@@ -45,14 +38,12 @@ or the repository. It does not change what is inside either zip.
    out/release/SHA256SUMS
    ```
 
-   The tag scheme stays `mesence-vMAJOR.MINOR.PATCH`, so the prefix of an
-   artifact and the tag of the release that carries it no longer match. That
-   is intended: the tag is a URL that was already published and linked, and
-   the file name is what a person reads on the download page.
-
+   The tag scheme stays `mesence-vMAJOR.MINOR.PATCH`, so artifact prefix and tag
+   no longer match — intended: the tag is an already-published, linked URL; the
+   file name is what a reader sees on the download page.
 2. **The staging directories follow**, because `ditto --keepParent` writes the
-   staged folder's name into the zip — the folder is the first thing a user
-   sees after unpacking:
+   staged folder's name into the zip (the first thing a user sees after
+   unpacking):
 
    ```
    out/stage/MesenAI-<version>-macos-arm64/
@@ -60,40 +51,35 @@ or the repository. It does not change what is inside either zip.
    ```
 
 3. **The published `mesence-v0.1.0` release is corrected in place.** The two
-   zips are re-uploaded under the new names, the old ones are removed, and
-   `SHA256SUMS` is regenerated from the new names. The tag and the release URL
-   are untouched, so every link to the release page keeps working.
-
-4. **The SHA-256 values are asserted unchanged.** The rename is a rename only
-   if the hashes are identical before and after; `SHA256SUMS` is the record of
-   that. A hash that moves means the artifact was rebuilt, not renamed, and
-   the release body's reproducibility claim would need revisiting.
-
-   Measured on the published release: the two zips hash `76172fa0…` and
-   `ec1edace…` under both the old and the new names, and both new URLs answer
-   `200`.
-
+   zips are re-uploaded under the new names, the old ones removed, `SHA256SUMS`
+   regenerated from the new names; tag and release URL untouched, so every link
+   to the release page keeps working.
+4. **The SHA-256 values are asserted unchanged.** The rename is a rename only if
+   the hashes are identical before and after (`SHA256SUMS` is the record); a
+   hash that moves means a rebuild, not a rename, and the release body's
+   reproducibility claim would need revisiting. Measured on the published
+   release: the two zips hash `76172fa0…` and `ec1edace…` under both names, and
+   both new URLs answer `200`.
 5. **The docs that name the artifacts say the new names**: `README.md`,
-   `docs/releases/macos-zip-README.md`, `docs/releases/tools-zip-README.md`
-   and the release body `docs/releases/mesence-v0.1.0.md` (whose *file name*
-   follows the tag and therefore stays).
+   `docs/releases/macos-zip-README.md`, `docs/releases/tools-zip-README.md` and
+   the release body `docs/releases/mesence-v0.1.0.md` (its *file name* follows
+   the tag, so it stays).
 
 ## Consequences
 
-- **The download page stops contradicting itself**: title, table and file
-  names all say MesenAI.
-- **The direct asset URLs of the old names stop resolving.** Nothing in the
-  repository used them, and the release page is what `README.md` links to, so
-  the breakage is limited to a URL someone may have bookmarked in the hours
-  the release has existed.
-- **`SHA256SUMS` must be regenerated in the same operation**, not after it: it
-  is generated from the zip basenames, and a stale copy would name two files
-  that no longer exist while omitting the two that do.
-- **The tag and the artifact prefix now differ on purpose**, and this is the
-  kind of thing a later reader "fixes". `scripts/checks/verify_release_asset_names.sh`
-  is the answer: it fails if a `MesenCE-`/`mesence-tools-` name returns to the
-  four definitions in `release_macos.sh` or to the four documents above, and
-  it asserts that `SHA256SUMS` is still derived from the zip basenames.
-- **The next release is renamed by construction**, since the script is the
-  only thing that names these files; the correction to the existing release
-  was a one-off, and is recorded here rather than in a script.
+- **The download page stops contradicting itself**: title, table and file names
+  all say MesenAI.
+- **The old names' direct asset URLs stop resolving.** Nothing in the repo used
+  them and `README.md` links to the release page, so the breakage is limited to
+  a URL someone may have bookmarked in the release's first hours.
+- **`SHA256SUMS` must be regenerated in the same operation**, not after: it is
+  generated from the zip basenames, so a stale copy would name two files that no
+  longer exist while omitting the two that do.
+- **The tag and the artifact prefix now differ on purpose** — the kind of thing
+  a later reader "fixes". `scripts/checks/verify_release_asset_names.sh` is the
+  answer: it fails if a `MesenCE-`/`mesence-tools-` name returns to the four
+  definitions in `release_macos.sh` or the four documents above, and asserts
+  `SHA256SUMS` is still derived from the zip basenames.
+- **The next release is renamed by construction**, since the script is the only
+  thing that names these files; the correction to the existing release was a
+  one-off, recorded here rather than in a script.

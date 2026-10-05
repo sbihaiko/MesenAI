@@ -9,28 +9,25 @@
 ## Context
 
 ADR-0051 recorded the spike (`scripts/spike_sound_driver.cpp`, `make
-spike-sound-driver`, makefile target `spike-sound-driver`): drive the game's own sound driver via
-debugger breakpoints and JSR/mailbox discovery to enumerate every music and
-SFX id without gameplay. On 12 ROMs it produced a validated trigger on 5–6
-(Mega Man, Castlevania, Zelda, Punch-Out!!, SMB3, Ninja Gaiden plausible) and
-nothing on the rest (Bomberman corrupted state; 1943, Contra, Excitebike,
-Gauntlet, SMB1 found the tick but validated no trigger). Its proposed Decision
-already says: ship as an **opt-in tool** behind *Open Game Folder → Extract
-audio*, writing into the sibling folder's `auto/audio/` through the F5.3
-recorder, with the enumeration log kept beside it.
+spike-sound-driver`, makefile target `spike-sound-driver`): drive the game's own
+sound driver via debugger breakpoints and JSR/mailbox discovery to enumerate
+every music and SFX id without gameplay. On 12 ROMs it validated a trigger on
+5–6 and nothing on the rest (some found the tick but validated no trigger, one
+corrupted state). Its Decision says: ship as an **opt-in tool** behind *Open
+Game Folder → Extract audio*, writing into the sibling folder's `auto/audio/`
+through the F5.3 recorder, enumeration log beside it.
 
 The F5 closeout spec (run `d662e62e2648`) planned to promote this into an
 in-process, shortcut-triggered feature (`EmulatorShortcut::ExtractAudioHdPack`,
 a `NesSoundDriverProbe` class, an `OpenGameFolder` entry in
 `UI/ViewModels/HdPackBuilderViewModel.cs`). None of it exists: `grep
 ExtractAudioHdPack Core UI` returns nothing; the only comparable shortcut is
-`ExportRomTilesHdPack`. ADR-0096 and ADR-0099 point out that promoting a
-technique with a ~50 % failure mode into a live feature that runs the game's
-code with a hijacked stack, inside the emulator process, needs a *failure
-contract* that 0051 does not state: how the user opts in, how long it may run,
-how it is stopped, what happens on an unsupported ROM, and on which thread it
-runs. ADR-0093 adds that the spec's acceptance criteria only checked the C++
-enum entry, while the precedent touches ~8 files.
+`ExportRomTilesHdPack`. ADR-0096 and ADR-0099: a technique with a ~50 % failure
+mode promoted into a live feature that runs the game's code with a hijacked
+stack, inside the emulator process, needs a *failure contract* 0051 does not
+state (opt-in, run length, stop, unsupported ROM, thread). ADR-0093 adds that
+the spec's acceptance criteria only checked the C++ enum entry, while the
+precedent touches ~8 files.
 
 ## Decision
 
@@ -39,9 +36,8 @@ Proposed runtime contract for the productised probe:
 1. **Opt-in only.** Never runs at ROM load or on any automatic path. Entry
    points: a menu action under *Open Game Folder → Extract audio…* and an
    `EmulatorShortcut::ExtractAudioHdPack` (unbound by default). The UI text
-   states up front that the probe "may find nothing" on this ROM and lists
-   what it will write (`auto/audio/fingerprints.json`, `midi/`, an
-   enumeration log).
+   states up front that the probe "may find nothing" on this ROM and lists what
+   it will write (`auto/audio/fingerprints.json`, `midi/`, an enumeration log).
 2. **Hard budget.** Two independent caps, both from settings with fixed
    defaults derived from the spike (24 ids × 3 s per phase, ~5 min total on
    Mega Man): a wall-clock budget for the whole run and a per-id frame budget
@@ -96,33 +92,32 @@ Proposed runtime contract for the productised probe:
   run it.
 - Cost: debugger attach/detach and save-state churn inside the emulator
   process; NES-only until GB/SMS drivers are studied.
-- Implemented variant (2026-08-29): the tool runs in its own process — its
-  own `Emulator` instance with a private home — not on the live emulation
-  thread. That is Decision 5's "second `Emulator` instance" alternative (and
-  the headless-script alternative) taken to the limit: the GUI *Extract audio*
-  action launches `scripts/spike_sound_driver` with the loaded ROM and the
-  sibling pack folder, so isolation is total (nothing shares the user's
-  session) and "private copy of the console state" becomes a private process.
-  `spike_sound_driver.cpp` carries the full 7-point contract: per-id frame
+- Implemented variant (2026-08-29): the tool runs in its own process — its own
+  `Emulator` instance with a private home — not on the live emulation thread,
+  i.e. Decision 5's "second `Emulator` instance" alternative taken to the
+  limit: the GUI *Extract audio* action launches `scripts/spike_sound_driver`
+  with the loaded ROM and the sibling pack folder, so isolation is total and
+  "private copy of the console state" becomes a private process.
+  `spike_sound_driver.cpp` carries the full 7-point contract (per-id frame
   budget + whole-run wall-clock budget, SIGINT abort at frame boundaries,
-  guaranteed no-op (`enumeration.log` only) when no trigger validates, output
-  relocated into `<sibling>/auto/audio/`.
-- Point 7 (shortcut wiring) implemented 2026-08-29: the checklist of §7 is
+  guaranteed no-op — `enumeration.log` only — when no trigger validates, output
+  relocated into `<sibling>/auto/audio/`).
+- Point 7 (shortcut wiring) implemented 2026-08-29 — the checklist of §7 is
   complete. `Utilities/ProcessUtilities.{h,cpp}` (new, cross-platform:
   `fork`/`execvp` on POSIX, `CreateProcessW` on Windows, `GetExecutableFolder`
   via `_NSGetExecutablePath`/`/proc/self/exe`/`GetModuleFileNameW`) provides the
   detached-process launch the checklist's "Core process-spawn utility" required
-  (there was none in the codebase). `EmulatorShortcut::ExtractAudioHdPack`
-  (`SettingTypes.h` + `EmulatorShortcut.cs` mirror), the `NesConsole` switch
-  case + `ExtractAudioHdPack()` handler (NES-only; GB/SMS switches ignore it
+  (none existed). `EmulatorShortcut::ExtractAudioHdPack` (`SettingTypes.h` +
+  `EmulatorShortcut.cs` mirror), the `NesConsole` switch case +
+  `ExtractAudioHdPack()` handler (NES-only; GB/SMS switches ignore it
   explicitly), a tool-binary resolver (`MESEN_EXTRACT_AUDIO_TOOL` env →
-  next-to-app → `<Mesen home>/Tools`, the app data folder — not `$HOME`), the `HdPackBuilderViewModel.ExtractAudio()` action
-  gated on NES, the `HdPackBuilderWindow` button and localisation strings.
-  `MepPackManager` needed no case — it emits shortcuts, it does not receive
-  them. Validated: UI `dotnet build` 0/0, a standalone `ProcessUtilities` test
-  (spawn + exe-folder) and an end-to-end headless spike (synthetic NES ROM →
-  shortcut → resolver → detached child with the pack folder forwarded). The
-  remaining GUI button-click on a real display is recorded as manual/pending.
+  next-to-app → `<Mesen home>/Tools`, the app data folder — not `$HOME`), the
+  `HdPackBuilderViewModel.ExtractAudio()` action gated on NES, the
+  `HdPackBuilderWindow` button and localisation strings. `MepPackManager` needed
+  no case — it emits shortcuts, it does not receive them. Validated: UI
+  `dotnet build` 0/0, a standalone `ProcessUtilities` test and an end-to-end
+  headless spike (synthetic NES ROM → shortcut → resolver → detached child).
+  The remaining GUI button-click on a real display is manual/pending.
 - This ADR moves to `accepted` when the feature ships with all seven points
   verifiable; ADR-0051 stays the record of the technique and its measured hit
   rate.
