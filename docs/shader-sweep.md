@@ -2,7 +2,7 @@
 
 A maintainer tool that pushes every RetroArch `.slangp` preset of a
 slang-shaders library through the macOS Metal presenter
-([ADR-0237](adr/ci-build/0237-macos-gets-shader-support-through-a-native-metal-renderer.md))
+([ADR-0237](adr/core/0237-macos-gets-shader-support-through-a-native-metal-renderer.md))
 and through `GetShaderParams`, and says which ones load, render, fall back or
 take the process down.
 
