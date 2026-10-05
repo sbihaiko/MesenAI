@@ -633,7 +633,7 @@ static bool parseRamCheat(const std::string& code, CheatCodeAbi& out, std::strin
 //A search over short windows played from save states pays a process start, a
 //ROM load and a state file round trip per candidate, and none of it is
 //emulation. Measured on the Ninja Gaiden search this was written for
-//(docs/validation/f1412-step-mode-emulator-2026-09-26.md): about 1 s of the
+//(docs/validation/slices/f1412-step-mode-emulator-2026-09-26.md): about 1 s of the
 //1.05 s a candidate cost was that overhead. This mode keeps the emulator, the
 //ROM and the candidate states in one process and answers requests on
 //stdin/stdout, so what a candidate costs is the frames it plays.

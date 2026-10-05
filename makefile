@@ -444,7 +444,7 @@ doc-checks-2:
 	#is the target that actually fetches them.
 	./scripts/checks/verify_download_channel.sh
 	#ADR reference integrity (PRD slice D1): every ADR-NNNN cited in docs/ADRs/
-	#AGENTS.md/CLAUDE.md must resolve to docs/adr/NNNN-*.md.
+	#AGENTS.md/CLAUDE.md must resolve to docs/adr/<area>/NNNN-*.md.
 	python3 scripts/checks/verify_adr_refs.py
 	#The companion of the line above: that one checks the ID resolves, this one
 	#checks the citation is TRUE. Two ways a consolidation makes a citation that

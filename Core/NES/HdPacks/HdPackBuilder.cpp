@@ -316,7 +316,7 @@ HdPackTileInfo* HdPackBuilder::FindObjectArt(uint32_t shapeHash, std::map<uint32
 //   away, and kTileNearbyMinFrames on what the old ">= 3" actually counted.
 //   Measured on Contra, the both-ways support of the candidates is sharply
 //   bimodal, and the gate below keeps the near-deterministic mode.
-//Full numbers and method: docs/validation/tilenearby-evidence-study.md.
+//Full numbers and method: docs/validation/measurements/tilenearby-evidence-study.md.
 void HdPackBuilder::BuildObjectSheets(stringstream& tileRows)
 {
 	//Before the guard below, not after it: one of the three early-outs is

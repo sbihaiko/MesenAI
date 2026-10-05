@@ -103,7 +103,7 @@
     "run shows one less - a different textures/ tree by construction, which is",
     "the failure the control exists to catch. That control was run on both of",
     "the two games that tried a pin and failed byte for byte on each",
-    "(docs/validation/f1416-coverage-sweep-2026-09-26.md: Castlevania 002A:04,",
+    "(docs/validation/slices/f1416-coverage-sweep-2026-09-26.md: Castlevania 002A:04,",
     "166 of 529 files differ; Ninja Gaiden 0076:02, 226 of 627), which is why",
     "the F14.16 sweeps carry no pin. Nothing about this ROM differs in the",
     "respect that matters - the counter is read by the game and drawn by the",

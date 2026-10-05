@@ -255,7 +255,7 @@ def candidate_files():
 
 def scan(failures):
     sections, tombstones = {}, {}
-    for p in ADR_DIR.glob("[0-9][0-9][0-9][0-9]-*.md"):
+    for p in ADR_DIR.rglob("[0-9][0-9][0-9][0-9]-*.md"):
         text = p.read_text(encoding="utf-8", errors="replace")
         sections[p.name[:4]] = sections_of(text)
         m = re.search(r"^- Superseded by:\s*ADR-(\d{4})\s*$", text, re.MULTILINE)

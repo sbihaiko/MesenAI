@@ -20,7 +20,7 @@ what a search that ran the scratch driver at its default `--jobs 8` wants. One
 session is cheaper per candidate than one launch (2.6x, measured) but it is one
 process, so on its own it is slower than eight launches were. With the same
 eight workers the session is ahead, and the route it finds is the same one:
-`docs/validation/f1412-step-mode-emulator-2026-09-26.md` has both numbers and
+`docs/validation/slices/f1412-step-mode-emulator-2026-09-26.md` has both numbers and
 the 15-hop comparison against the scratch search's own log.
 
 Frame accounting, unchanged from the scratch driver: each hop is one window of
@@ -63,7 +63,7 @@ nothing, `L+A` jumps, and the way over the wall is to jump *off* it and come
 back at it holding the jump: `L+A` for a few frames, then `R+A` to the end of
 the window. That window, applied hop after hop, walks Ryu up the wall to
 abs x 1068 and y 104 (`runs/f1413`, not versioned; the numbers are in
-`docs/validation/f1413-ninjagaiden-search-2026-09-26.md`). A candidate is
+`docs/validation/slices/f1413-ninjagaiden-search-2026-09-26.md`). A candidate is
 therefore a *run* of parts, not one hold, and the durations are fixed here.
 """
 import argparse
@@ -292,7 +292,7 @@ def choose_beam(ranked, beam, occupied=()):
     #the scratch search's log at 14/15 hops instead of 12/15, and was measured
     #to climb the Act 1-1 wall two hops later and less reliably - the mechanism
     #is the point, and the log says what it costs
-    #(docs/validation/f1413-ninjagaiden-search-2026-09-26.md).
+    #(docs/validation/slices/f1413-ninjagaiden-search-2026-09-26.md).
     if len(keep) < beam:
         for in_line_only in (True, False):
             for index, (_slot, fp, in_line) in enumerate(ranked):

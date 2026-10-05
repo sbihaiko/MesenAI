@@ -2,7 +2,7 @@
 """Build the evaluator sandbox for one ROM: frame, state, tilemap, copy table.
 
 The F12.2 dispatcher script
-(`docs/validation/f12.2-copy-sheet-cell-panel-script.md`, S1-S7) was written
+(`docs/validation/slices/f12.2-copy-sheet-cell-panel-script.md`, S1-S7) was written
 for two games whose routes already existed and whose reference frame had
 already been measured. This is the same thing for a ROM with no route at all,
 which is 25 of the 30 in the library: the frame has to be *found* before it can

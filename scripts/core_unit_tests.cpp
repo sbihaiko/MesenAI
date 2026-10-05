@@ -8517,7 +8517,7 @@ namespace
 	//---- ADR-0190: tileNearby selection from the background pair table -------
 	//The gate SelectTileNearby applies is the whole reason a tileNearby may be
 	//auto-attached at all, so it is tested away from the emulator. The numbers
-	//it is set to are measured in docs/validation/tilenearby-evidence-study.md.
+	//it is set to are measured in docs/validation/measurements/tilenearby-evidence-study.md.
 
 	static TileAdjacency Adjacency(uint32_t a, uint32_t b, uint32_t frames, uint32_t framesA, uint32_t framesB)
 	{
@@ -11872,7 +11872,7 @@ void TestHdPackOptionsLineOrderAndEmptiness()
 //over flat colours, with the real predicate deciding the re-apply. The
 //renderer itself is proven on the headless render: a pack without the tag
 //must come back byte-identical
-//(docs/validation/f12.15-behind-bg-sprites-2026-09-22.md).
+//(docs/validation/slices/f12.15-behind-bg-sprites-2026-09-22.md).
 namespace
 {
 	struct ModelPixel

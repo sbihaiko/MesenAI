@@ -52,7 +52,7 @@ def main():
         print(f"No ADR register at {ADR_DIR}.")
         return 0
 
-    adrs = sorted((parse(p) for p in ADR_DIR.glob("[0-9][0-9][0-9][0-9]-*.md")),
+    adrs = sorted((parse(p) for p in ADR_DIR.rglob("[0-9][0-9][0-9][0-9]-*.md")),
                   key=lambda a: a["id"])
     groups = ["accepted"] if not show_all else \
         ["accepted", "proposed", "superseded", "unknown"]

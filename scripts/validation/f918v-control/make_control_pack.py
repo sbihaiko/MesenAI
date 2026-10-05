@@ -31,7 +31,7 @@ The third argument is the kit's sheet-sidecar folder (`kit/sheets/`, the
 `usr*.json` written by artist_kit.py); its entries carrying "mirror" give
 the unflipped `source` tile data that is the hires.txt key. Without it no
 key is marker-painted. Read with mep_lint.py afterwards; the run that used
-this is docs/validation/f918v-current-binary-painting-2026-09-15.md §4.
+this is docs/validation/slices/f918v-current-binary-painting-2026-09-15.md §4.
 """
 import json
 import re

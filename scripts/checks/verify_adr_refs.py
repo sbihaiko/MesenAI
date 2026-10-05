@@ -55,7 +55,7 @@ def declared_consolidated_ids():
     dangling reference and the register could never be consolidated again.
     """
     declared = {}
-    for p in ADR_DIR.glob("*.md"):
+    for p in ADR_DIR.rglob("*.md"):
         try:
             text = p.read_text(encoding="utf-8")
         except UnicodeDecodeError:
@@ -73,7 +73,7 @@ def declared_consolidated_ids():
 
 def known_ids():
     ids = set()
-    for p in ADR_DIR.glob("*.md"):
+    for p in ADR_DIR.rglob("*.md"):
         m = re.match(r"(\d{4})-", p.name)
         if m:
             ids.add(m.group(1))
@@ -129,7 +129,7 @@ def scan(failures):
     #text sits there unchanged and readers follow it instead.
     for num in sorted(set(declared) & ids):
         declarers = declared[num]
-        path = next(iter(ADR_DIR.glob(f"{num}-*.md")))
+        path = next(iter(ADR_DIR.rglob(f"{num}-*.md")))
         target = stub_target(path.read_text(encoding="utf-8"))
         if target in declarers:
             continue

@@ -906,7 +906,7 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   patch). Verification: `python3 scripts/test_mep_import.py` (synthetic
   pack, synthetic iNES + IPS; PASS/FAIL per check, exit 0 only if all
   pass); the measured round-trips are in
-  `docs/validation/adr0198-s3-patched-rom-import-2026-09-22.md`.
+  `docs/validation/adr/adr0198-s3-patched-rom-import-2026-09-22.md`.
   `gen_mep_recipe_fixture.py` (F6.4a) writes the real-bytes MEP-recipe-v1
   golden under `docs/specs/golden/mep-recipe/fixture/` (`primary.zip`,
   `audio-dep.zip`, `recipe.json`, `recipe-missing-dep.json`) that a
@@ -1417,12 +1417,12 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   the poses of one figure, and the source crop's recorded art would erase
   paint an earlier instance had already routed there. Covered by
   `test_mep_figure.py`; measured on Contra in
-  `docs/validation/issue-413-kit-figure-reload-2026-09-24.md` and
-  `docs/validation/issue-435-kit-recipe-order-2026-09-24.md`, and on
+  `docs/validation/issues/issue-413-kit-figure-reload-2026-09-24.md` and
+  `docs/validation/issues/issue-435-kit-recipe-order-2026-09-24.md`, and on
   Castlevania in
-  `docs/validation/issue-452-453-figure-import-blank-tiles-and-recipe-order-2026-09-24.md`
-  and `docs/validation/issue-463-figure-mirror-2026-09-25.md` and
-  `docs/validation/issue-478-routed-cell-owner-merge-2026-09-25.md`.
+  `docs/validation/issues/issue-452-453-figure-import-blank-tiles-and-recipe-order-2026-09-24.md`
+  and `docs/validation/issues/issue-463-figure-mirror-2026-09-25.md` and
+  `docs/validation/issues/issue-478-routed-cell-owner-merge-2026-09-25.md`.
 - `sheet_keys_audit.py <pack-dir>...` (#181/#183) - for every sprite-sheet
   tile entry (`sheets/sprNNN.json`, `sheets/sprites.json`, a cell's own
   `tiles` and its `aliases[].tiles`) looks up the
@@ -1596,7 +1596,7 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   expression (`cancel-in-progress` parsed as
   `${{ github.event_name == 'issues' }}`, not a comment grep).
   `verify_mep_fallback_adr.sh` (AC-7 of the MEP zip-fallback task) checks
-  `docs/adr/0120-*.md` documents the subfolder fallback as an additive
+  `docs/adr/packs/0120-*.md` documents the subfolder fallback as an additive
   last-priority extension of ADR-0040/ADR-0049's precedence, a pure I/O-free
   function `PrepareZip` consults with its `outFolder` contract held fixed,
   the C++ (name match) vs C#/Python (structural match) asymmetry with its

@@ -12,7 +12,7 @@ tool that does. It picks the sheet, picks the slot, writes the cell into the
 sidecar, and grows the two PNGs when the grid has no free slot.
 
 What it retires, measured over the 2026-09-19 28-ROM cold read
-(`docs/validation/f12.2-opus-sweep-2026-09-19.md`, finding 4 — a stop in
+(`docs/validation/slices/f12.2-opus-sweep-2026-09-19.md`, finding 4 — a stop in
 every one of the 28 runs, 30 s to 2 min each):
 
   1. authoring the wrapper (`index`, `x`, `y`, `count`, `context`);

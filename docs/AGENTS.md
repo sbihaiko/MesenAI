@@ -6,7 +6,7 @@ Durable documentation for this fork: open specs, execution plans, and the enhanc
 
 ## Ownership
 
-Owns `docs/specs/` (CC0), `docs/roadmap/` (the consolidated PRD), `docs/adr/` (the decision register, moved here from `.dev-squad/adr/` on 2026-09-03), `docs/media/`, `docs/validation/` (dated acceptance/measurement logs as `.md`, plus one JSON fixture; no scripts), `docs/community-packs/` (the errata store read by `scripts/mep_errata.py` and the validate workflow, ADR-0152), `docs/releases/` (release-zip READMEs copied by `scripts/release_macos.sh`, gated by `scripts/checks/verify_release_asset_names.sh`), `docs/reviews/` (point-in-time review reports), and top-level ecosystem notes. Does not own `AGENTS.md` files in other trees or Core/UI source.
+Owns `docs/specs/` (CC0), `docs/roadmap/` (the consolidated PRD), `docs/adr/` (the decision register, moved here from `.dev-squad/adr/` on 2026-09-03 and split into the six area subfolders `packs/`, `sprites/`, `recorder/`, `ci-build/`, `audio/`, `gui/` on 2026-10-05 — the area is the decision's subject, and ids are never reused, so a citation is by `ADR-NNNN`, not by path), `docs/media/`, `docs/validation/` (dated acceptance/measurement logs, grouped by what the record IS: `issues/`, `slices/`, `adr/`, `measurements/`, `process/`; plus one JSON fixture; no scripts), `docs/community-packs/` (the errata store read by `scripts/mep_errata.py` and the validate workflow, ADR-0152), `docs/releases/` (release-zip READMEs copied by `scripts/release_macos.sh`, gated by `scripts/checks/verify_release_asset_names.sh`), `docs/reviews/` (point-in-time review reports), and top-level ecosystem notes. Does not own `AGENTS.md` files in other trees or Core/UI source.
 
 ## Local Contracts
 
@@ -65,9 +65,9 @@ Owns `docs/specs/` (CC0), `docs/roadmap/` (the consolidated PRD), `docs/adr/` (t
   them (`README.md`, `CLAUDE.md`, the community-pack validation workflow) name
   `docs/` accordingly.
 - F12.2 cold-read protocol (ADR-0214, amended 2026-09-19: the evaluator is a
-  fresh **Opus** session): `docs/validation/f12.2-sweep-evaluator-briefing.md`
+  fresh **Opus** session): `docs/validation/slices/f12.2-sweep-evaluator-briefing.md`
   is the only evaluator-facing document for the 28-ROM sweep;
-  `docs/validation/f12.2-fable-evaluator-briefing.md` is the Fable-era
+  `docs/validation/slices/f12.2-fable-evaluator-briefing.md` is the Fable-era
   two-game version. The dispatcher script next to them
   (`f12.2-copy-sheet-cell-panel-script.md`) is the answer key and must not
   be pasted into an evaluator session.

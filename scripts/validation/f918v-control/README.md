@@ -7,7 +7,7 @@ re-pointed at a cell whose colour names the outcome (gated hit = cyan,
 gated miss falling to the bare twin = magenta, no gate = orange,
 mirror-flagged key = solid four-quadrant marker whose order reads the OAM
 flip). Rationale and the run that used it:
-`docs/validation/f918v-current-binary-painting-2026-09-15.md` §4.
+`docs/validation/slices/f918v-current-binary-painting-2026-09-15.md` §4.
 
 ```
 python3 scripts/validation/f918v-control/make_control_pack.py <built-pack> <out-pack> [<kit>/sheets]

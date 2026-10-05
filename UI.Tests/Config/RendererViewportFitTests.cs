@@ -5,7 +5,7 @@ using Xunit;
 namespace Mesen.Tests.Config;
 
 //P.7 "16:9 stretch", the half that was still listed as manual in
-//docs/validation/manual-validation-automation-plan.md: the on-window letterbox
+//docs/validation/process/manual-validation-automation-plan.md: the on-window letterbox
 //fit and FullscreenForceIntegerScale, previously inline in
 //MainWindow.RendererPanel_LayoutUpdated and therefore untestable. The
 //aspect-ratio *math* is Core/Shared/Video/AspectRatioMath.h + core_unit_tests
