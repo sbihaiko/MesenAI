@@ -29,12 +29,24 @@ extern "C"
 		}
 	}
 
-	DllExport void __stdcall GetPressedKeys(uint16_t* keyBuffer)
+	//capacity is the host's buffer length, handed over explicitly (#895): the
+	//copy loop stops at the caller's bound, not at a literal repeated here. What
+	//comes back is the SIZE OF THE SET the manager holds, not how many slots fit,
+	//which is what lets the host grow a buffer that was too small instead of
+	//losing the tail of a set. Only the first min(size, capacity) slots are
+	//written; nothing here fills the rest, so it is the HOST that has to leave
+	//them reading as "no key" - it allocates the buffer (a zeroed `new ushort[]`)
+	//and its no-key convention is 0.
+	DllExport int32_t __stdcall GetPressedKeys(uint16_t* keyBuffer, int32_t capacity)
 	{
+		if(capacity < 0) {
+			capacity = 0;
+		}
 		vector<uint16_t> pressedKeys = KeyManager::GetPressedKeys();
-		for(size_t i = 0; i < pressedKeys.size() && i < 3; i++) {
+		for(size_t i = 0; i < pressedKeys.size() && i < (size_t)capacity; i++) {
 			keyBuffer[i] = pressedKeys[i];
 		}
+		return (int32_t)pressedKeys.size();
 	}
 
 	DllExport void __stdcall DisableAllKeys(bool disabled)
