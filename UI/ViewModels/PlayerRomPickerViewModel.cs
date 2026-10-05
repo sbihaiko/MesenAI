@@ -194,9 +194,17 @@ namespace Mesen.ViewModels
 		//The action row's press: this folder becomes the games folder. It is the
 		//same two properties the classic Advanced Options row writes, saved the
 		//same way, then the picker re-roots in place and STAYS: the sheet does not
-		//dismiss, the action row is gone (this folder IS the games folder now),
-		//the path line reads "Your games", and the new root leads the roots list.
-		//The focus re-claim is free - PathText changes, and the arbiter watches it.
+		//dismiss.
+		//
+		//There are two outcomes (#887), and the difference is whether the folder
+		//answers anything. A folder with entries in it IS the games folder now: the
+		//action row is gone, the path line reads "Your games", and it leads the roots
+		//list. A folder that answers nothing is SAVED but not used - it is not
+		//registered with the core, not made a root, and not led with - so the player
+		//keeps the action row and is told why by the notice.
+		//
+		//The first outcome re-claims the ring through PathText, which changes. The
+		//second does not, which is why it bumps SuggestionRevision by hand.
 		private void MakeGamesFolder(string folder)
 		{
 			if(_folder is null) {
@@ -206,6 +214,14 @@ namespace Mesen.ViewModels
 			ConfigManager.Config.Preferences.OverrideGameFolder = true;
 			ConfigManager.Config.Save();
 
+			//#887: the setting is saved either way - a folder that answers nothing
+			//today is used the moment it holds anything, and this action is the
+			//player's, not the app's to refuse - but a folder the app cannot open on
+			//is not registered with the core and does not become a root. Otherwise
+			//the press that designates an empty folder is also the press that leaves
+			//them leading on it, which is the state #887 is about.
+			string? usable = GamesFolderChoice.Usable(folder);
+
 			//The core keeps its own list of folders a game can be found in, and
 			//reads the configured folder only at startup (MainWindow's own
 			//AddKnownGameFolder call). Without this one the folder the player
@@ -213,11 +229,31 @@ namespace Mesen.ViewModels
 			//resolves a ROM by name and CRC - until the next launch. The native
 			//dialog's initial folder reads the config live and was never affected;
 			//this is the other half of the same write.
-			KnownGameFolderSink(folder);
+			if(usable != null) {
+				KnownGameFolderSink(usable);
+			}
 
-			_roots = BuildRoots(folder);
+			_roots = BuildRoots(usable);
 			ShowFolder(folder);
-			NoticeText = ResourceHelper.GetMessage("RomPickerGamesFolderSaved");
+			//The rebuilt rows are new containers, so whatever the arbiter had the ring
+			//on - the action row this press came from - went with the old one.
+			//
+			//The claim above cannot lean on PathText here the way the class comment
+			//says it can: a folder that answers nothing is deliberately not made a
+			//root as *the games folder* (#887), so the path line reads the same text
+			//before and after - the shortened path, or another root's own label when
+			//the folder is also that root, since Roots dedupes by path - and the
+			//arbiter sees no change in any of the three properties it watches. Without this the pad is left with nothing focused, the
+			//direction keys and Confirm return immediately because there is no
+			//control to act on, and only Back still works - escaped through the
+			//window rather than through the sheet. Found by the second review of
+			//#894, which traced the ring rather than the rule.
+			SuggestionRevision++;
+			//The notice says which of the two happened, because "Saved" alone would
+			//contradict what the player then sees: the action row is still there
+			//offering to make this the games folder, which is only confusing if
+			//nothing says why.
+			NoticeText = ResourceHelper.GetMessage(usable is null ? "RomPickerGamesFolderEmpty" : "RomPickerGamesFolderSaved");
 		}
 
 		private void ShowRoots()
@@ -416,10 +452,13 @@ namespace Mesen.ViewModels
 			? null
 			: new RomPickerRoot(ResourceHelper.GetMessage("RomPickerThisComputer"), WholeComputerFolder);
 
-		//The configured games folder, or null when the player never set one. Both
-		//the roots and the action row's "already the games folder" test read it.
-		private static string? GamesFolder => ConfigManager.Config.Preferences.OverrideGameFolder
-			? ConfigManager.Config.Preferences.GameFolder : null;
+		//The configured games folder, or null when the player never set one or the
+		//folder they set answers nothing (#887). Both the roots and the action row's
+		//"already the games folder" test read it, so the rule is applied in one
+		//place: the list must not lead with a root that opens on nothing, and the
+		//action row keeps offering to designate one.
+		private static string? GamesFolder => GamesFolderChoice.Usable(
+			ConfigManager.Config.Preferences.OverrideGameFolder ? ConfigManager.Config.Preferences.GameFolder : null);
 
 		//The app's own ROM folder, beside its settings. Created on demand: a
 		//fresh install has no Roms folder, and a root that does not answer would

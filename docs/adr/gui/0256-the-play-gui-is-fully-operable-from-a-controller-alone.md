@@ -528,6 +528,67 @@ place.
      library is *called* and *how many rows it may take*, and nothing about
      which folders are found.
 
+   **Amendment, 2026-10-05 (third, same day): the configured games folder is
+   used only while it answers something.** The rule for a games folder that
+   resolves to a directory holding nothing was put to the user as a choice
+   (issue #887; macOS `/home` is an autofs node - `isdir` true, `listdir` empty),
+   and he picked **"Degradar no uso"**, verbatim: *accept any folder as the games
+   folder, and never open on one that lists nothing*. That is the go-ahead this
+   narrowing records, and ADR-0260 is the decision it belongs to.
+
+   Three clauses written above stop being literally true, and this is where they
+   are narrowed rather than left to contradict the code. Each was a promise the
+   sheet could not keep once the folder it promised to lead with is one the app
+   cannot open on - the player is left at a root that lists nothing, with no way
+   back to a library that works.
+
+   - **"The roots are the configured game folder when `Preferences.OverrideGameFolder`
+     is set"** is now "…when it is set **and that folder holds at least one
+     entry**". `PlayerRomPickerViewModel.GamesFolder` asks `GamesFolderChoice.Usable`
+     instead of reading the setting, so an empty, missing or unreadable folder is
+     not a root **as the games folder**. That is the whole of it, and not "not a
+     root at all": `PlayRomPicker.Roots` dedupes by path, so a folder that is
+     also the app's own ROM folder or a mounted volume is still a root under
+     *that* label. The app ROM folder and the mounted volumes are otherwise
+     unchanged: they are not the player's setting, and nothing here makes them
+     conditional.
+   - **The action row "then re-roots in place, turning the path line into *Your
+     games* and putting the new root at the head of the list"** is now that,
+     **when the folder answers**; when it does not, the setting is saved, the
+     roots are rebuilt without it, the path line keeps what it already read (the
+     shortened path - or another root's own label, in the dedupe case above), and
+     the row stays where it was with a notice saying the folder is saved but not
+     the one in use. The *save* is untouched - the fence below still holds, and
+     the two properties written are the same two - and so is the fence's reason:
+     the player may put a legitimate empty library there and fill it later.
+   - **"The sheet therefore makes that same call itself, immediately after
+     `ConfigManager.Config.Save()`"** is now that call **gated on the same
+     answer**: `EmuApi.AddKnownGameFolder` is not called for a folder that holds
+     nothing, because what that list feeds is `RomFinder`, which resolves a ROM
+     by name and CRC and has nothing to resolve in an empty folder. Everything
+     the paragraph above says about *why* the second write exists is untouched -
+     a designated folder that answers something is still registered in the same
+     turn, and the "works only after a restart" gap is still closed.
+   - **What this does not change**: the fence (this sheet writes `GameFolder` and
+     nothing else, ever), the setting itself - which is never cleared, refused or
+     rewritten, so a folder that answers nothing today is used again the moment
+     it holds anything - the focus rule that keeps the ring off the action row,
+     and every refusal above. The rule is one function in the dual-compiled
+     `UI/Logic` (`GamesFolderChoice`), so the next entry point that needs it asks
+     the same question instead of an inline `Directory.Exists` of its own.
+   - **The cost, stated where the sheet's own rules live**: a legitimately empty
+     games folder stops being led with. A player who has just created an empty
+     library is not led to their new empty one - `Open ROM` starts at the
+     last-opened folder only when that folder answers something too, and
+     otherwise at the dialog's own default, and the roots list is usually one
+     root shorter but not always, because `PlayRomPicker.Roots` dedupes by path
+     and the folder is still a root under another label when it is also the app's
+     own ROM folder or a mounted volume. That is deliberate - telling an autofs
+     node apart from an empty folder is not knowable from the path - and the
+     alternative (refusing at save) would refuse a folder that is full
+     tomorrow. ADR-0260 carries the full argument and the three ways out that
+     were put to the user.
+
 ## The four questions, and how they were answered
 
 All on 2026-10-04, by the user, quoted verbatim from the questions they answered.
