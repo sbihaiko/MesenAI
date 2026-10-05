@@ -1,0 +1,1387 @@
+{
+  "schema": "mesence.cheat-intent-cases/1",
+  "how_chosen": "Judged from CheatDb.Nes.json descriptions alone, with no play-testing. An entry is acceptable when its description, read literally, does what the intent asks. \"don't die\" accepts invincibility and infinite-health entries, but not infinite lives (with infinite lives you still die). \"infinite X\" accepts an entry that keeps X from running out, including a RAM write that pins X high, but not a \"... on pick-up\" entry. \"start on level/world N\" accepts only the entry for that N. NONE (accept: []) is the only correct answer when no description does what was asked - a level select in a game whose list has none, ammo in a game without ammo, or a request to invent a code. An entry and its \"(alt)\" twin are both acceptable, so both ids are listed where both exist. Independence: this set was authored without reading tests/fixtures/cheat-intent/intents.json, without reading scripts/cheat_intent_eval.py beyond its --help output, and without reading docs/validation/measurements/p11-cheat-intent-measurement-2026-10-02.md. The only input was UI/Dependencies/Internal/CheatDb.Nes.json. Intents are deliberately paraphrased, use synonym verbs and colloquial player phrasings, and are not near-literal restatements of any description; four intents are in pt-BR.",
+  "cases": [
+    {
+      "game": "Super Mario Bros. (World)",
+      "sha1": "FEFA1097449A3A11EBF8C6199E905996C5DC8FBD",
+      "intent": "I keep dying the moment a Goomba touches me - make me untouchable",
+      "accept": [
+        "E0",
+        "E1",
+        "E51",
+        "E52"
+      ],
+      "accept_desc": [
+        "Invincibility (Starman effect)",
+        "Invincibility",
+        "Invincibility (blinking)",
+        "Invincibility (Starman effect) (alt)"
+      ]
+    },
+    {
+      "game": "Super Mario Bros. (World)",
+      "sha1": "FEFA1097449A3A11EBF8C6199E905996C5DC8FBD",
+      "intent": "stop the clock so I never run out of time",
+      "accept": [
+        "E2",
+        "E3",
+        "E50"
+      ],
+      "accept_desc": [
+        "Infinite time",
+        "Infinite time (alt)",
+        "Infinite time (alt 2)"
+      ]
+    },
+    {
+      "game": "Super Mario Bros. (World)",
+      "sha1": "FEFA1097449A3A11EBF8C6199E905996C5DC8FBD",
+      "intent": "unlock the level select so I can jump around",
+      "accept": [
+        "E38"
+      ],
+      "accept_desc": [
+        "Enable level select"
+      ]
+    },
+    {
+      "game": "Super Mario Bros. (World)",
+      "sha1": "FEFA1097449A3A11EBF8C6199E905996C5DC8FBD",
+      "intent": "put me at the start of World 5",
+      "accept": [
+        "E42"
+      ],
+      "accept_desc": [
+        "Start on World 5"
+      ]
+    },
+    {
+      "game": "Super Mario Bros. (World)",
+      "sha1": "FEFA1097449A3A11EBF8C6199E905996C5DC8FBD",
+      "intent": "I never want to lose a life again",
+      "accept": [
+        "E4",
+        "E5",
+        "E49"
+      ],
+      "accept_desc": [
+        "Infinite lives - both players",
+        "Infinite lives",
+        "Infinite lives (alt)"
+      ]
+    },
+    {
+      "game": "Super Mario Bros. (World)",
+      "sha1": "FEFA1097449A3A11EBF8C6199E905996C5DC8FBD",
+      "intent": "let Mario hop again in mid-air",
+      "accept": [
+        "E22"
+      ],
+      "accept_desc": [
+        "Multi-jump"
+      ]
+    },
+    {
+      "game": "Super Mario Bros. (World)",
+      "sha1": "FEFA1097449A3A11EBF8C6199E905996C5DC8FBD",
+      "intent": "give me the power to pass through pipes and brick blocks",
+      "accept": [
+        "E12"
+      ],
+      "accept_desc": [
+        "Walk through pipes and blocks"
+      ]
+    },
+    {
+      "game": "Super Mario Bros. (World)",
+      "sha1": "FEFA1097449A3A11EBF8C6199E905996C5DC8FBD",
+      "intent": "start me off in World 9",
+      "accept": [
+        "NONE"
+      ],
+      "accept_desc": []
+    },
+    {
+      "game": "Super Mario Bros. (World)",
+      "sha1": "FEFA1097449A3A11EBF8C6199E905996C5DC8FBD",
+      "intent": "quero começar direto na fase 8",
+      "accept": [
+        "E45"
+      ],
+      "accept_desc": [
+        "Start on World 8"
+      ]
+    },
+    {
+      "game": "Mega Man 2 (USA)",
+      "sha1": "2EC08F9341003DED125458DF8697CA5EF09D2209",
+      "intent": "nothing should be able to hurt me, not even the spikes",
+      "accept": [
+        "E0",
+        "E1",
+        "E33"
+      ],
+      "accept_desc": [
+        "Invincibility",
+        "Invincibility (alt)",
+        "Invincibility (blinking)"
+      ]
+    },
+    {
+      "game": "Mega Man 2 (USA)",
+      "sha1": "2EC08F9341003DED125458DF8697CA5EF09D2209",
+      "intent": "I want to keep playing forever without ever seeing a game over",
+      "accept": [
+        "E3",
+        "E47"
+      ],
+      "accept_desc": [
+        "Infinite lives",
+        "Infinite lives (alt)"
+      ]
+    },
+    {
+      "game": "Mega Man 2 (USA)",
+      "sha1": "2EC08F9341003DED125458DF8697CA5EF09D2209",
+      "intent": "my health bar should never empty",
+      "accept": [
+        "E2",
+        "E50"
+      ],
+      "accept_desc": [
+        "Infinite health",
+        "Infinite health (alt)"
+      ]
+    },
+    {
+      "game": "Mega Man 2 (USA)",
+      "sha1": "2EC08F9341003DED125458DF8697CA5EF09D2209",
+      "intent": "let me chain my jumps to reach the top of the screen",
+      "accept": [
+        "E21"
+      ],
+      "accept_desc": [
+        "Multi-jump"
+      ]
+    },
+    {
+      "game": "Mega Man 2 (USA)",
+      "sha1": "2EC08F9341003DED125458DF8697CA5EF09D2209",
+      "intent": "start me off with every weapon already unlocked",
+      "accept": [
+        "E34"
+      ],
+      "accept_desc": [
+        "Have all weapons and all stages cleared"
+      ]
+    },
+    {
+      "game": "Mega Man 2 (USA)",
+      "sha1": "2EC08F9341003DED125458DF8697CA5EF09D2209",
+      "intent": "let me slide backwards while holding the opposite direction",
+      "accept": [
+        "E10"
+      ],
+      "accept_desc": [
+        "Moonwalking"
+      ]
+    },
+    {
+      "game": "Mega Man 2 (USA)",
+      "sha1": "2EC08F9341003DED125458DF8697CA5EF09D2209",
+      "intent": "my energy tanks should never be used up",
+      "accept": [
+        "E46"
+      ],
+      "accept_desc": [
+        "Infinite energy tanks"
+      ]
+    },
+    {
+      "game": "Mega Man 2 (USA)",
+      "sha1": "2EC08F9341003DED125458DF8697CA5EF09D2209",
+      "intent": "give me a clock that never runs out",
+      "accept": [
+        "NONE"
+      ],
+      "accept_desc": []
+    },
+    {
+      "game": "Mega Man 2 (USA)",
+      "sha1": "2EC08F9341003DED125458DF8697CA5EF09D2209",
+      "intent": "quero começar com todos os chefes já derrotados",
+      "accept": [
+        "E34"
+      ],
+      "accept_desc": [
+        "Have all weapons and all stages cleared"
+      ]
+    },
+    {
+      "game": "Contra (USA)",
+      "sha1": "979494E7869AC7AB4815FDBD1DC99F893F713FBF",
+      "intent": "I want to be untouchable for the whole run",
+      "accept": [
+        "E0",
+        "E1",
+        "E2",
+        "E32",
+        "E33",
+        "E34"
+      ],
+      "accept_desc": [
+        "Invincibility",
+        "Invincibility (blinking)",
+        "Invincibility (blinking) (alt)",
+        "Invincibility (blinking) (alt 2)",
+        "Invincibility (star effect) - P1",
+        "Invincibility (star effect) - P2"
+      ]
+    },
+    {
+      "game": "Contra (USA)",
+      "sha1": "979494E7869AC7AB4815FDBD1DC99F893F713FBF",
+      "intent": "when I respawn, keep the gun I was carrying",
+      "accept": [
+        "E4"
+      ],
+      "accept_desc": [
+        "Keep weapons after losing life"
+      ]
+    },
+    {
+      "game": "Contra (USA)",
+      "sha1": "979494E7869AC7AB4815FDBD1DC99F893F713FBF",
+      "intent": "start me on level 6",
+      "accept": [
+        "E19"
+      ],
+      "accept_desc": [
+        "Start on level 6"
+      ]
+    },
+    {
+      "game": "Contra (USA)",
+      "sha1": "979494E7869AC7AB4815FDBD1DC99F893F713FBF",
+      "intent": "I never want to run out of lives",
+      "accept": [
+        "E3"
+      ],
+      "accept_desc": [
+        "Start with infinite lives"
+      ]
+    },
+    {
+      "game": "Contra (USA)",
+      "sha1": "979494E7869AC7AB4815FDBD1DC99F893F713FBF",
+      "intent": "hand me the Spread Gun every time I start a new life",
+      "accept": [
+        "E12"
+      ],
+      "accept_desc": [
+        "Start new life with Spread Gun"
+      ]
+    },
+    {
+      "game": "Contra (USA)",
+      "sha1": "979494E7869AC7AB4815FDBD1DC99F893F713FBF",
+      "intent": "my bullets should connect no matter where they land on screen",
+      "accept": [
+        "E7"
+      ],
+      "accept_desc": [
+        "Hit anywhere"
+      ]
+    },
+    {
+      "game": "Contra (USA)",
+      "sha1": "979494E7869AC7AB4815FDBD1DC99F893F713FBF",
+      "intent": "make me move across the ground twice as fast",
+      "accept": [
+        "E8"
+      ],
+      "accept_desc": [
+        "Run twice as fast"
+      ]
+    },
+    {
+      "game": "Castlevania (USA)",
+      "sha1": "EE09B857C90916EDD92A20C463485A610B0A76FD",
+      "intent": "my health should never drop",
+      "accept": [
+        "E10"
+      ],
+      "accept_desc": [
+        "Infinite health"
+      ]
+    },
+    {
+      "game": "Castlevania (USA)",
+      "sha1": "EE09B857C90916EDD92A20C463485A610B0A76FD",
+      "intent": "I want to be impossible to kill",
+      "accept": [
+        "E10",
+        "E11"
+      ],
+      "accept_desc": [
+        "Infinite health",
+        "Invincibility (blinking)"
+      ]
+    },
+    {
+      "game": "Castlevania (USA)",
+      "sha1": "EE09B857C90916EDD92A20C463485A610B0A76FD",
+      "intent": "hand me the throwing knife sub-weapon",
+      "accept": [
+        "E14"
+      ],
+      "accept_desc": [
+        "Have the Knife"
+      ]
+    },
+    {
+      "game": "Castlevania (USA)",
+      "sha1": "EE09B857C90916EDD92A20C463485A610B0A76FD",
+      "intent": "let me jump twice as high as normal",
+      "accept": [
+        "E3"
+      ],
+      "accept_desc": [
+        "Jump 2x as high"
+      ]
+    },
+    {
+      "game": "Castlevania (USA)",
+      "sha1": "EE09B857C90916EDD92A20C463485A610B0A76FD",
+      "intent": "keep my sub-weapon after I lose a life",
+      "accept": [
+        "E8"
+      ],
+      "accept_desc": [
+        "Keep sub-weapon after dying"
+      ]
+    },
+    {
+      "game": "Castlevania (USA)",
+      "sha1": "EE09B857C90916EDD92A20C463485A610B0A76FD",
+      "intent": "my whip should hit enemies anywhere on screen",
+      "accept": [
+        "E5"
+      ],
+      "accept_desc": [
+        "Hit anywhere (Whip)"
+      ]
+    },
+    {
+      "game": "Castlevania (USA)",
+      "sha1": "EE09B857C90916EDD92A20C463485A610B0A76FD",
+      "intent": "let me pick any stage from the title screen",
+      "accept": [
+        "NONE"
+      ],
+      "accept_desc": []
+    },
+    {
+      "game": "Castlevania (USA)",
+      "sha1": "EE09B857C90916EDD92A20C463485A610B0A76FD",
+      "intent": "quero dar uma de imortal",
+      "accept": [
+        "E10",
+        "E11"
+      ],
+      "accept_desc": [
+        "Infinite health",
+        "Invincibility (blinking)"
+      ]
+    },
+    {
+      "game": "Zelda II - The Adventure of Link (USA)",
+      "sha1": "52BF22C47D86DBD1E09A9179EDD593B19E43115B",
+      "intent": "my magic meter should never drain",
+      "accept": [
+        "E2",
+        "E3",
+        "E30"
+      ],
+      "accept_desc": [
+        "Infinite magic",
+        "Infinite magic (alt)",
+        "Infinite magic (alt 2)"
+      ]
+    },
+    {
+      "game": "Zelda II - The Adventure of Link (USA)",
+      "sha1": "52BF22C47D86DBD1E09A9179EDD593B19E43115B",
+      "intent": "let me fly by holding A",
+      "accept": [
+        "E17"
+      ],
+      "accept_desc": [
+        "Link can fly (hold A)"
+      ]
+    },
+    {
+      "game": "Zelda II - The Adventure of Link (USA)",
+      "sha1": "52BF22C47D86DBD1E09A9179EDD593B19E43115B",
+      "intent": "start me out knowing every spell",
+      "accept": [
+        "E18"
+      ],
+      "accept_desc": [
+        "Start with all spells"
+      ]
+    },
+    {
+      "game": "Zelda II - The Adventure of Link (USA)",
+      "sha1": "52BF22C47D86DBD1E09A9179EDD593B19E43115B",
+      "intent": "give me the upward and downward stab",
+      "accept": [
+        "E54"
+      ],
+      "accept_desc": [
+        "Have up/down thrust"
+      ]
+    },
+    {
+      "game": "Zelda II - The Adventure of Link (USA)",
+      "sha1": "52BF22C47D86DBD1E09A9179EDD593B19E43115B",
+      "intent": "stop me from losing EXP when I level up",
+      "accept": [
+        "E9"
+      ],
+      "accept_desc": [
+        "Don't lose EXP points while leveling up"
+      ]
+    },
+    {
+      "game": "Metroid (USA)",
+      "sha1": "FDBFC7871962F72A1EF57E5A7E456164FB93430B",
+      "intent": "my missile count should never drop",
+      "accept": [
+        "E19",
+        "E25"
+      ],
+      "accept_desc": [
+        "Infinite health and Missiles, have all items",
+        "Infinite energy, Missiles and all items"
+      ]
+    },
+    {
+      "game": "Metroid (USA)",
+      "sha1": "FDBFC7871962F72A1EF57E5A7E456164FB93430B",
+      "intent": "make Samus invulnerable",
+      "accept": [
+        "E0"
+      ],
+      "accept_desc": [
+        "Invincibility"
+      ]
+    },
+    {
+      "game": "Metroid (USA)",
+      "sha1": "FDBFC7871962F72A1EF57E5A7E456164FB93430B",
+      "intent": "spawn in with every item already collected",
+      "accept": [
+        "E19",
+        "E24",
+        "E25"
+      ],
+      "accept_desc": [
+        "Infinite health and Missiles, have all items",
+        "Have all items",
+        "Infinite energy, Missiles and all items"
+      ]
+    },
+    {
+      "game": "Metroid (USA)",
+      "sha1": "FDBFC7871962F72A1EF57E5A7E456164FB93430B",
+      "intent": "let me jump repeatedly in mid-air",
+      "accept": [
+        "E9"
+      ],
+      "accept_desc": [
+        "Multi-jump"
+      ]
+    },
+    {
+      "game": "Metroid (USA)",
+      "sha1": "FDBFC7871962F72A1EF57E5A7E456164FB93430B",
+      "intent": "give Samus a sword to swing",
+      "accept": [
+        "NONE"
+      ],
+      "accept_desc": []
+    },
+    {
+      "game": "Pac-Man (USA) (Namco)",
+      "sha1": "AA1BBA9A243C70EB4E9928B5EFEC9D4877579D08",
+      "intent": "make the power pellets last a really long time",
+      "accept": [
+        "E2"
+      ],
+      "accept_desc": [
+        "Power pills last extra long"
+      ]
+    },
+    {
+      "game": "Pac-Man (USA) (Namco)",
+      "sha1": "AA1BBA9A243C70EB4E9928B5EFEC9D4877579D08",
+      "intent": "I never want to lose a life",
+      "accept": [
+        "E8"
+      ],
+      "accept_desc": [
+        "Infinite lives"
+      ]
+    },
+    {
+      "game": "Pac-Man (USA) (Namco)",
+      "sha1": "AA1BBA9A243C70EB4E9928B5EFEC9D4877579D08",
+      "intent": "make Pac-Man untouchable by the ghosts",
+      "accept": [
+        "E3"
+      ],
+      "accept_desc": [
+        "Invincibility"
+      ]
+    },
+    {
+      "game": "Pac-Man (USA) (Namco)",
+      "sha1": "AA1BBA9A243C70EB4E9928B5EFEC9D4877579D08",
+      "intent": "each ghost should be worth a fortune",
+      "accept": [
+        "E4"
+      ],
+      "accept_desc": [
+        "8000+ points for eating ghosts"
+      ]
+    },
+    {
+      "game": "Pac-Man (USA) (Namco)",
+      "sha1": "AA1BBA9A243C70EB4E9928B5EFEC9D4877579D08",
+      "intent": "make Pac-Man fire bullets",
+      "accept": [
+        "NONE"
+      ],
+      "accept_desc": []
+    },
+    {
+      "game": "Pac-Man (USA) (Namco)",
+      "sha1": "AA1BBA9A243C70EB4E9928B5EFEC9D4877579D08",
+      "intent": "não deixe o Pac-Man morrer",
+      "accept": [
+        "E3"
+      ],
+      "accept_desc": [
+        "Invincibility"
+      ]
+    },
+    {
+      "game": "Duck Hunt (World)",
+      "sha1": "B742576317CD6A04CAAC25252D5593844C9A0BB6",
+      "intent": "I should never have to reload",
+      "accept": [
+        "E0",
+        "E4"
+      ],
+      "accept_desc": [
+        "Infinite ammo",
+        "Infinite ammo (alt)"
+      ]
+    },
+    {
+      "game": "Duck Hunt (World)",
+      "sha1": "B742576317CD6A04CAAC25252D5593844C9A0BB6",
+      "intent": "every shot I take should connect",
+      "accept": [
+        "E1"
+      ],
+      "accept_desc": [
+        "Hit anywhere"
+      ]
+    },
+    {
+      "game": "Duck Hunt (World)",
+      "sha1": "B742576317CD6A04CAAC25252D5593844C9A0BB6",
+      "intent": "stop the ducks from flying off",
+      "accept": [
+        "E5"
+      ],
+      "accept_desc": [
+        "Ducks never fly away - Game A"
+      ]
+    },
+    {
+      "game": "Duck Hunt (World)",
+      "sha1": "B742576317CD6A04CAAC25252D5593844C9A0BB6",
+      "intent": "start me on round 20",
+      "accept": [
+        "NONE"
+      ],
+      "accept_desc": []
+    },
+    {
+      "game": "Tetris (USA)",
+      "sha1": "3EF4B8D6C668C0DE0CFDF508DD28E2AD8DE9A2E9",
+      "intent": "make the pieces fall faster",
+      "accept": [
+        "E8"
+      ],
+      "accept_desc": [
+        "Faster forced fall rate"
+      ]
+    },
+    {
+      "game": "Tetris (USA)",
+      "sha1": "3EF4B8D6C668C0DE0CFDF508DD28E2AD8DE9A2E9",
+      "intent": "the next block that comes down should be a T",
+      "accept": [
+        "E9"
+      ],
+      "accept_desc": [
+        "Next piece is a T-block"
+      ]
+    },
+    {
+      "game": "Tetris (USA)",
+      "sha1": "3EF4B8D6C668C0DE0CFDF508DD28E2AD8DE9A2E9",
+      "intent": "slow the blocks down",
+      "accept": [
+        "NONE"
+      ],
+      "accept_desc": []
+    },
+    {
+      "game": "Punch-Out!! (USA)",
+      "sha1": "DC69588E2A55A7BB8B915D3504048DB05D1B4CC9",
+      "intent": "my health bar should never empty",
+      "accept": [
+        "E2"
+      ],
+      "accept_desc": [
+        "Infinite health"
+      ]
+    },
+    {
+      "game": "Punch-Out!! (USA)",
+      "sha1": "DC69588E2A55A7BB8B915D3504048DB05D1B4CC9",
+      "intent": "let me flatten any boxer with a single punch",
+      "accept": [
+        "E3"
+      ],
+      "accept_desc": [
+        "One-hit knockdowns"
+      ]
+    },
+    {
+      "game": "Punch-Out!! (USA)",
+      "sha1": "DC69588E2A55A7BB8B915D3504048DB05D1B4CC9",
+      "intent": "let me fight Mike Tyson from the start",
+      "accept": [
+        "NONE"
+      ],
+      "accept_desc": []
+    },
+    {
+      "game": "Bubble Bobble (USA)",
+      "sha1": "D1B349E71A67A1F7D58D0194BE2C729AE26B1498",
+      "intent": "begin at level 50",
+      "accept": [
+        "E5"
+      ],
+      "accept_desc": [
+        "Start on level 50"
+      ]
+    },
+    {
+      "game": "Bubble Bobble (USA)",
+      "sha1": "D1B349E71A67A1F7D58D0194BE2C729AE26B1498",
+      "intent": "skip ten stages ahead",
+      "accept": [
+        "E8"
+      ],
+      "accept_desc": [
+        "Skip 10 levels"
+      ]
+    },
+    {
+      "game": "Bubble Bobble (USA)",
+      "sha1": "D1B349E71A67A1F7D58D0194BE2C729AE26B1498",
+      "intent": "player one should never lose a life",
+      "accept": [
+        "E16"
+      ],
+      "accept_desc": [
+        "Infinite lives - P1"
+      ]
+    },
+    {
+      "game": "Bubble Bobble (USA)",
+      "sha1": "D1B349E71A67A1F7D58D0194BE2C729AE26B1498",
+      "intent": "make the bubbles carry a lot more power",
+      "accept": [
+        "E9"
+      ],
+      "accept_desc": [
+        "Lots of bubble power"
+      ]
+    },
+    {
+      "game": "Ninja Gaiden (USA)",
+      "sha1": "EAD83487D9BE2F1D16C1D0B438A361A06508CD85",
+      "intent": "put me on stage 6-5",
+      "accept": [
+        "E36"
+      ],
+      "accept_desc": [
+        "Start on stage 6-5 (final boss)"
+      ]
+    },
+    {
+      "game": "Ninja Gaiden (USA)",
+      "sha1": "EAD83487D9BE2F1D16C1D0B438A361A06508CD85",
+      "intent": "shurikens shouldn't drain my spiritual strength",
+      "accept": [
+        "E10"
+      ],
+      "accept_desc": [
+        "Use shuriken without losing spiritual strength"
+      ]
+    },
+    {
+      "game": "Ninja Gaiden (USA)",
+      "sha1": "EAD83487D9BE2F1D16C1D0B438A361A06508CD85",
+      "intent": "every enemy should fall in a single strike",
+      "accept": [
+        "E14"
+      ],
+      "accept_desc": [
+        "Enemies die instantly"
+      ]
+    },
+    {
+      "game": "Ninja Gaiden (USA)",
+      "sha1": "EAD83487D9BE2F1D16C1D0B438A361A06508CD85",
+      "intent": "bosses should go down in one hit",
+      "accept": [
+        "E37"
+      ],
+      "accept_desc": [
+        "One hit kills bosses"
+      ]
+    },
+    {
+      "game": "Ninja Gaiden (USA)",
+      "sha1": "EAD83487D9BE2F1D16C1D0B438A361A06508CD85",
+      "intent": "let me begin a fresh run with nine lives",
+      "accept": [
+        "E5"
+      ],
+      "accept_desc": [
+        "Start with 9 lives"
+      ]
+    },
+    {
+      "game": "Super Mario Bros. 3 (USA)",
+      "sha1": "7E54F2A2EE6AF721CB57BA4DC39C388B06533594",
+      "intent": "start a new game at World 7",
+      "accept": [
+        "E51"
+      ],
+      "accept_desc": [
+        "Start on World 7"
+      ]
+    },
+    {
+      "game": "Super Mario Bros. 3 (USA)",
+      "sha1": "7E54F2A2EE6AF721CB57BA4DC39C388B06533594",
+      "intent": "let me jump over and over in the air",
+      "accept": [
+        "E16",
+        "E17",
+        "E18"
+      ],
+      "accept_desc": [
+        "Multi-jump",
+        "Multi-jump (alt)",
+        "Multi-jump (alt 2)"
+      ]
+    },
+    {
+      "game": "Super Mario Bros. 3 (USA)",
+      "sha1": "7E54F2A2EE6AF721CB57BA4DC39C388B06533594",
+      "intent": "every enemy I stomp should give me an extra life",
+      "accept": [
+        "E6"
+      ],
+      "accept_desc": [
+        "1-Up from every enemy you stomp"
+      ]
+    },
+    {
+      "game": "Mega Man 3 (USA)",
+      "sha1": "5CB19C7CCCF9DEDB73DAD69A39B047A24B1BE50D",
+      "intent": "I want Top Man's weapon to never run out",
+      "accept": [
+        "E5",
+        "E34"
+      ],
+      "accept_desc": [
+        "Infinite Top Man",
+        "Infinite Top Man (alt)"
+      ]
+    },
+    {
+      "game": "Mega Man 3 (USA)",
+      "sha1": "5CB19C7CCCF9DEDB73DAD69A39B047A24B1BE50D",
+      "intent": "make my slides go twice as far",
+      "accept": [
+        "E9"
+      ],
+      "accept_desc": [
+        "Longer slides"
+      ]
+    },
+    {
+      "game": "Mega Man 3 (USA)",
+      "sha1": "5CB19C7CCCF9DEDB73DAD69A39B047A24B1BE50D",
+      "intent": "give me nine lives right at the start",
+      "accept": [
+        "E23"
+      ],
+      "accept_desc": [
+        "Start with 9 lives"
+      ]
+    },
+    {
+      "game": "Mega Man 3 (USA)",
+      "sha1": "5CB19C7CCCF9DEDB73DAD69A39B047A24B1BE50D",
+      "intent": "let me begin on Dr. Wily's castle from a fresh file",
+      "accept": [
+        "NONE"
+      ],
+      "accept_desc": []
+    },
+    {
+      "game": "Double Dragon (USA)",
+      "sha1": "91B3B33A4E24D5DD1A5AFA480B8C44FAC503E926",
+      "intent": "stop the clock so I have as long as I want",
+      "accept": [
+        "E11"
+      ],
+      "accept_desc": [
+        "Infinite time"
+      ]
+    },
+    {
+      "game": "Double Dragon (USA)",
+      "sha1": "91B3B33A4E24D5DD1A5AFA480B8C44FAC503E926",
+      "intent": "let me begin on mission 4",
+      "accept": [
+        "E17"
+      ],
+      "accept_desc": [
+        "Start on mission 4 (disable after stage begins)"
+      ]
+    },
+    {
+      "game": "Double Dragon (USA)",
+      "sha1": "91B3B33A4E24D5DD1A5AFA480B8C44FAC503E926",
+      "intent": "clear the streets of every enemy",
+      "accept": [
+        "E8"
+      ],
+      "accept_desc": [
+        "No enemies"
+      ]
+    },
+    {
+      "game": "Double Dragon (USA)",
+      "sha1": "91B3B33A4E24D5DD1A5AFA480B8C44FAC503E926",
+      "intent": "give me unlimited health",
+      "accept": [
+        "E19"
+      ],
+      "accept_desc": [
+        "Infinite health"
+      ]
+    },
+    {
+      "game": "Double Dragon (USA)",
+      "sha1": "91B3B33A4E24D5DD1A5AFA480B8C44FAC503E926",
+      "intent": "give me infinite ammo",
+      "accept": [
+        "NONE"
+      ],
+      "accept_desc": []
+    },
+    {
+      "game": "Teenage Mutant Ninja Turtles (USA)",
+      "sha1": "05606CAFBA838EEB36198B5E5E9D11C3729971B3",
+      "intent": "keep my missile count from ever dropping",
+      "accept": [
+        "E22"
+      ],
+      "accept_desc": [
+        "Infinite Missiles"
+      ]
+    },
+    {
+      "game": "Teenage Mutant Ninja Turtles (USA)",
+      "sha1": "05606CAFBA838EEB36198B5E5E9D11C3729971B3",
+      "intent": "let me keep my rope forever",
+      "accept": [
+        "E12",
+        "E21"
+      ],
+      "accept_desc": [
+        "Never lose rope",
+        "Infinite Ropes"
+      ]
+    },
+    {
+      "game": "Teenage Mutant Ninja Turtles (USA)",
+      "sha1": "05606CAFBA838EEB36198B5E5E9D11C3729971B3",
+      "intent": "unlimited air on the water level",
+      "accept": [
+        "E23"
+      ],
+      "accept_desc": [
+        "Infinite time on water level"
+      ]
+    },
+    {
+      "game": "Teenage Mutant Ninja Turtles (USA)",
+      "sha1": "05606CAFBA838EEB36198B5E5E9D11C3729971B3",
+      "intent": "show the ending right after I start",
+      "accept": [
+        "E15"
+      ],
+      "accept_desc": [
+        "Start a new game to view ending"
+      ]
+    },
+    {
+      "game": "Gradius (USA)",
+      "sha1": "DFF7BCC522E5F4AADAC9A801DE613A10F29B1E23",
+      "intent": "forever lives for both ships",
+      "accept": [
+        "E0"
+      ],
+      "accept_desc": [
+        "Infinite lives - both players"
+      ]
+    },
+    {
+      "game": "Gradius (USA)",
+      "sha1": "DFF7BCC522E5F4AADAC9A801DE613A10F29B1E23",
+      "intent": "let each ship begin with nine lives",
+      "accept": [
+        "E3"
+      ],
+      "accept_desc": [
+        "Start with 9 lives - both players"
+      ]
+    },
+    {
+      "game": "Gradius (USA)",
+      "sha1": "DFF7BCC522E5F4AADAC9A801DE613A10F29B1E23",
+      "intent": "let me hold on to the power capsules I collected",
+      "accept": [
+        "E4"
+      ],
+      "accept_desc": [
+        "Keep power capsules"
+      ]
+    },
+    {
+      "game": "Gradius (USA)",
+      "sha1": "DFF7BCC522E5F4AADAC9A801DE613A10F29B1E23",
+      "intent": "every bullet should hit its target",
+      "accept": [
+        "E7"
+      ],
+      "accept_desc": [
+        "Hit anywhere"
+      ]
+    },
+    {
+      "game": "Gradius (USA)",
+      "sha1": "DFF7BCC522E5F4AADAC9A801DE613A10F29B1E23",
+      "intent": "let me start on stage 5",
+      "accept": [
+        "NONE"
+      ],
+      "accept_desc": []
+    },
+    {
+      "game": "1943 - The Battle of Midway (USA)",
+      "sha1": "1E76A86398F069DA43B25351EF419BE664D630C5",
+      "intent": "start me at mission 20",
+      "accept": [
+        "E13"
+      ],
+      "accept_desc": [
+        "Start on mission 20"
+      ]
+    },
+    {
+      "game": "1943 - The Battle of Midway (USA)",
+      "sha1": "1E76A86398F069DA43B25351EF419BE664D630C5",
+      "intent": "my plane should never be destroyed",
+      "accept": [
+        "E2",
+        "E3",
+        "E15",
+        "E16"
+      ],
+      "accept_desc": [
+        "Infinite energy",
+        "Infinite energy (alt 2)",
+        "Invincibility",
+        "Infinite energy (alt)"
+      ]
+    },
+    {
+      "game": "1943 - The Battle of Midway (USA)",
+      "sha1": "1E76A86398F069DA43B25351EF419BE664D630C5",
+      "intent": "hand me 30 power points",
+      "accept": [
+        "E8"
+      ],
+      "accept_desc": [
+        "30 power points"
+      ]
+    },
+    {
+      "game": "1943 - The Battle of Midway (USA)",
+      "sha1": "1E76A86398F069DA43B25351EF419BE664D630C5",
+      "intent": "give me unlimited power-ups",
+      "accept": [
+        "E0"
+      ],
+      "accept_desc": [
+        "Infinite power-ups"
+      ]
+    },
+    {
+      "game": "Rygar (USA)",
+      "sha1": "B76593A8FBD39447CC5A5D85E525427B9ECEB6F8",
+      "intent": "my mind meter should never drain",
+      "accept": [
+        "E5"
+      ],
+      "accept_desc": [
+        "Infinite Mind points"
+      ]
+    },
+    {
+      "game": "Rygar (USA)",
+      "sha1": "B76593A8FBD39447CC5A5D85E525427B9ECEB6F8",
+      "intent": "the pits shouldn't kill me",
+      "accept": [
+        "E11"
+      ],
+      "accept_desc": [
+        "Pits aren't fatal (side view)"
+      ]
+    },
+    {
+      "game": "Rygar (USA)",
+      "sha1": "B76593A8FBD39447CC5A5D85E525427B9ECEB6F8",
+      "intent": "let me walk across the water",
+      "accept": [
+        "E12"
+      ],
+      "accept_desc": [
+        "Walk on water (overhead view)"
+      ]
+    },
+    {
+      "game": "Blaster Master (USA)",
+      "sha1": "0BC1A4345439ACD29921AFD4BECAEB5683A42ACB",
+      "intent": "let me begin on world 6",
+      "accept": [
+        "E21"
+      ],
+      "accept_desc": [
+        "Start on world 6"
+      ]
+    },
+    {
+      "game": "Blaster Master (USA)",
+      "sha1": "0BC1A4345439ACD29921AFD4BECAEB5683A42ACB",
+      "intent": "start me with every ability unlocked",
+      "accept": [
+        "E1"
+      ],
+      "accept_desc": [
+        "Start with all abilities"
+      ]
+    },
+    {
+      "game": "Blaster Master (USA)",
+      "sha1": "0BC1A4345439ACD29921AFD4BECAEB5683A42ACB",
+      "intent": "I want 99 of every weapon from the start",
+      "accept": [
+        "E2",
+        "E3"
+      ],
+      "accept_desc": [
+        "Start with 99 of each weapon",
+        "Start with 99 of each weapon and max Hover"
+      ]
+    },
+    {
+      "game": "Blaster Master (USA)",
+      "sha1": "0BC1A4345439ACD29921AFD4BECAEB5683A42ACB",
+      "intent": "let me die to see the ending",
+      "accept": [
+        "E32"
+      ],
+      "accept_desc": [
+        "Die to see ending"
+      ]
+    },
+    {
+      "game": "Batman - The Video Game (USA)",
+      "sha1": "0BC72608E47B4CA9836BDCF70288EF68472A7E21",
+      "intent": "let me soak up unlimited hits",
+      "accept": [
+        "E0",
+        "E1",
+        "E14",
+        "E15"
+      ],
+      "accept_desc": [
+        "Infinite health",
+        "Infinite health (alt)",
+        "Invincibility",
+        "Infinite health (alt 2)"
+      ]
+    },
+    {
+      "game": "Batman - The Video Game (USA)",
+      "sha1": "0BC72608E47B4CA9836BDCF70288EF68472A7E21",
+      "intent": "start me off with nine lives",
+      "accept": [
+        "E8"
+      ],
+      "accept_desc": [
+        "Start with 9 lives"
+      ]
+    },
+    {
+      "game": "Batman - The Video Game (USA)",
+      "sha1": "0BC72608E47B4CA9836BDCF70288EF68472A7E21",
+      "intent": "my bullets should never run out",
+      "accept": [
+        "E3",
+        "E16"
+      ],
+      "accept_desc": [
+        "Infinite weapons",
+        "Infinite weapons (alt)"
+      ]
+    },
+    {
+      "game": "Batman - The Video Game (USA)",
+      "sha1": "0BC72608E47B4CA9836BDCF70288EF68472A7E21",
+      "intent": "let me jump again while airborne",
+      "accept": [
+        "E13"
+      ],
+      "accept_desc": [
+        "Multi-jump"
+      ]
+    },
+    {
+      "game": "Marble Madness (USA)",
+      "sha1": "EAAA0F6D5D94EC692EAF9A61F593674829289914",
+      "intent": "stop the countdown",
+      "accept": [
+        "E0",
+        "E6"
+      ],
+      "accept_desc": [
+        "Infinite time",
+        "Infinite time (alt)"
+      ]
+    },
+    {
+      "game": "Marble Madness (USA)",
+      "sha1": "EAAA0F6D5D94EC692EAF9A61F593674829289914",
+      "intent": "don't let my marble shatter when it falls",
+      "accept": [
+        "E4"
+      ],
+      "accept_desc": [
+        "Don't break from falling"
+      ]
+    },
+    {
+      "game": "Marble Madness (USA)",
+      "sha1": "EAAA0F6D5D94EC692EAF9A61F593674829289914",
+      "intent": "start me at level 3",
+      "accept": [
+        "NONE"
+      ],
+      "accept_desc": []
+    },
+    {
+      "game": "Pinball (World)",
+      "sha1": "607C5954E5C577AC78DB3234987F8FE62F86F068",
+      "intent": "give me unlimited balls",
+      "accept": [
+        "E4",
+        "E6"
+      ],
+      "accept_desc": [
+        "Infinite balls",
+        "Infinite balls (alt)"
+      ]
+    },
+    {
+      "game": "Pinball (World)",
+      "sha1": "607C5954E5C577AC78DB3234987F8FE62F86F068",
+      "intent": "start the game with six balls",
+      "accept": [
+        "E1"
+      ],
+      "accept_desc": [
+        "Start with 6 balls"
+      ]
+    },
+    {
+      "game": "Ice Climber (USA, Europe)",
+      "sha1": "E323EBAA2C0BE5B9A31A21743DDFE7F3D1580672",
+      "intent": "make Popo unkillable",
+      "accept": [
+        "E0"
+      ],
+      "accept_desc": [
+        "Invincibility"
+      ]
+    },
+    {
+      "game": "Ice Climber (USA, Europe)",
+      "sha1": "E323EBAA2C0BE5B9A31A21743DDFE7F3D1580672",
+      "intent": "let me begin with nine lives",
+      "accept": [
+        "E4"
+      ],
+      "accept_desc": [
+        "Start with 9 lives"
+      ]
+    },
+    {
+      "game": "Ice Climber (USA, Europe)",
+      "sha1": "E323EBAA2C0BE5B9A31A21743DDFE7F3D1580672",
+      "intent": "start on the fifth mountain",
+      "accept": [
+        "NONE"
+      ],
+      "accept_desc": []
+    },
+    {
+      "game": "Balloon Fight (USA)",
+      "sha1": "6742FA2EA498E5B73DC2024AD3888A64E6B894E4",
+      "intent": "I never want to lose a life",
+      "accept": [
+        "E0",
+        "E10",
+        "E11"
+      ],
+      "accept_desc": [
+        "Infinite lives",
+        "Infinite lives - P1",
+        "Infinite lives - P2"
+      ]
+    },
+    {
+      "game": "Balloon Fight (USA)",
+      "sha1": "6742FA2EA498E5B73DC2024AD3888A64E6B894E4",
+      "intent": "my balloons should be impossible to pop",
+      "accept": [
+        "E5"
+      ],
+      "accept_desc": [
+        "Balloons are unburstable"
+      ]
+    },
+    {
+      "game": "Balloon Fight (USA)",
+      "sha1": "6742FA2EA498E5B73DC2024AD3888A64E6B894E4",
+      "intent": "let me start on level 10 in two-player mode",
+      "accept": [
+        "E8"
+      ],
+      "accept_desc": [
+        "Start on level 10 - 2P only"
+      ]
+    },
+    {
+      "game": "Urban Champion (World)",
+      "sha1": "40B31EDA5C83097100F203774E76EFB389EB01D7",
+      "intent": "stop the timer",
+      "accept": [
+        "E2"
+      ],
+      "accept_desc": [
+        "Infinite time"
+      ]
+    },
+    {
+      "game": "Urban Champion (World)",
+      "sha1": "40B31EDA5C83097100F203774E76EFB389EB01D7",
+      "intent": "give me unlimited stamina",
+      "accept": [
+        "E6"
+      ],
+      "accept_desc": [
+        "Infinite stamina"
+      ]
+    },
+    {
+      "game": "Urban Champion (World)",
+      "sha1": "40B31EDA5C83097100F203774E76EFB389EB01D7",
+      "intent": "give me infinite lives",
+      "accept": [
+        "NONE"
+      ],
+      "accept_desc": []
+    },
+    {
+      "game": "Wrecking Crew (World)",
+      "sha1": "764D68F05F4A6E43FB26D7E654E237D2B0258FE4",
+      "intent": "make me untouchable",
+      "accept": [
+        "E0"
+      ],
+      "accept_desc": [
+        "Invincibility"
+      ]
+    },
+    {
+      "game": "Wrecking Crew (World)",
+      "sha1": "764D68F05F4A6E43FB26D7E654E237D2B0258FE4",
+      "intent": "start me with ten lives",
+      "accept": [
+        "E6"
+      ],
+      "accept_desc": [
+        "Start with 10 lives - both players"
+      ]
+    },
+    {
+      "game": "Wrecking Crew (World)",
+      "sha1": "764D68F05F4A6E43FB26D7E654E237D2B0258FE4",
+      "intent": "stop the timer",
+      "accept": [
+        "NONE"
+      ],
+      "accept_desc": []
+    }
+  ]
+}
