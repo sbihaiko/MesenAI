@@ -169,8 +169,13 @@ namespace Mesen.Windows
 				() => model.ControllerSheet.IsVisible, () => Named(window, "ControllerSheetDone"));
 			focus.When(model.PackDepSheet, [nameof(PlayPackDepSheetViewModel.IsVisible)],
 				() => model.PackDepSheet.IsVisible, () => Named(window, "PackDepSheetChooseFile"));
+			//#848: and it names its own search root for the same reason #845's
+			//picker does - its first control is a row of its own list, so the
+			//inference in SearchRoot would answer with that row's item container
+			//and the D-pad could not leave the first choice.
 			focus.When(model, [nameof(MainWindowViewModel.IsPlayerPackPickerVisible)],
-				() => model.IsPlayerPackPickerVisible, () => PackPickerChoice(window));
+				() => model.IsPlayerPackPickerVisible, () => PackPickerChoice(window),
+				() => Named(window, "PlayerPackPicker"));
 			focus.When(model, [nameof(MainWindowViewModel.IsEnhancementsPanelVisible)],
 				() => model.IsEnhancementsPanelVisible, () => Named(window, "EnhancementsModernCheckBox"));
 			focus.When(model, [nameof(MainWindowViewModel.IsPackDetailVisible)],
