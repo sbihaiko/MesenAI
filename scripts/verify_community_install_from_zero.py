@@ -199,14 +199,24 @@ def size_limit_message(max_bytes: int) -> str:
 
 
 def _read_nested_capped(outer: zipfile.ZipFile, entry_name: str, max_bytes: int) -> bytes:
-    """The enforcement half of the nested-archive gate (#860/#871), mirroring
+    """The second half of the nested-archive gate, mirroring
     UI/Logic/SizeCappedStream.cs: stream the entry through a byte counter that
     refuses the instant more than max_bytes is handed out, so a local header
-    that lies about the size is caught too. The declared size is gated by the
-    caller first; this runs on the bytes actually read. Difference from the
-    C#: that stage copies to a seekable temp file because ZipArchive needs one,
-    whereas this mirror is in-process and can hand the bytes straight to
-    zipfile - a deliberate difference in plumbing, not in the ceiling."""
+    that lies about the size would still be caught.
+
+    Kept for parity with the client's #860 shape - a mirror must never look
+    more permissive than the client - but it is UNREACHABLE through the caller's
+    declared gate under today's runtimes: both .NET's ZipArchiveEntry stream and
+    Python's zipfile deliver at most the entry's declared Length (min(declared,
+    real), for a lying-small, lying-large and honest header alike), and the
+    caller refuses any declared Length past the cap before this runs. So the
+    declared-size check is what actually refuses a nested bomb today; this half
+    only fires if a future runtime were to deliver more than the header
+    declares, which is exactly what SizeCappedStream guards against on the
+    client. Difference from the C#: that stage copies to a seekable temp file
+    because ZipArchive needs one, whereas this mirror is in-process and hands
+    the bytes straight to zipfile - a deliberate difference in plumbing, not in
+    the ceiling."""
     chunks = []
     total = 0
     try:
@@ -233,10 +243,12 @@ def extract_legacy_pack(pack_zip: Path, target: Path, rom_name: str,
     """Extract the pack into <target> so hires.txt lands directly there -
     the layout HdTilePack::LoadForRom reads. Raises ValueError with a reason
     when the zip is not a legacy HD pack (zip-slip, no hires.txt, ambiguous).
-    max_bytes is the ceiling for the nested archive's declared size and for
-    the bytes actually read out of it (LegacyHdPackInstall.MaxExtractedBytes);
-    injectable so a test drives the gate with a small cap, not a real 2 GiB
-    bomb - the same shape as the C# overload."""
+    max_bytes is LegacyHdPackInstall.MaxExtractedBytes and caps every stage the
+    client caps: a nested archive's declared size and the bytes actually read
+    out of it (StageNestedArchive), and the bytes inflated and written under
+    the pack root (WriteUnderRoot), nested or not; injectable so a test drives
+    the gates with a small cap, not a real 2 GiB bomb - the same shape as the
+    C# overload."""
     target.mkdir(parents=True, exist_ok=True)
     with zipfile.ZipFile(pack_zip) as outer:
         names = []
@@ -257,11 +269,14 @@ def extract_legacy_pack(pack_zip: Path, target: Path, rom_name: str,
                 raise ValueError("not a legacy HD pack (no hires.txt)")
             raw_name = by_name[nested]
             #Two-half ceiling mirroring LegacyHdPackInstall.StageNestedArchive
-            #(#860): the DECLARED size is a cheap early refusal for a declared
-            #bomb, then the bytes actually read are capped, because a declared
-            #size is attacker-controlled. Reading the whole entry with
-            #outer.read() and checking afterwards is exactly what #860 removed
-            #from the client - the mirror must not be more permissive.
+            #(#860): the DECLARED size is the cheap early refusal that actually
+            #stops a declared bomb today; the byte-read cap below (the client's
+            #SizeCappedStream) is kept for parity but cannot be reached through
+            #this gate under today's runtimes - both .NET and Python deliver at
+            #most the declared Length, and a declared Length past the cap never
+            #gets here. Reading the whole entry with outer.read() and checking
+            #afterwards is still exactly what #860 removed from the client - the
+            #mirror must not be more permissive.
             if outer.getinfo(raw_name).file_size > max_bytes:
                 raise ValueError(size_limit_message(max_bytes))
             inner = _read_nested_capped(outer, raw_name, max_bytes)
@@ -280,28 +295,58 @@ def extract_legacy_pack(pack_zip: Path, target: Path, rom_name: str,
                     root = find_pack_root(names, rom_name)
                     if root is None:
                         raise ValueError("not a legacy HD pack (no hires.txt)")
-                    _extract_under(inner_zip, by_name, root, target)
+                    _extract_under(inner_zip, by_name, root, target, max_bytes)
             except zipfile.BadZipFile as exc:
                 raise ValueError(_CORRUPT_NESTED_MESSAGE) from exc
         else:
-            _extract_under(outer, by_name, root, target)
+            _extract_under(outer, by_name, root, target, max_bytes)
 
 
-def _extract_under(zf, by_name, root, target):
-    #NOT a full mirror: LegacyHdPackInstall.WriteUnderRoot also counts the bytes
-    #inflated and aborts past MaxExtractedBytes, while this loop reads each
-    #entry whole with zf.read(). #871 scoped the fix to the nested branch, so a
-    #non-nested pack whose entries inflate past the ceiling is still extracted
-    #here but refused by the client - a known gap, stated rather than implied.
-    for norm, entry in by_name.items():
-        if not norm.startswith(root):
-            continue  # outside the pack root (banner art, README, ...)
-        rel = norm[len(root):]
-        if not rel:
-            continue
-        dest = target / rel
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        dest.write_bytes(zf.read(entry))
+def _extract_under(zf, by_name, root, target, max_bytes: int = MAX_EXTRACTED_BYTES):
+    """LegacyHdPackInstall.WriteUnderRoot: write every entry under root into
+    target, counting the bytes actually inflated against ONE running total and
+    refusing (ValueError naming the cap) the moment that total passes
+    max_bytes. Same running total (not per entry), same '>' boundary and same
+    refusal message as the C# loop - so the mirror refuses the archive the
+    client refuses, whether the over-cap entry is inside a wrapper's nested zip
+    (#871) or a plain non-nested pack (#860's ceiling is not nested-only).
+
+    Difference from the C#: WriteUnderRoot streams each entry straight into its
+    final file, so a mid-extraction refusal can leave a partial file behind;
+    this mirror streams into a sibling staging dir and moves the result under
+    target only once the whole extraction has passed the ceiling. A refusal
+    therefore leaves target untouched - the from-zero harness never mistakes a
+    half-written pack for an install - while the memory profile still matches
+    the C# (entry-by-entry streaming to disk, never the whole pack in RAM)."""
+    staging = target.parent / (target.name + ".partial")
+    shutil.rmtree(staging, ignore_errors=True)
+    written = 0
+    try:
+        for norm, entry in by_name.items():
+            if not norm.startswith(root):
+                continue  # outside the pack root (banner art, README, ...)
+            rel = norm[len(root):]
+            if not rel:
+                continue
+            dest = staging / rel
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            with zf.open(entry) as src, open(dest, "wb") as out:
+                while True:
+                    chunk = src.read(_READ_CHUNK)
+                    if not chunk:
+                        break
+                    written += len(chunk)
+                    if written > max_bytes:
+                        raise ValueError(size_limit_message(max_bytes))
+                    out.write(chunk)
+        #Commit only after every entry passed the ceiling.
+        for src_path in sorted(staging.rglob("*")):
+            if src_path.is_file():
+                final = target / src_path.relative_to(staging)
+                final.parent.mkdir(parents=True, exist_ok=True)
+                shutil.move(str(src_path), str(final))
+    finally:
+        shutil.rmtree(staging, ignore_errors=True)
 
 
 def io_bytes(b: bytes):
