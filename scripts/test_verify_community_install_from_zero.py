@@ -107,6 +107,23 @@ def _run(zip_bytes: bytes, rom_name: str, max_bytes: int, td: str):
     return sorted(str(p.relative_to(dest)) for p in dest.rglob("*") if p.is_file())
 
 
+def _assert_target_absent(dest: Path, label: str) -> bool:
+    """A refusal must leave no target AT ALL, not merely no files in one.
+
+    The earlier assertion listed dest.rglob("*"), which an EMPTY directory
+    satisfies - so the mirror created the pack folder up front and left it behind
+    on every refusal while the test stayed green. An adversarial review caught
+    it by asking dest.exists() directly. The stronger property is the one the
+    docstring promises and the one the from-zero harness needs: the next run must
+    not find a folder it has to reason about.
+    """
+    if dest.exists():
+        fail(f"{label}: refused install left the target behind: "
+             f"{sorted(str(p.relative_to(dest)) for p in dest.rglob('*'))}")
+        return False
+    return True
+
+
 def _assert_refused_naming_cap(run, label: str) -> bool:
     """Run `run()` expecting a ValueError that names the cap and is not the
     corruption message. Returns True on that refusal; records a failure and
@@ -143,9 +160,7 @@ def check_nested_entry_over_the_cap_is_refused():
         dest = Path(td) / "HdPacks" / "Some Rom"
         if not _assert_refused_naming_cap(lambda: _run(wrapper, "Some Rom", ONE_MIB, td), label):
             return
-        leftovers = list(dest.rglob("*")) if dest.exists() else []
-        if leftovers:
-            fail(f"{label}: refused install left files behind: {leftovers}")
+        if not _assert_target_absent(dest, label):
             return
     ok(f"{label}: refused with a ValueError naming the cap, nothing written")
 
@@ -201,9 +216,7 @@ def check_non_nested_entries_over_the_cap_are_refused():
         dest = Path(td) / "HdPacks" / "Some Rom"
         if not _assert_refused_naming_cap(lambda: _run(pack, "Some Rom", ONE_MIB, td), label):
             return
-        leftovers = list(dest.rglob("*")) if dest.exists() else []
-        if leftovers:
-            fail(f"{label}: refused install left files behind: {leftovers}")
+        if not _assert_target_absent(dest, label):
             return
     ok(f"{label}: refused with a ValueError naming the cap, nothing written")
 
@@ -224,9 +237,7 @@ def check_nested_inner_over_the_cap_is_refused():
         dest = Path(td) / "HdPacks" / "Some Rom"
         if not _assert_refused_naming_cap(lambda: _run(wrapper, "Some Rom", ONE_MIB, td), label):
             return
-        leftovers = list(dest.rglob("*")) if dest.exists() else []
-        if leftovers:
-            fail(f"{label}: refused install left files behind: {leftovers}")
+        if not _assert_target_absent(dest, label):
             return
     ok(f"{label}: inner (not the wrapper) over the cap refused, nothing written")
 

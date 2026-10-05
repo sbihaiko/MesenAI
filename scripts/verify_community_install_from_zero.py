@@ -64,6 +64,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import zipfile
 import zlib
 from pathlib import Path
@@ -248,8 +249,8 @@ def extract_legacy_pack(pack_zip: Path, target: Path, rom_name: str,
     out of it (StageNestedArchive), and the bytes inflated and written under
     the pack root (WriteUnderRoot), nested or not; injectable so a test drives
     the gates with a small cap, not a real 2 GiB bomb - the same shape as the
-    C# overload."""
-    target.mkdir(parents=True, exist_ok=True)
+    C# overload. Nothing is created under target until every ceiling has passed,
+    so a refusal leaves the target absent rather than empty."""
     with zipfile.ZipFile(pack_zip) as outer:
         names = []
         by_name = {}
@@ -315,11 +316,20 @@ def _extract_under(zf, by_name, root, target, max_bytes: int = MAX_EXTRACTED_BYT
     final file, so a mid-extraction refusal can leave a partial file behind;
     this mirror streams into a sibling staging dir and moves the result under
     target only once the whole extraction has passed the ceiling. A refusal
-    therefore leaves target untouched - the from-zero harness never mistakes a
-    half-written pack for an install - while the memory profile still matches
-    the C# (entry-by-entry streaming to disk, never the whole pack in RAM)."""
-    staging = target.parent / (target.name + ".partial")
-    shutil.rmtree(staging, ignore_errors=True)
+    therefore leaves no target directory and no file behind - the from-zero
+    harness never mistakes a half-written pack for an install - while the memory
+    profile still matches the C# (entry-by-entry streaming to disk, never the
+    whole pack in RAM).
+
+    target itself is created at commit time, not before: an adversarial review
+    caught the earlier version creating it up front, so a refusal left an empty
+    directory where the docstring promised none, and a stale <target>.partial FILE
+    made shutil.rmtree(ignore_errors=True) a silent no-op whose directory then
+    raised FileExistsError from the first mkdir. A unique mkdtemp staging name
+    fixes the second and removes the shared-name race a fixed .partial would have
+    had between two extractions into the same parent."""
+    target.parent.mkdir(parents=True, exist_ok=True)
+    staging = Path(tempfile.mkdtemp(dir=target.parent, prefix=target.name + ".partial-"))
     written = 0
     try:
         for norm, entry in by_name.items():
