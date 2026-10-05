@@ -8,6 +8,11 @@
 - Date: 2026-10-05
 - Related: issue #887, ADR-0123 (the host-free split `UI/Logic/` exists for),
   ADR-0256 Decision 9 (the ROM picker this rule also feeds)
+- Supersedes / amends: ADR-0256 Decision 9 — its third amendment, same date,
+  narrows three clauses of that decision (the roots, the action row's re-root,
+  and the `AddKnownGameFolder` call) from "the configured folder" to "the
+  configured folder while it answers something". The narrowing itself lives
+  there, beside the clauses it changes; this ADR is the decision it implements.
 
 ## Context
 
