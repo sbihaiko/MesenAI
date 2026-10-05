@@ -43,6 +43,17 @@
   (Decision 7) and the first run's scope (Decision 8). Their picks are recorded
   in the decisions themselves, quoted verbatim, and they changed the Decision
   text rather than being noted beside it.
+  **Decision 9 amended 2026-10-05**, under the standing grant the user gave for
+  the hours he was away that day (*"vou ficar off por algumas horas, use o grok
+  no meu lugar se precisar. nao pare, decida"*), from his own requirement, quoted
+  verbatim: **"poder mudar o diretorio onde estao as ROMs nao e opcional"**, his
+  pick that the control lives in the ROM picker sheet itself, his pick of a root
+  at `/`, and **"acho que sobre a roms, que tal buscar e sugerir, na pasta do
+  mesen, na pasta do usuario, essas com padrao? e permitir indicar/alterar o
+  diretorio de roms?"**. The sheet keeps its refusal of every generic folder
+  picker and gains exactly one folder to set: the games folder it already lists.
+  What that changes is set out under Decision 9, which also says which of the
+  proxy's quoted clauses it narrows.
 - Date: 2026-10-04
 - Related: ADR-0241 (Play's home and the W-P4 pause overlay), ADR-0249 (the
   rendered wireframes as the visual spec), ADR-0250 (every menu entry has one
@@ -374,12 +385,97 @@ pad, and still one place rather than a per-view concern.
      `PlaySelectRomSheetView` already is, and the two are deliberately not
      merged: one asks which game an archive holds (a list the loader owns), the
      other walks the filesystem (a list the player owns).
-   - **What this deliberately does not decide**: every other file choice stays
-     native (the proxy's refusal above). A pad-only machine still cannot add a
-     BIOS file, a pack dependency, a save state, a shader or a palette, and each
-     of those is its own bug when someone reports it. Advanced's own Open keeps
-     the native dialog too - this sheet belongs to the Play home, which is the
-     door a cabinet boots into.
+   - **What this deliberately does not decide**: every other file *and folder*
+     choice stays native (the proxy's refusal above). A pad-only machine still
+     cannot add a BIOS file, a pack dependency, a save state, a shader or a
+     palette, **nor set any folder other than the games folder**, and each of
+     those is its own bug when someone reports it. Advanced's own Open keeps the
+     native dialog too - this sheet belongs to the Play home, which is the door
+     a cabinet boots into.
+
+   **Amendment, 2026-10-05: the sheet also names the folder the games live in.**
+   The user, verbatim: *"poder mudar o diretorio onde estao as ROMs nao e
+   opcional"*. The proxy's quotation above stands as the record of what was
+   picked on 2026-10-05; what it *binds* is narrowed here, in the ADR's own
+   voice, because two of its clauses read wider than the decision they carry.
+
+   - **"used only to load a game" is now "load a game, and name the folder they
+     live in".** Both clauses of the refusal ("*No BIOS / W-P16 pack / save-state
+     / movie / wave / shader / palette / folder picker in this sheet*", and the
+     stop rule's "*a ROM-extension file is the only pick*") are about picks and
+     about choices the sheet has no business making. The games folder is neither:
+     it is already one of the sheet's own roots - the proxy's own stop rule lists
+     "configured `GameFolder` when set" - and the sheet's subject is the folder
+     that holds the games it lists. A *folder picker* in that refusal means the
+     generic `PathSelector` family the sentence enumerates it with (BIOS, packs,
+     save states, movie and wave export, shaders, palettes), and that refusal is
+     untouched: this sheet gains exactly one folder it may write, and it is the
+     one it exists to browse. The stop rule's "non-ROMs are not rows" survives
+     with one carve-out, because a *discovered folder* is a place to walk to, not
+     a pick - the same exception a folder row already was.
+   - **What the sheet gains, three things.** (1) A **bounded scan** of the
+     standard places - the user's home and the Mesen home to depth 5, each
+     mounted volume to depth 3 - collecting folders that hold at least one ROM
+     directly, ranked by how many, deduped against each other (a folder that
+     contains a better hit is dropped) and against the specific roots, capped at
+     five, and run **off the UI thread with a folder and wall-clock budget** so
+     the sheet never waits. Two passes, in this order: a shallow one (home 2,
+     volumes 1) published the moment it lands, then the measured one that
+     replaces it - and a second answer that offers *fewer* libraries than the
+     first is discarded, so "the scan finished" can never read as "your libraries
+     are gone". **A network mount is never a base and is never entered** (NFS,
+     SMB, AFP, WebDAV, CIFS, autofs): a read on a mount whose server is gone
+     blocks in the kernel, where no wall-clock budget can interrupt it, so the
+     sheet would hang where it is meant to degrade. Whether a mount is a network
+     one is *told* to the scan by the host, so the rule itself stays host-free
+     and is pinned in `UI.Tests`. It is a *scan of standard locations*, not the "no
+     search box" the refusal forbids: no keystroke field, no query, no path
+     typing. Measured on the requesting machine: depth 4 costs 0.31 s and does
+     **not** find his library, which sits at depth 5; depth 5 costs 0.86 s and
+     its top five hits are exactly his five emulator libraries; depth 6 costs
+     1.24 s and adds only noise. That measurement is why the depth is 5 and why
+     the ranking is by count rather than alphabetical. (2) An **action row**,
+     *Make this my games folder*, first in the list inside any folder that is not
+     already the games folder; it writes `Preferences.GameFolder` and
+     `Preferences.OverrideGameFolder = true` through `ConfigManager.Config.Save()`
+     - the two properties the classic Advanced Options row already writes, so no
+     new setting exists - and then re-roots in place, which turns the path line
+     into *Your games* and puts the new root at the head of the list. (3) A root
+     at **`/`**, the user's own pick, so a folder the scan does not reach is still
+     reachable by hand. It is supplied by the host like the volumes are, and it is
+     deliberately **not** part of the exclusion set the scan dedupes against, or
+     it would discard every suggestion there is.
+   - **The fence: this sheet writes `GameFolder` and nothing else, ever.** The
+     action row is the sheet's only write, and the two properties it sets -
+     `Preferences.GameFolder` and `Preferences.OverrideGameFolder = true`, both
+     through `ConfigManager.Config.Save()` - are the whole of it. No other
+     preference, no other file, no pack, no pad binding, no storage path, no
+     window geometry, nothing. This is the clause the widening in the two bullets
+     above is bounded by: a later change that wants this sheet to write a second
+     thing is a change to this ADR, not a patch to the sheet.
+   - **The focus rule that makes (2) safe.** The action row leads the list, so the
+     focus arbiter must never land the ring on it: the picker's first-row target
+     skips Action rows whenever the folder has content, and a folder with none at
+     all sends the ring to Back instead. Without that, a stray Confirm on an empty
+     folder would silently repoint *Your games* away from a library that worked -
+     the one failure this amendment must not introduce. A headless case pins it.
+   - **Still refused, unchanged**: no BIOS, pack, save-state, movie, wave, shader
+     or palette choice in this sheet, no general-purpose folder picker, no
+     hidden-file policy, no keyboard path typing. Advanced keeps the native
+     dialog, and so does every other door.
+   - **The save is two writes, and the second one is the point** (added by the
+     review of the first pass, 2026-10-05). `MainWindow` calls
+     `EmuApi.AddKnownGameFolder` from the configured folder **at startup only**,
+     so a folder designated at runtime would not be in the core's
+     known-game-folder list until the next launch - and the whole purpose of the
+     action row is a folder the player can use *now*. The sheet therefore makes
+     that same call itself, immediately after `ConfigManager.Config.Save()`. It
+     is not a nicety: `Core/Shared/RomFinder.h` is what resolves a ROM by name
+     and CRC when a pack, a replay or a movie names one, so without the call a
+     designated folder works for this sheet and for nothing else until the app is
+     restarted - which is precisely the "works only after a restart" the action
+     row exists to remove. The classic PathSelector keeps the old gap; that is
+     out of scope here, and this bullet is not a claim about it.
 
 ## The four questions, and how they were answered
 
