@@ -486,6 +486,15 @@ doc-checks-2:
 	#table, with no mirror in between, and the enum name for value.
 	python3 scripts/checks/verify_pad_button_tables.py
 	python3 scripts/test_verify_pad_button_tables.py
+	#Issue #895: the pressed-key read is written in two languages - the native
+	#export answers the size of the set it holds and the C# side grows its buffer
+	#to match - and UI.Tests only ever sees stand-ins for the export, so a native
+	#loop that stopped at the old literal, or one that answered min(size, capacity),
+	#passes every case there. This is the committed guard for that half: it reads
+	#the export, the DllImport and PressedKeys.Read and fails on each drift, and
+	#its own test feeds it all of them.
+	python3 scripts/checks/verify_pressed_keys_contract.py
+	python3 scripts/test_verify_pressed_keys_contract.py
 	#Issue #516: the checks themselves must be load-proof. `set -o pipefail`
 	#plus an early-exit grep as a pipeline reader makes the writer's SIGPIPE a
 	#141, which a check reads as a missing string - verify_community_pack_
