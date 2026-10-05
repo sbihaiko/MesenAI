@@ -2249,6 +2249,8 @@
 		<Message ID="DoorMenuAbout">About MesenAI</Message>
 		<Message ID="DoorMenuQuit">Quit MesenAI</Message>
 		<Message ID="ShellStatusNoGame">No game loaded</Message>
+		<Message ID="ShellPadPortsOverflowOne">1 pad beyond the four ports</Message>
+		<Message ID="ShellPadPortsOverflowMany">{0} pads beyond the four ports</Message>
 		<Message ID="ShellStatusRemasterRecording">● Remaster: recording {0}</Message>
 		<Message ID="ShellStatusRemasterJob">● Remaster: preparing figures for {0} · {1} %</Message>
 		<Message ID="RemasterNoGameRunning">No game is running</Message>

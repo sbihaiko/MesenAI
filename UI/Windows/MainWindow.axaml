@@ -101,10 +101,53 @@
 		<!--G.1 (W-S1): the one-sentence, read-only status line; shown and hidden
 		with the bar.-->
 		<Border Name="ShellStatusLine" DockPanel.Dock="Bottom" Height="26" Padding="12 0" IsVisible="{Binding Shell.IsBarVisible}" Classes.player="{Binding Config.Preferences.UiMode, Converter={StaticResource EnumMatchConverter}, ConverterParameter={x:Static lg:UiMode.Player}}">
-			<StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-				<TextBlock Name="ShellStatusDot" Text="●" FontSize="10" Opacity="0.5" VerticalAlignment="Center" Classes.live="{Binding Shell.HasGame}" />
-				<TextBlock Name="ShellStatusText" Text="{Binding Shell.StatusText}" VerticalAlignment="Center" />
-			</StackPanel>
+			<DockPanel LastChildFill="False">
+				<!--ADR-0249 (W-S1)/ADR-0255: the arcade cabinet's four port lamps,
+				right-aligned so they read as a panel indicator beside the status
+				sentence. One lamp per port (P1..P4), lit while that port has a pad on
+				it, dim otherwise; the theme's own tints carry the two states - the
+				status dot's own dim (PlayerText3Brush) and its live tint
+				(PlayerTintShareBrush). Docked first so a long sentence never pushes
+				the strip off the bar.-->
+				<StackPanel Name="ShellPadStrip" DockPanel.Dock="Right" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+					<ItemsControl Name="ShellPadLamps" ItemsSource="{Binding Shell.PadLamps}">
+						<ItemsControl.Styles>
+							<Style Selector="Border#ShellPadLampDot">
+								<Setter Property="Width" Value="8" />
+								<Setter Property="Height" Value="8" />
+								<Setter Property="CornerRadius" Value="4" />
+								<Setter Property="Background" Value="{StaticResource PlayerText3Brush}" />
+							</Style>
+							<Style Selector="Border#ShellPadLampDot.lit">
+								<Setter Property="Background" Value="{StaticResource PlayerTintShareBrush}" />
+							</Style>
+							<Style Selector="TextBlock#ShellPadLampLabel">
+								<Setter Property="FontSize" Value="10" />
+								<Setter Property="Foreground" Value="{StaticResource PlayerText3Brush}" />
+							</Style>
+						</ItemsControl.Styles>
+						<ItemsControl.ItemsPanel>
+							<ItemsPanelTemplate>
+								<StackPanel Orientation="Horizontal" Spacing="10" />
+							</ItemsPanelTemplate>
+						</ItemsControl.ItemsPanel>
+						<ItemsControl.ItemTemplate>
+							<DataTemplate x:DataType="lg:PadPortLamp">
+								<StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" ToolTip.Tip="{Binding Tip}">
+									<Border Name="ShellPadLampDot" Classes.lit="{Binding IsLit}" VerticalAlignment="Center" />
+									<TextBlock Name="ShellPadLampLabel" Text="{Binding Label}" VerticalAlignment="Center" />
+								</StackPanel>
+							</DataTemplate>
+						</ItemsControl.ItemTemplate>
+					</ItemsControl>
+					<TextBlock Name="ShellPadLampNote" Text="{Binding Shell.PadLampNote}" IsVisible="{Binding Shell.HasPadLampNote}" FontSize="{StaticResource PlayerFontFootnote}" Foreground="{StaticResource PlayerText3Brush}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+				</StackPanel>
+
+				<StackPanel DockPanel.Dock="Left" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+					<TextBlock Name="ShellStatusDot" Text="●" FontSize="10" Opacity="0.5" VerticalAlignment="Center" Classes.live="{Binding Shell.HasGame}" />
+					<TextBlock Name="ShellStatusText" Text="{Binding Shell.StatusText}" VerticalAlignment="Center" />
+				</StackPanel>
+			</DockPanel>
 		</Border>
 
 		<ContentControl Name="AudioPlayer" DockPanel.Dock="Bottom" Content="{Binding AudioPlayer}" IsVisible="{Binding IsPlayWorkspace}" />
