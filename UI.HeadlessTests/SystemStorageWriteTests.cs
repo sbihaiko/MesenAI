@@ -21,6 +21,13 @@ namespace Mesen.HeadlessTests;
 //the process's own default folders - so the view-model has two seams (the three
 //folder functions and `SwitchConfigFolder`) and this drives the real
 //`WriteStorage` through them, against folders the case made.
+//#432's guard is right about this one even though the cases touch no core: the
+//path it walks is `TestSystem..ctor` -> `PlayerSystemSettingsViewModel..ctor`
+//-> `OnKeyboardChanged` -> `ChooseKeyboard` -> `WriteKeyboard` ->
+//`InputConfig.ApplyConfig` -> `ConfigApi.SetInputConfig`, and a test class that
+//can reach the process-global core runs in the serial collection whether or not
+//this particular case gets there.
+[Collection(NativeCoreCollection.Name)]
 public class SystemStorageWriteTests : IDisposable
 {
 	private readonly string _folder = Path.Combine(Path.GetTempPath(), "mesen-846-" + Guid.NewGuid().ToString("N"));
