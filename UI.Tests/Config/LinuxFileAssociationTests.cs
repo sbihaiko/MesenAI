@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Text.RegularExpressions;
 using Mesen.Logic;
 using Xunit;
 
@@ -213,5 +214,113 @@ public class LinuxFileAssociationTests
 		Assert.Contains("[Desktop Entry]", content);
 		Assert.Contains("Exec=\"/home/John Doe/Applications/Mesen\" %f", content);
 		Assert.Contains("MimeType=application/x-mesen-nes", content);
+	}
+
+	//#882: CreateLinuxShortcutFile is only reached when mesen.desktop is absent,
+	//and the update path rewrote MimeType= and nothing else. So an entry written
+	//before #877 kept its invalid Exec= for good: the quoting fix could not reach
+	//a user who had ever run Mesen, and the ROM double-click stayed dead. The same
+	//stale Exec= survives the executable moving - the AppImage case, where the
+	//unpacked folder differs between runs - and then the shortcut launches nothing.
+	//
+	//The rule the tests below pin: an update reconciles the keys this writer owns,
+	//Exec= and MimeType=, and carries every other key through untouched. The file
+	//is ours to maintain, not ours to overwrite.
+	private static string Entry(params string[] lines)
+	{
+		return string.Join(Environment.NewLine, lines);
+	}
+
+	[Fact]
+	public void An_update_repairs_an_exec_key_an_older_build_wrote()
+	{
+		string stale = Entry("[Desktop Entry]", "Type=Application", "Name=Mesen",
+			"Exec=/home/John Doe/Mesen %f", "MimeType=application/x-mesen-nes;");
+
+		string? fixedUp = LinuxFileAssociation.ReconcileDesktopEntry(stale, SpacedExecutable, new List<string> { "x-mesen-nes" }, out string reason);
+
+		Assert.Empty(reason);
+		Assert.NotNull(fixedUp);
+		Assert.Contains("Exec=\"/home/John Doe/Applications/Mesen\" %f", fixedUp);
+		Assert.DoesNotContain("Exec=/home/John Doe/Mesen %f", fixedUp);
+	}
+
+	[Fact]
+	public void An_update_repoints_an_exec_key_at_the_executable_that_is_running()
+	{
+		string stale = Entry("[Desktop Entry]", "Exec=\"/opt/old/Mesen\" %f");
+
+		string? fixedUp = LinuxFileAssociation.ReconcileDesktopEntry(stale, "/opt/new/Mesen", null, out string reason);
+
+		Assert.Empty(reason);
+		Assert.NotNull(fixedUp);
+		Assert.Contains("Exec=\"/opt/new/Mesen\" %f", fixedUp);
+		Assert.DoesNotContain("/opt/old/Mesen", fixedUp);
+	}
+
+	//The complement: a user who renamed the entry, or added a key of their own,
+	//must not have that edit thrown away by an update that only had Exec= and
+	//MimeType= to reconcile.
+	[Fact]
+	public void An_update_keeps_the_keys_the_writer_does_not_own()
+	{
+		string entry = Entry("[Desktop Entry]", "Exec=\"/opt/old/Mesen\" %f",
+			"Name=My Own Name", "Comment=I typed this", "X-Custom=keep me",
+			"MimeType=application/x-mesen-nes;");
+
+		string? fixedUp = LinuxFileAssociation.ReconcileDesktopEntry(entry, "/opt/new/Mesen", null, out string reason);
+
+		Assert.NotNull(fixedUp);
+		Assert.Contains("Name=My Own Name", fixedUp);
+		Assert.Contains("Comment=I typed this", fixedUp);
+		Assert.Contains("X-Custom=keep me", fixedUp);
+	}
+
+	//A second Exec= line would leave the loader to pick one, so the key is
+	//replaced where it stands rather than appended.
+	[Fact]
+	public void An_update_replaces_an_exec_key_in_place_rather_than_adding_a_second()
+	{
+		string entry = Entry("[Desktop Entry]", "Exec=\"/opt/old/Mesen\" %f", "MimeType=application/x-mesen-nes;");
+
+		string? fixedUp = LinuxFileAssociation.ReconcileDesktopEntry(entry, "/opt/new/Mesen", null, out string reason);
+
+		Assert.NotNull(fixedUp);
+		Assert.Single(Regex.Matches(fixedUp!, "^Exec=", RegexOptions.Multiline));
+		Assert.Equal("Exec=\"/opt/new/Mesen\" %f", fixedUp!.Split(Environment.NewLine)[1]);
+	}
+
+	[Fact]
+	public void An_update_adds_an_exec_key_when_the_entry_has_none()
+	{
+		string entry = Entry("[Desktop Entry]", "Type=Application", "Name=Mesen");
+
+		string? fixedUp = LinuxFileAssociation.ReconcileDesktopEntry(entry, "/opt/new/Mesen", null, out string reason);
+
+		Assert.NotNull(fixedUp);
+		Assert.Contains("Exec=\"/opt/new/Mesen\" %f", fixedUp);
+	}
+
+	[Fact]
+	public void An_update_still_reconciles_the_mime_types()
+	{
+		string entry = Entry("[Desktop Entry]", "Exec=\"/opt/old/Mesen\" %f", "MimeType=application/x-mesen-nes;");
+
+		string? fixedUp = LinuxFileAssociation.ReconcileDesktopEntry(entry, "/opt/new/Mesen", new List<string> { "x-mesen-nes", "x-mesen-gb" }, out string reason);
+
+		Assert.NotNull(fixedUp);
+		Assert.Contains("MimeType=application/x-mesen-nes;application/x-mesen-gb", fixedUp);
+	}
+
+	//The refusal of #877 applies to the update as well: a path the Exec key cannot
+	//carry is no reason to replace a working entry with an invalid one. Returning
+	//null leaves the file as it stands, and reports why.
+	[Fact]
+	public void An_update_leaves_the_entry_alone_when_the_exec_key_cannot_carry_the_path()
+	{
+		string entry = Entry("[Desktop Entry]", "Exec=\"/opt/old/Mesen\" %f", "MimeType=application/x-mesen-nes;");
+
+		Assert.Null(LinuxFileAssociation.ReconcileDesktopEntry(entry, "/home/u/apps/foo=1/Mesen", null, out string reason));
+		Assert.Contains("=", reason);
 	}
 }
