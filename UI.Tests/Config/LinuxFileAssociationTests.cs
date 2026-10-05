@@ -71,4 +71,46 @@ public class LinuxFileAssociationTests
 	{
 		Assert.Equal("\"/usr/bin/Mesen\" %f", LinuxFileAssociation.ExecValue("/usr/bin/Mesen", "%f"));
 	}
+
+	//#870: the general escape rule for string values also covers the percentage
+	//character ("Literal percentage characters must be escaped as %%"), and it is
+	//applied to the whole Exec value before the quoting rule. So a literal "%" in
+	//the executable path is doubled. Without it, "/home/50%off/Mesen" writes
+	//"...50%off...", whose "%o" the loader reads as a field code - and a command
+	//line with an unlisted field code is invalid, so double-clicking a ROM does
+	//nothing.
+	[Fact]
+	public void A_path_with_a_literal_percent_is_doubled_in_the_exec_value()
+	{
+		Assert.Equal("\"/home/50%%off/Mesen\" %f", LinuxFileAssociation.ExecValue("/home/50%off/Mesen", "%f"));
+	}
+
+	//The "%" doubling is the general rule, not a replacement for the quoting rule:
+	//a reserved character next to a literal "%" still gets its own escape, and the
+	//two compose in the same argument.
+	[Fact]
+	public void A_percent_next_to_other_reserved_characters_keeps_both_escapes()
+	{
+		Assert.Equal("\"/tmp/100%%/a\\\\\"b/\\\\$c/Mesen\"", LinuxFileAssociation.ExecArgument("/tmp/100%/a\"b/$c/Mesen"));
+	}
+
+	//Requirement of #870: the field code argument ("%f") is a field code, not a
+	//literal percentage, so it stays unquoted and unescaped - it must still read
+	//"%f" in the Exec value.
+	[Fact]
+	public void The_real_field_code_is_not_escaped()
+	{
+		Assert.Equal("\"/usr/bin/Mesen\" %f", LinuxFileAssociation.ExecValue("/usr/bin/Mesen", "%f"));
+	}
+
+	//A literal "%f" in the path is a literal percentage followed by "f": the
+	//general rule writes it "%%f" inside the quotes, while the real field code
+	//stays "%f" outside them. Escaping the path is exactly what keeps the two
+	//apart - the quoted path can never be mistaken for the field code, and the
+	//field code is never doubled into literal text.
+	[Fact]
+	public void A_literal_percent_f_in_the_path_is_not_the_field_code()
+	{
+		Assert.Equal("\"/home/%%f/Mesen\" %f", LinuxFileAssociation.ExecValue("/home/%f/Mesen", "%f"));
+	}
 }
