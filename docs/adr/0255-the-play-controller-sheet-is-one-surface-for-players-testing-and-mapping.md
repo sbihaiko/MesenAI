@@ -33,9 +33,35 @@
   `GamepadState.Buttons` order is **per backend**, which
   `Core/Shared/GamepadButtonOrder.h` now carries for the core and
   `scripts/checks/verify_pad_button_tables.py` guards against the three
-  backends' tables. **Still not implemented**: the remap mode and slice 4's
-  surface (the extra buttons), so the sheet is not yet the whole of what the
-  Decision describes.
+  backends' tables.
+  **Slice 3 landed 2026-10-04** (#839), and it settled two rules the shape above
+  did not. The rows are the loaded console's own controls - the list W-P15's
+  setup already walks (`ControllerSetupSteps.For`), so the two surfaces can bind
+  the same set - each carrying the two lights; picking one arms a capture whose
+  first button must be released before it listens, whose navigation controls are
+  refused *visibly* (ADR-0256 Decision 4) and whose writes go through the same
+  `ConfigManager`/`ApplyConfig()` pair the classic Input page uses. The host-free
+  rules are `UI/Logic/ControllerSheetRemap.cs` (with
+  `UI.Tests/Play/ControllerSheetRemapTests.cs`), the sheet half is
+  `UI/ViewModels/ControllerSheetViewModel.Remap.cs`, and the window behaviour is
+  `UI.HeadlessTests/PlayerControllerSheetTests.cs`. The two rules:
+  - **While a capture is armed, the pad is the capture's** - and it says so
+    through the predicate ADR-0256's bridge already asks
+    (`PlayPadNavigationWiring.HasAuthority` gains `!_model.IsControllerCapturing`)
+    rather than through a second competing rule, which is what keeps a pad
+    Confirm from both binding a control and activating the sheet's Done.
+  - **The sheet's own mode dies with the sheet.** The poll that ends a capture
+    when the pad goes away stops with the sheet, so `Close()` ends it too: found
+    in review, where Done-with-the-pointer left a capture armed whose answer kept
+    the bridge without authority for the rest of the session - the pad moved no
+    focus and confirmed nothing anywhere in the Play door. The case is
+    `Closing_the_sheet_ends_the_capture_it_was_in`.
+  Three limits are carried rather than solved: a rebind does not clear the same
+  pad button from another control, the port light reads the first non-zero field
+  across the port's four slots, and the section was never visually evaluated with
+  the pad, PLAYERS and REMAP all on screen at once.
+  **Still not implemented**: slice 4's surface (the extra buttons), so the sheet
+  is not yet the whole of what the Decision describes.
 - Date: 2026-10-04
 - Related: ADR-0241 (the four-door Player GUI), ADR-0249 (the Play sheets, the
   Esc router and W-P15 - the setup sheet this one sits beside), ADR-0250 (one
