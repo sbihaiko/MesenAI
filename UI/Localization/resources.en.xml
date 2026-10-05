@@ -259,6 +259,9 @@
 			<Control ID="lblControllerSheetRemapHint">Pick a control, then press the controller button you want on it. Esc cancels.</Control>
 			<Control ID="lblControllerSheetRemapPadLight">What the controller sends</Control>
 			<Control ID="lblControllerSheetRemapPortLight">What the game receives</Control>
+			<Control ID="lblControllerSheetExtra">EXTRA BUTTONS</Control>
+			<Control ID="lblControllerSheetExtraHint">A controller button the console has no use for can carry one of the emulator's own actions. Pick a row, then press the button you want on it. Esc cancels.</Control>
+			<Control ID="btnControllerSheetExtraClear">Clear</Control>
 			<Control ID="btnControllerSheetMoreInOptions">More in Options…</Control>
 			<Control ID="btnControllerSheetDone">Done</Control>
 		</Form>
@@ -2173,6 +2176,9 @@
 		<Message ID="ControllerSheetRemapBound">{0} is now {1}.</Message>
 		<Message ID="ControllerSheetRemapNoSlot">Every mapping slot of that player is taken — free one in Options first.</Message>
 		<Message ID="ControllerSheetRemapNonRebindable">That control works the menus — Confirm, Back and the D-pad can't be rebound.</Message>
+		<Message ID="ControllerSheetExtraArm">Press the controller button for {0} — Esc cancels.</Message>
+		<Message ID="ControllerSheetExtraBound">{0} is now on {1}.</Message>
+		<Message ID="ControllerSheetExtraCleared">{0} no longer has a controller button.</Message>
 		<Message ID="PlayerRumbleOff">Off</Message>
 		<Message ID="LookPixelsMore">More in Options…</Message>
 		<Message ID="LookCurrentFromOptions">{0} (set in Options)</Message>
@@ -2687,6 +2693,7 @@ E
 			<Value ID="SetScale9x">Set Scale 9x</Value>
 			<Value ID="SetScale10x">Set Scale 10x</Value>
 			<Value ID="ToggleFullscreen">Toggle Fullscreen Mode</Value>
+			<Value ID="ToggleOverlay">Pause Menu</Value>
 			<Value ID="ToggleFps">Toggle FPS Counter</Value>
 			<Value ID="ToggleDebugInfo">Toggle Debug Information</Value>
 			<Value ID="ToggleGameTimer">Toggle Game Timer</Value>

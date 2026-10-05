@@ -476,6 +476,27 @@ vector<KeyCombination> EmuSettings::GetShortcutSupersets(EmulatorShortcut shortc
 	return _shortcutSupersets[keySetIndex][(uint32_t)shortcut];
 }
 
+void EmuSettings::SetPadAxisThresholds(vector<PadAxisThreshold> thresholds)
+{
+	auto lock = _updateShortcutsLock.AcquireSafe();
+	_padAxisThresholds.clear();
+	for(PadAxisThreshold& threshold : thresholds) {
+		//Two shortcuts may name one direction; the last one read wins, which is
+		//the one the player's list ends on - the same "the config is the
+		//authority" answer every other shortcut conflict gets.
+		_padAxisThresholds[threshold.Direction] = threshold.ThresholdUnits;
+	}
+}
+
+int32_t EmuSettings::GetPadAxisThresholdUnits(uint16_t direction)
+{
+	auto lock = _updateShortcutsLock.AcquireSafe();
+	auto result = _padAxisThresholds.find(direction);
+	//0 is "no threshold of the player's", never "0%" - a zero threshold would be
+	//a direction held while the stick rests, which PadAxisAction refuses to store.
+	return result != _padAxisThresholds.end() ? result->second : 0;
+}
+
 OverscanDimensions EmuSettings::GetOverscan()
 {
 	RomFormat romFormat = _emu->GetRomInfo().Format;

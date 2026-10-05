@@ -101,6 +101,16 @@ extern "C"
 		_emu->GetSettings()->SetShortcutKeys(shortcutList);
 	}
 
+	//ADR-0255 slice 4: the player's axis thresholds, pushed with the shortcut
+	//list so the binding that names a direction and its threshold land in one
+	//config apply. The platform game controllers read it off the settings object
+	//they already hold.
+	DllExport void __stdcall SetPadAxisThresholds(PadAxisThreshold thresholds[], uint32_t count)
+	{
+		vector<PadAxisThreshold> thresholdList(thresholds, thresholds + count);
+		_emu->GetSettings()->SetPadAxisThresholds(thresholdList);
+	}
+
 	DllExport NesConfig __stdcall GetNesConfig()
 	{
 		return _emu->GetSettings()->GetNesConfig();

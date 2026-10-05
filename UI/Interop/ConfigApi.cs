@@ -35,6 +35,11 @@ namespace Mesen.Interop
 		[DllImport(DllPath)] public static extern void SetAudioPlayerConfig(InteropAudioPlayerConfig config);
 		[DllImport(DllPath)] public static extern void SetShortcutKeys([MarshalAs(UnmanagedType.LPArray, SizeParamIndex = 1)] InteropShortcutKeyInfo[] shortcuts, UInt32 count);
 
+		//ADR-0255 slice 4: pushed right after the shortcut list, in the same
+		//ApplyConfig(), so the direction a spare binding names and the threshold
+		//that governs it reach the core together.
+		[DllImport(DllPath)] public static extern void SetPadAxisThresholds([MarshalAs(UnmanagedType.LPArray, SizeParamIndex = 1)] InteropPadAxisThreshold[] thresholds, UInt32 count);
+
 		[DllImport(DllPath)] public static extern void SetDebugConfig(InteropDebugConfig config);
 
 		[DllImport(DllPath)] public static extern void SetEmulationFlag(EmulationFlags flag, bool enabled);
@@ -138,6 +143,16 @@ namespace Mesen.Interop
 		public UInt32 Key1;
 		public UInt32 Key2;
 		public UInt32 Key3;
+	}
+
+	//ADR-0255 slice 4: one stick direction's press threshold, in the core's own
+	//field order (Core/Shared/SettingTypes.h's PadAxisThreshold). Direction is
+	//PadAxisAction.DirectionKey - the family base plus the button byte; the units
+	//are PadAxisAction.ThresholdUnits of the binding's effective percent.
+	public struct InteropPadAxisThreshold
+	{
+		public UInt16 Direction;
+		public Int32 ThresholdUnits;
 	}
 
 	public struct InteropShaderConfig

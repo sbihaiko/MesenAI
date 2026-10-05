@@ -81,5 +81,45 @@ namespace Mesen.Logic
 			char last = keyName[keyName.Length - 1];
 			return last == '+' || last == '-';
 		}
+
+		//The fraction of full travel at which one stick direction counts as
+		//pressed, as the host compares it. A direction a shortcut's PadBinding
+		//names fires at the player's own threshold; every other direction keeps
+		//the host's own ratio, untouched.
+		//
+		//This is what makes "zero behaviour change for anyone who has not bound an
+		//axis" a rule and not a promise: `thresholdUnits` is the value the core
+		//holds for that direction, and it is absent (null) for every direction no
+		//binding names - including every direction on a config that never used
+		//this feature - so the host's expression stands exactly as written. Zero
+		//is read the same way and never as "0%", which ClampPercent already
+		//refuses.
+		public static double ThresholdRatio(int? thresholdUnits, double hostRatio)
+		{
+			if(thresholdUnits is int units && units > 0) {
+				return units / (double)short.MaxValue;
+			}
+			return hostRatio;
+		}
+
+		//The key the core's axis-threshold table is stored under: the direction
+		//with its device cleared, so the threshold belongs to the *direction* and
+		//not to whichever pad is in the player's hands (ADR-0256 Decision 5). It
+		//is Core/Shared/ShortcutKeyRules.h's PadDirectionOf - the family base plus
+		//the button byte.
+		//
+		//The family cannot be read off the code alone, which is why the host's own
+		//name comes in with it: a backend that numbers pads past sixteen puts
+		//Pad17 at 0x2000, the very block a Windows joystick's first button
+		//occupies, so a mask over the code would answer the wrong family there.
+		//The name is the backend's own answer - PadNaming reads its prefix - and
+		//it is the same answer ShortcutKeyRules is handed by its caller.
+		public static ushort DirectionKey(ushort keyCode, string? keyName)
+		{
+			int family = PadNaming.Parse(keyName ?? "") is PadId pad && pad.Family == PadFamily.Ps4
+				? ControllerDevices.BaseDirectInputIndex
+				: ControllerDevices.BaseGamepadIndex;
+			return (ushort)(family + (keyCode & 0xFF));
+		}
 	}
 }

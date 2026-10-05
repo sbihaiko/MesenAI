@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Mesen.Config.Shortcuts;
 using Mesen.Interop;
 
 namespace Mesen.Logic;
@@ -136,6 +137,18 @@ public static class ControllerSheetRemap
 //The two lights of one row, as the ViewModel applies them.
 public sealed record RemapLights(bool PadLit, bool PortLit);
 
+//What a capture is waiting to write. One machine serves both of the sheet's
+//binding surfaces (ADR-0255 slices 3 and 4): REMAP binds a console control, and
+//EXTRA BUTTONS binds one of the emulator's own actions. Only the target differs,
+//so only the target is here - the arming rule, the release-first rule, the
+//refusal and the "one press, one bind" rule are the same decisions on both, and
+//a second machine would be a second copy of them.
+public readonly record struct CaptureTarget(bool IsExtra, SetupButton Button, EmulatorShortcut Shortcut)
+{
+	public static CaptureTarget Remap(SetupButton button) => new(false, button, default);
+	public static CaptureTarget Extra(EmulatorShortcut shortcut) => new(true, default, shortcut);
+}
+
 public enum CaptureOutcome
 {
 	//Not capturing (or a tick that changed nothing): the caller does nothing.
@@ -167,19 +180,26 @@ public sealed class ControllerSheetCapture
 	private HashSet<ushort> _previous = new();
 
 	public bool IsCapturing { get; private set; }
-	//The row being captured, so the sheet can light it and the write can land on
-	//the right control.
-	public SetupButton Button { get; private set; }
+	//What the capture will write when it binds, so the sheet can light the row it
+	//is waiting on and the write can land on the right one.
+	public CaptureTarget Target { get; private set; }
+	//The console control REMAP is capturing (CaptureTarget.Button). Reading it is
+	//how the REMAP rows light the armed one; EXTRA BUTTONS reads Target.Shortcut.
+	public SetupButton Button => Target.Button;
 	public ushort BoundCode { get; private set; }
 
-	public void Arm(SetupButton button)
+	public void Arm(CaptureTarget target)
 	{
 		IsCapturing = true;
-		Button = button;
+		Target = target;
 		BoundCode = 0;
 		_armed = false;
 		_previous.Clear();
 	}
+
+	//The REMAP arm, kept as the shape slice 3 shipped so its callers and tests
+	//read the same as they did.
+	public void Arm(SetupButton button) => Arm(CaptureTarget.Remap(button));
 
 	public void Cancel()
 	{

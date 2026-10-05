@@ -12,6 +12,27 @@
 #include "Core/Shared/MessageManager.h"
 #include "Core/Shared/Emulator.h"
 #include "Core/Shared/EmuSettings.h"
+#include "Core/Shared/ShortcutKeyRules.h"
+#include "Core/Shared/Interfaces/IKeyManager.h"
+
+//ADR-0255 slice 4: the range one joystick axis direction must cross to count as
+//pressed. `hostRange` is this backend's own expression (half of full travel,
+//scaled by the deadzone ratio) and stands unchanged unless a shortcut's spare
+//binding names that direction - then the player's threshold replaces it and only
+//the magnitude moves, never the sign (ShortcutKeyRules::AxisThresholdRatio; 0
+//from the table means no binding names the direction, i.e. behave as before).
+//The direction key is the DirectInput family's, the same family the binding was
+//written from.
+//
+//Windows is not built or run on the macOS machine this was written on - CI
+//compiles it - so this edit is deliberately the smallest one that mirrors the
+//macOS backend: one magnitude, in the one place the old one was computed.
+static int AxisThresholdRange(Emulator* emu, int direction, int hostRange)
+{
+	int32_t units = emu->GetSettings()->GetPadAxisThresholdUnits(
+		ShortcutKeyRules::PadDirectionOf((uint16_t)IKeyManager::BaseDirectInputIndex, (uint16_t)direction));
+	return (int)ShortcutKeyRules::AxisThresholdRatio(units, hostRange);
+}
 
 LPDIRECTINPUT8 DirectInputManager::_directInput = nullptr;
 vector<DirectInputData> DirectInputManager::_joysticks;
@@ -359,18 +380,18 @@ bool DirectInputManager::IsPressed(int port, int button)
 	bool povCentered = (LOWORD(state.rgdwPOV[0]) == 0xFFFF) || povDirection >= 8;
 
 	switch(button) {
-		case 0x00: return state.lY - defaultState.lY < -deadRange;
-		case 0x01: return state.lY - defaultState.lY > deadRange;
-		case 0x02: return state.lX - defaultState.lX < -deadRange;
-		case 0x03: return state.lX - defaultState.lX > deadRange;
-		case 0x04: return state.lRy - defaultState.lRy < -deadRange;
-		case 0x05: return state.lRy - defaultState.lRy > deadRange;
-		case 0x06: return state.lRx - defaultState.lRx < -deadRange;
-		case 0x07: return state.lRx - defaultState.lRx > deadRange;
-		case 0x08: return state.lZ - defaultState.lZ < -deadRange;
-		case 0x09: return state.lZ - defaultState.lZ > deadRange;
-		case 0x0A: return state.lRz - defaultState.lRz < -deadRange;
-		case 0x0B: return state.lRz - defaultState.lRz > deadRange;
+		case 0x00: return state.lY - defaultState.lY < -AxisThresholdRange(_emu, 0x00, deadRange);
+		case 0x01: return state.lY - defaultState.lY > AxisThresholdRange(_emu, 0x01, deadRange);
+		case 0x02: return state.lX - defaultState.lX < -AxisThresholdRange(_emu, 0x02, deadRange);
+		case 0x03: return state.lX - defaultState.lX > AxisThresholdRange(_emu, 0x03, deadRange);
+		case 0x04: return state.lRy - defaultState.lRy < -AxisThresholdRange(_emu, 0x04, deadRange);
+		case 0x05: return state.lRy - defaultState.lRy > AxisThresholdRange(_emu, 0x05, deadRange);
+		case 0x06: return state.lRx - defaultState.lRx < -AxisThresholdRange(_emu, 0x06, deadRange);
+		case 0x07: return state.lRx - defaultState.lRx > AxisThresholdRange(_emu, 0x07, deadRange);
+		case 0x08: return state.lZ - defaultState.lZ < -AxisThresholdRange(_emu, 0x08, deadRange);
+		case 0x09: return state.lZ - defaultState.lZ > AxisThresholdRange(_emu, 0x09, deadRange);
+		case 0x0A: return state.lRz - defaultState.lRz < -AxisThresholdRange(_emu, 0x0A, deadRange);
+		case 0x0B: return state.lRz - defaultState.lRz > AxisThresholdRange(_emu, 0x0B, deadRange);
 		case 0x0C: return !povCentered && (povDirection == 7 || povDirection == 0 || povDirection == 1);
 		case 0x0D: return !povCentered && (povDirection >= 3 && povDirection <= 5);
 		case 0x0E: return !povCentered && (povDirection >= 1 && povDirection <= 3);

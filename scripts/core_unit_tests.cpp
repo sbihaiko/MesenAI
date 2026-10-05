@@ -6174,6 +6174,60 @@ namespace
 			"BlocoO.3: ...on device 1, the one the host enumerated fifth behind four XInput pads");
 	}
 
+	//ADR-0255 slice 4 (the third answer, "Sim, com um limiar"): a stick
+	//direction a shortcut's spare binding names fires at the player's own
+	//threshold, and every other direction keeps the magnitude the backend derived
+	//from the deadzone setting. The whole "zero behaviour change for anyone who
+	//has not bound an axis" claim is these two functions: PadDirectionOf is the key
+	//the EmuSettings table is stored under (device-free, so a threshold belongs to
+	//the direction), and AxisThresholdRatio is the one place a host turns the
+	//stored units back into the magnitude it compares.
+	void TestAnAxisThresholdAppliesOnlyToTheDirectionABindingNames()
+	{
+		//No entry in the table (0) is "no binding names this direction": the
+		//backend's own expression stands untouched. This is the case every config
+		//that never used the feature takes, including macOS' own
+		//GetControllerDeadzoneRatio() * 0.4 and DirectInput's INT16_MAX/2 * ratio -
+		//whatever `host` is, it comes back as it went in.
+		Check(ShortcutKeyRules::AxisThresholdRatio(0, 0.4) == 0.4,
+			"BlocoO.5: with no binding on the direction, the host's own ratio stands");
+		Check(ShortcutKeyRules::AxisThresholdRatio(0, 0.75) == 0.75,
+			"BlocoO.5: ...at any deadzone setting, and not only the default one");
+		Check(ShortcutKeyRules::AxisThresholdRatio(0, 0) == 0,
+			"BlocoO.5: ...including a host expression that is itself zero");
+
+		//A direction a binding names takes the player's threshold, expressed as
+		//the fraction of full travel the host compares against - the same
+		//conversion PadAxisAction.ThresholdUnits makes on the C# side (100% is
+		//short.MaxValue, so 40% is 13107 and 100% is 32767).
+		Check(ShortcutKeyRules::AxisThresholdRatio(13107, 0.4) == 13107.0 / INT16_MAX,
+			"BlocoO.5: a named direction fires at the stored threshold's fraction of travel");
+		Check(ShortcutKeyRules::AxisThresholdRatio(32767, 1.0) == 1.0,
+			"BlocoO.5: ...and 100% is full travel, whatever the deadzone says");
+		Check(ShortcutKeyRules::AxisThresholdRatio(3277, 1.0) < 1.0 && ShortcutKeyRules::AxisThresholdRatio(3277, 1.0) > 0.0,
+			"BlocoO.5: ...and a low threshold is a fraction, not clamped to the host's ratio");
+
+		//The default 40% is what the backends already do at the default deadzone
+		//setting (2 -> ratio 1), which is why a binding that never names a number
+		//behaves as it always did: 40% of travel is 0.4 either way. Not an exact
+		//equality - the stored threshold is an integer count of the axis' own
+		//units, so 40% is 13107 of 32767 and lands a hair under 0.4.
+		Check(std::fabs(ShortcutKeyRules::AxisThresholdRatio(13107, 0.4) - 0.4) < 1e-5,
+			"BlocoO.5: the default threshold's fraction is the default deadzone's own 0.4");
+
+		//PadDirectionOf is the code with the device cleared, which is what makes
+		//the threshold the direction's rather than the pad's: two pads of one
+		//family must answer to the same key.
+		Check(ShortcutKeyRules::PadDirectionOf((uint16_t)IKeyManager::BaseGamepadIndex, 16) == (uint16_t)(IKeyManager::BaseGamepadIndex + 16),
+			"BlocoO.5: the direction key is the family base plus the button byte");
+		Check(ShortcutKeyRules::PadDirectionOf((uint16_t)IKeyManager::BaseGamepadIndex, ShortcutKeyRules::PadButtonOf(PadKey(3, 16))) ==
+			ShortcutKeyRules::PadDirectionOf((uint16_t)IKeyManager::BaseGamepadIndex, ShortcutKeyRules::PadButtonOf(PadKey(0, 16))),
+			"BlocoO.5: ...so the third pad's X+ and the first pad's share one threshold");
+		Check(ShortcutKeyRules::PadDirectionOf((uint16_t)IKeyManager::BaseDirectInputIndex, 0) !=
+			ShortcutKeyRules::PadDirectionOf((uint16_t)IKeyManager::BaseGamepadIndex, 0),
+			"BlocoO.5: ...and the two families' first directions stay apart");
+	}
+
 	//ADR-0255 slice 1 correction: GamepadState.Buttons is numbered per backend,
 	//and the Play Controller sheet draws the pad's own keys from it. The order is
 	//written once in Core/Shared/GamepadButtonOrder.h; this pins that header's
@@ -16931,6 +16985,7 @@ TestW6TheFiltersAcceptTheExtendedFrame();
 	TestAMixedCombinationAsksEachHalfItsOwnWay();
 	TestAPadSupersetShadowsItsSubsetOnAnyPad();
 	TestAJoysticksDeviceIndexIsItsOwnFamilyNotTheHostsOrdinal();
+	TestAnAxisThresholdAppliesOnlyToTheDirectionABindingNames();
 	TestThePadsButtonOrderIsPerBackend();
 	TestPadRuleLeavesTheKeyboardAndMouseExact();
 

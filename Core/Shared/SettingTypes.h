@@ -1248,6 +1248,28 @@ struct ShortcutKeyInfo
 	KeyCombination Keys;
 };
 
+//ADR-0255 slice 4 (the third answer, "Sim, com um limiar"): the point at which
+//one stick *direction* counts as pressed, as the player set it. The direction is
+//keyed the way a pad key code names it with its device cleared
+//(ShortcutKeyRules::PadDirectionOf: the family base plus the button byte) - a
+//threshold belongs to the direction, not to whichever pad is in the player's
+//hands, and macOS's MacOSGameController has no device index of its own to
+//qualify it with (ADR-0256 Decision 5).
+//
+//Units, not percent: 100% is full travel, so the host's own comparison - which
+//works in the backend's raw axis units - is handed a magnitude in the units it
+//already compares, and the sign convention stays where it is. The C# side
+//converts (PadAxisAction.ThresholdUnits) and ShortcutKeyRules::AxisThresholdRatio
+//is the one place either side turns them back into the ratio the host applies.
+//
+//A direction absent from the table is a direction no shortcut's spare binding
+//names: the host keeps the deadzone-derived magnitude it always used.
+struct PadAxisThreshold
+{
+	uint16_t Direction;
+	int32_t ThresholdUnits;
+};
+
 enum class DebuggerFlags
 {
 	SnesDebuggerEnabled = (1 << 0),

@@ -129,5 +129,70 @@ namespace Mesen.Tests.Input
 			Assert.False(PadAxisAction.IsAxisDirectionName(""));
 			Assert.False(PadAxisAction.IsAxisDirectionName(null));
 		}
+
+		//The rule behind "zero behaviour change for anyone who has not bound an
+		//axis" (ADR-0255 slice 4): the host replaces the magnitude it compares an
+		//axis direction against only when the core's table has a threshold for that
+		//direction, and a table entry exists only for a direction a shortcut's
+		//PadBinding actually names. Without one, whatever expression the backend
+		//derived from the deadzone setting comes back exactly as it went in - so a
+		//config that never used this feature cannot be affected by it.
+		[Theory]
+		[InlineData(null, 0.4)]
+		[InlineData(0, 0.4)]
+		[InlineData(null, 0.75)]
+		[InlineData(0, 1.5)]
+		public void ThresholdRatio_WithoutABindingKeepsTheHostsOwnRatio(int? units, double hostRatio)
+		{
+			Assert.Equal(hostRatio, PadAxisAction.ThresholdRatio(units, hostRatio));
+		}
+
+		[Fact]
+		public void ThresholdRatio_WithABindingIsTheThresholdsFractionOfTravel()
+		{
+			//100% is full travel (short.MaxValue), so the fraction is the same
+			//number whatever the host's own ratio was - the deadzone setting stops
+			//governing this one direction and governs every other one still. The
+			//fraction is a division of the stored integer units, hence the
+			//tolerance: 40% is 13107 of 32767, which is 0.400006 and not 0.4.
+			Assert.Equal(1.0, PadAxisAction.ThresholdRatio(PadAxisAction.ThresholdUnits(100), 0.4), 1e-4);
+			Assert.Equal(0.4, PadAxisAction.ThresholdRatio(PadAxisAction.ThresholdUnits(40), 1.5), 1e-4);
+			Assert.Equal(0.75, PadAxisAction.ThresholdRatio(PadAxisAction.ThresholdUnits(75), 0.2), 1e-4);
+		}
+
+		[Fact]
+		public void ThresholdRatio_AtTheDefaultIsTheBackendsOwnDefaultRatio()
+		{
+			//The one case where the two agree, and why a binding that never names a
+			//number behaves as the pad always did at the default deadzone size.
+			Assert.Equal(0.4, PadAxisAction.ThresholdRatio(PadAxisAction.ThresholdUnits(40), 0.4), 1e-4);
+		}
+
+		//The key the core's axis-threshold table is stored under: the direction with
+		//its device cleared, so a threshold belongs to the direction and not to the
+		//pad that happened to be in the player's hands when it was set (ADR-0256
+		//Decision 5).
+		[Fact]
+		public void DirectionKey_ClearsTheDeviceAndKeepsTheButton()
+		{
+			//"Pad1 X+" and "Pad3 X+" are the same direction: one threshold governs
+			//both, and a binding made on one pad still fires on another.
+			Assert.Equal(PadAxisAction.DirectionKey(PadKey(0, 16), "Pad1 X+"), PadAxisAction.DirectionKey(PadKey(2, 16), "Pad3 X+"));
+			Assert.Equal((ushort)(ControllerDevices.BaseGamepadIndex + 16), PadAxisAction.DirectionKey(PadKey(2, 16), "Pad3 X+"));
+		}
+
+		[Fact]
+		public void DirectionKey_KeepsTheTwoPadFamiliesApart()
+		{
+			//Windows' DirectInput joysticks number their own directions from their
+			//own base ("Joy1 Y-"), so the same button byte in the two families must
+			//not share a threshold.
+			Assert.Equal((ushort)(ControllerDevices.BaseDirectInputIndex + 0), PadAxisAction.DirectionKey((ushort)ControllerDevices.BaseDirectInputIndex, "Joy1 Y+"));
+			Assert.NotEqual(
+				PadAxisAction.DirectionKey((ushort)ControllerDevices.BaseDirectInputIndex, "Joy1 Y+"),
+				PadAxisAction.DirectionKey((ushort)ControllerDevices.BaseGamepadIndex, "Pad1 X+"));
+		}
+
+		private static ushort PadKey(int device, int button) => (ushort)(ControllerDevices.BaseGamepadIndex + device * 0x100 + button);
 	}
 }

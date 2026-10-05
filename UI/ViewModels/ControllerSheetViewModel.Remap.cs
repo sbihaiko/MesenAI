@@ -160,14 +160,21 @@ namespace Mesen.ViewModels
 				switch(outcome) {
 					case CaptureOutcome.Bound:
 						IsCapturing = false;
-						BindCaptured(_capture.BoundCode, portIndex, ports[portIndex]);
-						//The write changed the port, so the lights are re-read from it.
+						//One machine, two targets (ADR-0255 slice 4): the capture
+						//that armed from a REMAP row writes the port, the one that
+						//armed from an EXTRA BUTTONS row writes the shortcut.
+						if(_capture.Target.IsExtra) {
+							BindExtraCaptured(_capture.BoundCode);
+						} else {
+							BindCaptured(_capture.BoundCode, portIndex, ports[portIndex]);
+						}
+						//The write changed the config, so the reads are re-read from it.
 						pressed = PressedKeys();
 						break;
 					case CaptureOutcome.Refused:
 						//Visible, never a silent no-op: the row stays armed and the
 						//sheet says why it refused.
-						RemapNote = ResourceHelper.GetMessage("ControllerSheetRemapNonRebindable");
+						RefusalNote = ResourceHelper.GetMessage("ControllerSheetRemapNonRebindable");
 						break;
 				}
 			}
@@ -189,7 +196,10 @@ namespace Mesen.ViewModels
 				row.HasBinding = bound != 0;
 				row.PadLit = lights.PadLit;
 				row.PortLit = lights.PortLit;
-				row.Armed = _capture.IsCapturing && _capture.Button == row.Button;
+				//The armed row is the REMAP one that armed the capture - and only
+				//that: an EXTRA BUTTONS arm carries no console control, so reading
+				//Button alone would light the A row for a press aimed at an action.
+				row.Armed = _capture.IsCapturing && !_capture.Target.IsExtra && _capture.Button == row.Button;
 			}
 		}
 
@@ -204,7 +214,9 @@ namespace Mesen.ViewModels
 			_capture.Arm(button);
 			IsCapturing = true;
 			//The armed state is on screen, not only in the model: the note names the
-			//control being captured, and says how to get out.
+			//control being captured, and says how to get out. The other section's
+			//note goes with it - one capture, one line saying so.
+			ExtraNote = "";
 			RemapNote = ResourceHelper.GetMessage("ControllerSheetRemapArm", ControllerSheetRemap.ControlLabel(CurrentConsole(), button));
 			RefreshRemap();
 		}
@@ -230,6 +242,10 @@ namespace Mesen.ViewModels
 			_capture.Cancel();
 			IsCapturing = false;
 			RemapNote = "";
+			//ADR-0255 slice 4: the EXTRA BUTTONS section arms the same machine, so
+			//the same one path clears its note too - a capture that ended must not
+			//leave either section saying "press a control".
+			ExtraNote = "";
 		}
 
 		//The port's slot the selected pad's other keys are in, or null when nothing

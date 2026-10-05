@@ -36,6 +36,12 @@
 		     UI/Interop/EmuApi.cs into UI/Interop/InteropEnums.cs. Included by exact file, not
 		     a folder glob, since the rest of UI/Interop/ still references Avalonia/EmuApi. -->
 		<Compile Include="../UI/Interop/InteropEnums.cs" />
+		<!-- EmulatorShortcut (ADR-0255 slice 4): the one host-free file in
+		     UI/Config/Shortcuts/, split from its own extension methods there (the enum is
+		     pure data; EmulatorShortcutExtensions reaches ConfigManager and InputApi).
+		     UI/Logic names the actions it filters, so the enum has to dual-compile too.
+		     Exact file, not a folder glob - the rest of that folder is host-aware. -->
+		<Compile Include="../UI/Config/Shortcuts/EmulatorShortcut.cs" />
 	</ItemGroup>
 
 	<ItemGroup>
