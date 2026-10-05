@@ -28,7 +28,6 @@ Text is reduced before matching, because a mention is not a call:
     "mtl_filter_chain_frame failed: ..." messages that would otherwise read as
     eight appliers - with `R"(...)"` raw strings blanked first, so an odd quote
     inside one cannot desynchronise the walk;
-  * `#if 0` regions are removed;
   * a `//` comment continued with a backslash is followed to its real end.
 
 This is still a presence guard, and these are its limits, written down rather
@@ -41,7 +40,21 @@ than implied:
     for, and it pins the presenter half rather than this call site.
   * It cannot see a read reached through a pointer to the member function, nor a
     read copied into a local in another file.
-  * `#if defined(NEVER)` is not `#if 0`; only the literal zero is stripped.
+  * **A read or a call kept inside a preprocessor-dead branch passes.** A `#if 0`
+    block, an `#if defined(NEVER)`, anything a build would drop, still reads as
+    live text here. Stripping those was tried and removed: a regex cannot respect
+    `#else`/`#elif` or nesting, and the version that did it removed LIVE code
+    (a false FAIL) and, when an inner `#if` closed the match early, left dead
+    code behind (a false PASS - the exact regression this guard exists to
+    catch). A guard that fails on correct code and passes on the bug is worse
+    than one that names the hole, so the hole is named. `if(false && ...)` is the
+    same class of limit, minus the preprocessor.
+  * **An applier that never spells the symbol is invisible.** A new renderer that
+    reaches its chain through a table of function pointers, or builds the name by
+    concatenation, never appears in the set - so it is not reported as unlisted
+    either. Nothing can be done about this in a text scan; what the scan CAN do,
+    it does: everything it does find is compared against EXPECTED_APPLIERS, so a
+    renderer it can see cannot slip in quietly.
   * It cannot tell a chain whose call is gone from one whose call is hidden, and
     says so rather than guessing, because both are FAILs.
 
@@ -51,6 +64,7 @@ never on a pull request into `main` - so they are not compiled by a normal pull
 request either. They are never run here, and neither has a renderer harness.
 """
 
+import os
 import pathlib
 import re
 import sys
@@ -79,10 +93,12 @@ EXCLUDED_FILES = (
 	"Utilities/Video/librashader_ld.h",
 )
 
-#Directories never walked. Matched against the path RELATIVE to the repo root, so a
-#checkout that happens to live under a folder called `bin` is unaffected. `roms` is
-#unversioned local content (it holds a virtualenv with 100k+ files) and the graph
-#cache is generated.
+#Directories PRUNED - not entered at all. The distinction matters: `rglob` walks
+#everything and filters afterwards, which took 19-32 s because it descended into
+#`roms/` (unversioned local content holding a virtualenv with ~100k files) and
+#`.git/`. Pruning the same names brings it under 2 s. Matched against the path
+#RELATIVE to the repo root, so a checkout that happens to live under a folder
+#called `bin` is unaffected.
 SKIPPED_DIRS = {
 	"obj", "bin", "build", "node_modules", ".git", ".venv", "venv",
 	"player-renders", "graphify-out", "roms", ".claude", "out",
@@ -99,19 +115,16 @@ APPLIES = re.compile(r"\b\w*_filter_chain_frame\b")
 READS = re.compile(r"\bIsLookCompare\s*\(")
 
 RAW_STRING = re.compile(r"R\"(?P<delim>[^()\\\s]{0,16})\(.*?\)(?P=delim)\"", re.DOTALL)
-IF_ZERO = re.compile(r"^[ \t]*#[ \t]*if[ \t]+0\b.*?^[ \t]*#[ \t]*endif\b",
-	re.DOTALL | re.MULTILINE)
 
 
 def blank_literals_and_comments(text: str) -> str:
-	"""Remove comments, string/char literal contents and `#if 0` regions.
+	"""Remove comments and string/char literal contents.
 
 	Walking beats a regex here: a `//` inside a string is not a comment, and a
 	quote inside a comment does not open a string. The walk keeps literals'
 	delimiters and drops their contents, so a symbol named inside a message
 	disappears while the code around it stays where it was.
 	"""
-	text = IF_ZERO.sub("", text)
 	text = RAW_STRING.sub('R""', text)
 
 	out = []
@@ -169,16 +182,21 @@ def blank_literals_and_comments(text: str) -> str:
 
 
 def sources_in(root: pathlib.Path):
-	for path in root.rglob("*"):
-		if not path.is_file() or path.suffix.lower() not in SOURCES:
-			continue
-		relative = path.relative_to(root).as_posix()
-		if relative in EXCLUDED_FILES:
-			continue
-		parent_parts = pathlib.PurePosixPath(relative).parts[:-1]
-		if any(part in SKIPPED_DIRS for part in parent_parts):
-			continue
-		yield path, relative
+	"""Every candidate source, with the skipped trees never entered.
+
+	os.walk rather than rglob so the prune happens BEFORE the descent - see the
+	note on SKIPPED_DIRS.
+	"""
+	for directory, subdirs, names in os.walk(root):
+		subdirs[:] = [d for d in subdirs if d not in SKIPPED_DIRS]
+		for name in names:
+			if pathlib.PurePosixPath(name).suffix.lower() not in SOURCES:
+				continue
+			path = pathlib.Path(directory) / name
+			relative = path.relative_to(root).as_posix()
+			if relative in EXCLUDED_FILES:
+				continue
+			yield path, relative
 
 
 def main() -> int:
