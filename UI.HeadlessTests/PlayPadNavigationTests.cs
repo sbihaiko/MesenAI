@@ -51,6 +51,12 @@ public class PlayPadNavigationTests : IDisposable
 	private readonly bool _pauseInMenus = ConfigManager.Config.Preferences.PauseWhenInMenusAndConfig;
 	private readonly string _folder = Path.Combine(Path.GetTempPath(), "mesen-0256-" + Guid.NewGuid().ToString("N"));
 
+	//The windows this case opened, closed in Dispose (#838): a window that outlives
+	//its case is a second top level, and the focus the next case waits for is asked
+	//of whichever top level the focus manager answers for. Every window this class
+	//shows is registered by the two fixtures below, so no case can forget one.
+	private readonly List<MainWindow> _windows = new();
+
 	//The backend this suite does not have. InitializeEmu registers a key manager
 	//only when the window and the viewer both hand it a platform handle, and a
 	//headless window has neither, so KeyManager's null check answers "" for every
@@ -121,6 +127,29 @@ public class PlayPadNavigationTests : IDisposable
 
 	public void Dispose()
 	{
+		//#838: the case's own windows go first, and they are the leak that made this
+		//class's failures order-dependent. A window that outlives its case is a
+		//second top level for the next case, and the slot grid's focus is asked of
+		//whichever top level the focus manager answers for: the grid opened, stayed
+		//visible and never became the focused element (its case timed out saying
+		//"focus=Panel#RendererPanel; grid: visible=True effectively=False"), while
+		//the case passed on its own. Measured on main 383238501: 1 failed / 13
+		//passed / 1 skipped with the window left open, 14 passed / 1 skipped with it
+		//closed - and the same suite reported a *different* case red on every
+		//ordering, which is what a leak between cases looks like.
+		//
+		//Closing runs MainWindow's exit path, which releases the process-global core
+		//(EmuApi.Release cannot be undone in one process), so ReleaseCore is set
+		//first: MainWindow.axaml.cs names the hook for exactly this, and the next
+		//case still needs the core. EmuApi.Stop still runs, so a game this case
+		//loaded is stopped here rather than by the next case's constructor.
+		foreach(MainWindow window in _windows) {
+			window.ReleaseCore = () => { };
+			window.Close();
+		}
+		Pump();
+		_windows.Clear();
+
 		PreferencesConfig prefs = ConfigManager.Config.Preferences;
 		prefs.UiMode = _uiMode;
 		prefs.Workspace = _workspace;
@@ -134,7 +163,7 @@ public class PlayPadNavigationTests : IDisposable
 		}
 	}
 
-	private static (MainWindow Window, MainWindowViewModel Model) ShowPlay()
+	private (MainWindow Window, MainWindowViewModel Model) ShowPlay()
 	{
 		PreferencesConfig prefs = ConfigManager.Config.Preferences;
 		prefs.UiMode = UiMode.Player;
@@ -145,6 +174,7 @@ public class PlayPadNavigationTests : IDisposable
 
 		MainWindow window = new();
 		window.ShowStarted();
+		_windows.Add(window);
 		MainWindowViewModel model = Assert.IsType<MainWindowViewModel>(window.DataContext);
 		WaitFor(() => model.MainMenu.HelpMenuItems.Count > 0, "MainWindow never finished building its menus (MainMenuViewModel.Initialize).");
 		return (window, model);
@@ -154,7 +184,7 @@ public class PlayPadNavigationTests : IDisposable
 	//(PlayHomeView's plain grid) as its game-selection and Save/Load screens. The
 	//bridge is attached in every window, so its Back edge has to be told which
 	//door it is in.
-	private static (MainWindow Window, MainWindowViewModel Model) ShowAdvanced()
+	private (MainWindow Window, MainWindowViewModel Model) ShowAdvanced()
 	{
 		PreferencesConfig prefs = ConfigManager.Config.Preferences;
 		prefs.UiMode = UiMode.Advanced;
@@ -165,6 +195,7 @@ public class PlayPadNavigationTests : IDisposable
 
 		MainWindow window = new();
 		window.ShowStarted();
+		_windows.Add(window);
 		MainWindowViewModel model = Assert.IsType<MainWindowViewModel>(window.DataContext);
 		WaitFor(() => model.MainMenu.HelpMenuItems.Count > 0, "MainWindow never finished building its menus (MainMenuViewModel.Initialize).");
 		return (window, model);
