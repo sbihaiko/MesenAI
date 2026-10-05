@@ -913,6 +913,119 @@ void TestDetectConventionLayoutBorderSection()
 		std::filesystem::remove_all(home, ec); //mesen.log/.1 written into it by MessageManager::Log
 	}
 
+	//#881: a failure AFTER the first write is reachable without fault
+	//injection - RunOps stops at the first op that fails, leaving the earlier
+	//ops' files on disk. Replacing op 3's source with an entry the primary does
+	//not contain is exactly that: ops 1 and 2 have written hires.txt and
+	//tiles.png by the time op 3 fails.
+	//
+	//The two tests below are the same failure in the two states the caller can
+	//hand the core, and together they are the ownership rule (ADR-0258): the
+	//core owns the folder's *contents* from the moment PrepareOutputFolder
+	//succeeds - it can only succeed on a folder that was absent or empty - so a
+	//later failure restores the folder to how it was found.
+	std::string RecipeWithFailingThirdOp()
+	{
+		std::string recipeJson = ReadFileBytes(kFixtureDir + "/recipe.json");
+		return ReplaceOnce(recipeJson, "\"from\": \"primary:game.ips\"", "\"from\": \"primary:absent.bin\"",
+			"partial-failure test");
+	}
+
+	void TestRecipePartialFailureRestoresTheFolderItFound()
+	{
+		//The production shape: CommunityPackInstallCoordinator.Install calls
+		//TryCreateOutFolder before EmuApi.InstallMepRecipe, so mep/ already
+		//exists and is empty when the core starts (the same shape
+		//MakeTempPackDir builds, which is why every *success* test above was
+		//already running it).
+		std::filesystem::path out = MakeTempPackDir("recipe_partial_failure_found");
+
+		MepRecipeInstallResult result;
+		bool ok = MepRecipeInstaller::Install(RecipeWithFailingThirdOp(), kFixtureDir + "/primary.zip", {}, "", out.string(), result);
+		Check(!ok && !result.Success && !result.Error.empty(), "BlocoE: an op that fails partway aborts Install()", result.Error);
+		Check(std::filesystem::exists(out), "BlocoE: a failed install leaves the folder the caller created in place");
+		Check(std::filesystem::is_empty(out), "BlocoE: a failed install leaves that folder empty, so the next install is not refused as 'not empty'");
+		Check(!std::filesystem::exists(out / "hires.txt"), "BlocoE: a failed install leaves none of the files an earlier op wrote");
+
+		std::error_code ec;
+		std::filesystem::remove_all(out, ec);
+	}
+
+	void TestRecipePartialFailureRemovesTheFolderItCreated()
+	{
+		//The same failure with the folder absent: the core created it, so the
+		//core removes it. This is the branch that already worked, kept so the
+		//new rule cannot regress it.
+		std::filesystem::path out = std::filesystem::temp_directory_path() / "mep_core_unit_tests_recipe_partial_failure_created";
+		std::error_code ec;
+		std::filesystem::remove_all(out, ec);
+
+		MepRecipeInstallResult result;
+		bool ok = MepRecipeInstaller::Install(RecipeWithFailingThirdOp(), kFixtureDir + "/primary.zip", {}, "", out.string(), result);
+		Check(!ok && !result.Success, "BlocoE: an op that fails partway aborts Install() when the folder was absent too", result.Error);
+		Check(!std::filesystem::exists(out), "BlocoE: a failed install removes the output folder it created itself");
+	}
+
+	//`PrepareOutputFolder` accepted ANY existing path that `is_empty` reports
+	//empty - and `is_empty` is true for a zero-byte regular file, not only for a
+	//directory. With the rollback now gated on "we prepared it" (#881), that path
+	//was handed to `remove_all`, so a file the caller had at the output path was
+	//deleted and replaced by a directory. A file is not an output folder:
+	//refuse it, and leave it exactly as it is.
+	void TestRecipeFailureDoesNotDeleteANonDirectoryItWasHanded()
+	{
+		std::filesystem::path out = std::filesystem::temp_directory_path() / "mep_core_unit_tests_recipe_out_is_a_file";
+		std::error_code ec;
+		std::filesystem::remove_all(out, ec);
+		WriteTestFile(out, ""); //zero bytes - the shape is_empty calls empty
+
+		MepRecipeInstallResult result;
+		bool ok = MepRecipeInstaller::Install(RecipeWithFailingThirdOp(), kFixtureDir + "/primary.zip", {}, "", out.string(), result);
+
+		//The error has to name the reason: the install fails either way, so
+		//asserting only that it failed would pass while the file was being
+		//deleted, which is the shape this test exists to catch.
+		Check(!ok && result.Error.find("not a directory") != std::string::npos,
+			"BlocoE: a path that is not a directory is refused as an output folder", result.Error);
+		Check(std::filesystem::exists(out) && !std::filesystem::is_directory(out),
+			"BlocoE: a failed install leaves a file the caller had at the output path alone");
+
+		std::filesystem::remove_all(out, ec);
+	}
+
+	//The same acceptance, for a symlink to an empty directory. The install writes
+	//through the link into the target, and `remove_all` on the link removes the
+	//link rather than the target's contents - so the residue the rollback exists
+	//to prevent stays behind in the target, and the caller's link is replaced by
+	//a real directory. Restoring the folder means emptying it, not replacing it.
+	void TestRecipeFailureKeepsASymlinkedOutputFolder()
+	{
+		std::filesystem::path target = MakeTempPackDir("recipe_symlink_target");
+		std::filesystem::path out = std::filesystem::temp_directory_path() / "mep_core_unit_tests_recipe_out_is_a_symlink";
+		std::error_code ec;
+		std::filesystem::remove_all(out, ec);
+		std::filesystem::create_directory_symlink(target, out, ec);
+		if(ec) {
+			//Windows without developer mode cannot create one, so there is nothing
+			//to assert here
+			printf("SKIP  BlocoE: a symlinked output folder is restored (create_directory_symlink: %s)\n", ec.message().c_str());
+			std::filesystem::remove_all(target, ec);
+			return;
+		}
+
+		MepRecipeInstallResult result;
+		bool ok = MepRecipeInstaller::Install(RecipeWithFailingThirdOp(), kFixtureDir + "/primary.zip", {}, "", out.string(), result);
+
+		Check(!ok, "BlocoE: an op that fails partway aborts Install() through a symlinked output folder", result.Error);
+		Check(std::filesystem::exists(out) && std::filesystem::is_symlink(out),
+			"BlocoE: a failed install keeps the symlink the caller handed it");
+		Check(std::filesystem::is_empty(target),
+			"BlocoE: a failed install removes the files it wrote through the symlink, not the link itself");
+
+		std::filesystem::remove_all(out, ec);
+		std::filesystem::remove_all(target, ec);
+	}
+
 	//F6.4c (ADR-0138 §39): the three primary-discovery edge cases must
 	//resolve to the same installed tree on both interpreters. The wrapped
 	//subfolder (ADR-0120 name-anchored) and the bare legacy probe basename
@@ -16855,6 +16968,10 @@ int main()
 	TestMissingDepWithholdsPatchKeepsTextures();
 	TestHashMismatchAbortsWritesNothing();
 	TestUnknownOpAndVersionLogsAndSkips();
+	TestRecipePartialFailureRestoresTheFolderItFound();
+	TestRecipePartialFailureRemovesTheFolderItCreated();
+	TestRecipeFailureDoesNotDeleteANonDirectoryItWasHanded();
+	TestRecipeFailureKeepsASymlinkedOutputFolder();
 	TestDiscoveryEdgeCaseParity();
 
 	TestFoldArpeggioToChord();
