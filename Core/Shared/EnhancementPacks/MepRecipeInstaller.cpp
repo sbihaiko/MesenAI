@@ -156,14 +156,18 @@ namespace
 		return true;
 	}
 
-	//`created` is set when the folder did not exist before this call, so a
-	//later failure can roll it back (a pre-existing empty folder is the
-	//caller's and is left in place).
-	bool PrepareOutputFolder(const string& outFolder, bool& created, string& error)
+	//`existed` records whether the folder was already there. It is not a
+	//rollback gate - see ADR-0258: this call succeeds only on a folder that was
+	//absent or empty (#881 - in production the caller has already created it
+	//empty), so from here on the folder's *contents* are this install's, and a
+	//failure restores the folder to how it was found. `existed` only says which
+	//restoration that is: absent means removed, pre-existing means recreated
+	//empty so the caller still has the folder it handed over.
+	bool PrepareOutputFolder(const string& outFolder, bool& existed, string& error)
 	{
 		std::error_code ec;
-		created = false;
-		if(fs::exists(fs::u8path(outFolder), ec)) {
+		existed = fs::exists(fs::u8path(outFolder), ec);
+		if(existed) {
 			if(!fs::is_empty(fs::u8path(outFolder), ec)) {
 				error = "output folder is not empty: " + outFolder;
 				return false;
@@ -175,7 +179,6 @@ namespace
 			error = "cannot create output folder: " + outFolder;
 			return false;
 		}
-		created = true;
 		return true;
 	}
 
@@ -509,7 +512,12 @@ namespace
 		string PrimaryHash;
 		vector<uint8_t> PrimaryBytes; //read once by ParseAndVerify, moved into PrimarySrc
 		MepRecipeSource PrimarySrc;
-		bool CreatedOutFolder = false; //rollback: remove the folder we created on failure
+		//ADR-0258: `Prepared` is the rollback gate ("we handed out an empty
+		//folder"), `Existed` is only how to restore it - removed if absent,
+		//recreated empty if the caller had made it. A failure before
+		//PrepareOutputFolder leaves both false and touches nothing.
+		bool OutFolderPrepared = false;
+		bool OutFolderExisted = false;
 		unordered_map<string, MepRecipeSource> DepSources;
 		unordered_map<string, string> DepHashes;
 		unordered_set<string> MissingIds;
@@ -541,7 +549,13 @@ namespace
 	//primary source (discovering its pack root) and run the recipe's ops.
 	bool BuildContextAndRun(InstallState& state, const string& romName, const string& outFolder, string& error)
 	{
-		if(!PrepareOutputFolder(outFolder, state.CreatedOutFolder, error) || !state.PrimarySrc.LoadBytes(std::move(state.PrimaryBytes), error)) {
+		if(!PrepareOutputFolder(outFolder, state.OutFolderExisted, error)) {
+			return false;
+		}
+		//Past this point the folder is ours on failure (ADR-0258), so it is
+		//marked before the next thing that can fail
+		state.OutFolderPrepared = true;
+		if(!state.PrimarySrc.LoadBytes(std::move(state.PrimaryBytes), error)) {
 			return false;
 		}
 		DiscoverPrimaryRoot(state.PrimarySrc, romName);
@@ -605,11 +619,28 @@ bool MepRecipeInstaller::Install(const string& recipeJson, const string& primary
 	if(!ParseAndVerify(recipeJson, primaryPath, depPaths, state, result.Error)
 		|| !BuildContextAndRun(state, romName, outFolder, result.Error)
 		|| !WriteOutputs(state, recipeJson, outFolder, result.Error)) {
-		if(state.CreatedOutFolder) {
-			//Rollback: never leave a half-written pack where MepPackManager
-			//would discover it on the next scan
+		if(state.OutFolderPrepared) {
+			//Rollback (ADR-0258), on "we prepared it" rather than "we created
+			//it": #881 - the caller pre-creates mep/ empty, so gating on
+			//creation meant this never ran in production and a failure after
+			//the first op left a half-written, unstamped folder that the next
+			//install refused as the user's own. Restore it to how it was found:
+			//gone if it was absent, empty if the caller had already made it -
+			//which is the state a retry needs.
 			std::error_code ec;
 			fs::remove_all(fs::u8path(outFolder), ec);
+			if(ec) {
+				//The residue this ADR exists to prevent, and it would otherwise
+				//be silent: say so rather than report a clean failure
+				Log("could not clear " + outFolder + " after a failed install: " + ec.message());
+			} else if(state.OutFolderExisted) {
+				fs::create_directories(fs::u8path(outFolder), ec);
+				if(ec) {
+					Log("could not restore " + outFolder + " after a failed install: " + ec.message());
+				}
+			}
+			//Never leave a half-written pack where MepPackManager would
+			//discover it on the next scan
 		}
 		return false;
 	}
