@@ -17,7 +17,7 @@ using System.Globalization;
 
 namespace Mesen.Debugger.Controls
 {
-	public class DynamicTooltip : UserControl
+	public class DynamicTooltip : UserControl, IDisposable
 	{
 		public static readonly StyledProperty<TooltipEntries> ItemsProperty = AvaloniaProperty.Register<DynamicTooltip, TooltipEntries>(nameof(Items));
 		public static readonly StyledProperty<int> FirstColumnWidthProperty = AvaloniaProperty.Register<DynamicTooltip, int>(nameof(FirstColumnWidth));
@@ -87,6 +87,34 @@ namespace Mesen.Debugger.Controls
 			if(sender is TextBox txt) {
 				txt.ClearSelection();
 			}
+		}
+
+		//Issue #872: a tooltip's entries can each own a subscription - a picture's
+		//DynamicCroppedBitmap subscribes to the viewer bitmap it borrows. #861
+		//released that subscription when a picture was *replaced*, but a tooltip
+		//thrown away whole (pointer exited, a preview panel dropped) still leaked
+		//its last one. Dispose() is the single seam: discarding the tooltip releases
+		//every subscription it took, and no caller needs to know which entry holds
+		//one. Safe to call more than once - the entry release Detach() is idempotent.
+		public void Dispose()
+		{
+			if(Items == null) {
+				return;
+			}
+
+			foreach(TooltipEntry item in Items) {
+				item.Dispose();
+			}
+		}
+
+		//A viewer window drops an inline preview panel by assigning null to the
+		//bound property, which removes this control from the visual tree - the same
+		//"discard it whole" event as a popup tooltip being cleared. Releasing here
+		//means a new drop site is covered without a per-site Dispose call.
+		protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
+		{
+			base.OnDetachedFromVisualTree(e);
+			Dispose();
 		}
 	}
 

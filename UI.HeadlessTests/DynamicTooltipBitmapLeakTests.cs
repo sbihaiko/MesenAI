@@ -1,5 +1,6 @@
 using System;
 using Avalonia;
+using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform;
@@ -74,5 +75,54 @@ public class DynamicTooltipBitmapLeakTests
 		}
 
 		Assert.Equal(1, viewerBitmap.HandlerCount);
+	}
+
+	//The drop path the PointerExited handlers use (and the one every inline
+	//PreviewPanel / SelectedPreviewPanel follows): the viewer discards the whole
+	//tooltip instead of replacing one picture. #861 fixed the replacement; the
+	//tooltip's last DynamicCroppedBitmap was still subscribed to the shared
+	//ViewerBitmap, rooting it for as long as the bitmap lives.
+	[AvaloniaFact]
+	public void Discarding_the_tooltip_whole_releases_its_last_picture_subscription()
+	{
+		CountingBitmap viewerBitmap = new CountingBitmap();
+		TooltipEntries entries = new TooltipEntries();
+		entries.AddPicture("Tile", viewerBitmap, 6, new PixelRect(0, 0, 8, 8));
+		Assert.Equal(1, viewerBitmap.HandlerCount);
+
+		DynamicTooltip tooltip = new DynamicTooltip() { Items = entries };
+
+		//The viewer shows it (an inline panel, or a popup hosted by a window).
+		Window window = new Window() { Content = tooltip };
+		window.Show();
+		Assert.Equal(1, viewerBitmap.HandlerCount);
+
+		//Pointer exited: ViewerTooltip/PreviewPanel is set to null and the tooltip
+		//leaves the tree, discarded whole.
+		window.Content = null;
+
+		Assert.Equal(0, viewerBitmap.HandlerCount);
+	}
+
+	//The popup path: a viewer hides its tooltip through TooltipHelper on pointer
+	//exit, which clears the tip. Clearing it must release the content's
+	//subscription, otherwise the leak survives for every popup tooltip that never
+	//leaves a visual tree the test can observe.
+	[AvaloniaFact]
+	public void Hiding_a_popup_tooltip_releases_its_picture_subscription()
+	{
+		CountingBitmap viewerBitmap = new CountingBitmap();
+		TooltipEntries entries = new TooltipEntries();
+		entries.AddPicture("Tile", viewerBitmap, 6, new PixelRect(0, 0, 8, 8));
+		DynamicTooltip tooltip = new DynamicTooltip() { Items = entries };
+
+		Border target = new Border();
+		Window window = new Window() { Content = target };
+		window.Show();
+
+		TooltipHelper.ShowTooltip(target, tooltip, 15);
+		TooltipHelper.HideTooltip(target);
+
+		Assert.Equal(0, viewerBitmap.HandlerCount);
 	}
 }
