@@ -71,7 +71,54 @@ internal static class MainWindowStartup
 				}
 			}
 		} finally {
-			Shown.Clear();
+			//#840: the windows go with the test that showed them, and this is the
+			//other half of the #619 fix above. Waiting for the work a window started
+			//is not enough while the window itself stays open: an open window keeps a
+			//50 ms DispatcherTimer of its own (PlayPadNavigationWiring.Attach, one per
+			//MainWindow) and whatever else it wired, so a tick can land after this
+			//test ended and the next test's session setup fails in
+			//HeadlessUnitTestSession.EnsureIsolatedApplication with
+			//"The calling thread cannot access this object because a different thread
+			//owns it" - reported at 1 ms, as a *cleanup* failure of the case that
+			//happens to run next, which is what #840 sees.
+			//
+			//Closing runs MainWindow's exit path, which releases the process-global
+			//core (EmuApi.Release cannot be undone in one process), so ReleaseCore is
+			//set first: MainWindow.axaml.cs names the hook for exactly this, and the
+			//tests that follow still need the core. EmuApi.Stop still runs, so a game
+			//a test left loaded is stopped here rather than by the next test's
+			//constructor (#790).
+			//
+			//Two passes, and the reason is the first pass's own: MainWindow.CloseEmu
+			//closes *every other open window* before it stops anything
+			//(MainWindow.axaml.cs), so closing the first window here can close the
+			//second from inside it. A sibling closed that way would still be holding
+			//its own ReleaseCore and would release the core on the way out, which is
+			//the one thing this hook exists to prevent. Every hook is therefore
+			//neutered before any window is closed.
+			List<MainWindow> closing = new(Shown);
+			foreach(MainWindow window in closing) {
+				window.ReleaseCore = () => { };
+				//And the close itself has to happen: ConfirmQuit (a recording, a
+				//Remaster job) and ValidateExit (ConfirmExitResetPower, Player
+				//mode's stop banner) each cancel OnClosing and leave the window
+				//open, which is the leak this hook exists to stop.
+				window.SkipCloseConfirmation = true;
+			}
+
+			//MainWindow.OnClosing can refuse: a recording or a Remaster job asks
+			//first, and a refused close leaves the window open. Such a window stays
+			//in Shown - the next settle retries it, and a window that never closes is
+			//a leak the suite fails on rather than one this hook quietly forgets.
+			//A throw from one Close must not strand the windows behind it either.
+			foreach(MainWindow window in closing) {
+				try {
+					window.Close();
+				} catch {
+					//Left in Shown below, exactly like a refused close.
+				}
+			}
+			Shown.RemoveAll(window => !window.IsVisible);
 		}
 	}
 
