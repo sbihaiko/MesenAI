@@ -391,7 +391,7 @@ namespace Mesen.Controls
 
 			if(_loadRequested && keyCodes.Count == 0 && Entries.Count > 0) {
 				//Load game/state once all buttons are released to avoid game processing pressed button
-				RecentGameInfo entry = Entries[SelectedIndex % Entries.Count];
+				RecentGameInfo entry = Entries[GridSelection.SlotOf(SelectedIndex, Entries.Count)];
 				if(entry.IsEnabled() == true) {
 					entry.Load();
 				}
@@ -399,47 +399,24 @@ namespace Mesen.Controls
 			}
 		}
 
-		private void MoveLeft()
-		{
-			if(SelectedIndex == 0) {
-				SelectedIndex = Entries.Count - 1;
-			} else {
-				SelectedIndex--;
-			}
-		}
+		//#897: the arithmetic lives in the host-free GridSelection so it can be
+		//tested without a host; these are the control's only callers of it. The
+		//row count is handed over because "is there anything above me" is a fact
+		//about the layout, and inferring it from the entry and column counts gets
+		//the *paged* one-row grid wrong (see GridSelection.Next).
+		private void MoveLeft() => SelectedIndex = GridSelection.Next(SelectedIndex, GridDirection.Left, Entries.Count, _colCount, _rowCount);
 
-		private void MoveRight() => SelectedIndex = (SelectedIndex + 1) % Entries.Count;
+		private void MoveRight() => SelectedIndex = GridSelection.Next(SelectedIndex, GridDirection.Right, Entries.Count, _colCount, _rowCount);
 
-		private void MoveDown()
-		{
-			if(SelectedIndex + _colCount < Entries.Count) {
-				SelectedIndex += _colCount;
-			} else {
-				SelectedIndex = Math.Min(SelectedIndex % _colCount, Entries.Count - 1);
-			}
-		}
+		private void MoveDown() => SelectedIndex = GridSelection.Next(SelectedIndex, GridDirection.Down, Entries.Count, _colCount, _rowCount);
 
-		//A grid with one row has nothing above it, and the wrap below is the 4x3
-		//grid's arithmetic: on the Play home's row of tiles (ADR-0249's W-P2, one
-		//row of up to five) it answers a *negative* index whenever the row holds
-		//fewer entries than it has columns - measured with 5 columns and 2 tiles:
-		//Entries.Count - _colCount == -3 - and the load path reads the selection
-		//back as `Entries[SelectedIndex % Entries.Count]`, which C#'s sign rules
-		//turn into Entries[-1], an IndexOutOfRangeException (#897). Up on such a
-		//grid moves nothing, so it moves nothing here either, and the bridge keeps
-		//that press to walk the focus out of the row.
+		private void MoveUp() => SelectedIndex = GridSelection.Next(SelectedIndex, GridDirection.Up, Entries.Count, _colCount, _rowCount);
+
+		//#896: what the bridge asks before it lets the grid keep an Up press. A
+		//grid with one row has nothing above it, which is the same fact
+		//GridSelection.Next reads to leave a one-row selection where it is - the
+		//bridge and the grid must never disagree about this, so both read the row
+		//count and neither re-derives it.
 		public bool MovesWithUpFromPad => _rowCount > 1;
-
-		private void MoveUp()
-		{
-			if(!MovesWithUpFromPad) {
-				return;
-			}
-			if(SelectedIndex < _colCount) {
-				SelectedIndex = Entries.Count - (_colCount - (SelectedIndex % _colCount));
-			} else {
-				SelectedIndex -= _colCount;
-			}
-		}
 	}
 }
