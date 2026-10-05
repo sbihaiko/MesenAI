@@ -12,6 +12,7 @@ using Avalonia.Media;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using Mesen.Config;
+using Mesen.Config.Shortcuts;
 using Mesen.Interop;
 using Mesen.Logic;
 using Mesen.ViewModels;
@@ -632,6 +633,14 @@ public class PlayerControllerSheetTests : IDisposable
 	{
 		typeof(ControllerSheetViewModel).GetMethod("Tick", BindingFlags.Instance | BindingFlags.NonPublic)!
 			.Invoke(sheet, null);
+		Dispatcher.UIThread.RunJobs();
+	}
+
+	//A section's rows are ItemsControl items: their containers (and so the Buttons
+	//a test clicks) exist only once a layout pass has built them.
+	private static void Relayout(MainWindow window)
+	{
+		window.UpdateLayout();
 		Dispatcher.UIThread.RunJobs();
 	}
 
@@ -1667,6 +1676,397 @@ public class PlayerControllerSheetTests : IDisposable
 		} finally {
 			ConfigManager.Config.Nes = saved;
 		}
+	}
+
+	//ADR-0255 slice 4: EXTRA BUTTONS, the second binding surface of the same
+	//sheet - the pad's spare buttons carrying the emulator's own actions, the
+	//user's own fourth requirement ("se o jostick tiver mais botoes que o nitendo
+	//quero poder atribuir outros controles como retroceder, avancar, compartilhar,
+	//home"). A row's binding *is* the shortcut's own spare slot
+	//(ShortcutKeyInfo.PadBinding), so what the classic Input page shows for that
+	//action and what the row shows are the same field - which is what this pins,
+	//along with the keyboard combination the slot must leave alone.
+	[AvaloniaFact]
+	public void The_extra_rows_are_the_shortcut_lists_own_pad_slot()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model) = ShowPlayWithGame();
+		OpenFromSettings(window, model);
+		ControllerSheetViewModel sheet = model.ControllerSheet;
+		Poll(sheet)!.Stop();
+		sheet.CurrentConsole = () => ConsoleType.Nes;
+		sheet.KeyName = key => "Pad1 " + (key & 0xFF);
+
+		NesConfig savedNes = SavedNes();
+		ShortcutKeyInfo rewind = ShortcutOf(EmulatorShortcut.Rewind);
+		PadShortcutBinding? savedBinding = rewind.PadBinding;
+		try {
+			ConfigManager.Config.Nes.Port1 = new NesControllerConfig();
+			ConfigManager.Config.Nes.Port2 = new NesControllerConfig();
+			//The shortcut's spare slot is empty, as a fresh config's is.
+			rewind.PadBinding = null;
+
+			sheet.Tester.Gamepads.Add(new GamepadTestItem(0) { Name = "Pad Zero", Backend = GamepadBackend.GameController });
+			sheet.PressedKeys = () => Array.Empty<ushort>();
+			sheet.ApplyPad();
+			Relayout(window);
+
+			//The section is up, one row per listed action, and every row is drawn.
+			Assert.True(sheet.ShowExtra);
+			Assert.True(window.FindNamed<StackPanel>("ControllerSheetExtra").IsOnScreen());
+			Assert.Equal(ControllerSheetExtra.Actions.Count, sheet.ExtraRows.Count);
+			Assert.Equal(ControllerSheetExtra.Actions.Count, window.FindAll<Button>().Count(b => b.Name == "ControllerSheetExtraRow"));
+			Assert.All(sheet.ExtraRows, row => Assert.False(string.IsNullOrWhiteSpace(row.Label)));
+
+			ControllerSheetExtraRow rewindRow = sheet.ExtraRows.First(r => r.Action == EmulatorShortcut.Rewind);
+			Assert.False(rewindRow.HasBinding);
+
+			//The classic Input page's own field: writing the shortcut's PadBinding
+			//is what makes the row show it, with no second store in between.
+			ushort spare = PadButton(0, 5);
+			rewind.PadBinding = new PadShortcutBinding() { KeyCode = spare };
+			sheet.ApplyPad();
+			Relayout(window);
+
+			rewindRow = sheet.ExtraRows.First(r => r.Action == EmulatorShortcut.Rewind);
+			Assert.True(rewindRow.HasBinding);
+			Assert.Equal("Pad1 5", rewindRow.BoundName);
+			//...and clearing that field from the other surface empties the row again.
+			rewind.PadBinding = null;
+			sheet.ApplyPad();
+			Assert.False(sheet.ExtraRows.First(r => r.Action == EmulatorShortcut.Rewind).HasBinding);
+		} finally {
+			rewind.PadBinding = savedBinding;
+			ConfigManager.Config.Nes = savedNes;
+		}
+	}
+
+	//The pad slot is a *third* binding beside the two key combinations, never a
+	//replacement for them: a shortcut that already answers to a keyboard
+	//combination keeps it, and clearing the spare button gives back only that.
+	[AvaloniaFact]
+	public void An_extra_binding_leaves_the_shortcuts_keyboard_combination_alone()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model) = ShowPlayWithGame();
+		OpenFromSettings(window, model);
+		ControllerSheetViewModel sheet = model.ControllerSheet;
+		Poll(sheet)!.Stop();
+		sheet.CurrentConsole = () => ConsoleType.Nes;
+
+		NesConfig savedNes = SavedNes();
+		ShortcutKeyInfo rewind = ShortcutOf(EmulatorShortcut.Rewind);
+		ushort savedKey1 = rewind.KeyCombination.Key1;
+		PadShortcutBinding? savedBinding = rewind.PadBinding;
+		try {
+			ConfigManager.Config.Nes.Port1 = new NesControllerConfig();
+			ConfigManager.Config.Nes.Port2 = new NesControllerConfig();
+			//A shortcut with a key and no spare button: the ADR's "the two coexist".
+			rewind.KeyCombination.Key1 = 200;
+			rewind.PadBinding = null;
+
+			sheet.Tester.Gamepads.Add(new GamepadTestItem(0) { Name = "Pad Zero", Backend = GamepadBackend.GameController });
+			sheet.PressedKeys = () => Array.Empty<ushort>();
+			sheet.ApplyPad();
+
+			sheet.ArmExtra(EmulatorShortcut.Rewind);
+			//The row is picked with the pad at rest, so this tick spends the
+			//release-first step (ControllerSheetCapture) and the press after it binds.
+			sheet.PressedKeys = () => Array.Empty<ushort>();
+			sheet.RefreshRemap();
+			sheet.PressedKeys = () => new ushort[] { PadButton(0, 2) };
+			sheet.RefreshRemap();
+
+			Assert.Equal(PadButton(0, 2), rewind.PadBinding!.KeyCode);
+			//The keyboard combination is exactly where it was.
+			Assert.Equal(200, rewind.KeyCombination.Key1);
+
+			sheet.ClearExtra(EmulatorShortcut.Rewind);
+			Assert.Null(rewind.PadBinding);
+			//Clearing the spare button did not touch the key it sits beside.
+			Assert.Equal(200, rewind.KeyCombination.Key1);
+		} finally {
+			rewind.KeyCombination.Key1 = savedKey1;
+			rewind.PadBinding = savedBinding;
+			ConfigManager.Config.Nes = savedNes;
+		}
+	}
+
+	//Picking a row arms slice 3's own capture - the same machine, one target
+	//apart - so the release-first rule, the pad bridge's single IsControllerCapturing
+	//flag and the write path are all the ones REMAP already had. And the arm is the
+	//EXTRA section's: a REMAP row must not light up for a press aimed at an action.
+	[AvaloniaFact]
+	public void Picking_an_extra_row_arms_the_capture_and_the_next_pad_button_binds_it()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model) = ShowPlayWithGame();
+		OpenFromSettings(window, model);
+		ControllerSheetViewModel sheet = model.ControllerSheet;
+		Poll(sheet)!.Stop();
+		sheet.CurrentConsole = () => ConsoleType.Nes;
+		sheet.KeyName = key => "Pad1 " + (key & 0xFF);
+
+		NesConfig savedNes = SavedNes();
+		ShortcutKeyInfo rewind = ShortcutOf(EmulatorShortcut.Rewind);
+		PadShortcutBinding? savedBinding = rewind.PadBinding;
+		try {
+			ConfigManager.Config.Nes.Port1 = new NesControllerConfig();
+			ConfigManager.Config.Nes.Port2 = new NesControllerConfig();
+			rewind.PadBinding = null;
+
+			sheet.Tester.Gamepads.Add(new GamepadTestItem(0) { Name = "Pad Zero", Backend = GamepadBackend.GameController });
+			sheet.PressedKeys = () => Array.Empty<ushort>();
+			sheet.ApplyPad();
+			Relayout(window);
+
+			Click(window.FindAll<Button>().First(b => b.Name == "ControllerSheetExtraRow" && b.DataContext is ControllerSheetExtraRow { Action: EmulatorShortcut.Rewind }));
+
+			Assert.True(sheet.IsCapturing);
+			//One flag, read by the pad bridge: while this is true the pad press is
+			//the capture's and not a focus move (ADR-0256's bridge).
+			Assert.True(model.IsControllerCapturing);
+			Assert.Contains("Esc", sheet.ExtraNote);
+			//The armed row is the EXTRA one, and no REMAP row claims the press.
+			Assert.True(sheet.ExtraRows.First(r => r.Action == EmulatorShortcut.Rewind).Armed);
+			Assert.DoesNotContain(sheet.RemapRows, r => r.Armed);
+
+			//The release that arms it, then the spare button the player picked.
+			ushort spare = PadButton(0, 2);
+			sheet.PressedKeys = () => Array.Empty<ushort>();
+			sheet.RefreshRemap();
+			sheet.PressedKeys = () => new ushort[] { spare };
+			sheet.RefreshRemap();
+
+			Assert.Equal(spare, rewind.PadBinding!.KeyCode);
+			Assert.False(sheet.IsCapturing);
+			Assert.False(model.IsControllerCapturing);
+			//A plain button carries no threshold - a field that would lie about
+			//being in use (PadShortcutBinding).
+			Assert.Null(rewind.PadBinding.ThresholdPercent);
+			//The row now shows the host's own name for it, and nothing else moved.
+			Assert.True(sheet.ExtraRows.First(r => r.Action == EmulatorShortcut.Rewind).HasBinding);
+			//No console control was rebound by it: this section never touches a port.
+			Assert.Equal(0, ConfigManager.Config.Nes.Port1.Mapping1.A);
+		} finally {
+			rewind.PadBinding = savedBinding;
+			ConfigManager.Config.Nes = savedNes;
+		}
+	}
+
+	//The row's clear control gives the spare button back. The ViewModel's guard is
+	//what decides it is offered, so the case also pins that the clear is a write of
+	//the same kind - it goes through ApplyConfig() and reaches the core.
+	[AvaloniaFact]
+	public void The_extra_rows_clear_button_gives_the_spare_button_back()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model) = ShowPlayWithGame();
+		OpenFromSettings(window, model);
+		ControllerSheetViewModel sheet = model.ControllerSheet;
+		Poll(sheet)!.Stop();
+		sheet.CurrentConsole = () => ConsoleType.Nes;
+		sheet.KeyName = key => "Pad1 " + (key & 0xFF);
+
+		NesConfig savedNes = SavedNes();
+		ShortcutKeyInfo screenshot = ShortcutOf(EmulatorShortcut.TakeScreenshot);
+		PadShortcutBinding? savedBinding = screenshot.PadBinding;
+		try {
+			ConfigManager.Config.Nes.Port1 = new NesControllerConfig();
+			ConfigManager.Config.Nes.Port2 = new NesControllerConfig();
+			screenshot.PadBinding = new PadShortcutBinding() { KeyCode = PadButton(0, 6) };
+
+			sheet.Tester.Gamepads.Add(new GamepadTestItem(0) { Name = "Pad Zero", Backend = GamepadBackend.GameController });
+			sheet.PressedKeys = () => Array.Empty<ushort>();
+			sheet.ApplyPad();
+			Relayout(window);
+
+			Assert.True(sheet.ExtraRows.First(r => r.Action == EmulatorShortcut.TakeScreenshot).HasBinding);
+			Click(window.FindAll<Button>().First(b => b.Name == "ControllerSheetExtraClear" && b.DataContext is ControllerSheetExtraRow { Action: EmulatorShortcut.TakeScreenshot }));
+
+			Assert.Null(screenshot.PadBinding);
+			Assert.False(sheet.ExtraRows.First(r => r.Action == EmulatorShortcut.TakeScreenshot).HasBinding);
+			Assert.False(sheet.IsCapturing);
+		} finally {
+			screenshot.PadBinding = savedBinding;
+			ConfigManager.Config.Nes = savedNes;
+		}
+	}
+
+	//ADR-0256 Decision 4 on the EXTRA section: the pad's navigation controls are
+	//refused here too, visibly, and the capture stays armed. The refusal has to
+	//replace the arm note - "something was said" would hold whether the refusal was
+	//shown or swallowed, because the arm note is non-empty too (the same trap the
+	//REMAP case was written against).
+	[AvaloniaFact]
+	public void A_navigation_control_is_refused_on_an_extra_row_visibly()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model) = ShowPlayWithGame();
+		OpenFromSettings(window, model);
+		ControllerSheetViewModel sheet = model.ControllerSheet;
+		Poll(sheet)!.Stop();
+		sheet.CurrentConsole = () => ConsoleType.Nes;
+		//The backend's own names, so PadNavControls resolves the pad's preset for
+		//it: the pad's A is Confirm (the Xbox family).
+		sheet.KeyName = key => key == PadButton(0, 0) ? "Pad1 A" : "Pad1 " + (key & 0xFF);
+		sheet.KeyCode = name => name switch {
+			"Pad1 A" => PadButton(0, 0),
+			"Pad1 B" => PadButton(0, 1),
+			"Pad1 Up" => PadButton(0, 8),
+			"Pad1 Down" => PadButton(0, 9),
+			"Pad1 Left" => PadButton(0, 10),
+			"Pad1 Right" => PadButton(0, 11),
+			_ => 0
+		};
+
+		NesConfig savedNes = SavedNes();
+		ShortcutKeyInfo rewind = ShortcutOf(EmulatorShortcut.Rewind);
+		PadShortcutBinding? savedBinding = rewind.PadBinding;
+		try {
+			ConfigManager.Config.Nes.Port1 = new NesControllerConfig();
+			ConfigManager.Config.Nes.Port2 = new NesControllerConfig();
+			rewind.PadBinding = null;
+
+			sheet.Tester.Gamepads.Add(new GamepadTestItem(0) { Name = "Pad Zero", Backend = GamepadBackend.GameController });
+			sheet.PressedKeys = () => Array.Empty<ushort>();
+			sheet.ApplyPad();
+
+			sheet.ArmExtra(EmulatorShortcut.Rewind);
+			string armNote = sheet.ExtraNote;
+			//Released first: without this tick the capture is still spending the
+			//release-first step and the press below would only be recorded.
+			sheet.PressedKeys = () => Array.Empty<ushort>();
+			sheet.RefreshRemap();
+			//The pad's own Confirm, the control the player opens menus with.
+			sheet.PressedKeys = () => new ushort[] { PadButton(0, 0) };
+			sheet.RefreshRemap();
+
+			//Refused, still armed, nothing written, and the note says why.
+			Assert.True(sheet.IsCapturing);
+			Assert.Null(rewind.PadBinding);
+			Assert.NotEqual(armNote, sheet.ExtraNote);
+			//The refusal belongs to this section, and the other one's note is not
+			//carrying it.
+			Assert.Equal("", sheet.RemapNote);
+
+			//Still listening: another control binds as usual.
+			sheet.PressedKeys = () => Array.Empty<ushort>();
+			sheet.RefreshRemap();
+			sheet.PressedKeys = () => new ushort[] { PadButton(0, 4) };
+			sheet.RefreshRemap();
+			Assert.Equal(PadButton(0, 4), rewind.PadBinding!.KeyCode);
+		} finally {
+			rewind.PadBinding = savedBinding;
+			ConfigManager.Config.Nes = savedNes;
+		}
+	}
+
+	//The one Esc router is the capture's own exit (PlayEsc's CancelCapture state,
+	//ADR-0255 slice 3) and an EXTRA arm goes through it too: one Esc ends the
+	//capture, the note the arm put under the list goes with it, and the sheet
+	//stays up - a second Esc is what closes it.
+	[AvaloniaFact]
+	public void Esc_cancels_an_extra_capture_and_leaves_the_sheet_up()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model) = ShowPlayWithGame();
+		OpenFromSettings(window, model);
+		ControllerSheetViewModel sheet = model.ControllerSheet;
+		Poll(sheet)!.Stop();
+		sheet.CurrentConsole = () => ConsoleType.Nes;
+
+		NesConfig savedNes = SavedNes();
+		ShortcutKeyInfo rewind = ShortcutOf(EmulatorShortcut.Rewind);
+		PadShortcutBinding? savedBinding = rewind.PadBinding;
+		try {
+			ConfigManager.Config.Nes.Port1 = new NesControllerConfig();
+			ConfigManager.Config.Nes.Port2 = new NesControllerConfig();
+			rewind.PadBinding = null;
+
+			sheet.Tester.Gamepads.Add(new GamepadTestItem(0) { Name = "Pad Zero", Backend = GamepadBackend.GameController });
+			sheet.PressedKeys = () => Array.Empty<ushort>();
+			sheet.ApplyPad();
+
+			sheet.ArmExtra(EmulatorShortcut.Rewind);
+			Assert.True(sheet.IsCapturing);
+			Assert.False(string.IsNullOrEmpty(sheet.ExtraNote));
+
+			model.TogglePlayerOverlay();
+
+			Assert.False(sheet.IsCapturing);
+			Assert.False(model.IsControllerCapturing);
+			//The arm's own line went with the capture, under the right section.
+			Assert.Equal("", sheet.ExtraNote);
+			Assert.Equal("", sheet.RemapNote);
+			//Still the Controller sheet: the capture ended, the sheet did not.
+			Assert.True(sheet.IsVisible);
+		} finally {
+			rewind.PadBinding = savedBinding;
+			ConfigManager.Config.Nes = savedNes;
+		}
+	}
+
+	//The section's gate is REMAP's, and for the same reason: a binding is made by
+	//pressing a control on the pad, over a game whose console has a player port.
+	//A pad that goes away takes its capture with it, and only its own.
+	[AvaloniaFact]
+	public void The_extra_section_is_dark_without_a_pad_or_a_player_port()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model) = ShowPlayWithGame();
+		OpenFromSettings(window, model);
+		ControllerSheetViewModel sheet = model.ControllerSheet;
+		Poll(sheet)!.Stop();
+		sheet.CurrentConsole = () => ConsoleType.Nes;
+
+		NesConfig savedNes = SavedNes();
+		ShortcutKeyInfo rewind = ShortcutOf(EmulatorShortcut.Rewind);
+		PadShortcutBinding? savedBinding = rewind.PadBinding;
+		try {
+			ConfigManager.Config.Nes.Port1 = new NesControllerConfig();
+			ConfigManager.Config.Nes.Port2 = new NesControllerConfig();
+			rewind.PadBinding = null;
+
+			//No pad at all: nothing to press, so no section.
+			sheet.PressedKeys = () => Array.Empty<ushort>();
+			sheet.ApplyPad();
+			Assert.False(sheet.ShowExtra);
+			Assert.False(window.FindNamed<StackPanel>("ControllerSheetExtra").IsOnScreen());
+
+			//A pad, but a console with no player port the sheet knows: still no
+			//section, and no rows were built for it either.
+			sheet.CurrentConsole = () => ConsoleType.Snes;
+			sheet.Tester.Gamepads.Add(new GamepadTestItem(0) { Name = "Pad Zero", Backend = GamepadBackend.GameController });
+			sheet.ApplyPad();
+			Assert.False(sheet.ShowExtra);
+
+			//A port back, and the capture an arm opened ends when the pad does.
+			sheet.CurrentConsole = () => ConsoleType.Nes;
+			sheet.ApplyPad();
+			Assert.True(sheet.ShowExtra);
+			sheet.ArmExtra(EmulatorShortcut.Rewind);
+			Assert.True(sheet.IsCapturing);
+
+			sheet.Tester.Gamepads.Clear();
+			sheet.ApplyPad();
+
+			Assert.False(sheet.ShowExtra);
+			Assert.False(sheet.IsCapturing);
+			//The bridge's flag goes with it: the sheet is not waiting for anything.
+			Assert.False(model.IsControllerCapturing);
+			Assert.Null(rewind.PadBinding);
+		} finally {
+			rewind.PadBinding = savedBinding;
+			ConfigManager.Config.Nes = savedNes;
+		}
+	}
+
+	//The shortcut entry a row edits: the one the classic Input page's list holds,
+	//found the way that page finds it.
+	private static ShortcutKeyInfo ShortcutOf(EmulatorShortcut action)
+	{
+		return ConfigManager.Config.Preferences.ShortcutKeys.Find(sk => sk.Shortcut == action)!;
 	}
 
 	//Every console's player ports, emptied: the state the keyboard guard

@@ -1,6 +1,8 @@
 #include "Core/Shared/MessageManager.h"
 #include "Core/Shared/Emulator.h"
 #include "Core/Shared/EmuSettings.h"
+#include "Core/Shared/ShortcutKeyRules.h"
+#include "Core/Shared/Interfaces/IKeyManager.h"
 #include "LinuxGameController.h"
 
 #include "libevdev/libevdev.h"
@@ -138,11 +140,37 @@ void LinuxGameController::Calibrate()
 	}
 }
 
+//ADR-0255 slice 4: the button byte this axis direction is reported as. It is
+//the same list and the same order Calibrate() walks, which is what
+//IsButtonPressed numbers its cases from (ABS_X+ is 14, ABS_HAT3Y- is 41), so the
+//direction's own threshold can be found without every call site naming it. -1
+//for an axis this table does not carry.
+static int AxisDirectionButton(unsigned int code, bool forPositive)
+{
+	static const unsigned int axes[14] = { ABS_X, ABS_Y, ABS_Z, ABS_RX, ABS_RY, ABS_RZ, ABS_HAT0X, ABS_HAT0Y, ABS_HAT1X, ABS_HAT1Y, ABS_HAT2X, ABS_HAT2Y, ABS_HAT3X, ABS_HAT3Y };
+	for(int i = 0; i < 14; i++) {
+		if(axes[i] == code) {
+			return 14 + (i * 2) + (forPositive ? 0 : 1);
+		}
+	}
+	return -1;
+}
+
 bool LinuxGameController::CheckAxis(unsigned int code, bool forPositive)
 {
 	double deadZoneRatio = _emu->GetSettings()->GetControllerDeadzoneRatio();
-	int deadZoneNegative = (_axisDefaultValue[code] - libevdev_get_abs_minimum(_device, code)) * 0.400 * deadZoneRatio;
-	int deadZonePositive = (libevdev_get_abs_maximum(_device, code) - _axisDefaultValue[code]) * 0.400 * deadZoneRatio;
+	//ADR-0255 slice 4: the 0.4-of-travel ratio this always used, unless the
+	//direction is one a shortcut's spare binding names - then the player's own
+	//threshold replaces the ratio and nothing else about the comparison moves
+	//(ShortcutKeyRules::AxisThresholdRatio; 0 from the table is "no binding names
+	//it", so this is a no-op for every config that never used the feature).
+	int direction = AxisDirectionButton(code, forPositive);
+	int32_t units = direction >= 0
+		? _emu->GetSettings()->GetPadAxisThresholdUnits(ShortcutKeyRules::PadDirectionOf((uint16_t)IKeyManager::BaseGamepadIndex, (uint16_t)direction))
+		: 0;
+	double ratio = ShortcutKeyRules::AxisThresholdRatio(units, 0.400 * deadZoneRatio);
+	int deadZoneNegative = (int)((_axisDefaultValue[code] - libevdev_get_abs_minimum(_device, code)) * ratio);
+	int deadZonePositive = (int)((libevdev_get_abs_maximum(_device, code) - _axisDefaultValue[code]) * ratio);
 
 	if(forPositive) {
 		return libevdev_get_event_value(_device, EV_ABS, code) - _axisDefaultValue[code] > deadZonePositive;

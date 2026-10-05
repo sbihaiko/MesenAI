@@ -48,6 +48,26 @@ namespace Mesen.Views
 			}
 		}
 
+		//ADR-0255 slice 4: an EXTRA BUTTONS row is picked. Same capture as a REMAP
+		//row - the sheet then waits for the pad control to write into that
+		//shortcut's spare slot. The row carries the action in its DataContext.
+		private void OnExtraRow(object? sender, RoutedEventArgs e)
+		{
+			if(sender is Control { DataContext: ViewModels.ControllerSheetExtraRow row } && DataContext is ViewModels.ControllerSheetViewModel sheet) {
+				sheet.ArmExtra(row.Action);
+			}
+		}
+
+		//The row's clear: give the shortcut's spare slot back, leaving whatever
+		//keyboard combination it already had. The ViewModel holds the rule and the
+		//guard (it only offers this button on a bound row).
+		private void OnExtraClear(object? sender, RoutedEventArgs e)
+		{
+			if(sender is Control { DataContext: ViewModels.ControllerSheetExtraRow row } && DataContext is ViewModels.ControllerSheetViewModel sheet) {
+				sheet.ClearExtra(row.Action);
+			}
+		}
+
 		//The keyboard case's action: write the preset back (the ViewModel keeps
 		//the guard - it only shows this button when nothing is bound).
 		private void OnRestoreKeyboard(object? sender, RoutedEventArgs e)

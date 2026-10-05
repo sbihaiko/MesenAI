@@ -1248,6 +1248,45 @@ struct ShortcutKeyInfo
 	KeyCombination Keys;
 };
 
+//ADR-0255 slice 4: how many key sets one shortcut may occupy. Two was the
+//whole engine until the Play Controller sheet's EXTRA BUTTONS section gave a
+//shortcut a pad slot beside its key combinations (ShortcutKeyInfo.PadBinding
+//on the UI side), and the two numbers below are the difference between "the
+//slot is a third binding" and "the slot silently overwrites the second key".
+//
+//ShortcutKeySetCount is one more than the sets a config may fill, and the
+//extra one is not a shortcut set at all: it is where ClearShortcutKeys seeds
+//the fake Alt-F4 Exit binding that keeps Alt+F4 from firing Alt+F4 shortcuts
+//(Load State 4 and friends). The guard has to sit *outside* the range
+//ShortcutKeyHandler polls, or the guard would fire Exit on its own - it is
+//there to shadow, not to trigger. SetShortcutKey's superset wiring iterates
+//the whole count, which is what lets the guard shadow the shortcuts in the
+//polled sets.
+constexpr int ShortcutKeySets = 3;
+constexpr int ShortcutKeySetCount = ShortcutKeySets + 1;
+
+//ADR-0255 slice 4 (the third answer, "Sim, com um limiar"): the point at which
+//one stick *direction* counts as pressed, as the player set it. The direction is
+//keyed the way a pad key code names it with its device cleared
+//(ShortcutKeyRules::PadDirectionOf: the family base plus the button byte) - a
+//threshold belongs to the direction, not to whichever pad is in the player's
+//hands, and macOS's MacOSGameController has no device index of its own to
+//qualify it with (ADR-0256 Decision 5).
+//
+//Units, not percent: 100% is full travel, so the host's own comparison - which
+//works in the backend's raw axis units - is handed a magnitude in the units it
+//already compares, and the sign convention stays where it is. The C# side
+//converts (PadAxisAction.ThresholdUnits) and ShortcutKeyRules::AxisThresholdRatio
+//is the one place either side turns them back into the ratio the host applies.
+//
+//A direction absent from the table is a direction no shortcut's spare binding
+//names: the host keeps the deadzone-derived magnitude it always used.
+struct PadAxisThreshold
+{
+	uint16_t Direction;
+	int32_t ThresholdUnits;
+};
+
 enum class DebuggerFlags
 {
 	SnesDebuggerEnabled = (1 << 0),

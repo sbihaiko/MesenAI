@@ -326,11 +326,18 @@ namespace Mesen.Config
 			);
 
 			List<InteropShortcutKeyInfo> shortcutKeys = new List<InteropShortcutKeyInfo>();
-			//The core holds two key sets per shortcut - EmuSettings::SetShortcutKeys
-			//fills sets 0 and 1 and ShortcutKeyHandler polls exactly those two, so a
-			//third binding for one shortcut would overwrite the second instead of
-			//adding to it. The pad slot has to fit under that ceiling.
-			const int coreKeySetsPerShortcut = 2;
+			//ADR-0255 slice 4: the thresholds of the directions those shortcuts'
+			//spare bindings name, pushed in the same call pair below.
+			List<InteropPadAxisThreshold> axisThresholds = new List<InteropPadAxisThreshold>();
+			//The core holds three key sets per shortcut - EmuSettings::SetShortcutKeys
+			//fills the first free one and ShortcutKeyHandler polls all three
+			//(ShortcutKeySets, Core/Shared/SettingTypes.h; the engine's fourth set is
+			//the fake Alt-F4 guard's and is never a config's). The pad slot is pushed
+			//as a set of its own, so it sits *beside* the two key combinations rather
+			//than overwriting the second - which is what the sheet shows and what a
+			//shortcut shipping with both combinations already filled (Rewind,
+			//FastForward, ToggleOverlay) needs.
+			const int coreKeySetsPerShortcut = 3;
 			foreach(ShortcutKeyInfo shortcutInfo in ShortcutKeys) {
 				bool isOverlay = shortcutInfo.Shortcut == EmulatorShortcut.ToggleOverlay;
 				int pushed = 0;
@@ -348,17 +355,32 @@ namespace Mesen.Config
 				//case the ADR is about - and is dropped when there is none, never
 				//silently replacing a key.
 				//
-				//An axis direction is deliberately not pushed: the core would answer
-				//it at the platform's own deadzone threshold rather than at the
-				//player's, and a binding whose setting is ignored is worse than one
-				//that has not landed yet. Its comparison is PadAxisAction's and waits
-				//for the sheet that offers the threshold.
-				if(pushed < coreKeySetsPerShortcut && shortcutInfo.PadBinding is PadShortcutBinding pad && !pad.IsEmpty && !pad.IsAxis) {
+				//An axis direction is pushed like any other button now that its
+				//threshold travels with it (axisThresholds below): the core answers
+				//the direction as this shortcut's key, and the threshold is what
+				//decides when that key reads as pressed, so the player's setting is
+				//no longer stored and ignored.
+				if(pushed < coreKeySetsPerShortcut && shortcutInfo.PadBinding is PadShortcutBinding pad && !pad.IsEmpty) {
 					shortcutKeys.Add(new InteropShortcutKeyInfo(shortcutInfo.Shortcut, pad.ToKeyCombination().ToInterop()));
 					pushed++;
+
+					//The threshold that governs the direction, pushed only for a
+					//direction a spare binding actually names - every other axis
+					//keeps the backend's own deadzone-derived magnitude, which is
+					//what makes this feature invisible to a config that never used
+					//it. Keyed by the direction with its device cleared, so it is the
+					//direction's threshold and not that one pad's (ADR-0256
+					//Decision 5).
+					if(pad.IsAxis) {
+						axisThresholds.Add(new InteropPadAxisThreshold() {
+							Direction = PadAxisAction.DirectionKey(pad.KeyCode, InputApi.GetKeyName(pad.KeyCode)),
+							ThresholdUnits = PadAxisAction.ThresholdUnits(pad.EffectiveThresholdPercent)
+						});
+					}
 				}
 			}
 			ConfigApi.SetShortcutKeys(shortcutKeys.ToArray(), (UInt32)shortcutKeys.Count);
+			ConfigApi.SetPadAxisThresholds(axisThresholds.ToArray(), (UInt32)axisThresholds.Count);
 
 			ConfigApi.SetPreferences(new InteropPreferencesConfig() {
 				ShowFps = ShowFps,

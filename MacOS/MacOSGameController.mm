@@ -14,7 +14,24 @@
 #include "Shared/MessageManager.h"
 #include "Shared/Emulator.h"
 #include "Shared/EmuSettings.h"
+#include "Shared/ShortcutKeyRules.h"
+#include "Shared/Interfaces/IKeyManager.h"
 #undef Debugger
+
+//ADR-0255 slice 4: the magnitude one thumbstick direction is compared against.
+//`hostRatio` is this backend's own expression (the deadzone ratio times the 0.4
+//of full travel the stick directions always used) and stands unchanged unless a
+//shortcut's spare binding names the direction, in which case the player's own
+//threshold governs it - ShortcutKeyRules::AxisThresholdRatio is the rule, and 0
+//from the table means "no binding names this direction", i.e. behave as before.
+//The sign convention stays here, where it has always been: only the magnitude
+//the axis is compared against is replaced.
+static double AxisThresholdForDirection(Emulator* emu, int direction, double hostRatio)
+{
+	int32_t units = emu->GetSettings()->GetPadAxisThresholdUnits(
+		ShortcutKeyRules::PadDirectionOf((uint16_t)IKeyManager::BaseGamepadIndex, (uint16_t)direction));
+	return ShortcutKeyRules::AxisThresholdRatio(units, hostRatio);
+}
 
 MacOSGameController::MacOSGameController(Emulator* emu, GCController* controller)
 {
@@ -81,14 +98,19 @@ void MacOSGameController::HandleDpad(GCControllerDirectionPad* dpad)
 
 void MacOSGameController::HandleThumbstick(GCControllerDirectionPad* stick, int stickNumber)
 {
-	double deadZoneRatio = _emu->GetSettings()->GetControllerDeadzoneRatio() * 0.4;
+	double hostRatio = _emu->GetSettings()->GetControllerDeadzoneRatio() * 0.4;
 
+	//The four direction buttons of this stick in the pad's own button table
+	//("Pad1 X+", "X-", "Y+", "Y-", then X2/Y2 for the right stick), which is what
+	//a shortcut's spare binding names - so the same numbers the threshold table is
+	//keyed by.
+	int direction = (stickNumber * 4) + 16;
 	float xAxis = [[stick xAxis] value];
 	float yAxis = [[stick yAxis] value];
-	_buttonState[(stickNumber * 4) + 16] = xAxis > deadZoneRatio;
-	_buttonState[(stickNumber * 4) + 17] = xAxis < -deadZoneRatio;
-	_buttonState[(stickNumber * 4) + 18] = yAxis > deadZoneRatio;
-	_buttonState[(stickNumber * 4) + 19] = yAxis < -deadZoneRatio;
+	_buttonState[direction + 0] = xAxis > AxisThresholdForDirection(_emu, direction + 0, hostRatio);
+	_buttonState[direction + 1] = xAxis < -AxisThresholdForDirection(_emu, direction + 1, hostRatio);
+	_buttonState[direction + 2] = yAxis > AxisThresholdForDirection(_emu, direction + 2, hostRatio);
+	_buttonState[direction + 3] = yAxis < -AxisThresholdForDirection(_emu, direction + 3, hostRatio);
 	_axisState[(stickNumber * 2) + 0] = INT16_MAX * xAxis;
 	_axisState[(stickNumber * 2) + 1] = INT16_MAX * yAxis;
 }

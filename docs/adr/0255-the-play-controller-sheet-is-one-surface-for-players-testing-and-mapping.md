@@ -17,6 +17,11 @@
   - nothing in the app writes a `PadBinding`, and `PreferencesConfig` drops an
   axis binding before the core push (`!pad.IsAxis`), so a player-set threshold
   can be stored but cannot fire.
+  **Slice 4's surface landed 2026-10-04** (#844): the sheet's EXTRA BUTTONS
+  section, the per-direction threshold table the three backends read, and the
+  engine's third key set, without which the slot was dropped for exactly the
+  three actions the requirement names — Rewind, FastForward and ToggleOverlay
+  all ship with both key sets filled.
   **Slice 5 landed 2026-10-04** as re-specified below, after the implementer put
   the block's own question back to the coordinator - "is a repair that cannot fire
   on two of three backends worth shipping at all?" - and the answer was **ship
@@ -252,6 +257,22 @@ mappings, and the reconnect is repaired by VID:PID. Slices, in order:**
    section below is the pad's spare controls, not its navigation.
 4. **EXTRA BUTTONS**, the `ShortcutKeyInfo` slot, with the axis threshold from
    the third answer. The section is a filtered view of the one shortcut list.
+
+   **Landed 2026-10-04**, and it needed an engine change the shape above did not
+   anticipate. The slot is a *third* binding, and the engine held two key sets
+   per shortcut: `EmuSettings::SetShortcutKeys` filled sets 0 and 1 and
+   `ShortcutKeyHandler` polled exactly those, so a shortcut whose two key
+   combinations were already filled had its pad slot overwritten before it
+   reached the core — silently, because the GUI's own config still held it and
+   the sheet drew it as bound. Rewind, FastForward and ToggleOverlay ship with
+   both combinations filled, so the three actions the requirement names by hand
+   ("retroceder, avancar, home") were precisely the three that did not work.
+   The engine now holds `ShortcutKeySets` = 3, and the set above them is not a
+   shortcut set at all: it is where `ClearShortcutKeys` seeds the fake
+   Alt-F4 = Exit binding that shadows plain-F4 shortcuts, which was only safe at
+   index 2 because the poll loop stopped there (`Core/Shared/SettingTypes.h`).
+   `ConfigApi.GetShortcutKey` is exported so a binding the engine drops is
+   visible from the GUI side, which is what made the drop silent.
 5. **The reconnect repair**: on a pad appearing whose **identity** was last seen
    at another device index, its keys move with it. The identity is
    `(Backend, VendorId, ProductId)` and a pad reporting `0:0000` is unidentified

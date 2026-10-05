@@ -55,6 +55,55 @@ namespace ShortcutKeyRules
 		return (uint16_t)(keyCode & ~0xFF);
 	}
 
+	//ADR-0255 slice 4: the direction a button byte names inside one pad family -
+	//the family base plus the button byte, which is the pad key code with its
+	//device cleared. This is the key the axis-threshold table (EmuSettings'
+	//PadAxisThreshold) is stored and read under, and it is deliberately
+	//device-free: a threshold is a property of the direction, so a binding made
+	//with one pad in hand governs the same direction on another (ADR-0256
+	//Decision 5), and a backend that has no device index for the pad it is
+	//polling can still ask about it.
+	inline uint16_t PadDirectionOf(uint16_t familyBase, uint16_t button)
+	{
+		return (uint16_t)(familyBase + button);
+	}
+
+	//ADR-0255 slice 4: the magnitude one stick direction is compared against, as
+	//the backend's own expression produces it. `thresholdUnits` is the player's
+	//threshold for that direction, or 0 when the table has no entry - which is
+	//every direction no shortcut's spare binding names, including every direction
+	//of a config that never used this feature - and then `hostRatio` stands
+	//exactly as the caller wrote it. This is the core twin of
+	//PadAxisAction.ThresholdRatio, and it is what makes "zero behaviour change
+	//for anyone who has not bound an axis" a rule rather than a promise.
+	inline double AxisThresholdRatio(int32_t thresholdUnits, double hostRatio)
+	{
+		if(thresholdUnits > 0) {
+			return (double)thresholdUnits / INT16_MAX;
+		}
+		return hostRatio;
+	}
+
+	//ADR-0255 slice 4, the same rule for a backend that compares a *magnitude*
+	//rather than a ratio: Windows' DirectInput reads an axis as a signed 16-bit
+	//value, and 100% of its travel is INT16_MAX on both sides - the same unit a
+	//threshold is stored in - so a named direction's magnitude *is* the stored
+	//number, with no ratio to apply and nothing to divide by.
+	//
+	//This is not AxisThresholdRatio with a different argument: passing that one a
+	//magnitude (DirectInputManager's deadRange is INT16_MAX/2 * ratio) returns a
+	//fraction of 1.0, which as an int truncates to 0 and makes every direction
+	//count as pressed. Found in review, 2026-10-04, before it shipped - the
+	//backend is not built or run on the machine the change was written on.
+	//
+	//`hostMagnitude` comes back *exactly* as it went in when the table has no
+	//entry for the direction: that is what keeps this invisible to a config that
+	//never bound an axis, and it is why the comparison is `> 0` and not a ratio.
+	inline int32_t AxisThresholdMagnitude(int32_t thresholdUnits, int32_t hostMagnitude)
+	{
+		return thresholdUnits > 0 ? thresholdUnits : hostMagnitude;
+	}
+
 	//The pad families the running backend exposes, as their base indices: XInput
 	//from IKeyManager::BaseGamepadIndex, and Windows' DirectInput joysticks from
 	//BaseDirectInputIndex above it. The families number their buttons independently

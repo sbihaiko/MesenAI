@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -6,6 +6,12 @@ using System.Threading.Tasks;
 
 namespace Mesen.Config.Shortcuts
 {
+	//The one host-free file in this folder, and deliberately split from its own
+	//extension methods (EmulatorShortcutExtensions.cs): UI/Logic has to name the
+	//actions it filters (ADR-0255 slice 4's EXTRA BUTTONS section reads this list
+	//by action), and UI/Logic is dual-compiled into UI.Tests, which globs that
+	//folder alone. An enum is pure data, so it can travel; GetShortcutKeys reaches
+	//ConfigManager and InputApi, which is exactly what cannot.
 	public enum EmulatorShortcut
 	{
 		FastForward,
@@ -153,28 +159,5 @@ namespace Mesen.Config.Shortcuts
 
 		LastValidValue,
 		[Obsolete] LoadRandomGame,
-	}
-
-	public static class EmulatorShortcutExtensions
-	{
-		public static KeyCombination? GetShortcutKeys(this EmulatorShortcut shortcut)
-		{
-			PreferencesConfig cfg = ConfigManager.Config.Preferences;
-			int keyIndex = cfg.ShortcutKeys.FindIndex((ShortcutKeyInfo shortcutInfo) => shortcutInfo.Shortcut == shortcut);
-			if(keyIndex >= 0) {
-				if(!cfg.ShortcutKeys[keyIndex].KeyCombination.IsEmpty) {
-					return cfg.ShortcutKeys[keyIndex].KeyCombination;
-				} else if(!cfg.ShortcutKeys[keyIndex].KeyCombination2.IsEmpty) {
-					return cfg.ShortcutKeys[keyIndex].KeyCombination2;
-				} else if(cfg.ShortcutKeys[keyIndex].PadBinding is PadShortcutBinding pad && !pad.IsEmpty) {
-					//ADR-0255 slice 4: the chain ends on the pad slot, which is how
-					//a shortcut with a button and no key still has something to
-					//display (the context menu's shortcut text). A shortcut that
-					//has a key returns it exactly as it did.
-					return pad.ToKeyCombination();
-				}
-			}
-			return null;
-		}
 	}
 }

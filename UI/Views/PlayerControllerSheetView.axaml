@@ -218,6 +218,43 @@
 				<TextBlock Name="ControllerSheetRemapNote" Classes="subhead secondary" Text="{Binding RemapNote}"
 					IsVisible="{Binding RemapNote, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" TextWrapping="Wrap" Margin="2 8 0 0" />
 			</StackPanel>
+
+			<!--Slice 4 (W-P17): EXTRA BUTTONS - the pad's spare controls carrying the
+			emulator's own actions, for a pad with more buttons than the console needs
+			(the user's own requirement: "se o jostick tiver mais botoes que o nitendo
+			quero poder atribuir outros controles como retroceder, avancar,
+			compartilhar, home"). Same capture as REMAP above - one press, one bind, Esc
+			cancels - and the same gate: dark without a pad or without a player port. A
+			row's binding is the shortcut's own PadBinding slot, and the clear button
+			beside it gives that slot back.-->
+			<StackPanel Name="ControllerSheetExtra" IsVisible="{Binding ShowExtra}" Margin="0 14 0 0">
+				<TextBlock Classes="group-label" Text="{l:Translate lblControllerSheetExtra}" />
+				<TextBlock Classes="subhead secondary" Text="{l:Translate lblControllerSheetExtraHint}" TextWrapping="Wrap" Margin="2 6 0 0" />
+				<Border Classes="group" Margin="0 8 0 0">
+					<ItemsControl Name="ControllerSheetExtraRows" ItemsSource="{Binding ExtraRows}">
+						<ItemsControl.ItemTemplate>
+							<DataTemplate x:DataType="vm:ControllerSheetExtraRow">
+								<Grid ColumnDefinitions="*,Auto">
+									<Button Name="ControllerSheetExtraRow" Classes="row text" Grid.Column="0" Click="OnExtraRow">
+										<DockPanel>
+											<TextBlock Classes="value" DockPanel.Dock="Right" Text="{Binding BoundName}" Margin="0 0 8 0" TextTrimming="CharacterEllipsis" />
+											<TextBlock Classes="title" Text="{Binding Label}" />
+										</DockPanel>
+									</Button>
+									<!--The forward key the row writes, so the action is not left
+									without a way back to the keyboard alone. Nothing to clear on
+									an unbound row, so it is not there.-->
+									<Button Name="ControllerSheetExtraClear" Classes="plain small" Grid.Column="1" Margin="8 0 0 0"
+										IsVisible="{Binding HasBinding}" Click="OnExtraClear" Content="{l:Translate btnControllerSheetExtraClear}"
+										ToolTip.Tip="{l:Translate btnControllerSheetExtraClear}" />
+								</Grid>
+							</DataTemplate>
+						</ItemsControl.ItemTemplate>
+					</ItemsControl>
+				</Border>
+				<TextBlock Name="ControllerSheetExtraNote" Classes="subhead secondary" Text="{Binding ExtraNote}"
+					IsVisible="{Binding ExtraNote, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" TextWrapping="Wrap" Margin="2 8 0 0" />
+			</StackPanel>
 			<DockPanel Margin="0 16 0 0">
 				<Button Name="ControllerSheetMoreInOptions" Classes="plain small" DockPanel.Dock="Left" Margin="-9 0 0 0" Click="OnMoreInOptions" Content="{l:Translate btnControllerSheetMoreInOptions}" />
 				<Button Name="ControllerSheetDone" Classes="primary regular" HorizontalAlignment="Right" Click="OnDone" Content="{l:Translate btnControllerSheetDone}" />

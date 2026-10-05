@@ -185,6 +185,10 @@ namespace Mesen.ViewModels
 			//that re-reads the sheet re-reads it too - and the sheet's own 60 Hz
 			//poll keeps its lights and its capture live.
 			RefreshRemap();
+			//ADR-0255 slice 4: EXTRA BUTTONS reads them for the same reason (the
+			//section needs a player port to be about anything), and rides the same
+			//poll - its own note and its armed row stay live with it.
+			RefreshExtra(ports);
 		}
 
 		//Whether two readings of the rows are the same shown surface. Value

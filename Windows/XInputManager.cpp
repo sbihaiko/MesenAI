@@ -57,6 +57,17 @@ bool XInputManager::IsPressed(uint8_t gamepadPort, uint8_t button)
 			WORD xinputButton = 1 << (button - 1);
 			pressed = (_gamePadStates[gamepadPort].Gamepad.wButtons & xinputButton) != 0;
 		} else {
+			//ADR-0255 slice 4 deliberately leaves this backend's magnitudes alone.
+			//An XInput stick direction is named as a *button* here - "Pad1 RT Up",
+			//"Pad1 LT Right" (WindowsKeyManager's buttonNames) - so
+			//PadAxisAction.IsAxisDirectionName never recognises one and no
+			//shortcut's spare binding can name a direction in this family: there is
+			//nothing for a player-set axis threshold to govern. DirectInput, whose
+			//directions *are* named "Joy1 Y+" / "Joy1 Y-", is where the threshold
+			//lands on Windows (DirectInputManager::AxisThresholdRange), and the
+			//trigger pair at 17/18 is 8-bit with no full-travel scale a percentage
+			//could be measured against. Windows is not built or run on the macOS
+			//machine slice 4 was written on; CI compiles it.
 			double ratio = _emu->GetSettings()->GetControllerDeadzoneRatio() * 2;
 
 			switch(button) {
