@@ -28,7 +28,7 @@ public static class NativeDependencyExtractor
 	//silently does nothing. It is here rather than in DependencyHelper so the names
 	//are dual-compiled into UI.Tests and that agreement is pinned by a test
 	//(ADR-0123).
-	public static readonly string[] DebugCoreFileNames = { "MesenCore.dll", "MesenCore.so", "MesenCoredylib" };
+	public static readonly string[] DebugCoreFileNames = { "MesenCore.dll", "MesenCore.so", "MesenCore.dylib" };
 
 	public static void Extract(Stream zipStream, string destFolder)
 	{
