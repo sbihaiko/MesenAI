@@ -119,6 +119,51 @@ namespace Mesen.Tests.Input
 		}
 
 		[Fact]
+		public void Read_Keeps_Up_With_A_Set_That_Grows_Between_Asks()
+		{
+			//Every ask is a fresh snapshot, so the first answer is not a promise
+			//about the second. A review of the two-ask cut caught this: it sized
+			//the second buffer from the FIRST answer and threw the second one
+			//away, so a set that grew in between was truncated to the number the
+			//first ask reported - the original bug at a larger size.
+			ushort[] forty = Held(40);
+			ushort[] sixty = Held(60);
+			List<int> asks = new List<int>();
+			int call = 0;
+			List<ushort> keys = PressedKeys.Read((ushort[] buffer) => {
+				asks.Add(buffer.Length);
+				call++;
+				//40 keys on the first ask, 60 from the second one on: a key went
+				//down between them.
+				ushort[] held = call == 1 ? forty : sixty;
+				for(int i = 0; i < held.Length && i < buffer.Length; i++) {
+					buffer[i] = held[i];
+				}
+				return held.Length;
+			});
+
+			Assert.Equal(60, keys.Count);
+			Assert.Equal(sixty[59], keys[59]);
+			Assert.Equal(new List<int> { PressedKeys.Capacity, 40, 60 }, asks);
+		}
+
+		[Fact]
+		public void Read_Stops_Asking_At_The_Cap()
+		{
+			//A set growing faster than it is read must not turn Read into an
+			//unbounded loop: the cap is what ends it, and what fits is kept.
+			List<int> asks = new List<int>();
+			int reported = 0;
+			PressedKeys.Read((ushort[] buffer) => {
+				asks.Add(buffer.Length);
+				reported += 64;
+				return reported;
+			});
+
+			Assert.Equal(PressedKeys.MaxAsks, asks.Count);
+		}
+
+		[Fact]
 		public void Read_Does_Not_Grow_Past_The_Sanity_Ceiling()
 		{
 			//A backend answering past MaxKeys is not describing pressed keys. The

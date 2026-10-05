@@ -33,8 +33,10 @@ extern "C"
 	//copy loop stops at the caller's bound, not at a literal repeated here. What
 	//comes back is the SIZE OF THE SET the manager holds, not how many slots fit,
 	//which is what lets the host grow a buffer that was too small instead of
-	//losing the tail of a set. The caller leaves the remaining slots zero (the
-	//sentinel), so it must zero-initialize the buffer it hands over.
+	//losing the tail of a set. Only the first min(size, capacity) slots are
+	//written; nothing here fills the rest, so it is the HOST that has to leave
+	//them reading as "no key" - it allocates the buffer (a zeroed `new ushort[]`)
+	//and its no-key convention is 0.
 	DllExport int32_t __stdcall GetPressedKeys(uint16_t* keyBuffer, int32_t capacity)
 	{
 		if(capacity < 0) {
