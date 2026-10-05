@@ -1679,6 +1679,19 @@ recording; a `jev_harness.py` script replayed by the recorder is `ai`.
   numbered paragraph, bold or not); a fold claim's subject is the last
   `ADR-NNNN` before the phrase on that line, and it passes only when that
   ADR's own file is a tombstone naming the claimed target. No allow-list.
+- `python3 scripts/checks/verify_md_links.py` (also in `make doc-checks`) -
+  every markdown `](target)` in the repo resolves from the file that writes
+  it. A link target is relative to its own file, so moving a file changes
+  what its links must say even when their targets never moved, and the
+  2026-10-05 area split (283 files, one directory deeper) was swept four
+  times, each sweep missing a shape the next one found: a repo-relative
+  literal split across two lines; a `../`-relative path in a code span; a
+  link's visible *label*; and a target written `adr/core/0237-….md` with no
+  `docs/` prefix. Resolving every target is the one formulation with no shape
+  to miss, and it is the only one of the four that needed no allow-list -
+  over the tree it replaced it reported exactly the two links that were
+  broken and nothing else. Fenced code blocks and non-repo schemes
+  (`http(s)`, `mailto`, `ftp`, `tel`) and bare `#anchor` links are skipped.
 - `python3 scripts/checks/verify_prd_live_rows.py` (PRD slice C.2, also in
   `make doc-checks`) - no row of a *live* slice table in
   `docs/roadmap/PRD-mesence-enhancement-ecosystem.md` (Part A section 4,

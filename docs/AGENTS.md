@@ -76,6 +76,7 @@ Owns `docs/specs/` (CC0), `docs/roadmap/` (the consolidated PRD), `docs/adr/` (t
 
 - Specs: `python3 scripts/validate-specs.py` from the repo root.
 - ADRs: `python3 scripts/checks/verify_adr_refs.py` (also in `make doc-checks`) — every cited `ADR-NNNN` resolves to a file.
+- Links: `python3 scripts/checks/verify_md_links.py` (also in `make doc-checks`) — every markdown `](target)` resolves from the file that writes it. A target is relative to its own file, so this is the check that catches a moved document whose links were not re-relativised, which no id- or path-based check sees. It was written after the 2026-10-05 area split was swept four times and each sweep missed a shape the next one found.
 - Upstream coexistence (ADR-0163): tiers = `scripts/upstream_tiers.py`; `Upstream-Delta:` trailer check = `scripts/checks/verify_upstream_delta.py`; sync = `scripts/sync-upstream.sh` (local, merge on `main`) + `.github/workflows/sync-upstream.yml` (scheduled PR when upstream moves).
 - `hd-pack-authoring.md`: `./scripts/checks/verify_hd_pack_authoring_doc.sh`.
 - The artist-facing docs — `remastering-a-game.md`, `ai-kit-review.md`,
