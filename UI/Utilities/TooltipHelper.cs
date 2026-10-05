@@ -29,6 +29,15 @@ namespace Mesen.Utilities
 
 				ToolTip.SetIsOpen(target, true);
 
+				//One instance belongs to one target. Handing the same tooltip to a
+				//second target moves it out of the first target's popup, which fires
+				//DynamicTooltip.OnDetachedFromVisualTree and releases subscriptions
+				//the instance may still need on the target it was just taken from -
+				//and this reference check cannot see that, because it reads the NEW
+				//target's previous tip, not the other target's. Every call site today
+				//uses one target per instance; a future one that shares a
+				//picture-bearing tooltip between two targets would need re-showing
+				//rather than re-hosting.
 				if(previous is IDisposable disposable && !ReferenceEquals(previous, tooltipContent)) {
 					disposable.Dispose();
 				}
