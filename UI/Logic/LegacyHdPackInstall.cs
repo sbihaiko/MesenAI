@@ -230,14 +230,27 @@ namespace Mesen.Logic
 				error = SizeLimitError(maxBytes);
 				return false;
 			}
+			SizeCappedStream? capped = null;
 			try {
 				using Stream src = nestedEntry.Open();
-				using SizeCappedStream capped = new(src, maxBytes);
-				using FileStream dst = new FileStream(tempPath, FileMode.Create, FileAccess.Write, FileShare.None);
-				capped.CopyTo(dst);
+				capped = new SizeCappedStream(src, maxBytes);
+				using(capped) {
+					using FileStream dst = new FileStream(tempPath, FileMode.Create, FileAccess.Write, FileShare.None);
+					capped.CopyTo(dst);
+				}
 				return true;
 			} catch(InvalidDataException) {
-				error = SizeLimitError(maxBytes);
+				//One exception type, two causes, and they must not be reported as
+				//the same thing: the entry inflated past the ceiling, or the
+				//archive is corrupt (a truncated download, a bad local header).
+				//The capped stream can tell them apart - it stops counting at the
+				//ceiling, so having reached it means the cap is what stopped the
+				//read, and anything short of it is corruption. Telling a person
+				//their download is a 2 GiB bomb when it is merely truncated sends
+				//them looking for an attacker who is not there.
+				error = capped != null && capped.BytesRead >= maxBytes
+					? SizeLimitError(maxBytes)
+					: "legacy HD pack holds a corrupt nested archive - refusing to extract";
 				return false;
 			}
 		}

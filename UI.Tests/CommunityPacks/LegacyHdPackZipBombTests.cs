@@ -40,6 +40,28 @@ namespace Mesen.Tests.CommunityPacks
 				"the capped stream consumed the whole entry before refusing");
 		}
 
+		[Fact]
+		public void A_corrupt_nested_archive_is_not_reported_as_a_size_bomb()
+		{
+			//Both causes arrive as InvalidDataException from the deflate reader.
+			//Before the types were separated, a truncated download was reported
+			//as "inflates past <cap> - refusing to extract", which names a bomb
+			//that is not there and sends the reader to the wrong place.
+			byte[] wrapperBytes = BuildWrapperZipWithCorruptNestedEntry();
+
+			using MemoryStream wrapperMs = new(wrapperBytes);
+			using ZipArchive wrapper = new(wrapperMs, ZipArchiveMode.Read);
+			string dest = NewTempDir();
+			try {
+				bool ok = LegacyHdPackInstall.ExtractToFolder(wrapper, dest, "Some Rom", OneMiB, out string error);
+				Assert.False(ok);
+				Assert.DoesNotContain("inflates past", error, StringComparison.Ordinal);
+				Assert.Contains("corrupt", error, StringComparison.Ordinal);
+			} finally {
+				Directory.Delete(dest, true);
+			}
+		}
+
 		// --- the install path over a real wrapper zip ------------------------
 
 		[Fact]
@@ -53,7 +75,11 @@ namespace Mesen.Tests.CommunityPacks
 			try {
 				bool ok = LegacyHdPackInstall.ExtractToFolder(wrapper, dest, "Some Rom", OneMiB, out string error);
 				Assert.False(ok);
+				//Both refusals say "refusing"; only this one may say why the cap
+				//is what stopped the read.
 				Assert.Contains("refusing", error, StringComparison.Ordinal);
+				Assert.Contains("inflates past", error, StringComparison.Ordinal);
+				Assert.DoesNotContain("corrupt", error, StringComparison.Ordinal);
 				Assert.Empty(Directory.GetFileSystemEntries(dest));
 			} finally {
 				Directory.Delete(dest, true);
@@ -96,6 +122,37 @@ namespace Mesen.Tests.CommunityPacks
 				CreateEntry(zip, "readme.txt", "wrapper");
 			}
 			return ms.ToArray();
+		}
+
+		//A wrapper whose nested entry is a valid zip whose *compressed* bytes were
+		//then damaged, so the deflate reader fails part-way through the copy.
+		//That is the corrupt-archive case, and it is the one the cap used to
+		//claim for itself.
+		private static byte[] BuildWrapperZipWithCorruptNestedEntry()
+		{
+			byte[] payload = new byte[256 * 1024];
+			for(int i = 0; i < payload.Length; i++) {
+				payload[i] = (byte)(i * 7);
+			}
+
+			using MemoryStream ms = new();
+			using(ZipArchive zip = new(ms, ZipArchiveMode.Create, true)) {
+				ZipArchiveEntry nested = zip.CreateEntry("Pack.zip", CompressionLevel.Optimal);
+				using(Stream stream = nested.Open()) {
+					stream.Write(payload, 0, payload.Length);
+				}
+				CreateEntry(zip, "readme.txt", "wrapper");
+			}
+			byte[] bytes = ms.ToArray();
+
+			//Local file header: signature(4) version(2) flags(2) method(2)
+			//time(2) date(2) crc(4) compressedSize(4) size(4) nameLen(2)
+			//extraLen(2), then the name, the extra field, then the entry data.
+			int nameLen = BitConverter.ToInt16(bytes, 26);
+			int extraLen = BitConverter.ToInt16(bytes, 28);
+			int dataStart = 30 + nameLen + extraLen;
+			bytes[dataStart + 100] ^= 0xFF;
+			return bytes;
 		}
 
 		private static byte[] BuildWrapperZipWithNestedPack()
