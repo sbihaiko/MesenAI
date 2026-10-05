@@ -75,11 +75,18 @@ MacOSKeyManager::MacOSKeyManager(Emulator* emu)
 			HandleModifiers((uint32_t) [event modifierFlags]);
 		} else {
 			//#902: the table answers 0 - the "no key" sentinel - for a virtual key
-			//code it has no Mesen key for (Fn, the keypad codes it leaves out), and
-			//everything >= 128 maps there too, which is where media and brightness
-			//keys live. Recording it would write _keyState[0] and put a key in the
-			//pressed set that no key name resolves to and no binding can name; the
-			//key has no Mesen code, so nothing about it is recorded.
+			//code it has no Mesen key for, and every code >= 128 maps there too,
+			//outside the range the table covers at all. 0 is not a key: writing it
+			//sets _keyState[0] and puts a code in the pressed set that no key name
+			//resolves to and no binding can name, so a key with no Mesen code
+			//records nothing.
+			//
+			//Which physical keys reach this line with such a code is not something
+			//this repo can settle: the Fn key arrives as FlagsChanged (the branch
+			//above) and media keys arrive as SystemDefined, which the event mask
+			//does not subscribe to. The write has to be safe for the codes the
+			//table does produce regardless - the sentinel's other way in is the
+			//host export (InputApi.SetKeyState), which accepts 0 on every backend.
 			uint16_t mappedKeyCode = [event keyCode] >= 128 ? IKeyManager::NoKey : _keyCodeMap[[event keyCode]];
 			if(mappedKeyCode != IKeyManager::NoKey) {
 				_keyState[mappedKeyCode] = ([event type] == NSEventTypeKeyDown);

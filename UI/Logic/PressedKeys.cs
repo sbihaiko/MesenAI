@@ -70,12 +70,16 @@ public static class PressedKeys
 	//treated as "no key here": the native copy leaves the slots past the set
 	//untouched and the caller's `new ushort[]` is zeroed, and the host's own
 	//consumers apply the same convention (StateGrid skips a code of 0 before it
-	//does anything with it). It is a convention and not a property of every
-	//backend: MacOSKeyManager maps a few unassigned key codes to 0, so a key that
-	//lands on that code is invisible here and in every host consumer - upstream
-	//behaviour that predates this read, and not something it can fix from here.
-	//The array's own length is the bound: the host allocates it, and Read sizes it
-	//from what the backend reported.
+	//does anything with it).
+	//
+	//Since #902 the core answers the same way: key code 0 is the "no key"
+	//sentinel - what MacOSKeyManager answers for a virtual key code its table
+	//cannot name - and KeyManager::GetPressedKeys drops it before the set leaves
+	//the backend (IKeyManager::WithoutNoKey), so a 0 in this buffer means only
+	//what it says. This filter stays as the host's own guard for a stale core:
+	//the loader prefers a MesenCore.dylib built before that fix, and dropping 0
+	//again costs a comparison. The array's own length is the bound: the host
+	//allocates it, and Read sizes it from what the backend reported.
 	public static List<ushort> Decode(IReadOnlyList<ushort> buffer)
 	{
 		List<ushort> keys = new List<ushort>();

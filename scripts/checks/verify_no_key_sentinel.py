@@ -3,14 +3,15 @@
 
 #902: a key code of 0 is not a key. It is the value an empty KeyCombination
 slot has, and the one code a pressed set must never carry. macOS produces it
-anyway - `MacOSKeyManager` maps every virtual key code it has no Mesen key for
-to 0 (its table's own holes, like Fn, and everything >= 128, which is where
-media and brightness keys live) and then writes `_keyState[0]`, so
-`GetPressedKeys` reports a key that no key name resolves to. Every reader that
-receives it has to know to drop it, and each one drops it differently: the host
-filters it in `PressedKeys.Decode`, Lua drops it by accident (its name is
-empty), and `ShortcutKeyHandler` keeps it - where it is the whole set's
-non-emptiness and its size, and both are read as "a key is down".
+anyway - `MacOSKeyManager` maps a virtual key code to a Mesen key code and then
+records the answer, and its table answers 0 for every code it has no Mesen key
+for (eight holes, and every code >= 128, which is outside the range it covers
+at all) - so `GetPressedKeys` reports a key that no key name resolves to. Every
+reader that receives it has to know to drop it, and each one drops it
+differently: the host filters it in `PressedKeys.Decode`, Lua drops it by
+accident (its key name is empty), and `ShortcutKeyHandler` keeps it - where it
+is the whole set's non-emptiness and its size, and both are read as "a key is
+down".
 
 Nothing host-free can express this: the writer is ObjC++ behind AppKit and the
 facade is not linked into `make core-unit-tests`, so a stand-in for either would

@@ -6110,10 +6110,9 @@ namespace
 	}
 
 	//#902: key code 0 is the "no key" sentinel, not a key. It is what an empty
-	//KeyCombination slot holds, and what macOS answers for every virtual key code
-	//it has no Mesen key for (the holes in its table, and everything >= 128, where
-	//media and brightness keys live). A pressed set carrying it describes a key
-	//that is not there, and it is read as one: ShortcutKeyHandler takes the set's
+	//KeyCombination slot holds, and what macOS answers for a virtual key code its
+	//table has no Mesen key for. A pressed set carrying it describes a key that is
+	//not there, and it is read as one: ShortcutKeyHandler takes the set's
 	//non-emptiness for "a key is down" and compares two reads by size, so the
 	//sentinel is a press and a release that never happened. The filter is what
 	//keeps that knowledge out of each reader - and it has to drop that one code
