@@ -1,12 +1,12 @@
 ﻿using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
+using Mesen.Logic;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Text;
-using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 
 namespace Mesen.Utilities
@@ -82,38 +82,10 @@ namespace Mesen.Utilities
 		//Taken from Avalonia's code (MIT): https://github.com/AvaloniaUI/Avalonia/blob/master/src/Avalonia.Dialogs/AboutAvaloniaDialog.xaml.cs
 		public static void OpenBrowser(string url)
 		{
-			if(OperatingSystem.IsLinux()) {
-				// If no associated application/json MimeType is found xdg-open opens retrun error
-				// but it tries to open it anyway using the console editor (nano, vim, other..)
-				ShellExec($"xdg-open {url}", waitForExit: false);
-			} else {
-				using Process? process = Process.Start(new ProcessStartInfo {
-					FileName = OperatingSystem.IsWindows() ? url : "open",
-					Arguments = OperatingSystem.IsMacOS() ? $"{url}" : "",
-					CreateNoWindow = true,
-					UseShellExecute = OperatingSystem.IsWindows()
-				});
-			}
-		}
-
-		private static void ShellExec(string cmd, bool waitForExit = true)
-		{
-			var escapedArgs = Regex.Replace(cmd, "(?=[`~!#&*()|;'<>])", "\\").Replace("\"", "\\\\\\\"");
-
-			using(Process? process = Process.Start(
-				 new ProcessStartInfo {
-					 FileName = "/bin/sh",
-					 Arguments = $"-c \"{escapedArgs}\"",
-					 RedirectStandardOutput = true,
-					 UseShellExecute = false,
-					 CreateNoWindow = true,
-					 WindowStyle = ProcessWindowStyle.Hidden
-				 }
-			)) {
-				if(waitForExit) {
-					process?.WaitForExit();
-				}
-			}
+			//#859: the URL reaches the opener as one argument, never joined into a
+			//shell command line. What program and argv that is lives in the
+			//host-free BrowserLaunch (asserted in UI.Tests).
+			using Process? process = Process.Start(BrowserLaunch.Build(url, BrowserLaunch.Host));
 		}
 	}
 }
