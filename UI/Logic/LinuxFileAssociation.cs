@@ -18,7 +18,9 @@ namespace Mesen.Logic
 	//   reserved character) and the four characters the spec escapes inside
 	//   them (", `, $, \) are backslash-escaped - with the double escaping the
 	//   spec's general string rule implies. A bare path with a space makes the
-	//   whole desktop entry invalid, so double-clicking a ROM does nothing.
+	//   whole desktop entry invalid, so double-clicking a ROM does nothing. The
+	//   same general rule doubles a literal "%" (#870): left single it is read
+	//   as a field code and invalidates the entry just as surely.
 	public static class LinuxFileAssociation
 	{
 		public static ProcessStartInfo DatabaseUpdateStartInfo(string command, string folder)
@@ -28,6 +30,12 @@ namespace Mesen.Logic
 			return info;
 		}
 
+		//The argument is the desktop entry's field code ("%f"), not a literal
+		//value, so it is concatenated as-is: it stays outside the quotes and is
+		//never escaped. A field code is only a field code outside quotes, and the
+		//general "%%" escape is for literal percentages only - doubling the
+		//argument would turn the real %f into literal text and stop the ROM from
+		//being opened (#870).
 		public static string ExecValue(string executablePath, string argument)
 		{
 			return ExecArgument(executablePath) + " " + argument;
@@ -39,6 +47,17 @@ namespace Mesen.Logic
 		//backslash is itself subject to the general escape rule for string values,
 		//which is applied first. So a literal "$" is written "\\$" and a literal
 		//"\" is written as four successive backslashes.
+		//
+		//The percentage character is a separate rule, not the general escape rule
+		//above - that one covers only "\s", "\n", "\t", "\r" and "\\". It is
+		//exec-variables.html, the Exec key's field-code paragraph, which says a
+		//literal percentage "must be escaped as %%", and that field codes are
+		//expanded only after quoting has been undone. "%" is not one of the four
+		//characters quoting escapes, so nothing unquotes it and a literal "%" is
+		//simply doubled - no backslash is added. Without this,
+		//"/home/50%off/Mesen" writes "...50%off...", whose "%o" the loader reads as
+		//a field code; a command line with an unlisted field code is invalid and
+		//must not be processed, so double-clicking a ROM does nothing (#870).
 		public static string ExecArgument(string value)
 		{
 			StringBuilder sb = new(value.Length + 2);
@@ -49,6 +68,11 @@ namespace Mesen.Logic
 				} else if(c == '"' || c == '`' || c == '$') {
 					sb.Append('\\', 2);
 					sb.Append(c);
+				} else if(c == '%') {
+					//General string escape rule, applied before the quoting rule:
+					//a literal "%" becomes "%%" (and is unescaped back to "%"
+					//before field codes are expanded, so it is never a field code).
+					sb.Append("%%");
 				} else {
 					sb.Append(c);
 				}
