@@ -504,7 +504,7 @@ namespace Mesen.Windows
 				//longer collide. The keyboard's console mapping is untouched:
 				//Decision 4 is about the pad, and the keyboard player's own choice is
 				//theirs.
-				if(action != PadNavAction.Back && IsGrid(focused)) {
+				if(action != PadNavAction.Back && IsGrid(focused) && !GridYieldsUp(focused, action)) {
 					return;
 				}
 
@@ -547,6 +547,22 @@ namespace Mesen.Windows
 			private static StateGrid? GridOf(Control focused)
 			{
 				return focused as StateGrid ?? focused.GetVisualAncestors().OfType<StateGrid>().FirstOrDefault();
+			}
+
+			//#896: the one press a grid gives back to the bridge. A grid with a
+			//single row has nothing above it - its own Up moves nothing, which is
+			//StateGrid.MovesWithUpFromPad - so the bridge keeps Up there and walks
+			//the focus out of the grid, instead of the grid holding it for good.
+			//
+			//The Play home's row of tiles (ADR-0249's W-P2) is where that mattered:
+			//its directions are the grid's by the rule above, its Back has no close
+			//box to leave by (CanCloseFromPad is false for it), and a cabinet has no
+			//Tab - so one D-pad Down off the Continue card left the player unable to
+			//reach the card, or anything on it, again. Every direction the grid does
+			//move stays the grid's; this is one press, not a second focus model.
+			private static bool GridYieldsUp(Control focused, PadNavAction action)
+			{
+				return action == PadNavAction.Up && GridOf(focused) is StateGrid grid && !grid.MovesWithUpFromPad;
 			}
 
 			private static NavigationDirection Direction(PadNavAction action)

@@ -150,6 +150,10 @@ public class PlayPadNavigationTests : IDisposable
 		Pump();
 		_windows.Clear();
 
+		//The seeded recents live in the app's real folder, not in this class's temp
+		//folder, so they are cleared here rather than left for the next case.
+		ClearRecents();
+
 		PreferencesConfig prefs = ConfigManager.Config.Preferences;
 		prefs.UiMode = _uiMode;
 		prefs.Workspace = _workspace;
@@ -797,5 +801,82 @@ public class PlayPadNavigationTests : IDisposable
 	{
 		return window.FocusManager?.GetFocusedElement() is Visual focused
 			&& focused.GetVisualAncestors().OfType<Control>().Any(c => c.Name == surface);
+	}
+
+	//The home that has recents, which is the screen a real report was made
+	//against (2026-10-05: "nao consigo controlar a janela usando o joystick",
+	//with a screenshot of this layout - Continue card, Recent row, "No game
+	//loaded"). Every case in this file either puts a surface over the home or
+	//loads a game first, so none of them asks whether the pad moves the ring on
+	//the home itself: the first-run home is a one-control screen (rule 2) and
+	//there is nothing there to move *to*, while this one has three focusables
+	//and a traversal to make.
+	[AvaloniaFact]
+	public void The_pad_walks_the_home_that_has_recents()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		SeedRecents("Contra", "Zelda", "Metroid");
+		(MainWindow window, MainWindowViewModel model) = ShowPlay();
+		model.RecentGames.Init(GameScreenMode.RecentGames);
+		Pump();
+
+		Assert.True(model.RecentGames.ShowRecentsHome, "the seeded recents did not put the home in its recents layout");
+		Assert.False(EmuApi.IsRunning(), "this test is about the home with no game loaded");
+		WaitFor(() => FocusedName(window) == "PlayHomeContinueButton",
+			() => $"the home opened without its primary action focused ({Focused(window, model)})");
+		Release(window);
+
+		//Down is the walk this layout is built for: Continue sits at the left of the
+		//card, above the row of tiles, and the grid keeps the D-pad for its own
+		//selection (ADR-0256 Decision 3) - so the ring lands in the grid and stays
+		//there for the left/right presses.
+		Feed(window, PadNavAction.Down);
+		Assert.True(GridHasFocus(window), $"Down off the Continue card did not reach the row of tiles ({Focused(window, model)})");
+		Release(window);
+
+		//Up is the press that has to come back, and #896 is why it is asserted and
+		//not assumed: the row is *one* row, so it has nothing above it and the grid
+		//has nothing to do with this press - but the bridge refused every direction
+		//while a grid held the focus, and this grid's Back has no close box to leave
+		//by. One D-pad Down therefore left the player unable to reach the card, or
+		//anything on it, again, on the screen a cabinet boots into.
+		Feed(window, PadNavAction.Up);
+		Assert.True(FocusedName(window) == "PlayHomeContinueButton",
+			$"Up did not bring the ring back to the card (now {FocusedName(window) ?? "<nothing>"}; {Focused(window, model)})");
+	}
+
+	//The recents the home reads are `.rgd` files in the app's own folder, and the
+	//first-run/recents split is decided by how many of them there are (PlayHome's
+	//own rule), so seeding them is what reaches this layout. An empty file is
+	//enough - the entry only has to exist - and the timestamps are written newest
+	//first so the newest game is the Continue card and the rest are the row.
+	private static void SeedRecents(params string[] games)
+	{
+		string folder = ConfigManager.RecentGamesFolder;
+		Directory.CreateDirectory(folder);
+		foreach(string stale in Directory.GetFiles(folder, "*.rgd")) {
+			File.Delete(stale);
+		}
+		DateTime written = DateTime.Now;
+		foreach(string game in games) {
+			string file = Path.Combine(folder, game + ".rgd");
+			File.WriteAllText(file, "");
+			File.SetLastWriteTime(file, written);
+			written = written.AddMinutes(-1);
+		}
+	}
+
+	//The seeded entries are in the app's real recents folder, not in this class's
+	//temp folder, so they outlive the case unless they are removed here - and a
+	//stray one would put the *next* case's home in the recents layout.
+	private static void ClearRecents()
+	{
+		string folder = ConfigManager.RecentGamesFolder;
+		if(!Directory.Exists(folder)) {
+			return;
+		}
+		foreach(string file in Directory.GetFiles(folder, "*.rgd")) {
+			File.Delete(file);
+		}
 	}
 }

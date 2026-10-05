@@ -419,8 +419,22 @@ namespace Mesen.Controls
 			}
 		}
 
+		//A grid with one row has nothing above it, and the wrap below is the 4x3
+		//grid's arithmetic: on the Play home's row of tiles (ADR-0249's W-P2, one
+		//row of up to five) it answers a *negative* index whenever the row holds
+		//fewer entries than it has columns - measured with 5 columns and 2 tiles:
+		//Entries.Count - _colCount == -3 - and the load path reads the selection
+		//back as `Entries[SelectedIndex % Entries.Count]`, which C#'s sign rules
+		//turn into Entries[-1], an IndexOutOfRangeException (#897). Up on such a
+		//grid moves nothing, so it moves nothing here either, and the bridge keeps
+		//that press to walk the focus out of the row.
+		public bool MovesWithUpFromPad => _rowCount > 1;
+
 		private void MoveUp()
 		{
+			if(!MovesWithUpFromPad) {
+				return;
+			}
 			if(SelectedIndex < _colCount) {
 				SelectedIndex = Entries.Count - (_colCount - (SelectedIndex % _colCount));
 			} else {
