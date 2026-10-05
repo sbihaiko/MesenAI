@@ -20,6 +20,16 @@ namespace Mesen.Logic;
 //scripts/replace_file_atomic.sh - and this is the runtime side of the same rule.
 public static class NativeDependencyExtractor
 {
+	//The core's file name on each platform, as the debug build looks for it beside
+	//its own executable. A build done from Visual Studio does not embed the core in
+	//the assembly, so it is copied from the bin folder into the home folder instead
+	//- and the name it looks for has to be the name `Program.DllImportResolver`
+	//loads out of that home folder, or the copy lands nowhere and the fallback
+	//silently does nothing. It is here rather than in DependencyHelper so the names
+	//are dual-compiled into UI.Tests and that agreement is pinned by a test
+	//(ADR-0123).
+	public static readonly string[] DebugCoreFileNames = { "MesenCore.dll", "MesenCore.so", "MesenCore.dylib" };
+
 	public static void Extract(Stream zipStream, string destFolder)
 	{
 		using ZipArchive zip = new(zipStream);

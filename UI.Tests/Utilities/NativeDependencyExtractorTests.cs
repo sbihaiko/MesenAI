@@ -124,6 +124,26 @@ namespace Mesen.Tests.Utilities
 			}
 		}
 
+		//#892: a build done from Visual Studio does not embed the core, so the debug
+		//branch copies it out of the bin folder into the home folder - the folder
+		//Program.DllImportResolver loads from, by exact name
+		//(Path.Combine(ConfigManager.HomeFolder, "MesenCore.dylib") on macOS, and the
+		//same shape elsewhere). The names it looks for must therefore be the names
+		//that resolver loads; a stem glued to an extension without its dot looks
+		//like a file name and is not one, and the whole fallback silently does
+		//nothing.
+		[Fact]
+		public void The_debug_copy_looks_for_the_names_the_resolver_loads()
+		{
+			Assert.Contains("MesenCore.dll", NativeDependencyExtractor.DebugCoreFileNames);
+			Assert.Contains("MesenCore.so", NativeDependencyExtractor.DebugCoreFileNames);
+			Assert.Contains("MesenCore.dylib", NativeDependencyExtractor.DebugCoreFileNames);
+
+			//Every entry is the core's name plus a real extension.
+			Assert.All(NativeDependencyExtractor.DebugCoreFileNames,
+				name => Assert.Equal("MesenCore", Path.GetFileNameWithoutExtension(name)));
+		}
+
 		//An extracted .bin that is already on disk is kept: it is user data the
 		//Satellaview writes, not something to re-extract over.
 		[Fact]
