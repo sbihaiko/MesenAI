@@ -425,7 +425,7 @@ namespace Mesen.Controls
 		//fewer entries than it has columns - measured with 5 columns and 2 tiles:
 		//Entries.Count - _colCount == -3 - and the load path reads the selection
 		//back as `Entries[SelectedIndex % Entries.Count]`, which C#'s sign rules
-		//turn into Entries[-1], an IndexOutOfRangeException (#896). Up on such a
+		//turn into Entries[-1], an IndexOutOfRangeException (#897). Up on such a
 		//grid moves nothing, so it moves nothing here either, and the bridge keeps
 		//that press to walk the focus out of the row.
 		public bool MovesWithUpFromPad => _rowCount > 1;
