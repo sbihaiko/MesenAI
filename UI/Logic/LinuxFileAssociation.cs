@@ -139,6 +139,51 @@ namespace Mesen.Logic
 			return true;
 		}
 
+		//Reconcile the keys this writer owns in a desktop entry that already
+		//exists. CreateLinuxShortcutFile is only reached when the file is absent,
+		//so an entry written by an older build kept whatever Exec= it had (#882) -
+		//which is how the quoting fix of #877 could pass a user by entirely: the
+		//file was never rewritten.
+		//
+		//This is the extraction of what UpdateLinuxShortcutFileMimeTypes did
+		//inline, moved into the dual-compiled tree so the decision is a return
+		//value a test can read. It reconciles the MimeType key and carries every
+		//other key through verbatim, Exec= included - the Exec key is what #882
+		//adds here.
+		public static string? ReconcileDesktopEntry(string content, string executablePath, IReadOnlyList<string>? mimeTypes, out string reason)
+		{
+			reason = "";
+			List<string> lines = new(content.Split(Environment.NewLine));
+			bool replaced = false;
+			for(int i = 0; i < lines.Count; i++) {
+				if(lines[i].Trim().StartsWith("MimeType=")) {
+					lines[i] = "MimeType=" + MimeTypeValue(mimeTypes);
+					replaced = true;
+				}
+			}
+
+			if(!replaced) {
+				lines.Add("MimeType=" + MimeTypeValue(mimeTypes));
+			}
+
+			return string.Join(Environment.NewLine, lines);
+		}
+
+		private static string MimeTypeValue(IReadOnlyList<string>? mimeTypes)
+		{
+			if(mimeTypes == null || mimeTypes.Count == 0) {
+				return "";
+			}
+			StringBuilder sb = new();
+			for(int i = 0; i < mimeTypes.Count; i++) {
+				if(i > 0) {
+					sb.Append(';');
+				}
+				sb.Append("application/").Append(mimeTypes[i]);
+			}
+			return sb.ToString();
+		}
+
 		//The mesen.desktop text, or null when the Exec key cannot carry the path -
 		//with the reason for the caller to report. Keeping the decision here is
 		//what makes it testable: the writer's choice between "write a broken entry"

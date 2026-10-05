@@ -91,7 +91,7 @@ namespace Mesen.Config
 			if(!File.Exists(desktopFile)) {
 				CreateLinuxShortcutFile(desktopFile, mimeTypes);
 			} else {
-				UpdateLinuxShortcutFileMimeTypes(desktopFile, mimeTypes);
+				UpdateLinuxShortcutFile(desktopFile, mimeTypes);
 			}
 
 			//Update databases. The folder goes through ArgumentList, never a joined
@@ -107,25 +107,26 @@ namespace Mesen.Config
 			}
 		}
 
-		private static void UpdateLinuxShortcutFileMimeTypes(string desktopFile, List<string> mimeTypes)
+		//#882: the line work moved into LinuxFileAssociation.ReconcileDesktopEntry
+		//so the decision is testable without a Linux run - the same reason
+		//BuildDesktopEntry is there (#877). What is reconciled, and what is left
+		//alone, is now a return value instead of a branch behind
+		//Process.GetCurrentProcess().MainModule.
+		private static void UpdateLinuxShortcutFile(string desktopFile, List<string> mimeTypes)
 		{
 			string? content = FileHelper.ReadAllText(desktopFile);
+			if(content == null) {
+				return;
+			}
 
-			if(content != null) {
-				List<string> lines = new List<string>(content.Split(Environment.NewLine));
-				bool replaced = false;
-				for(int i = 0; i < lines.Count; i++) {
-					if(lines[i].Trim().StartsWith("MimeType=")) {
-						lines[i] = "MimeType=" + string.Join(";", mimeTypes.Select(type => "application/" + type));
-						replaced = true;
-					}
-				}
+			ProcessModule? mainModule = Process.GetCurrentProcess().MainModule;
+			if(mainModule == null) {
+				return;
+			}
 
-				if(!replaced) {
-					lines.Add("MimeType=" + string.Join(";", mimeTypes.Select(type => "application/" + type)));
-				}
-
-				FileHelper.WriteAllText(desktopFile, string.Join(Environment.NewLine, lines), new UTF8Encoding(false));
+			string? updated = LinuxFileAssociation.ReconcileDesktopEntry(content, mainModule.FileName, mimeTypes, out _);
+			if(updated != null) {
+				FileHelper.WriteAllText(desktopFile, updated, new UTF8Encoding(false));
 			}
 		}
 
