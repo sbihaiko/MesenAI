@@ -48,14 +48,16 @@ namespace Mesen.Logic
 		//which is applied first. So a literal "$" is written "\\$" and a literal
 		//"\" is written as four successive backslashes.
 		//
-		//The general escape rule also covers the percentage character, which
-		//exec-variables.html states must be escaped as "%%". Because that rule runs
-		//before the quoting rule and "%" is not one of the four characters quoting
-		//escapes, a literal "%" is simply doubled - no backslash is added. Without
-		//this, "/home/50%off/Mesen" writes "...50%off...", whose "%o" the loader
-		//reads as a field code; a command line with an unlisted field code is
-		//invalid and must not be processed, so double-clicking a ROM does nothing
-		//(#870).
+		//The percentage character is a separate rule, not the general escape rule
+		//above - that one covers only "\s", "\n", "\t", "\r" and "\\". It is
+		//exec-variables.html, the Exec key's field-code paragraph, which says a
+		//literal percentage "must be escaped as %%", and that field codes are
+		//expanded only after quoting has been undone. "%" is not one of the four
+		//characters quoting escapes, so nothing unquotes it and a literal "%" is
+		//simply doubled - no backslash is added. Without this,
+		//"/home/50%off/Mesen" writes "...50%off...", whose "%o" the loader reads as
+		//a field code; a command line with an unlisted field code is invalid and
+		//must not be processed, so double-clicking a ROM does nothing (#870).
 		public static string ExecArgument(string value)
 		{
 			StringBuilder sb = new(value.Length + 2);
