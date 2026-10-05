@@ -187,6 +187,18 @@ namespace Mesen.Windows
 			//W-P4 itself, under every sheet opened from it and over the game.
 			focus.When(model, [nameof(MainWindowViewModel.IsPlayerOverlayVisible)],
 				() => model.IsPlayerOverlayVisible, () => Named(window, "OverlayResumeButton"));
+			//#845 (ADR-0256 Decision 9): the ROM picker, over the home. It is the
+			//one Play surface over the content area rather than over W-P4, so it is
+			//claimed last of the surfaces, before the content area it covers.
+			//
+			//PathText is watched beside IsVisible on purpose: a step inside the
+			//picker rebuilds its list (the rows of the folder just chosen), and the
+			//row that held the focus is gone with it - so the step is also what
+			//re-arbitrates, and the ring lands on the new first row. Without it the
+			//sheet would answer the first Step and no other. Both reads are the
+			//view-model's own state, never a second copy of it.
+			focus.When(model.RomPicker, [nameof(PlayerRomPickerViewModel.IsVisible), nameof(PlayerRomPickerViewModel.PathText)],
+				() => model.RomPicker.IsVisible, () => RomPickerFirstRow(window) ?? Named(window, "RomPickerBack"));
 
 			//The content area under all of them: the home's primary action, the
 			//Continue button, the slot grid over a game. It is not a claim (it is
@@ -222,6 +234,16 @@ namespace Mesen.Windows
 			//screen is the one to focus; a hidden control cannot take the focus at
 			//all, which is how the slot grid used to open with nothing focused.
 			return window.GetVisualDescendants().OfType<StateGrid>().FirstOrDefault(grid => grid.IsEffectivelyVisible);
+		}
+
+		//#845: the picker's first row, whatever it is now. Not FirstFocusable over
+		//the sheet: the sheet's own Back button is declared before the list (it is
+		//docked to the bottom, which does not move it in the tree), so "the first
+		//focusable control" is the way out rather than the way in. Fall back to
+		//that button only when the list has no rows at all.
+		private static Control? RomPickerFirstRow(MainWindow window)
+		{
+			return (Named(window, "RomPickerList") as ItemsControl)?.GetVisualDescendants().OfType<Button>().FirstOrDefault();
 		}
 
 		//W-P5: the stored choice, else the first row.

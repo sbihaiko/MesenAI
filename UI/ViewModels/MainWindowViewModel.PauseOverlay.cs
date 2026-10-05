@@ -93,7 +93,7 @@ namespace Mesen.ViewModels
 					UpdateRendererVisibility();
 				}
 			};
-			foreach(INotifyPropertyChanged sheet in new INotifyPropertyChanged[] { CheatsSheet, ReplaysSheet, PackDepSheet, BiosSheet, ControllerSetup, SelectRomSheet, ToolSheet, ControllerSheet }) {
+			foreach(INotifyPropertyChanged sheet in new INotifyPropertyChanged[] { CheatsSheet, ReplaysSheet, PackDepSheet, BiosSheet, ControllerSetup, SelectRomSheet, ToolSheet, ControllerSheet, RomPicker }) {
 				sheet.PropertyChanged += (s, e) => {
 					if(e.PropertyName == "IsVisible") {
 						UpdateRendererVisibility();
@@ -136,6 +136,11 @@ namespace Mesen.ViewModels
 			if(_stateGridFromOverlay && RecentGames.Visible && RecentGames.Mode != GameScreenMode.RecentGames) {
 				return PlaySheet.SaveStateGrid;
 			}
+			//#845: over the home rather than over the game, so it is read last -
+			//it is the one Play sheet that is not opened from W-P4.
+			if(_romPicker?.IsVisible == true) {
+				return PlaySheet.RomPicker;
+			}
 			return PlaySheet.None;
 		}
 
@@ -164,6 +169,13 @@ namespace Mesen.ViewModels
 				case PlayEscAction.DismissPackPicker:
 					//P.5: Esc on the first-start picker plays un-enhanced this session.
 					DismissPlayerPackPicker();
+					break;
+
+				case PlayEscAction.RomPickerBack:
+					//#845: one step up the tree, or - on the roots - the dismiss,
+					//which the picker performs itself. Never the overlay: this
+					//sheet is over the home, and there is no game to come back to.
+					RomPicker.Back();
 					break;
 
 				case PlayEscAction.CloseSheetToOverlay:
@@ -342,6 +354,7 @@ namespace Mesen.ViewModels
 			HideReplaysSheet();
 			ClosePlayerSettings();
 			CloseControllerSheet();
+			RomPicker.Hide();
 			IsSaveStatesSheetVisible = false;
 			EndEnhancementsDraftVisit();
 			IsEnhancementsPanelVisible = false;
