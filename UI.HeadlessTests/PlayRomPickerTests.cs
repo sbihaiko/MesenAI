@@ -320,6 +320,61 @@ public class PlayRomPickerTests : IDisposable
 		Assert.DoesNotContain("[[", model.RomPicker.EmptyText);
 	}
 
+	//The second review of #845 (2026-10-05) found this, and it is the one that
+	//made the slice unusable on the machine it was written for: every case above
+	//only ever presses Confirm on the *first* row, so none of them could see that
+	//the ring never leaves it. `PlayFocusOnOpen.SearchRoot` answers with the
+	//nearest ancestor the open claim's target and the focused control share,
+	//walked from the target's own parent - and this sheet's target is a row,
+	//alone inside its ContentPresenter, so the root is that one row and a D-pad
+	//press has nowhere to go. Only the first root, or the alphabetically first
+	//entry of a folder, could ever be opened with a pad.
+	[AvaloniaFact]
+	public void The_pad_walks_the_rows_of_the_roots_and_of_a_folder()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		string root = Path.Combine(_folder, "games");
+		foreach(string name in new[] { "aaa", "bbb", "ccc" }) {
+			Directory.CreateDirectory(Path.Combine(root, name));
+		}
+		ConfigManager.Config.Preferences.GameFolder = root;
+		ConfigManager.Config.Preferences.OverrideGameFolder = true;
+		try {
+			(MainWindow window, _) = ShowFirstRunHome();
+			WaitFor(() => FocusedName(window) == "PlayHomeOpenRomPrimary",
+				"the first-run home did not put the focus on its one action");
+
+			Press(window, PadNavAction.Confirm);
+			WaitFor(() => FocusedRow(window) == "Your games",
+				$"the picker did not open on its roots ({Focused(window)})");
+
+			//The second root is one press down: the app's own folder follows the
+			//configured one.
+			Press(window, PadNavAction.Down);
+			WaitFor(() => FocusedRow(window) == "MesenAI's games folder",
+				$"the pad could not leave the picker's first row ({Focused(window)})");
+
+			//And back up, so the walk is a walk and not a one-way jump.
+			Press(window, PadNavAction.Up);
+			WaitFor(() => FocusedRow(window) == "Your games",
+				$"the pad could not come back up to the first root ({Focused(window)})");
+
+			//Inside a folder the rows are the folders it holds, in order.
+			Press(window, PadNavAction.Confirm);
+			WaitFor(() => FocusedRow(window) == "aaa",
+				$"Confirm did not descend into the configured folder ({Focused(window)})");
+			Press(window, PadNavAction.Down);
+			WaitFor(() => FocusedRow(window) == "bbb",
+				$"the pad could not step to the second row of a folder ({Focused(window)})");
+			Press(window, PadNavAction.Down);
+			WaitFor(() => FocusedRow(window) == "ccc",
+				$"the pad could not step to the third row of a folder ({Focused(window)})");
+		} finally {
+			ConfigManager.Config.Preferences.GameFolder = "";
+			ConfigManager.Config.Preferences.OverrideGameFolder = false;
+		}
+	}
+
 	//The label of the row the pad's ring is on. The rows are the picker's own
 	//list, so this is "which row would Confirm act on" and nothing else.
 	private static string? FocusedRow(MainWindow window)

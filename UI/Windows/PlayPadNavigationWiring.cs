@@ -197,8 +197,17 @@ namespace Mesen.Windows
 			//re-arbitrates, and the ring lands on the new first row. Without it the
 			//sheet would answer the first Step and no other. Both reads are the
 			//view-model's own state, never a second copy of it.
+			//
+			//It is the one claim that also names its own search root, and it has to:
+			//its first control is a *row*, alone inside its ContentPresenter, and the
+			//arbiter's inference (the nearest ancestor the target and the focused
+			//control share) then answers with that one row - so the ring could never
+			//leave it, and only the first root or the alphabetically first entry of a
+			//folder was reachable with a pad (found by the second review of #845,
+			//2026-10-05; the case below presses Down).
 			focus.When(model.RomPicker, [nameof(PlayerRomPickerViewModel.IsVisible), nameof(PlayerRomPickerViewModel.PathText)],
-				() => model.RomPicker.IsVisible, () => RomPickerFirstRow(window) ?? Named(window, "RomPickerBack"));
+				() => model.RomPicker.IsVisible, () => RomPickerFirstRow(window) ?? Named(window, "RomPickerBack"),
+				() => Named(window, "PlayerRomPickerSheet"));
 
 			//The content area under all of them: the home's primary action, the
 			//Continue button, the slot grid over a game. It is not a claim (it is
