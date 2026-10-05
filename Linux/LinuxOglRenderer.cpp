@@ -507,7 +507,12 @@ void LinuxOglRenderer::Render(RenderSurfaceInfo& emuHud, RenderSurfaceInfo& scri
 	}
 
 	GLuint textureToDraw = _mainTexture;
-	if(_shaderEnabled && _filterChain) {
+	//ADR-0246 §5 (Hold to Compare): while the button is held the frame is
+	//presented unfiltered and the chain is kept - the measured swap stutters,
+	//so bypassing it is the whole point. The CPU filters already drop on every
+	//platform (VideoDecoder::DecodeFrame reads the same flag); this is the
+	//shader half, which only macOS's MetalPresenter had.
+	if(_shaderEnabled && _filterChain && !_emu->GetSettings()->IsLookCompare()) {
 		textureToDraw = ProcessSlangShader();
 	}
 
