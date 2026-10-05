@@ -1668,6 +1668,17 @@ recording; a `jev_harness.py` script replayed by the recorder is `ai`.
 - `python3 scripts/checks/verify_adr_refs.py` (also in `make doc-checks`) -
   every `ADR-NNNN` cited in `docs/`, `.github/`, `CLAUDE.md` or any
   `AGENTS.md` resolves to `docs/adr/NNNN-*.md`.
+- `python3 scripts/checks/verify_adr_citations.py` (also in `make
+  doc-checks`) - the companion of the line above: that one checks the id
+  resolves, this one checks the citation is *true*. Two ways a consolidation
+  makes a citation that resolves and still lies: it moves a section number
+  (`ADR-NNNN §M` is cited by number from live code, so `§1` can come to mean
+  the survivor's own §1, a different decision), or it leaves a sentence
+  claiming an ADR was absorbed after that fold was undone. Section numbers are
+  read in both conventions the register uses (a numbered heading and a
+  numbered paragraph, bold or not); a fold claim's subject is the last
+  `ADR-NNNN` before the phrase on that line, and it passes only when that
+  ADR's own file is a tombstone naming the claimed target. No allow-list.
 - `python3 scripts/checks/verify_prd_live_rows.py` (PRD slice C.2, also in
   `make doc-checks`) - no row of a *live* slice table in
   `docs/roadmap/PRD-mesence-enhancement-ecosystem.md` (Part A section 4,

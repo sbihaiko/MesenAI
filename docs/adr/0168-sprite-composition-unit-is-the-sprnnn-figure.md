@@ -11,7 +11,7 @@
 - Related: ADR-0164 (§1 `sprNNN.json` `evidence[]`, §5 the sprite layer and
   its Y-band criterion), ADR-0165 (the editor is an external stdlib Python
   tool over a host-free engine), ADR-0153 (§2 the grouping criterion that
-  produces `sprNNN`, §3 the `sprites.png` vocabulary sheet), ADR-0161
+  produces `sprNNN`, §3 the `sprites.png` vocabulary sheet), ADR-0154 §5
   (palette variants are positional)
 - Supersedes / amends: amends ADR-0164 §5 — the figure becomes the unit of
   *every* gesture in the sprite layer (seed, rank, lock, swap, preview,

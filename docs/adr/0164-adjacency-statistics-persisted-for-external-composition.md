@@ -6,7 +6,7 @@
   `sprites.png` vocabulary sheet added 2026-09-07 as F9.16, §4 sidecar
   schema and precedence, §5 host-free modules), ADR-0154 (external repaint
   reads the same sidecars), ADR-0156 (screens own cells), ADR-0160
-  (`sheets/` is the front door), ADR-0161 (palette variants are positional),
+  (`sheets/` is the front door), ADR-0154 §5 (palette variants are positional),
   ADR-0049/ADR-0147 (`auto/` is the recorder's folder, `mep/` the artist's)
 - Supersedes / amends: amends ADR-0153 §4 (one more sidecar under `sheets/`;
   readers skip `"kind": "adjacency"`) and §3's file table.
