@@ -32,13 +32,20 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent.parent
 SKIP_DIRS = {".git", "out", "obj", "bin", "node_modules", ".vs", "runs"}
 SKIP_SCHEMES = ("http://", "https://", "mailto:", "ftp://", "tel:")
 
-#] target ) — a CommonMark destination is either <angle-bracketed, and so allowed
-#to hold spaces> or bare and space-free; either may be followed by a "title".
-#The two forms are separate alternatives because the bare one must not eat the
-#space that starts the title (#883 review: a single pattern silently SKIPPED
-#every angle-bracketed destination with a space in it, checking nothing).
-LINK = re.compile(r"\]\(\s*(?:<([^>\n]*)>|([^)\s]+))(?:\s+\"[^\"]*\")?\s*\)")
+#[label](target) — a CommonMark destination is either <angle-bracketed, and so
+#allowed to hold spaces> or bare and space-free; either may be followed by a
+#"title". The two forms are separate alternatives because the bare one must not
+#eat the space that starts the title.
+#
+#The leading [label] is REQUIRED, not decoration. A bare `](target)` is not a
+#link in CommonMark - there is no opening bracket - and the first version of this
+#check matched one anyway, so it failed on the sentence in docs/AGENTS.md that
+#describes the check, which is a false positive on prose about links.
+LINK = re.compile(r"\[[^\]\n]*\]\(\s*(?:<([^>\n]*)>|([^)\s]+))(?:\s+\"[^\"]*\")?\s*\)")
 FENCE = re.compile(r"^\s*(```|~~~)")
+#Inline code spans, removed before scanning: a link written inside one is an
+#example, not a link, exactly as it is inside a fence.
+CODE_SPAN = re.compile(r"``[^`]*``|`[^`]*`")
 
 
 def markdown_files():
@@ -62,7 +69,7 @@ def scan(failures):
                 continue
             if in_fence:
                 continue
-            for m in LINK.finditer(line):
+            for m in LINK.finditer(CODE_SPAN.sub("", line)):
                 target = m.group(1) if m.group(1) is not None else m.group(2)
                 if target.startswith(SKIP_SCHEMES) or target.startswith("#"):
                     continue
