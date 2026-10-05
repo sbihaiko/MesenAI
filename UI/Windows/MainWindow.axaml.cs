@@ -442,8 +442,13 @@ namespace Mesen.Windows
 
 				ConfigManager.Config.ApplyConfig();
 
-				if(ConfigManager.Config.Preferences.OverrideGameFolder && Directory.Exists(ConfigManager.Config.Preferences.GameFolder)) {
-					EmuApi.AddKnownGameFolder(ConfigManager.Config.Preferences.GameFolder);
+				//#887: the same rule as Open ROM's start folder - a games folder that
+				//answers nothing is not registered with the core as a known folder,
+				//so the core's own file dialogs do not lead there either.
+				string? gamesFolder = GamesFolderChoice.Usable(
+					ConfigManager.Config.Preferences.OverrideGameFolder ? ConfigManager.Config.Preferences.GameFolder : null);
+				if(gamesFolder != null) {
+					EmuApi.AddKnownGameFolder(gamesFolder);
 				}
 				foreach(RecentItem recentItem in ConfigManager.Config.RecentFiles.Items) {
 					EmuApi.AddKnownGameFolder(recentItem.RomFile.Folder);

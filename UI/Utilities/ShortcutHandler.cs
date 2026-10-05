@@ -271,12 +271,12 @@ namespace Mesen.Utilities
 
 		private async void OpenFile()
 		{
-			string? initialFolder = null;
-			if(ConfigManager.Config.Preferences.OverrideGameFolder && Directory.Exists(ConfigManager.Config.Preferences.GameFolder)) {
-				initialFolder = ConfigManager.Config.Preferences.GameFolder;
-			} else {
-				initialFolder = ConfigManager.Config.RecentFiles.Items.Count > 0 ? ConfigManager.Config.RecentFiles.Items[0].RomFile.Folder : null;
-			}
+			//#887: a games folder that answers nothing is not somewhere to open on -
+			//the dialog would start on an empty listing the player cannot leave
+			//except by navigating away from it by hand.
+			string? initialFolder = GamesFolderChoice.StartFolder(
+				ConfigManager.Config.Preferences.OverrideGameFolder ? ConfigManager.Config.Preferences.GameFolder : null,
+				ConfigManager.Config.RecentFiles.Items.Count > 0 ? ConfigManager.Config.RecentFiles.Items[0].RomFile.Folder : null);
 
 			string? filename = await FileDialogHelper.OpenFile(initialFolder, _mainWindow, FileDialogHelper.RomExt);
 			if(filename != null) {

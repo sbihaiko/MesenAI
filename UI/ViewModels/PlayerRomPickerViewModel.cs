@@ -416,10 +416,13 @@ namespace Mesen.ViewModels
 			? null
 			: new RomPickerRoot(ResourceHelper.GetMessage("RomPickerThisComputer"), WholeComputerFolder);
 
-		//The configured games folder, or null when the player never set one. Both
-		//the roots and the action row's "already the games folder" test read it.
-		private static string? GamesFolder => ConfigManager.Config.Preferences.OverrideGameFolder
-			? ConfigManager.Config.Preferences.GameFolder : null;
+		//The configured games folder, or null when the player never set one or the
+		//folder they set answers nothing (#887). Both the roots and the action row's
+		//"already the games folder" test read it, so the rule is applied in one
+		//place: the list must not lead with a root that opens on nothing, and the
+		//action row keeps offering to designate one.
+		private static string? GamesFolder => GamesFolderChoice.Usable(
+			ConfigManager.Config.Preferences.OverrideGameFolder ? ConfigManager.Config.Preferences.GameFolder : null);
 
 		//The app's own ROM folder, beside its settings. Created on demand: a
 		//fresh install has no Roms folder, and a root that does not answer would
