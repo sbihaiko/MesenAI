@@ -386,7 +386,16 @@ namespace Mesen.ViewModels
 				return false;
 			}
 			for(int i = 0; i < left.Count; i++) {
-				if(!string.Equals(left[i].Folder, right[i].Folder, StringComparison.OrdinalIgnoreCase)) {
+				//The whole record, not just the folder: the console and the count
+				//are both rendered into the row's text now, so two answers that
+				//agree on the folder but not on those would leave the label the
+				//previous pass wrote. (Today the walk reads both off the same
+				//listing, so they cannot actually differ for one folder - which is
+				//exactly why a comparison that silently stopped covering them would
+				//not be noticed.)
+				if(!string.Equals(left[i].Folder, right[i].Folder, StringComparison.OrdinalIgnoreCase)
+					|| left[i].RomCount != right[i].RomCount
+					|| left[i].Console != right[i].Console) {
 					return false;
 				}
 			}
