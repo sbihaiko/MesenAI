@@ -961,14 +961,17 @@
 
 	<!-- ============================================================ segmented tab strip -->
 	<!-- <TabControl Classes="segmented">: the renderer's segmented() as a tab
-	     strip - a centred FILL track (radius 8) of 96 px segments, the
+	     strip - a centred FILL track (radius 8) of 96 px segments, narrowing
+	     together when the strip has more tabs than 96 px each can hold, the
 	     selected one white (radius 6, soft shadow), the page below. -->
 	<Style Selector=".player TabControl.segmented">
 		<Setter Property="Background" Value="Transparent" />
 		<Setter Property="Padding" Value="0" />
+		<!--Segments sized by the count, not fixed: see SegmentedStripPanel
+		    (#852 — a fixed 96 px overflowed the 480 px sheet at five tabs).-->
 		<Setter Property="ItemsPanel">
 			<ItemsPanelTemplate>
-				<StackPanel Orientation="Horizontal" />
+				<c:SegmentedStripPanel />
 			</ItemsPanelTemplate>
 		</Setter>
 		<Setter Property="Template">
@@ -990,7 +993,8 @@
 		</Setter>
 	</Style>
 	<Style Selector=".player TabControl.segmented > TabItem">
-		<Setter Property="Width" Value="96" />
+		<!--No Width: SegmentedStripPanel arranges the segments, at 96 px while
+		    96 px fits and an even share below that.-->
 		<Setter Property="Height" Value="22" />
 		<Setter Property="MinHeight" Value="22" />
 		<Setter Property="Padding" Value="0" />

@@ -48,6 +48,29 @@ public static class PlayerSettingsEssentials
 	//puts there.
 	public static double SheetHeight(ConfigWindowTab tab) => tab is ConfigWindowTab.Look or ConfigWindowTab.System ? 480 : 340;
 
+	//#852: the strip's segment width. ADR-0249's sheet is 480 px wide behind
+	//19 px of padding a side, and the reference mockups (docs/media/
+	//gui-redesign/W-P8..W-P11.png) draw the strip at four tabs, where 96 px
+	//segments leave the track centred and narrower than the sheet. ADR-0256
+	//Decision 8 added the fifth (System) and the fixed 96 px ran 42 px past the
+	//sheet's right edge, so the last label rendered as "Syst": the mockups were
+	//drawn before the tab existed. A segment is 96 px while 96 px still fits the
+	//width the track is handed, and the segments share it evenly once they do
+	//not, so no tab count can overflow the sheet again. Pure, so the rule is
+	//pinned host-free in UI.Tests/Play/PlayerSettingsStripTests; the rendered
+	//result is in UI.HeadlessTests (PlayerThemeSettingsRenderTests).
+	public const double MaxSegment = 96;
+
+	public static double SegmentWidth(double available, int count)
+	{
+		//Measure can hand over Infinity; dividing by it would be a NaN width,
+		//and a NaN in a Rect arranges children nowhere.
+		if(count <= 0 || double.IsNaN(available) || double.IsInfinity(available)) {
+			return MaxSegment;
+		}
+		return Math.Min(MaxSegment, available / count);
+	}
+
 	//PRD rule 2: an inset list of at most three rows per essentials tab.
 	public const int MaxRows = 3;
 
