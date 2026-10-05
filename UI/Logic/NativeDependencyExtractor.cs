@@ -10,7 +10,7 @@ namespace Mesen.Logic;
 //(UI.Tests/Utilities/NativeDependencyExtractorTests) instead of the machine.
 //
 //The rule this file exists to hold is that an extracted library is never
-//rewritten in place. Two installs that share one home folder - a development
+//rewritten in place (ADR-0259). Two installs that share one home folder - a development
 //build and the installed one ship different cores, so each re-extracts on
 //launch - and by then the same library is mapped by the instance that is already
 //running. Rewriting the bytes under a mapped Mach-O kills a process
@@ -59,9 +59,44 @@ public static class NativeDependencyExtractor
 				}
 			}
 
-			entry.ExtractToFile(path, true);
+			WriteAtomically(entry, path);
 		} catch {
 
+		}
+	}
+
+	//A library is replaced through a NEW file, never by editing the one that is
+	//already there. The instance that is running has it mapped, and a write to the
+	//inode under a mapped image is what kills that process - so the new content
+	//goes to a sibling temp file and is moved into place, which is the same rule
+	//scripts/replace_file_atomic.sh applies on the build side (issue #628).
+	//
+	//It is also the only form that works at all while the old library is open:
+	//.NET opens an in-place destination with FileShare.None, so that write fails
+	//and the per-member catch above swallows it, leaving a stale core.
+	//
+	//The temp file is a sibling (so the move stays inside one filesystem) and its
+	//name cannot be mistaken for a library - the core is found by scanning beside
+	//the executable. A write that fails leaves the old library untouched and takes
+	//its own temp file with it.
+	private static void WriteAtomically(ZipArchiveEntry entry, string path)
+	{
+		string temp = path + ".new-" + Guid.NewGuid().ToString("N");
+		try {
+			using(FileStream target = new(temp, FileMode.CreateNew, FileAccess.Write, FileShare.None)) {
+				using Stream source = entry.Open();
+				source.CopyTo(target);
+			}
+			//The member's own timestamp, which is what the guard above compares
+			//against: without it every launch would look like a change and unpack
+			//the whole archive again. ExtractToFile did this and the replacement
+			//has to keep doing it.
+			File.SetLastWriteTime(temp, entry.LastWriteTime.LocalDateTime);
+			File.Move(temp, path, true);
+		} finally {
+			if(File.Exists(temp)) {
+				File.Delete(temp);
+			}
 		}
 	}
 }
