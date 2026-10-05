@@ -161,7 +161,12 @@ public enum PlaySheet
 	Settings,
 	//ADR-0255 slice 1 (W-P17): the Controller sheet, opened from Settings'
 	//Controls row over the paused game.
-	Controller
+	Controller,
+	//#845 (ADR-0256 Decision 9): the ROM picker, opened by the Play home's own
+	//*Open a ROM…*. It is the one Play sheet that is not opened from W-P4 - it
+	//sits over the home, with no game under it - so it is not in the
+	//close-to-the-overlay family: Back ascends it and dismisses at the roots.
+	RomPicker
 }
 
 public enum PlayEscAction
@@ -177,7 +182,12 @@ public enum PlayEscAction
 	//Esc cancels the capture and leaves the sheet up. A state of this chain, not a
 	//second key handler racing it - Esc means one thing per context, and here the
 	//context is the capture.
-	CancelCapture
+	CancelCapture,
+	//#845 (ADR-0256 Decision 9): the ROM picker's own step back - up one folder,
+	//or out of the roots list, which dismisses. One state of this chain rather
+	//than a second key handler: Esc is already a router, and the picker only
+	//adds what "back" means inside it.
+	RomPickerBack
 }
 
 //Rule 8 / W-P4: Esc does one thing per context. The order is game → W-P4 →
@@ -190,6 +200,10 @@ public static class PlayEsc
 		switch(sheet) {
 			case PlaySheet.PackPickerOnLoad:
 				return PlayEscAction.DismissPackPicker;
+			//#845: the picker over the home walks folders, so Esc is a step and
+			//not a close until there is nowhere left to step.
+			case PlaySheet.RomPicker:
+				return PlayEscAction.RomPickerBack;
 			//ADR-0255 slice 3: a capture is the Controller sheet's own state, so Esc
 			//releases the capture before it would close the sheet. It is the same
 			//chain PlayEsc has always run, with one state more.

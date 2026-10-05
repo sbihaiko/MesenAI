@@ -230,7 +230,12 @@ can be exercised by real xunit tests without Avalonia or the native
   (the tool sheet's, which opened on the barcode kind alone, or the Controller
   sheet having none at all) leaves the arbiter focusing what is *under* the
   sheet, so the ring is drawn on a surface the player cannot reach and Confirm
-  fires that surface's action instead of the sheet's.
+  fires that surface's action instead of the sheet's. One claim is re-read by
+  something other than visibility: #845's ROM picker watches its `PathText`
+  beside `IsVisible`, because a step inside the picker rebuilds its list and
+  takes the row that held the focus with it — so the step is also what
+  re-arbitrates, and the ring lands on the new first row. Without it the sheet
+  would answer the first step and no other.
   `Enter` is the only place focus is taken, and always with
   `NavigationMethod.Directional`: that is what makes it a `:focus-visible`
   focus, which is what paints `PlayerFocusRing`. Before it, each surface posted

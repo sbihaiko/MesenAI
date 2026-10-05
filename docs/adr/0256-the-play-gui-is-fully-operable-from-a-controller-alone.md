@@ -33,7 +33,9 @@
   `EmuApi.ExecuteShortcut(EmulatorShortcut.OpenFile)`, which reaches
   `FileDialogHelper.OpenFile` and a native OS dialog the focus engine cannot
   drive. That is #845, still open, and it is why the stop rule is not signed off
-  yet.
+  yet. **Decision 9 closes it, decided and implemented 2026-10-05** (#845):
+  the ROM picker is an in-app Play sheet, so the last first-run surface that
+  needed a keyboard is gone and every Play surface is drivable from a pad.
   **Amended 2026-10-04**, the same day, after the work started: four more
   questions were put to the user and answered — the focus mechanism (Decision
   7's paragraph: the focus engine, not synthetic key events), what "one
@@ -292,6 +294,92 @@ the one path a keyboard-less cabinet depends on. The bridge calls the focus
 engine directly (`KeyboardNavigationHandler` / `FocusManager` with
 `NavigationMethod.Directional`), which is deterministic, testable without a
 pad, and still one place rather than a per-view concern.
+
+9. **The ROM picker is an in-app Play sheet** (decided 2026-10-05, while the
+   user was away, under the standing instruction he gave for that case:
+   *"estarei fora por algumas horas, tome as decisoes sozinho, use o grok 4.6
+   como proxy humano se precisar"*). Decision 8 named the ROM picker as part of
+   the first run and left it as the one surface still needing a keyboard; this
+   is the answer to it, filed as #845.
+
+   **What was actually broken, measured.** `PlayHomeView.OnOpenRom` called
+   `EmuApi.ExecuteShortcut(EmulatorShortcut.OpenFile)`, which reaches
+   `ShortcutHandler.OpenFile` and then `FileDialogHelper.OpenFile` - Avalonia's
+   `StorageProvider.OpenFilePickerAsync`, i.e. NSOpenPanel on macOS, the Win32
+   common dialog on Windows, GTK on Linux. The bridge drives the app's own focus
+   engine; a foreign dialog owns the screen once it opens, and Esc does not
+   route through `PlayEsc` there either. The *button* was reachable from the pad
+   and activated; the choice it opened was not. Every other file and folder
+   choice in the app goes through the same helper (`FirmwareSelect`,
+   `FirmwareHelper`, the W-P16 pack-file sheet, save-state import/export, movie
+   and wave export, shaders, palettes, `PathSelector`), and the app has no
+   in-app file browser at all - Remaster's tile browser browses tiles inside a
+   loaded ROM, not the filesystem.
+
+   **The pick, quoted verbatim from the proxy** (Grok 4.6, 2026-10-05, asked
+   with the measurements above and with the alternatives - a full Finder clone,
+   a known-locations scan, and "make the ROM folder the answer"):
+
+   > **Pick:** D - a Play-only ROM picker sheet that walks folders (A's surface)
+   > from a short list of roots (B's places), used only to load a game.
+   >
+   > **Why the others lose.** A as written is a Finder clone plus five call
+   > sites. That pretends BIOS, packs, shaders and movie export are this bug.
+   > They are not. B cannot reach a stick you just plugged in, or a library one
+   > folder below the scan. An HTPC guess at Downloads is not a cabinet answer.
+   > C leaves *Open a ROM…* a lie. If the default folder is empty, the machine
+   > still cannot load a game. That does not close #845.
+   >
+   > **The stop rule.** Host-free in `UI/Logic/`: given a fake tree, the model
+   > lists the roots (configured `GameFolder` when set, the app ROM folder, each
+   > mounted volume) plus recents; a folder row descends; Back ascends; a
+   > ROM-extension file is the only pick; non-ROMs are not rows. Headless
+   > against the real core: Play home, no game, pad-bridge Confirm on *Open a
+   > ROM…* opens this sheet (not `StorageProvider`); the sheet takes the focus
+   > claim; Confirm on a nested `.nes` returns that path to the existing open-ROM
+   > path and the home shows the loaded game; Back from the root dismisses with
+   > no load. Advanced still uses the native dialog. That is what closes #845.
+   >
+   > **What I refuse to build now.** No BIOS / W-P16 pack / save-state / movie /
+   > wave / shader / palette / folder picker in this sheet. Those stay native
+   > until each one is a pad-only blocker of its own. No hidden-file policy, no
+   > search box, no keyboard path typing. One sheet, ROM extensions, load a
+   > game.
+
+   Concretely, and as implemented: `PlayerRomPickerSheet` is a light sheet in
+   the main window like Settings and the Controller sheet, with a path line and
+   one row per entry - the folders first, then the files whose extension is a
+   ROM's (`RomFileKinds`, the table `FolderHelper` carried, moved into the
+   dual-compiled `UI/Logic` layer so the rules can be tested without a host),
+   each group sorted, never a dot-name. Confirm on a folder descends; Confirm on
+   a game hands its path to `LoadRomHelper.LoadFile`, the same call the native
+   dialog's own result took - so nothing downstream changes, an archive still
+   asks which game it holds, and the pack still resolves. Back ascends one
+   level, and on the first list it dismisses: `PlayEsc` gains one state
+   (`RomPickerBack`), not a second key handler, and `PlaySheet.RomPicker` is the
+   one Play sheet that is *not* opened from W-P4 - it sits over the home, so its
+   step back opens no overlay. The sheet's own Back button calls the same method
+   the router does. The roots are the configured game folder when
+   `Preferences.OverrideGameFolder` is set, the app's own ROM folder
+   (`<HomeFolder>/Roms`, created on demand), and every mounted volume
+   (`MountedVolumes`, the one host-aware piece - `/Volumes` on macOS, ready
+   fixed and removable drives on Windows, `/media`, `/run/media/<user>` and
+   `/mnt` on Linux).
+   - **Recents are not a root**, though the proxy listed them. A recent game is
+     a `.rgd` archive, not a ROM path, and the app has no helper that reads one
+     back; and the surface that has them (W-P2) already reaches the newest game
+     in one press through Continue. Adding them would mean unzipping every
+     recent file to build a list the player does not need.
+   - **What it costs.** The sheet is a second, smaller list of the same kind
+     `PlaySelectRomSheetView` already is, and the two are deliberately not
+     merged: one asks which game an archive holds (a list the loader owns), the
+     other walks the filesystem (a list the player owns).
+   - **What this deliberately does not decide**: every other file choice stays
+     native (the proxy's refusal above). A pad-only machine still cannot add a
+     BIOS file, a pack dependency, a save state, a shader or a palette, and each
+     of those is its own bug when someone reports it. Advanced's own Open keeps
+     the native dialog too - this sheet belongs to the Play home, which is the
+     door a cabinet boots into.
 
 ## The four questions, and how they were answered
 

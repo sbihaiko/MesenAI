@@ -2,16 +2,14 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
-using Mesen.Config.Shortcuts;
-using Mesen.Interop;
 using Mesen.Utilities;
 using Mesen.ViewModels;
 
 namespace Mesen.Views
 {
-	//G.2 (W-P1/W-P2): thin code-behind - Open a ROM… reuses the existing
-	//Open-ROM shortcut/dialog (ShortcutHandler.OpenFile), Continue resumes the
-	//most recent game exactly like clicking its tile.
+	//G.2 (W-P1/W-P2): thin code-behind - Open a ROM… opens the in-app ROM picker
+	//(#845, ADR-0256 Decision 9), Continue resumes the most recent game exactly
+	//like clicking its tile.
 	public class PlayHomeView : UserControl
 	{
 		public PlayHomeView()
@@ -45,9 +43,27 @@ namespace Mesen.Views
 			PlayFocusOnOpen.ContentChanged(this);
 		}
 
+		//#845 (ADR-0256 Decision 9): the home's own action opens the in-app
+		//picker instead of EmuApi.ExecuteShortcut(OpenFile). That reached
+		//ShortcutHandler -> FileDialogHelper -> Avalonia's StorageProvider - a
+		//native dialog that owns the screen once it opens, so the focus engine
+		//(and the pad with it) could not drive the choice, and a machine with a
+		//pad and nothing else could not load a game. Every other file choice in
+		//the app, and Advanced's own Open, still go there.
 		private void OnOpenRom(object? sender, RoutedEventArgs e)
 		{
-			EmuApi.ExecuteShortcut(new ExecuteShortcutParams() { Shortcut = EmulatorShortcut.OpenFile });
+			if(Window() is MainWindowViewModel model) {
+				model.OpenRomPicker();
+			}
+		}
+
+		//The window this home belongs to. The home's own DataContext is the
+		//recent-games list, so the sheet - one per window - is reached through
+		//the window's; a home drawn outside a MainWindow (a render, a preview)
+		//has no picker to open and says so by doing nothing.
+		private MainWindowViewModel? Window()
+		{
+			return TopLevel.GetTopLevel(this)?.DataContext as MainWindowViewModel;
 		}
 
 		//G.5 (W-P14): the alert's next step is the same Open a ROM… dialog.
