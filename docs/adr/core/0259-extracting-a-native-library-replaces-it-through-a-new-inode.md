@@ -49,12 +49,15 @@ unchanged from an in-place write to a mapped image, which also fails.
 
 **An extracted native library is replaced by writing the new content to a
 sibling temp file and moving it over the destination. Never by opening the
-destination for writing.**
+destination for writing.** Both writers obey it: the archive walk, and the debug
+build's copy of the core out of the bin folder
+(`NativeDependencyExtractor.ReplaceFromFile`), which is the same hazard through
+a different door.
 
 - The walk lives in `UI/Logic/NativeDependencyExtractor` so it is dual-compiled
   into `UI.Tests` and runs against a real archive in a temp folder (ADR-0123);
   `DependencyHelper` keeps only the host-aware half — reaching the embedded
-  resource and the debug copy of the core.
+  resource and deciding where the debug copy comes from.
 - The temp file is a sibling of the destination (the move stays inside one
   filesystem) with a name that cannot be mistaken for a library, since the core
   is found by scanning beside the executable. A failed write leaves the old

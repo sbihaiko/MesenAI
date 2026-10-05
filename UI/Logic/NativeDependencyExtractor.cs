@@ -81,8 +81,7 @@ public static class NativeDependencyExtractor
 	//its own temp file with it.
 	private static void WriteAtomically(ZipArchiveEntry entry, string path)
 	{
-		string temp = path + ".new-" + Guid.NewGuid().ToString("N");
-		try {
+		ReplaceAtomically(path, temp => {
 			using(FileStream target = new(temp, FileMode.CreateNew, FileAccess.Write, FileShare.None)) {
 				using Stream source = entry.Open();
 				source.CopyTo(target);
@@ -92,6 +91,27 @@ public static class NativeDependencyExtractor
 			//the whole archive again. ExtractToFile did this and the replacement
 			//has to keep doing it.
 			File.SetLastWriteTime(temp, entry.LastWriteTime.LocalDateTime);
+		});
+	}
+
+	//The same rule for a caller whose new content is already a file on disk - the
+	//debug build copies the core out of the bin folder rather than unpacking it.
+	//Opening the destination would put it straight back on the inode a running
+	//instance has mapped, which is the whole thing this class exists to avoid.
+	public static void ReplaceFromFile(string sourcePath, string destinationPath)
+	{
+		ReplaceAtomically(destinationPath, temp => File.Copy(sourcePath, temp, true));
+	}
+
+	//Fill `path` with new content without ever opening the file that is there.
+	//`fill` writes a sibling of the destination, so the move that follows stays
+	//inside one filesystem, and it is the one that leaves the timestamp the
+	//caller needs. A `fill` that throws leaves the destination exactly as it was.
+	private static void ReplaceAtomically(string path, Action<string> fill)
+	{
+		string temp = path + ".new-" + Guid.NewGuid().ToString("N");
+		try {
+			fill(temp);
 			File.Move(temp, path, true);
 		} finally {
 			if(File.Exists(temp)) {

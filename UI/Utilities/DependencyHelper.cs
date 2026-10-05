@@ -27,7 +27,9 @@ class DependencyHelper
 				foreach(string ext in extensions) {
 					string src = Path.Join(Program.OriginalFolder, "MesenCore" + ext);
 					if(File.Exists(src)) {
-						File.Copy(src, Path.Join(dest, "MesenCore" + ext), true);
+						//Through a new file, like the archive walk: the destination
+						//is a library a running instance may already have mapped.
+						NativeDependencyExtractor.ReplaceFromFile(src, Path.Join(dest, "MesenCore" + ext));
 					}
 				}
 			} catch { }
