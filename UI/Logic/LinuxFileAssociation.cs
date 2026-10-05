@@ -184,32 +184,34 @@ namespace Mesen.Logic
 			string mimeTypeValue = MimeTypeValue(mimeTypes);
 
 			List<string> lines = new(content.Split(Environment.NewLine));
-			int groupStart = FindDesktopEntryGroup(lines);
-			if(groupStart < 0) {
-				//A file with no [Desktop Entry] group is not loadable as it stands,
-				//and appending the keys at the end would file them under whichever
-				//group is last. Give them the group they belong to.
-				if(lines.Count != 1 || lines[0].Length != 0) {
-					lines.Add("");
-				}
-				lines.Add(DesktopEntryGroup);
-				groupStart = lines.Count - 1;
+			List<(int Start, int End)> groups = FindDesktopEntryGroups(lines);
+			if(groups.Count == 0) {
+				//A file with keys but no [Desktop Entry] header is not loadable, and
+				//the header has to go BEFORE those keys: put after them they stay
+				//outside any group, the loader still rejects the file, and the stale
+				//Exec= this is meant to repair survives outside the group.
+				lines.Insert(0, DesktopEntryGroup);
+				groups = FindDesktopEntryGroups(lines);
 			}
-			int groupEnd = FindGroupEnd(lines, groupStart);
 
+			//Every group of that name, not just the first. Two are forbidden by the
+			//spec, but GLib merges same-named groups with the LAST key winning, so
+			//reconciling one leaves a stale Exec= the loader prefers.
 			bool execReplaced = false;
 			bool mimeTypeReplaced = false;
-			for(int i = groupStart + 1; i < groupEnd; i++) {
-				if(reconcileExec && IsKey(lines[i], "Exec")) {
-					lines[i] = "Exec=" + execValue;
-					execReplaced = true;
-				} else if(IsKey(lines[i], "MimeType")) {
-					lines[i] = "MimeType=" + mimeTypeValue;
-					mimeTypeReplaced = true;
+			foreach((int start, int end) in groups) {
+				for(int i = start + 1; i < end; i++) {
+					if(reconcileExec && IsKey(lines[i], "Exec")) {
+						lines[i] = "Exec=" + execValue;
+						execReplaced = true;
+					} else if(IsKey(lines[i], "MimeType")) {
+						lines[i] = "MimeType=" + mimeTypeValue;
+						mimeTypeReplaced = true;
+					}
 				}
 			}
 
-			int insertAt = groupEnd;
+			int insertAt = groups[0].End;
 			if(reconcileExec && !execReplaced) {
 				lines.Insert(insertAt, "Exec=" + execValue);
 				insertAt++;
@@ -223,17 +225,18 @@ namespace Mesen.Logic
 
 		private const string DesktopEntryGroup = "[Desktop Entry]";
 
-		//The group the application's own keys live in. Matched exactly: group
-		//names are case-sensitive, so a `[desktop entry]` is a different (and
-		//invalid) group rather than this one.
-		private static int FindDesktopEntryGroup(List<string> lines)
+		//Every `[Desktop Entry]` group and the line it ends at. The name is matched
+		//exactly: group names are case-sensitive, so a `[desktop entry]` is a
+		//different (and invalid) group rather than this one.
+		private static List<(int Start, int End)> FindDesktopEntryGroups(List<string> lines)
 		{
+			List<(int Start, int End)> groups = new();
 			for(int i = 0; i < lines.Count; i++) {
 				if(lines[i].Trim() == DesktopEntryGroup) {
-					return i;
+					groups.Add((i, FindGroupEnd(lines, i)));
 				}
 			}
-			return -1;
+			return groups;
 		}
 
 		//The line the group ends at: the next header, or the end of the file.
