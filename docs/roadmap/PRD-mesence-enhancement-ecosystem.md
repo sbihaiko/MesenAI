@@ -1054,11 +1054,15 @@ contribution path, install/update happens in the client.
 | Pending | State |
 |---|---|
 | F6.5 native OS file-picker step of the user-supplied-audio install | manual; no live row can raise the prompt today (all rows `hd-legacy`); every other step of that pass is unit-tested |
-| CI live validation (`LIVE_VALIDATION_ENABLED` → `'true'`, also arms the autofix-PR step) | deferred by user decision 2026-08-29 |
+| CI live validation (`LIVE_VALIDATION_ENABLED` → `'true'`, also arms the autofix-PR step) | **no longer the owner's call, 2026-10-05.** A two-lens panel (Codex + Grok 4.6, blind, unanimous `KEEP-BOTH-OFF`) read the flag's own flip-back condition — *"once that path is solid again"* — and found it unmet: three steps the header comment promises are continue-on-error carry none of it (`Install SDL2 dev headers` ~452, `Cache Mesen core build` ~455, `Detect drift…` ~502), the `PROJECT_PAT`-in-URL workaround **precedes** the deferral rather than following it, and the ~7 min per submission is unchanged. The conditions are now written in the workflow beside the flag; whoever clears all three flips it, with no decision left to take |
 
 No Phase 6 slice is open. F6.10, the ADR-0240 A4 spike, ran on 2026-10-02 and is
 recorded in §3; its follow-up (the extract-audio tool logging the trigger id per
-fingerprinted track) is not a slice and waits for the user's decision.
+fingerprinted track) is not a slice. **Decided 2026-10-05 (owner's goal to clear
+the pending items that depended on him): do it.** It is ordinary work now, taken
+off the owner's plate: the tool logs the trigger id beside each fingerprinted
+track, so a later reader can tell which trigger produced a track without
+re-deriving it. No decision is outstanding.
 
 Non-goals (unchanged): hosting or committing third-party content; scraping
 Google Drive/MEGA confirm flows (the user supplies those files); fabricating
@@ -1082,15 +1086,47 @@ first release.
 
 #### Repo hygiene and tests
 
-**Shipped or closed** — H1–H10; record in §3. Open: ADR-0162 (accuracy
-suite) is accepted and not in CI by decision; the `CheatTypeDetector`
-GB/SMS product decision (H7) stays deferred.
+**Shipped or closed** — H1–H10; record in §3. Open: the accuracy suite as a CI
+gate — **corrected 2026-10-05: this row cited ADR-0162, which is itself
+`superseded` by ADR-0157** (`docs/adr/recorder/0157-*`, "Folded into ADR-0157"),
+so the decision lives there, where it is recorded as *not in CI* and run locally.
+The same two-lens panel that ruled on the live-validation flag (`KEEP-BOTH-OFF`,
+unanimous) re-affirmed it: the suite's missing-ROM cases skip green, its coverage
+is limited, and `checks.yml` already builds `capture-tool`, so the honest fix is a
+pinned ROM with `--require-rom` (so CI cannot pass by skipping) before it is ever
+gated. **Half of it shipped 2026-10-05**: `--require-rom` exists and refuses
+*both* ways the suite could compare nothing — no ROM at all, and a ROM that is
+not the pinned build (the quieter defect: the checkpoints are frame numbers read
+off that exact sha1, so another build puts them on other screens and the arms are
+still "compared", at the wrong ones, with nothing to tell that from a pass).
+ADR-0157 §5 was amended with the flag and with what a gate would still need.
+**What is still open is not the flag but the ROM**: `tests/accuracy/AccuracyCoin.nes`
+is not in the repo and CI has none, so a gated run would exit 2 on every machine
+until that build is vendored or fetched and checked against `SUITE_FILE_SHA1` —
+and vendoring a 40 KB binary still needs the maintenance story `docs/AGENTS.md`
+asks for (derivative game content out). That is a decision nobody has made yet,
+so **no owner decision is outstanding for the flag, and one is for the vendoring.** The `CheatTypeDetector`
+GB/SMS product decision (H7) **needs the owner's ratification, 2026-10-05.** The
+row pointed at ADR-0128, which is **superseded by ADR-0122** and carries only a
+stub, so the deferral's reasoning is no longer readable at its own home; and the
+decision has since been overtaken — ADR-0248 §3 (2026-10-02) shipped GB/SMS cheat
+*decoders* for the submission workflow and ADR-0245 §5 gives GB/SMS a cheats sheet
+with manual entry. Whether the `CheatTypeDetector` deferral is still wanted, or is
+now stale prose, is a product-surface call, and the record no longer holds enough to
+reconstruct the original intent. Left as a `needs-ratification` item rather than
+guessed at (see the 2026-10-05 clearing report).
 
 #### Documentation and normative integrity
 
 **Shipped** — D1–D13, audit of 2026-09-01; record in §3. Open: ADR-0120 §3
 (optional ROM-name parameter in `MepZipValidator`), deferred with a dated
-note in the ADR — pick it up with a per-ROM install caller.
+note in the ADR — pick it up with a per-ROM install caller. **Re-affirmed
+2026-10-05:** the deferral's own condition is substantive, not a schedule —
+the parameter is wanted *with* a per-ROM install caller, and no such caller
+exists in the tree. Implementing it now would put a parameter in front of the
+call it was meant to serve, so it stays deferred. Nothing here waits on the
+owner any more: it is gated on the caller appearing, and whoever adds that
+caller picks this up in the same change.
 
 #### Host input tester (host UX, not a pack feature)
 
@@ -2406,7 +2442,7 @@ Stop rule unchanged, and it now covers the first run end to end **and #804**: a 
 
 **G.7 — Remaster tile browser, provenance, import and composition hand-off** (ADR-0241, ADR-0183, ADR-0194, ADR-0198, ADR-0165; wireframes W-R1 zone ②, W-R5, W-R6, W-R7), cut under the go-ahead *"pode cortar a próxima leva e implementar em paralelo"* (2026-10-02). Deliverable: zone ② lists the kit `mep_project.py kit` wrote — Figures, Scenery, Stage maps, Pattern pages (and, for an imported project, the sheets cut from the pack) — with the generators' captions and counts; a click opens the PNG with the OS default; hover or ▸ shows the W-R5 popover (seen / cells filled from the game's data / painted, or an explicit "cannot tell"), and the patched-ROM banner; W-R0 *Choose Folder…* on a finished pack asks once to make it editable and runs `mep_import.py` as a job, listing a refusal with *Show line*; *Compose a Scene…* starts `compose_editor.py` in its own window when `adjacency.json` exists. Stop rule: every badge is read from a file a script wrote or says it cannot tell; a fresh real kit shows no tile as painted; the import and the composer start with the argv the tools take. Shipped 2026-10-02 (Part A §3).
 
-G.1–G.9 are implemented (records in Part A §3; G.9 is ADR-0250's four doors and per-door menus); W-R8 has its *Let the AI Play…* button on W-R1, disabled with its reason until the user decides ADR-0242 Q3's adoption verdict. P.0–P.7 implementation history is in Part A §3, and
+G.1–G.9 are implemented (records in Part A §3; G.9 is ADR-0250's four doors and per-door menus); W-R8 has its *Let the AI Play…* button on W-R1, disabled with its reason — and, as of 2026-10-05, **no longer waiting on the user**: ADR-0242 Q3 fixes the adoption criterion in advance (ADR-0238 §5 clause 2 included) and ADR-0238's own F14.15 measurement answers it — 0 keys no other pack here has — so the verdict is *not adopted* and the button keeps its disabled state by the criterion, not by a pending decision. P.0–P.7 implementation history is in Part A §3, and
 P.1-local (the local-container identity requirement of §3.3 and ADR-0139/0140)
 shipped 2026-09-17 with ADR-0206:
 
