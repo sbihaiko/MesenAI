@@ -83,6 +83,24 @@
   the pad, PLAYERS and REMAP all on screen at once.
   **Still not implemented**: slice 4's surface (the extra buttons), so the sheet
   is not yet the whole of what the Decision describes.
+  **The pad's own light has an owner (2026-10-06, #925), by the panel ruling on
+  #916**, quoted verbatim: *"macOS only, through `GCController.light`
+  (DualShock 4 / DualSense): a core light call with a default no-op,
+  implemented by the macOS key manager; `nil` (Xbox pads) is normal; Windows and
+  Linux stay no-ops."* The ruling was "AGREED 2–1, option (a)"; the dissent
+  (Codex) is recorded on #916 verbatim: *"(b) DEFER; NO SLICE — Keep port-label
+  colour; defer physical lighting until hardware verification is available.
+  Cross-platform builds alone cannot validate LEDs."* What landed:
+  `IKeyManager::SetGamepadLight` (default no-op returning false, pinned by
+  `TestAPadLightIsANoOpUnlessTheBackendHasOne` in `scripts/core_unit_tests.cpp`),
+  the `SetGamepadLight` export, `MacOSGameController::SetLight`, and the
+  host-free `UI/Logic/PadLights` - a pad lights in the colour of the port whose
+  keys it holds (`ControllerSheetPorts.HoldsDevice`), so a PLAYERS reassignment
+  moves the colour with the keys, from the window's 1 s pad-lamp poll. The
+  palette moved to `PadLights.PlayerColors`, which the PLAYERS rows paint from,
+  so label and light cannot drift. The bullet below ("the one promise above with
+  no owner") is therefore historical. Unverified here: no DualShock 4 or
+  DualSense was attached, so the physical light is the human check on #926.
 - Date: 2026-10-04
 - Related: ADR-0241 (the four-door Player GUI), ADR-0249 (the Play sheets, the Esc router and W-P15 — the setup sheet this one sits beside), ADR-0250 (one place per door), ADR-0251 (the pad's way into the overlay), ADR-0254 (the sibling decision about focus loss), PRD Part B §8 and §13.5.2.
 - Supersedes / amends: none.

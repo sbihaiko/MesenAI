@@ -62,6 +62,9 @@ namespace Mesen.Interop
 		[DllImport(DllPath)][return: MarshalAs(UnmanagedType.I1)] public static extern bool GetGamepadInfo(UInt32 index, out GamepadInfo info);
 		[DllImport(DllPath)][return: MarshalAs(UnmanagedType.I1)] public static extern bool GetGamepadState(UInt32 index, out GamepadState state);
 		[DllImport(DllPath)] public static extern void TestForceFeedback(UInt32 index, UInt16 magnitudeRight, UInt16 magnitudeLeft);
+		//#925: the pad's light in its player colour. False where the pad has no
+		//light (an Xbox pad on macOS) and always on Windows and Linux (a no-op).
+		[DllImport(DllPath)][return: MarshalAs(UnmanagedType.I1)] public static extern bool SetGamepadLight(UInt32 index, byte r, byte g, byte b);
 	}
 
 	//GamepadBackend lives in InteropEnums.cs (host-free, dual-compiled into

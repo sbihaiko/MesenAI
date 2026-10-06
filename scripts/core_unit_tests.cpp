@@ -6249,6 +6249,43 @@ namespace
 			"#902: ...in the backend's own order, because the shortcut handler compares two reads position by position");
 	}
 
+	//#925 / #916's ruling: the pad's light follows its player colour on macOS
+	//alone (GCController.light), and is an explicit no-op everywhere else. The
+	//default is what Windows, Linux and any backend without a light inherit, so a
+	//key manager that does not override it must answer "no light" and do nothing.
+	//The channel scale is what the macOS backend hands GCColor: a byte of the
+	//player colour on GameController's 0..1 float, with both ends exact.
+	void TestAPadLightIsANoOpUnlessTheBackendHasOne()
+	{
+		struct LightlessKeyManager : IKeyManager
+		{
+			void RefreshState() override {}
+			void UpdateDevices() override {}
+			bool IsMouseButtonPressed(MouseButton) override { return false; }
+			bool IsKeyPressed(uint16_t) override { return false; }
+			vector<uint16_t> GetPressedKeys() override { return {}; }
+			string GetKeyName(uint16_t) override { return ""; }
+			uint16_t GetKeyCode(string) override { return 0; }
+			bool SetKeyState(uint16_t, bool) override { return false; }
+			void ResetKeyState() override {}
+			void SetDisabled(bool) override {}
+		};
+
+		LightlessKeyManager keyManager;
+		Check(!keyManager.SetGamepadLight(0, 0xFF, 0x3B, 0x30),
+			"#925: a backend with no pad light answers that it lit nothing");
+		Check(!keyManager.SetGamepadLight(3, 0x00, 0x7A, 0xFF),
+			"#925: ...on every pad index, not only the first");
+
+		Check(IKeyManager::LightChannel(0) == 0.0f,
+			"#925: a zero byte is an unlit channel");
+		Check(IKeyManager::LightChannel(255) == 1.0f,
+			"#925: a full byte is a full channel, not 255/256");
+		float mid = IKeyManager::LightChannel(0x7A);
+		Check(mid > 0.478f && mid < 0.479f,
+			"#925: a byte between scales linearly (0x7A -> 122/255)");
+	}
+
 	void TestPadChordFiresOnWhicheverPadIsInHand()
 	{
 		Check(PadChordFires({ PadKey(0, kPadSelectButton), PadKey(0, kPadStartButton) }),
@@ -17335,6 +17372,7 @@ TestW6TheFiltersAcceptTheExtendedFrame();
 	TestKeyboardBlockSparesNonKeyboardInputs();
 	TestSupersetStillShadowsTheExemptShortcut();
 	TestTheNoKeySentinelIsNeverAKey();
+	TestAPadLightIsANoOpUnlessTheBackendHasOne();
 	TestPadChordFiresOnWhicheverPadIsInHand();
 	TestTheWholePadFamilyAnswersTheChord();
 	TestPadChordIsNotAnsweredAcrossPadFamilies();
