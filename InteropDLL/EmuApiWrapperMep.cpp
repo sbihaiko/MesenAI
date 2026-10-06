@@ -3,6 +3,7 @@
 #include "Core/Shared/EnhancementPacks/MepPackManager.h"
 #include "Core/Shared/EnhancementPacks/MepRecipeInstaller.h"
 #include "Core/NES/NesConsole.h"
+#include "Core/NES/HdPacks/NesAudioFingerprint.h"
 #include "Core/Shared/Emulator.h"
 #include "Utilities/StringUtilities.h"
 
@@ -125,6 +126,22 @@ extern "C"
 	DllExport uint8_t __stdcall ReloadRomKeepingState()
 	{
 		return (uint8_t)_emu->ReloadRomKeepingState();
+	}
+
+	//F6.10 (ADR-0240 A4 follow-up): the sound id the enumeration host is asking
+	//the game's driver for right now, or -1 for none. `scripts/spike_sound_driver.cpp`
+	//sets it around each id it fires, so every track the bootstrap recorder opens
+	//while it is set is stamped with it (AudioFingerprint::TriggerId, written to
+	//fingerprints.json as `triggerId`) - the join key ADR-0240 A4 needed, since
+	//emission order and note onsets cannot recover it
+	//(docs/validation/slices/f6.10-trigger-id-alignment-2026-10-02.md).
+	//
+	//Inert for every other host: nothing else calls this, and the default (-1)
+	//means "no trigger was fired", which stamps nothing and leaves a plain
+	//bootstrap recording's JSON byte for byte what it was before F6.10.
+	DllExport void __stdcall SetAudioBootstrapTriggerId(int32_t id)
+	{
+		SetActiveSoundTriggerId((int)id);
 	}
 
 	//#732: the pack ROM patch the ApplyPatchOnHashMismatch override forced on

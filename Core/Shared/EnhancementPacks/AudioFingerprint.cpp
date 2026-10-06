@@ -90,6 +90,12 @@ bool FingerprintStore::Load(const string& path, vector<AudioFingerprint>& out, s
 		if(frames && frames->IsNumber()) {
 			fp.Frames = (uint32_t)frames->GetNumber();
 		}
+		//F6.10: optional trigger id; absent (or not a number) means "no trigger
+		//was fired", the same fallback rule the `loop` field follows above.
+		const JsonValue* trigger = entry.Get("triggerId");
+		if(trigger && trigger->IsNumber()) {
+			fp.TriggerId = (int)trigger->GetNumber();
+		}
 		const JsonValue* events = entry.Get("events");
 		if(fp.Id.empty() || !events || !events->IsArray()) {
 			continue;
@@ -135,6 +141,12 @@ bool FingerprintStore::Save(const string& path, const vector<AudioFingerprint>& 
 		}
 		if(!fp.MidiFile.empty()) {
 			out << ", \"midi\": " << JsonQuote(fp.MidiFile);
+		}
+		//F6.10: the trigger id this track was fired with, emitted only when one
+		//was, under the `loop` field's rule above - a bootstrap recording that
+		//fired no trigger keeps the pre-F6.10 JSON byte for byte.
+		if(fp.TriggerId >= 0) {
+			out << ", \"triggerId\": " << fp.TriggerId;
 		}
 		out << ", \"events\": [";
 		for(size_t j = 0; j < fp.Events.size(); j++) {
@@ -252,6 +264,10 @@ void TrackSegmenter::Feed(const NoteFrame& frame)
 		_open = true;
 		_current = Segment();
 		_current.StartFrame = _frame;
+		//F6.10: stamped where the segment opens, never refreshed afterwards, so a
+		//track belongs to the id that started it - and an id that started nothing
+		//leaves no trace on the track the next id produces.
+		_current.Fingerprint.TriggerId = _activeTriggerId.load();
 	}
 	_silentRun = 0;
 	_current.Frames.push_back(frame);

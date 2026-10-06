@@ -1561,6 +1561,78 @@ namespace
 		std::string text0 = ReadFileBytes(path);
 		Check(text0.find("loop") == std::string::npos, "BlocoH: Save omits the loop field when zero", text0);
 	}
+	//--- Bloco H: the F6.10 trigger id (ADR-0240 A4 follow-up) -----------------
+	//The join key ADR-0240 A4 could not recover from emission order or note
+	//onsets: the id the host asked the driver for, carried by the track it
+	//produced. `NesAudioFingerprint.h` reads the process-wide id into the
+	//segmenter one line per frame; that line is compile-checked by the core
+	//build, so what is pinned here is the rule it feeds and the JSON it reaches.
+	NoteFrame AudibleNote(int8_t note)
+	{
+		NoteFrame f;
+		f.Note[0] = note;
+		return f;
+	}
+
+	void TestTriggerIdStampedAtSegmentOpen()
+	{
+		TrackSegmenter seg;
+		seg.SetActiveTriggerId(7);
+		//A burst has to outlast MinKeepFrames (6) or Close() drops it as noise,
+		//and it is stamped where it opens.
+		for(int i = 0; i < 10; i++) { seg.Feed(AudibleNote(60)); }
+		//The id moves while this track is open: it keeps the id it opened with,
+		//so an id that produced nothing borrows nobody else's work.
+		seg.SetActiveTriggerId(-1);
+		for(int i = 0; i < 10; i++) { seg.Feed(AudibleNote(60)); }
+		for(int i = 0; i < 100; i++) { seg.Feed(NoteFrame()); }
+		seg.SetActiveTriggerId(9);
+		for(int i = 0; i < 10; i++) { seg.Feed(AudibleNote(64)); }
+		seg.Finish();
+
+		const vector<TrackSegmenter::Segment>& segs = seg.GetSegments();
+		Check(segs.size() == 2, "F6.10: two audible stretches make two tracks", std::to_string(segs.size()));
+		if(segs.size() != 2) { return; }
+		Check(segs[0].Fingerprint.TriggerId == 7, "F6.10: a track carries the id in force when it opened",
+			std::to_string(segs[0].Fingerprint.TriggerId));
+		Check(segs[1].Fingerprint.TriggerId == 9, "F6.10: an id that opened nothing leaves no trace on the next id's track",
+			std::to_string(segs[1].Fingerprint.TriggerId));
+	}
+
+	void TestTriggerIdJsonRoundTrip()
+	{
+		std::string error;
+		std::vector<AudioFingerprint> with;
+		Check(FingerprintStore::Load(WriteTempFile("fp_trigger.json", FingerprintJson("\"triggerId\":7")), with, error),
+			"F6.10: fingerprints.json with triggerId loads");
+		Check(with.size() == 1 && with[0].TriggerId == 7, "F6.10: triggerId parsed to AudioFingerprint::TriggerId");
+
+		std::vector<AudioFingerprint> without;
+		Check(FingerprintStore::Load(WriteTempFile("fp_no_trigger.json", FingerprintJson("")), without, error),
+			"F6.10: fingerprints.json without triggerId loads");
+		Check(without.size() == 1 && without[0].TriggerId == -1,
+			"F6.10: absent triggerId is -1, i.e. no trigger was fired");
+
+		std::vector<AudioFingerprint> tracks;
+		AudioFingerprint fp;
+		fp.Id = "t1"; fp.Kind = "bgm"; fp.Frames = 1200; fp.TriggerId = 7;
+		fp.Events.push_back({ 0, 0, 0 });
+		tracks.push_back(fp);
+		std::string path = WriteTempFile("fp_save_trigger.json", "");
+		Check(FingerprintStore::Save(path, tracks), "F6.10: Save writes the file");
+		Check(ReadFileBytes(path).find("\"triggerId\": 7") != std::string::npos,
+			"F6.10: Save emits the trigger id when one was fired");
+
+		//A plain bootstrap recording fired no trigger, and must stay byte for
+		//byte what it was before F6.10 - no empty field, no schema change.
+		fp.TriggerId = -1;
+		tracks[0] = fp;
+		path = WriteTempFile("fp_save_no_trigger.json", "");
+		Check(FingerprintStore::Save(path, tracks), "F6.10: Save writes the file (no trigger)");
+		Check(ReadFileBytes(path).find("triggerId") == std::string::npos,
+			"F6.10: Save omits the field when no trigger was fired");
+	}
+
 	//--- Bloco H: BorderLayout (ADR-0149, Slice F8.3b) -------------------------
 	//Host-free viewport/canvas math extracted from VideoRenderer so the border
 	//layer's layout rules are pinned without linking the Emulator.
@@ -17065,6 +17137,8 @@ int main()
 	TestFingerprintLoopAbsent();
 	TestFingerprintLoopMalformed();
 	TestFingerprintLoopSave();
+	TestTriggerIdStampedAtSegmentOpen();
+	TestTriggerIdJsonRoundTrip();
 
 	TestBorderDefaultHeuristic();
 	TestBorderParseScaleMode();

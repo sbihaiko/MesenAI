@@ -29,6 +29,23 @@ namespace
 	{
 		return (env.ConstantVolume ? env.Volume : env.Counter) / 15.0;
 	}
+
+	//F6.10: the one process-wide "id the host asked the driver for". The host that
+	//drives an enumeration (scripts/spike_sound_driver.cpp, over the DLL export
+	//SetAudioBootstrapTriggerId) is the only writer; there is one emulator per
+	//process, so a file-scope atomic is the whole channel - no console plumbing,
+	//and nothing that a second emulator could disagree with.
+	std::atomic<int> g_activeSoundTriggerId{ -1 };
+}
+
+void SetActiveSoundTriggerId(int id)
+{
+	g_activeSoundTriggerId.store(id);
+}
+
+int GetActiveSoundTriggerId()
+{
+	return g_activeSoundTriggerId.load();
 }
 
 NoteFrame NesAudioFingerprint::FromApu(const ApuState& apu)
