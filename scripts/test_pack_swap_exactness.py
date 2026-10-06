@@ -12,10 +12,15 @@ Two halves:
   * Measured, when the tool is built: `scripts/pack_swap_exactness.py` per
     console, every transition holding the verdict ADR-0244's Status line records
     (all PASS, the negative control FAIL, the ROM-patch transitions
-    `patch-restarted`). NES needs Ninja Gaiden and SMS needs Sonic from the
-    user's library (never copied into this repo); GB and GBC run on the
-    synthetic ROMs `gen_hdpack_test_roms.py` writes. A missing ROM or binary prints `skip` for
-    that console and asserts nothing about it.
+    `patch-restarted`), plus the bootstrap case's transitions where the profile
+    runs it (the pack the bootstrap wrote beside the ROM as the source and as
+    the target of a swap, with the bootstrap on). NES needs Ninja Gaiden and SMS
+    needs Sonic from the user's library (never copied into this repo); GB and
+    GBC run on the synthetic ROMs `gen_hdpack_test_roms.py` writes. A missing
+    ROM or binary prints `skip` for that console and asserts nothing about it.
+  * The PPU-swap alternative of Decision 1, which the harness reports as not
+    measured (no such entry point exists): the check below holds that report to
+    the tree's entry points, so it cannot turn into a pass by itself.
 
 Run:  python3 scripts/test_pack_swap_exactness.py [--console nes|sms|gb|gbc ...]
 """
@@ -75,14 +80,35 @@ def measured(console):
         if not out.exists():
             print(f"skip {console}: the harness ran nothing (exit {code})")
             return
-        results = json.loads(out.read_text())["results"]
+        report = json.loads(out.read_text())
+        results = report["results"]
     check(code == 0, f"{console}: the harness exits 0 (exit {code})")
     for r in results:
         check(r["pass"] == r["expected_pass"] and r["outcome"] == r["expected_outcome"],
               f"{console}: {r['name']}: {'PASS' if r['pass'] else 'FAIL'} / {r['outcome']} "
               f"(expected {'PASS' if r['expected_pass'] else 'FAIL'} / {r['expected_outcome']})")
-    check(len(results) == len(harness.transitions(harness.PROFILES[console])),
-          f"{console}: every transition ran ({len(results)})")
+    profile = harness.PROFILES[console]
+    expected = len(harness.transitions(profile))
+    if report["bootstrap_measured"]:
+        expected += len(harness.bootstrap_transitions(profile))
+    check(len(results) == expected, f"{console}: every transition ran ({len(results)}/{expected})")
+    cases = {row["case"]: row for row in report["not_measured"]}
+    check(harness.PPU_SWAP_CASE in cases and not cases[harness.PPU_SWAP_CASE]["measured"],
+          f"{console}: the PPU-swap alternative is reported as not measured "
+          f"({cases.get(harness.PPU_SWAP_CASE, {}).get('entry_points')})")
+    check(harness.PPU_SWAP_CASE not in {r["name"] for r in results},
+          f"{console}: no transition claims to be the PPU-swap alternative")
+    check(profile["bootstrap"] == report["bootstrap_measured"] or
+          harness.BOOTSTRAP_CASE in cases,
+          f"{console}: the bootstrap case either ran or says why it did not")
+    # The case's first row is its own negative control. That row must FAIL, and
+    # a case that reports itself measured without it having failed is the false
+    # pass this probe exists to stop (measured 2026-10-05: it passed).
+    if report["bootstrap_measured"]:
+        probes = [r for r in results if r["name"].startswith("bootstrap probe")]
+        check(len(probes) == 1 and probes[0]["pass"] is False,
+              f"{console}: the bootstrap case ran with its probe failing "
+              f"({[(r['name'], r['pass']) for r in probes]})")
 
 
 def main(argv):
