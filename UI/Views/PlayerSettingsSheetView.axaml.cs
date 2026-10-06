@@ -41,6 +41,21 @@ namespace Mesen.Views
 			}
 		}
 
+		//#910: back to windowed. The control hides as soon as the window is not
+		//fullscreen, so a keyboard or pad focus on it moves to Done rather than
+		//being left on nothing (a pad has no pointer to recover with).
+		private void OnExitFullscreen(object? sender, RoutedEventArgs e)
+		{
+			if(DataContext is not ViewModels.ConfigViewModel { Display: { } display }) {
+				return;
+			}
+			bool hadFocus = sender is Button { IsFocused: true };
+			display.ExitFullscreen();
+			if(hadFocus) {
+				Utilities.PlayFocusOnOpen.Enter(this.FindControl<Button>("btnPlayerSettingsDone"));
+			}
+		}
+
 		private void OnDone(object? sender, RoutedEventArgs e) => DoneRequested?.Invoke(this, EventArgs.Empty);
 	}
 }

@@ -117,6 +117,16 @@ public static class PlayerSettingsEssentials
 	};
 
 	public static ConfigWindowTab? TabAt(int index) => index >= 0 && index < Tabs.Length ? Tabs[index] : null;
+
+	//#910 (PRD Part B §13.5.2 W-P4/W-P8): "Exit fullscreen moves into Settings".
+	//The explicit control is offered only while the window is fullscreen - in a
+	//window there is nothing to exit, and the Fullscreen switch already says so -
+	//and only on Display, the tab that owns the window. It sits in Done's row,
+	//where Look keeps its own footer (Hold to Compare), so it never shows on Look.
+	public static bool ShowsExitFullscreen(ConfigWindowTab? tab, bool isFullscreen)
+	{
+		return isFullscreen && tab == ConfigWindowTab.Display;
+	}
 }
 
 //W-P8's Display rows. A value set elsewhere that is not in the short list is

@@ -185,6 +185,19 @@ namespace Mesen.Tests.Config
 			Assert.Equal(expected, PlayerSliders.ToConfig(value, max));
 		}
 
+		//#910: Exit fullscreen is offered only while fullscreen, and only on
+		//Display (the window's tab); Look keeps Done's row for Hold to Compare.
+		[Fact]
+		public void Exit_fullscreen_shows_only_while_fullscreen_on_display()
+		{
+			Assert.True(PlayerSettingsEssentials.ShowsExitFullscreen(ConfigWindowTab.Display, true));
+			Assert.False(PlayerSettingsEssentials.ShowsExitFullscreen(ConfigWindowTab.Display, false));
+			foreach(ConfigWindowTab tab in PlayerSettingsEssentials.Tabs.Where(t => t != ConfigWindowTab.Display)) {
+				Assert.False(PlayerSettingsEssentials.ShowsExitFullscreen(tab, true));
+			}
+			Assert.False(PlayerSettingsEssentials.ShowsExitFullscreen(null, true));
+		}
+
 		//Restore-not-clobber: an output device chosen in Options that is not
 		//enumerated now is listed as the current item, never replaced.
 		[Fact]

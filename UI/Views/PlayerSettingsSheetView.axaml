@@ -83,7 +83,14 @@
 			<StackPanel Grid.Row="1" VerticalAlignment="Bottom">
 				<TextBlock Name="lblPlayerSettingsEverythingElse" Classes="subhead secondary" Text="{l:Translate lblPlayerSettingsEverythingElse}" Margin="2 0 0 12" IsVisible="{Binding IsPlayerHintTab}" />
 				<Button Name="btnPlayerSettingsMoreInOptions" Classes="plain small" HorizontalAlignment="Left" Margin="-9 -6 0 6" Click="OnMoreInOptions" IsVisible="{Binding IsPlayerMoreTab}" Content="{l:Translate btnPlayerSettingsMoreInOptions}" />
-				<Button Name="btnPlayerSettingsDone" Classes="primary regular wide" HorizontalAlignment="Right" Click="OnDone" Content="{l:Translate btnPlayerSettingsDone}" />
+				<!--#910 (§13.5.2 W-P4: "Exit fullscreen moves into Settings"): the
+				explicit way back to windowed, in Done's row, only while the window is
+				fullscreen and on Window (PlayerSettingsEssentials.ShowsExitFullscreen).
+				Look's Hold to Compare holds this place on its own tab.-->
+				<DockPanel>
+					<Button Name="btnPlayerSettingsExitFullscreen" DockPanel.Dock="Left" Classes="secondary regular" Click="OnExitFullscreen" IsVisible="{Binding ShowsPlayerExitFullscreen}" Content="{l:Translate btnPlayerSettingsExitFullscreen}" />
+					<Button Name="btnPlayerSettingsDone" Classes="primary regular wide" HorizontalAlignment="Right" Click="OnDone" Content="{l:Translate btnPlayerSettingsDone}" />
+				</DockPanel>
 			</StackPanel>
 		</Grid>
 	</Border>
