@@ -35,6 +35,8 @@ namespace Mesen.ViewModels
 	public partial class PlayControllerSetupViewModel : ViewModelBase
 	{
 		[ObservableProperty] public partial bool IsPillVisible { get; private set; }
+		//#913: the pill's sentence, naming the pad when the host reports its name.
+		[ObservableProperty] public partial string PillText { get; private set; } = "";
 		[ObservableProperty] public partial bool IsVisible { get; private set; }
 		[ObservableProperty] public partial string Title { get; private set; } = "";
 		[ObservableProperty] public partial string Prompt { get; private set; } = "";
@@ -93,10 +95,19 @@ namespace Mesen.ViewModels
 			ControllerConfig? port = PortFor(CurrentConsole(), out _);
 			IEnumerable<ushort> mapped = port == null ? Array.Empty<ushort>() : MappedKeys(CurrentConsole());
 			switch(_detector.OnPressed(pressed, mapped, k => ControllerDevices.NamesStart(KeyName(k)), now)) {
-				case DetectorEvent.ShowPill: IsPillVisible = true; break;
+				case DetectorEvent.ShowPill: ShowPill(_detector.PillDevice); break;
 				case DetectorEvent.DismissPill: IsPillVisible = false; break;
 				case DetectorEvent.OpenSheet: OpenSheet(_detector.SheetDevice, pressed, now); break;
 			}
+		}
+
+		private void ShowPill(int device)
+		{
+			PillText = ControllerDevices.PillText(
+				DeviceName(device),
+				name => ResourceHelper.GetMessage("ControllerSetupPillNamed", name),
+				ResourceHelper.GetViewLabel("PlayControllerSetupView", "lblControllerSetupPill"));
+			IsPillVisible = true;
 		}
 
 		//#660: the owner stopped ticking (the game paused or quit): the pill

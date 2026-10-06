@@ -289,6 +289,19 @@ namespace Mesen.Tests.Play
 			Assert.Equal(expected, ControllerDevices.DisplayName(deviceName, keyName));
 		}
 
+		//#913: the pill names the pad the host names, as the sheet's title does; a
+		//pad it cannot name keeps the generic sentence, never the "PadN" prefix.
+		[Theory]
+		[InlineData("8BitDo SN30", "New “8BitDo SN30”")]
+		[InlineData("  Xbox Wireless Controller ", "New “Xbox Wireless Controller”")]
+		[InlineData("", "New controller")]
+		[InlineData("   ", "New controller")]
+		[InlineData(null, "New controller")]
+		public void The_pill_names_a_named_pad_and_keeps_the_generic_sentence_otherwise(string? deviceName, string expected)
+		{
+			Assert.Equal(expected, ControllerDevices.PillText(deviceName, name => $"New “{name}”", "New controller"));
+		}
+
 		//#913: the host's pad list, the way the window hands it over - one entry
 		//per connected pad, keyed by the block its keys carry.
 		private static readonly HostPad[] HostPads = {

@@ -120,6 +120,17 @@ public static class ControllerDevices
 		return name.Length > 0 ? name : Label(keyName);
 	}
 
+	//#913: the unknown-controller pill's sentence. A pad the host names is named
+	//here too, the way the sheet's title names it (named formats the localized
+	//"New controller “{0}”..." sentence); a pad it cannot name keeps the generic
+	//sentence (unnamed). The key-name prefix is not used: "Pad1" is the generic
+	//label #913 removes, so the pill says nothing rather than that.
+	public static string PillText(string? deviceName, Func<string, string> named, string unnamed)
+	{
+		string name = (deviceName ?? "").Trim();
+		return name.Length > 0 ? named(name) : unnamed;
+	}
+
 	//#913: the controller's own name for a key-code device index, off the host's
 	//own pad list - the enumerated pad whose block the index's codes carry, found
 	//the way the controller sheet finds a pad (PadBlock of its backend and its
