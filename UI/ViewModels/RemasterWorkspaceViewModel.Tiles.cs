@@ -153,8 +153,9 @@ namespace Mesen.ViewModels
 					pending.Add(t);
 				}
 				string stamp = RemasterPaintCache.Stamp(t);
-				rows.Add(previous.TryGetValue(t.ImagePath, out RemasterTileRow? old) && old.Tile == t && old.Stamp == stamp && Equals(old.Paint, paint) && old.Phases == phases
-					? old : RemasterTileRow.From(t, paint, stamp, phases));
+				string marksStamp = RemasterPageMarks.Stamp(t);
+				rows.Add(previous.TryGetValue(t.ImagePath, out RemasterTileRow? old) && old.Tile == t && old.Stamp == stamp && old.MarksStamp == marksStamp && Equals(old.Paint, paint) && old.Phases == phases
+					? old : RemasterTileRow.From(t, paint, stamp, phases, marksStamp));
 			}
 			if(!rows.SequenceEqual(Tiles, ReferenceEqualityComparer.Instance)) {
 				Tiles = rows;
@@ -213,6 +214,15 @@ namespace Mesen.ViewModels
 
 	public sealed record RemasterCategoryChip(RemasterKitCategory Category, string Text, bool IsSelected);
 
+	//ADR-0219: one cell of a page thumbnail, in the thumbnail's own pixels -
+	//`IsFill` dims it (the shape came out of the ROM), `IsEmpty` outlines it
+	//(neither seen nor in the game's data). Every other cell of the page was
+	//seen in play and stays exactly as the picture draws it.
+	public sealed record RemasterThumbMark(double Left, double Top, double Size, bool IsFill)
+	{
+		public bool IsEmpty => !IsFill;
+	}
+
 	//One tile of zone ② and its W-R5 popover.
 	public sealed class RemasterTileRow
 	{
@@ -239,9 +249,27 @@ namespace Mesen.ViewModels
 		public required string ClassicToolTipText { get; init; }
 		public required string OpenPath { get; init; }
 		public required string Stamp { get; init; }
+		//ADR-0219: the sidecar the thumbnail's marks were read from, so a re-run
+		//of the kit rebuilds the row even when the picture is byte for byte.
+		public required string MarksStamp { get; init; }
 		public required RemasterPaintResult? Paint { get; init; }
 		//ADR-0252 §3: (painted, of) phases, null when not known.
 		public required (int Painted, int Of)? Phases { get; init; }
+
+		//The thumbnail's own pixels, the height in the render and the canvas the
+		//marks are already in.
+		public const double ThumbnailHeight = 64;
+
+		//ADR-0219: the cells of a pattern page the kit did not see in play, to
+		//draw over the picture. Empty for every other tile and for a page that
+		//cannot tell - the thumbnail then stays exactly as the kit wrote it.
+		public required IReadOnlyList<RemasterThumbMark> ThumbMarks { get; init; }
+
+		//The overlay canvas: the picture's own aspect at ThumbnailHeight. NaN
+		//(no marks to land) lets the image size itself, as every other tile
+		//does.
+		public required double ThumbWidth { get; init; }
+		public double ThumbHeight => ThumbnailHeight;
 
 		public Bitmap? Thumbnail
 		{
@@ -252,7 +280,7 @@ namespace Mesen.ViewModels
 					string path = RemasterTileFacts.ThumbnailPath(Tile);
 					try {
 						using FileStream s = File.OpenRead(path);
-						_thumbnail = Bitmap.DecodeToHeight(s, 64, BitmapInterpolationMode.None);
+						_thumbnail = Bitmap.DecodeToHeight(s, (int)ThumbnailHeight, BitmapInterpolationMode.None);
 					} catch(Exception) {
 						//A picture the decoder refuses still has its caption and popover.
 						_thumbnail = null;
@@ -263,7 +291,8 @@ namespace Mesen.ViewModels
 		}
 
 		//paint == null: the comparison is still running; the popover says so.
-		public static RemasterTileRow From(RemasterKitTile tile, RemasterPaintResult? paint, string stamp, (int Painted, int Of)? phases = null)
+		//marksStamp == null reads the sidecar's stamp here.
+		public static RemasterTileRow From(RemasterKitTile tile, RemasterPaintResult? paint, string stamp, (int Painted, int Of)? phases = null, string? marksStamp = null)
 		{
 			(RemasterTileCountKind kind, int n) = RemasterTileFacts.CountOf(tile);
 			string count = kind switch {
@@ -286,6 +315,7 @@ namespace Mesen.ViewModels
 			};
 			string detail = string.Join(" · ", new[] { count, from }.Where(p => p.Length > 0));
 			string header = string.Join(" · ", new[] { "\"" + tile.Caption + "\"", detail }.Where(p => p.Length > 0));
+			RemasterPageThumb? page = RemasterPageMarks.Thumbnail(tile, ThumbnailHeight);
 			return new RemasterTileRow {
 				Tile = tile,
 				Caption = tile.Caption,
@@ -301,8 +331,12 @@ namespace Mesen.ViewModels
 				ClassicToolTipText = string.Join(Environment.NewLine, new[] { header, tile.Title }.Concat(lines.Select(l => l.ClassicText)).Distinct()),
 				OpenPath = RemasterTileFacts.OpenPath(tile),
 				Stamp = stamp,
+				MarksStamp = marksStamp ?? RemasterPageMarks.Stamp(tile),
 				Paint = paint,
 				Phases = phases,
+				ThumbMarks = page == null ? Array.Empty<RemasterThumbMark>()
+					: page.Marks.Select(m => new RemasterThumbMark(m.X, m.Y, m.Size, m.Kind == RemasterPageCellKind.Fill)).ToList(),
+				ThumbWidth = page?.Width ?? double.NaN,
 			};
 		}
 

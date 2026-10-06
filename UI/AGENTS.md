@@ -336,6 +336,16 @@ can be exercised by real xunit tests without Avalonia or the native
   nearest-neighbour, as `mep_build`'s `_EditedProbe` does, and only for the
   units whose twin is a pre-paint copy (grid, object, element, panorama) -
   pattern pages, scene captures and imported sheets say "cannot tell".
+  A pattern-page thumbnail marks its cells (ADR-0219, #911) only from the
+  page's own sidecar beside the picture (ADR-0172's `<stem>.json`,
+  `kind: chr`, per-cell `state`), read by host-free
+  `UI/Logic/RemasterPageMarks.cs` and sized off the PNG's IHDR: `fill`
+  (filled from the game's data) is dimmed, `empty` gets a red outline, and
+  every seen state (`evidence`/`borrowed`/`donated`/`folded`) stays as
+  drawn. A missing, foreign-kind or unreadable sidecar, an unknown `state`
+  or an unsizeable picture is "cannot tell" and marks nothing - never a
+  count, never the pixels. The row re-reads when the sidecar's stamp
+  changes, not only the picture's.
   A tile opens with the OS default through `UI/Services/RemasterFileOpener.cs`
   (ADR-0209's first user-configured launch). `RemasterHandOff` builds the
   `mep_import.py import` job and the `compose_editor.py <recording>` child;

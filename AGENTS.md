@@ -88,7 +88,7 @@ When the user requests a durable behavior change, record it here or in the relev
 - Core/ — C++ emulation cores; `Core/AGENTS.md` records the pack-recorder contracts (per-frame hook, `poses.json` fields, debug dumps)
 - InteropDLL/ — C++ interop bridge for .NET UI
 - Linux/ — Linux platform support layer
-- MacOS/ — macOS platform support layer, including the Metal renderer and its librashader filter chain (ADR-0237; `make metal-presenter-tests`)
+- MacOS/ — macOS platform support layer, including the Metal renderer and its librashader filter chain (ADR-0237; `make metal-presenter-tests`); `MacOSKeyManager` takes any pad `MacOSGameController::Supports()` accepts - extended, micro or deprecated basic GameController profile, each mapped onto the backend's `buttonNames` bits (#912)
 - UI/ — .NET desktop UI application
 - UI.Tests/ — xunit harness for host-free UI/Logic/ code (Fase 0 of the now-completed unit-test plan)
 - Windows/ — Windows platform support layer
