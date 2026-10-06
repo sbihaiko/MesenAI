@@ -495,6 +495,13 @@ doc-checks-2:
 	#its own test feeds it all of them.
 	python3 scripts/checks/verify_pressed_keys_contract.py
 	python3 scripts/test_verify_pressed_keys_contract.py
+	#Issue #902: key code 0 is the "no key" sentinel, not a key, and macOS hands
+	#it out for every virtual key code it has no Mesen key for. Its writer is
+	#ObjC++ behind AppKit and KeyManager.cpp is not linked into core-unit-tests,
+	#so nothing host-free fails on it: this is the committed guard for the three
+	#sites that have to agree, and its own test feeds it each drift.
+	python3 scripts/checks/verify_no_key_sentinel.py
+	python3 scripts/test_verify_no_key_sentinel.py
 	#Issue #516: the checks themselves must be load-proof. `set -o pipefail`
 	#plus an early-exit grep as a pipeline reader makes the writer's SIGPIPE a
 	#141, which a check reads as a missing string - verify_community_pack_

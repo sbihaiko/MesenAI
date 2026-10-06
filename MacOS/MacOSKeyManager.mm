@@ -82,6 +82,21 @@ MacOSKeyManager::MacOSKeyManager(Emulator* emu)
 		if([event type] == NSEventTypeFlagsChanged) {
 			HandleModifiers((uint32_t) [event modifierFlags]);
 		} else {
+			//AliasedKeyState answers this line both ways it used to be wrong. It
+			//refuses a virtual key code its table cannot name - the codes with no
+			//Mesen key and every code >= 128, outside the range the table covers at
+			//all - so the "no key" sentinel (#902) is never recorded here; and it
+			//counts the host codes behind a Mesen code, so a slot four pairs of
+			//them share drops only on the last release (#904).
+			//
+			//The sentinel has a second way in that this class cannot close: the
+			//host export InputApi.SetKeyState accepts code 0 on every backend. That
+			//one is answered at the interface, in IKeyManager::WithoutNoKey.
+			//
+			//Which physical keys reach this line with such a code is not something
+			//this repo can settle: the Fn key arrives as FlagsChanged (the branch
+			//above) and media keys arrive as SystemDefined, which the event mask
+			//does not subscribe to.
 			_hostKeyState.SetKeyState((uint32_t) [event keyCode], [event type] == NSEventTypeKeyDown);
 		}
 
