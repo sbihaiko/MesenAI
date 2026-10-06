@@ -1,0 +1,191 @@
+{
+  "schema_version": 1,
+  "name": "router-dynamic",
+  "description": "A dynamic flow. A router agent runs the ask-matt skill and requests children inside the dispatch envelope (ADR-0113). Tuned for MesenCE: the skill allow-list names skills that exist in vendor/skills, the scope gate's generated list names this repo's generated-but-committed docs, and the security gate guards this repo's real secret surfaces. The router node carries the plugin's prompts/router.md as `instructions`: `skill: ask-matt` routes work but documents no spawn field names, so without it every run dies at dispatch with spawn_rejected:unknown_field/missing_prompt (runs run-20261005-185841 and run-20261005-194416). No Anthropic model runs a node (owner, 2026-10-05), DeepSeek Flash is the one to use and Pro is barred (owner, 2026-10-05, restated after run 11): the router is claude-deepseek-v4-flash, and claude-deepseek-v4-pro is not in the allow-list, so no request can pin it. The allow-list is claude-deepseek-v4-flash (code, and the default for a child that pins no model, so it stays first), claude-grok-4.6 and claude-grok-4.5 (verify/review; the owner asked for 4.5 as well on 2026-10-05), claude-gpt-5.5 and claude-gpt-5.6-sol (a second family for a verifying child, so the reviewer is not of the same parentage as the author) and claude-grok-composer-2.5-fast (a cheap reader). Every id here was probed one by one against the gateway's /v1/messages on 2026-10-05; the ids it lists but that answer 400 (the gpt-5.2 / gpt-5.3-codex / gpt-5.4 families, refused for a ChatGPT account) or 403 WebSocket upgrade were left out. All of them answer through the local gateway at ANTHROPIC_BASE_URL; the SDK inherits it from the process environment. The router's own budget is spend 8 / turns 80: the gateway bills no prompt cache (cache_read 0), so a router that reads CLAUDE.md and PRD section 4 respends its ~16k system prompt every turn and burned the old 2-dollar cap in 41 turns without emitting a spawn (run-20261005-195102). The router's instructions also pin `workspace`: `squad/envelope.py:76` admits a workspace only by exact membership, so a router that reads the allowed `worktrees/child` as a directory and extends it loses every child (run-20261005-200019: both spawns rejected `workspace_outside_allow`, verdict `no_dispatch`). The role text says `workspace` is a label to copy verbatim, and the policy line and the example were corrected with it, since the shipped example named both an Anthropic model and a workspace the allow-list does not carry. The third defect in the same node is the mirror of the first: the router's stopping rule reached the router and never reached its children, which have no budget discipline of their own, so all four died on node_turn_cap at 41-46 turns of 40-45 with real edits and no artifact (run-20261005-201716, verdict failed). The role now requires every child prompt to end with the child's own stopping rule, including the instruction to return fail/out_of_budget with a list of what it finished. The fourth defect is arithmetic and it outranks the other three: the `route` node's own spend cap was 4 while a single child may be granted spend up to 4, so the router's entry pass alone (0.57) plus two routing children (1.62, 1.22) reached 3.41 and the node died on node_spend_cap before spawning anything (run-20261005-204610, verdict failed; scope_gate/security_gate/final_gate never ran). No amount of model or turn discipline could get a child out of that node. The cap is now 20 on a 40 run cap: the router's own cost plus four children at their maximum. The fifth defect is the fourth one's twin, one line above it in the same budget block, and it is recorded here because the first fix missed it: the `route` node's turn cap was 60 while its router entry costs 14-17 turns to decide and each routing child has run 36. Two children alone reached 72 and the node died on node_turn_cap with spend at 2.35 of 20 (run-20261005-205157, verdict failed, same three gates never reached). A parent budget has to cover the node's own pass plus one round of children on both axes; only the spend half was fixed first. The cap is now 240 turns: the router plus four children at up to ~55 each. The sixth defect is the one the first five hid: a child's turn budget was being sized from the numbers the earlier failures recorded (40-50), so the role text anchored the router to a budget that cannot finish the task it hands out. Run-20261005-205624 reached the furthest of all six - the router passed, and it spawned three real children in parallel for the first time - and lost all three to node_turn_cap at 41, 46 and 51 turns, each with edits already written in its worktree and no artifact, because error_max_turns ends the session before the child can return anything. The role now sizes turns to the work (100+ for a child that edits and builds), pairs spend with it, and gives each child one deliverable instead of three.",
+  "run": {
+    "deadline": 21600,
+    "max_parallel": 2,
+    "spend_cap": 40
+  },
+  "facts": [
+    {
+      "name": "git",
+      "type": "bool",
+      "instrument": "code: git is available in the target",
+      "source_kind": "target"
+    },
+    {
+      "name": "run_spend",
+      "type": "number",
+      "instrument": "code: sum of SDK result spend over agent entries (ADR-0108)",
+      "source_kind": "run_record"
+    }
+  ],
+  "gates": [
+    {
+      "id": "scope",
+      "params": [
+        "allowed_generated"
+      ]
+    },
+    {
+      "id": "security",
+      "params": [
+        "sensitive_paths"
+      ]
+    },
+    {
+      "id": "ac-verify",
+      "params": [
+        "commands_from"
+      ]
+    }
+  ],
+  "root": "main",
+  "nodes": [
+    {
+      "name": "main",
+      "kind": "loop",
+      "max": {
+        "value": 1,
+        "min": 1
+      },
+      "children": [
+        "route",
+        "final_gate"
+      ]
+    },
+    {
+      "name": "route",
+      "kind": "dispatch",
+      "entry": "router",
+      "max_depth": 2,
+      "max_children": 4,
+      "max_parallel": 2,
+      "deadline": 7200,
+      "join": "all",
+      "allow": {
+        "models": [
+          "claude-deepseek-v4-flash",
+          "claude-grok-4.6",
+          "claude-grok-4.5",
+          "claude-gpt-5.5",
+          "claude-gpt-5.6-sol",
+          "claude-grok-composer-2.5-fast"
+        ],
+        "efforts": [
+          "low",
+          "medium",
+          "high"
+        ],
+        "tools": [
+          "Read",
+          "Grep",
+          "Glob",
+          "Edit",
+          "Write",
+          "Bash"
+        ],
+        "skills": [
+          {
+            "name": "tdd"
+          },
+          {
+            "name": "diagnosing-bugs"
+          },
+          {
+            "name": "codebase-design"
+          },
+          {
+            "name": "to-spec"
+          },
+          {
+            "name": "to-tickets"
+          }
+        ],
+        "workspaces": [
+          "worktrees/child"
+        ]
+      },
+      "budget": {
+        "turns": {
+          "min": 3,
+          "max": 240
+        },
+        "spend": {
+          "min": 0.05,
+          "max": 20
+        }
+      },
+      "checks": [
+        "scope_gate",
+        "security_gate"
+      ]
+    },
+    {
+      "name": "router",
+      "kind": "agent",
+      "model": "claude-deepseek-v4-flash",
+      "tools": [
+        "Read",
+        "Grep",
+        "Glob"
+      ],
+      "budget": {
+        "turns": {
+          "min": 3,
+          "max": 80
+        },
+        "spend": {
+          "min": 0.05,
+          "max": 8
+        }
+      },
+      "deadline": 1200,
+      "skill": "ask-matt",
+      "may_spawn": true,
+      "output_key": "spawns",
+      "next": {
+        "fail": "exit:fail"
+      },
+      "instructions": "# Role: router\n\nYou decide what work a request needs and ask for it. You read the repository and the request. You change nothing yourself.\n\nThe limits you may ask within are in the `limits` field of your input: the allowed `skills`, `models`, `efforts`, `tools` and `workspaces`, and the budgets. Read them before you ask.\n\nYou run the skill you were given. Then turn its advice into requests for child agents. Each child is one fresh session with its own prompt, skill, and settings.\n\nReturn these fields beside `status` and `reasons`:\n\n- `spawns`: a list of requests, each `{prompt, skill, model, effort, tools, turns, spend, deadline, workspace}`.\n  - Use exactly these field names. A request with any other field, such as `name`, `skills`, `budget` or `acceptance_commands`, is rejected whole, and so is a request that names an `id`, a `key` or a `name`: code assigns the identity.\n  - `prompt`: the full task for the child. The child sees nothing else from you, so state the goal, the paths, and the done condition. **End every prompt with the child's own stopping rule.** A child has no budget discipline of its own: it will read and edit until its turn cap and then return nothing, keeping only uncommitted edits. `error_max_turns` ends the session mid-work, so the child never gets the turn that would have returned its object - a stopping rule in the prompt cannot save a child whose cap was too small, it only helps one that is close to finishing. Measured 2026-10-05, seven children across two runs: four spent 41-46 of their 40-45 turns on the LIVE_VALIDATION, F6.10, P.9 and `--require-rom` work (run-20261005-201716), and three more died at 41, 46 and 51 turns on a three-bug TDD task, each with real edits already in its worktree and no artifact at all (run-20261005-205624). Every one of those seven had been handed 40-50 turns.\n  **Size `turns` to the work, not to those numbers.** A child that edits code and runs a build needs at least 100; a child that only reads and reports needs 30. Measured cost is roughly three cents a turn, so raise `spend` with `turns` or the child hits the other wall instead.\n  **Give a child one deliverable, never three.** The three-bug child of run-20261005-205624 ran out with its edits made and nothing returned; three narrower children on the same budget would have produced three artifacts.\n  Within that, still tell it in the prompt: read the minimum you need and act rather than survey; return your object before your last turns rather than at the wall; and if you cannot finish, return `fail` with the reason `out_of_budget` and a plain list of what you did finish, so the edits are not orphaned.\n  - `skill`: one skill, as a string, from the allowed list. It is never a list, and a skill outside the allowed list is rejected.\n  - `workspace`: one value from the allowed list, copied **verbatim**, character for character. It is a label, not a path: never append a sub-directory to it (`worktrees/child/mine` is rejected when the allowed value is `worktrees/child`) and never invent one. The engine gives every writing child its own worktree under that label, so two parallel children may name the same value and still never share a directory. A value that is not in the allowed list, character for character, is rejected whole.\n  - Every other field is optional and may only narrow the limits you were given.\n\nAsk for the fewest children that do the job. Use a cheaper model for reading and a stronger one for design. Parallel children each get their own worktree off the allowed workspace label, so naming the same allowed value for all of them is correct and keeps them isolated. Code checks each request against limits you cannot change. A request over any limit is rejected whole, so stay inside the limits.\nIf no child is needed, return `fail` with the reason `no_work`.\n\nExample of one request, in `spawns`:\n\n```json\n{\"prompt\": \"Add a retry with backoff to uploader.py. Done when tests/test_uploader.py passes.\", \"skill\": \"tdd\", \"model\": \"claude-deepseek-v4-flash\", \"effort\": \"medium\", \"tools\": [\"Read\", \"Edit\"], \"turns\": 20, \"spend\": 1.0, \"workspace\": \"worktrees/child\"}\n```\n\n## Budget discipline\n\nYou are the cheapest place in this graph to fail and the most expensive one to lose: a router that runs out of budget produces no run at all, while a child that does loses one child.\n\nRead what you need and no more. Spend at most about fifteen turns of reading the repository, then return your object. If the request cannot be routed from what you have read by then, return `needs-human` with the question that would settle it, instead of reading further."
+    },
+    {
+      "name": "scope_gate",
+      "kind": "gate",
+      "check": "scope",
+      "params": {
+        "allowed_generated": [
+          "docs/community-packs.md",
+          "docs/community-packs.json"
+        ]
+      }
+    },
+    {
+      "name": "security_gate",
+      "kind": "gate",
+      "check": "security",
+      "params": {
+        "sensitive_paths": [
+          "*.env*",
+          "*ByokKeyStore*",
+          "*ByokJobLauncher*",
+          "*jev_client*",
+          "*.pem",
+          "*.p12"
+        ]
+      }
+    },
+    {
+      "name": "final_gate",
+      "kind": "gate",
+      "check": "ac-verify",
+      "params": {
+        "commands_from": "route"
+      },
+      "next": {
+        "fail": "exit:fail"
+      }
+    }
+  ]
+}
