@@ -19,7 +19,7 @@ Held-out set: **121 cases over 27 NES games, 15 expecting `NONE`, 4 in pt-BR**.
 | Backend | Correct | Wrong entries | Discarded | Gate (≥ 90 % correct, ≤ 5 % wrong) | Offered |
 |---|---|---|---|---|---|
 | `jev` (`typesafe/jev-1.13`) | **120/121 = 99.17 %** | **1/121 = 0.83 %** | 0 | **passes** | **yes** |
-| `ollama` `qwen2.5:7b-instruct` | QWEN_CORRECT | QWEN_WRONG | QWEN_DISCARDED | QWEN_GATE | no |
+| `ollama` `qwen2.5:7b-instruct` | 100/121 = 82.64 % | 13/121 = 10.74 % | 0 | fails both | no |
 
 Jev: 105/106 when an entry was expected, 15/15 when `NONE` was expected; median
 latency 0.516 s, max 1.495 s; total cost US$ 0.00466 under a US$ 0.10 cap.
@@ -60,7 +60,7 @@ python3 scripts/cheat_intent_eval.py --backend jev \
 # Local model, same set.
 python3 scripts/cheat_intent_eval.py --backend ollama --model qwen2.5:7b-instruct \
   --cases tests/fixtures/cheat-intent/heldout-intents.json \
-  --out /tmp/p11-922/qwen.json                              # exit QWEN_EXIT
+  --out /tmp/p11-922/qwen.json                              # exit 0
 ```
 
 Per-run JSON stays outside the repository.
@@ -92,4 +92,4 @@ key from the OS credential store only (`CheatIntentScriptRunner`,
 ## Verdict
 
 Jev passes the held-out gate on both bars and is the only backend the sheet
-offers (`CheatIntentSearch.OfferedBackends`). QWEN_VERDICT
+offers (`CheatIntentSearch.OfferedBackends`). `qwen2.5:7b-instruct` fails both bars on the held-out set too (89/106 when an entry was expected, 11/15 when `NONE` was; median latency 4.94 s), as it did on the original set (84.6 %, 7 wrong), so no local backend is offered and the sheet needs the network: the "works offline when the chosen backend is local" criterion of #922 has no backend to apply to until a local model passes the gate on its own numbers.
