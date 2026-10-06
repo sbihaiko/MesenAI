@@ -361,8 +361,8 @@
 									<ItemsControl.ItemTemplate>
 										<DataTemplate x:DataType="vm:SaveStateSlotViewModel">
 											<DockPanel Margin="0 3">
-												<Button Name="SlotLoadButton" DockPanel.Dock="Right" Classes="secondary small" VerticalAlignment="Center" Content="{l:Translate btnSaveStatesLoadSlot}" IsEnabled="{Binding LoadEnabled}" Click="OnSlotLoad" />
-												<Button Name="SlotSaveButton" DockPanel.Dock="Right" Classes="primary small" VerticalAlignment="Center" Margin="0 0 6 0" Content="{l:Translate btnSaveStatesSaveHere}" IsVisible="{Binding SaveHereVisible}" Click="OnSlotSaveHere" />
+												<Button Name="SlotLoadButton" GotFocus="OnSlotGotFocus" DockPanel.Dock="Right" Classes="secondary small" VerticalAlignment="Center" Content="{l:Translate btnSaveStatesLoadSlot}" IsEnabled="{Binding LoadEnabled}" Click="OnSlotLoad" />
+												<Button Name="SlotSaveButton" GotFocus="OnSlotGotFocus" DockPanel.Dock="Right" Classes="primary small" VerticalAlignment="Center" Margin="0 0 6 0" Content="{l:Translate btnSaveStatesSaveHere}" IsVisible="{Binding SaveHereVisible}" Click="OnSlotSaveHere" />
 												<Image Width="52" Height="49" Margin="6 0 10 0" VerticalAlignment="Center" Source="{Binding Thumbnail}" />
 												<StackPanel VerticalAlignment="Center">
 													<TextBlock Classes="title" Text="{Binding Label}" />

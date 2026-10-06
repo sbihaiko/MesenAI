@@ -55,6 +55,10 @@ public class PlaySheetsRenderTests : IDisposable
 
 	private readonly UiMode _uiMode = ConfigManager.Config.Preferences.UiMode;
 	private readonly Workspace _workspace = ConfigManager.Config.Preferences.Workspace;
+	private readonly bool _overrideSaveStateFolder = ConfigManager.Config.Preferences.OverrideSaveStateFolder;
+	private readonly string _saveStateFolder = ConfigManager.Config.Preferences.SaveStateFolder;
+	private readonly bool _pauseInBackground = ConfigManager.Config.Preferences.PauseWhenInBackground;
+	private readonly bool _pauseInMenus = ConfigManager.Config.Preferences.PauseWhenInMenusAndConfig;
 	private readonly string _folder = Path.Combine(Path.GetTempPath(), "mesen-play-sheets-" + Guid.NewGuid().ToString("N"));
 
 	public PlaySheetsRenderTests()
@@ -67,6 +71,10 @@ public class PlaySheetsRenderTests : IDisposable
 		PreferencesConfig prefs = ConfigManager.Config.Preferences;
 		prefs.UiMode = _uiMode;
 		prefs.Workspace = _workspace;
+		prefs.OverrideSaveStateFolder = _overrideSaveStateFolder;
+		prefs.SaveStateFolder = _saveStateFolder;
+		prefs.PauseWhenInBackground = _pauseInBackground;
+		prefs.PauseWhenInMenusAndConfig = _pauseInMenus;
 		try {
 			Directory.Delete(_folder, true);
 		} catch(IOException) {
@@ -407,52 +415,155 @@ public class PlaySheetsRenderTests : IDisposable
 		Render(window, "replays", sheet);
 	}
 
-	//The Save states slot grid (Load): a light sheet of slot tiles (W-P2's
+	//The slot cases read slot files, so they get a ROM name and a save-state folder
+	//of their own (restored in Dispose): an earlier case - or an earlier run - that
+	//wrote "Contra (USA)_1.mss" or the last-played game's slot must not turn an
+	//empty slot into a dated one. The game is real (the slot grid reads the core's
+	//ROM, not the view-model's) and paused, the state both slot surfaces open over.
+	private MainWindowViewModel LoadOwnGame(MainWindow window, MainWindowViewModel model)
+	{
+		PreferencesConfig prefs = ConfigManager.Config.Preferences;
+		prefs.OverrideSaveStateFolder = true;
+		prefs.SaveStateFolder = Path.Combine(_folder, "SaveStates");
+		prefs.PauseWhenInBackground = false;
+		prefs.PauseWhenInMenusAndConfig = false;
+		Directory.CreateDirectory(prefs.SaveStateFolder);
+		Assert.Equal(prefs.SaveStateFolder, ConfigManager.SaveStateFolder);
+
+		string rom = Path.Combine(_folder, "render-slots-" + Guid.NewGuid().ToString("N") + ".nes");
+		File.WriteAllBytes(rom, SyntheticNrom.Build());
+		Assert.True(EmuApi.LoadRom(rom, string.Empty), $"the core refused to load {rom}");
+		WaitUntil(() => EmuApi.IsRunning() && model.RomInfo.Format != RomFormat.Unknown && !model.RecentGames.Visible, "the ROM never reported as loaded");
+		EmuApi.Pause();
+		WaitUntil(() => EmuApi.IsPaused(), "the game never paused");
+		model.IsGamePaused = true;
+		//The load sizes the window to the game's picture; the render is the
+		//wireframes' 1100 x 740 like every other case here.
+		window.Width = 1100;
+		window.Height = 740;
+		Settle(window);
+		return model;
+	}
+
+	private static void WaitUntil(Func<bool> done, string what)
+	{
+		System.Diagnostics.Stopwatch clock = System.Diagnostics.Stopwatch.StartNew();
+		while(!done()) {
+			Assert.True(clock.ElapsedMilliseconds < 30000, what);
+			Dispatcher.UIThread.RunJobs();
+			System.Threading.Thread.Sleep(20);
+		}
+		Dispatcher.UIThread.RunJobs();
+	}
+
+	//The classic slot grid (Load) the quick load shortcut opens - W-P4's Save
+	//states row is its own grid since #909: a light sheet of slot tiles (W-P2's
 	//tile language), the 17 px title, 12 slots; Advanced keeps the classic grid.
 	[AvaloniaFact]
 	public void Slot_grid_renders_as_a_light_sheet_of_tiles()
 	{
 		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
-		(MainWindow window, MainWindowViewModel model) = Show();
-		//#909: W-P4's Save states row is its own grid now; this is the classic slot
-		//grid the quick load shortcut opens over a paused game.
-		model.RecentGames.Init(GameScreenMode.LoadState);
-		Settle(window);
+		(MainWindow window, MainWindowViewModel model) = Show(overlay: false);
+		try {
+			LoadOwnGame(window, model);
+			model.RecentGames.Init(GameScreenMode.LoadState);
+			Settle(window);
 
-		Border sheet = window.FindNamed<Border>("PlayHomeSlotSheet");
-		Assert.True(sheet.IsOnScreen());
-		Assert.Equal(Card, PlayerRender.SolidColor(sheet.Background));
-		Assert.Equal(new CornerRadius(14), sheet.CornerRadius);
-		StateGrid grid = sheet.FindAll<StateGrid>().Single();
-		Assert.Contains("tiles", grid.Classes);
-		StateGridEntry[] slots = grid.FindAll<StateGridEntry>().ToArray();
-		Assert.Equal(12, slots.Length);
-		Assert.All(slots, s => Assert.Contains("slot", s.Classes));
-		Button tile = slots[0].FindNamed<Button>("TileButton");
-		Assert.Equal(new CornerRadius(10), tile.CornerRadius);
-		TextBlock title = grid.FindNamed<TextBlock>("StateGridTitle");
-		AssertTitle(title, 17);
-		TextBlock slotTitle = slots[0].FindAll<TextBlock>().First(t => t.Classes.Contains("title"));
-		Assert.Equal("Inter", slotTitle.FontFamily.Name);
-		//The grid's own close button: the window holds more than one StateGrid.
-		Assert.True(grid.FindNamed<Button>("StateGridCloseButton").IsOnScreen());
-		//Player copy (final audit): not Mesen's "Load State Menu" / "Slot #1" / "<empty>".
-		Assert.Equal("Load a Slot", title.Text);
-		Assert.Equal("Slot 1", slotTitle.Text);
-		Assert.Equal("Empty", slots[0].FindAll<TextBlock>().First(t => t.Classes.Contains("subtitle")).Text);
-		Assert.Equal("Auto-save", slots[10].FindAll<TextBlock>().First(t => t.Classes.Contains("title")).Text);
+			Border sheet = window.FindNamed<Border>("PlayHomeSlotSheet");
+			Assert.True(sheet.IsOnScreen());
+			Assert.Equal(Card, PlayerRender.SolidColor(sheet.Background));
+			Assert.Equal(new CornerRadius(14), sheet.CornerRadius);
+			StateGrid grid = sheet.FindAll<StateGrid>().Single();
+			Assert.Contains("tiles", grid.Classes);
+			StateGridEntry[] slots = grid.FindAll<StateGridEntry>().ToArray();
+			Assert.Equal(12, slots.Length);
+			Assert.All(slots, s => Assert.Contains("slot", s.Classes));
+			Button tile = slots[0].FindNamed<Button>("TileButton");
+			Assert.Equal(new CornerRadius(10), tile.CornerRadius);
+			TextBlock title = grid.FindNamed<TextBlock>("StateGridTitle");
+			AssertTitle(title, 17);
+			TextBlock slotTitle = slots[0].FindAll<TextBlock>().First(t => t.Classes.Contains("title"));
+			Assert.Equal("Inter", slotTitle.FontFamily.Name);
+			//The grid's own close button: the window holds more than one StateGrid.
+			Assert.True(grid.FindNamed<Button>("StateGridCloseButton").IsOnScreen());
+			//Player copy (final audit): not Mesen's "Load State Menu" / "Slot #1" / "<empty>".
+			Assert.Equal("Load a Slot", title.Text);
+			Assert.Equal("Slot 1", slotTitle.Text);
+			Assert.Equal("Empty", slots[0].FindAll<TextBlock>().First(t => t.Classes.Contains("subtitle")).Text);
+			Assert.Equal("Auto-save", slots[10].FindAll<TextBlock>().First(t => t.Classes.Contains("title")).Text);
 
-		//#909: the shortcut opens this grid over the Play home, whose scrim sits
-		//over the sheet's own fill (the old W-P4 door opened it over the game
-		//view). The card colour is asserted on the sheet itself just above; what
-		//the frame has to show is the tile below.
-		AssertShellChrome(window);
-		Bitmap frame = PlayerRender.Capture(window);
-		PlayerRender.Save(frame, "slot-grid");
-		//An empty slot is a FILL tile, not the classic black picture.
-		Assert.False(slots[0].Enabled);
-		Point centre = tile.TranslatePoint(new Point(tile.Bounds.Width / 2, tile.Bounds.Height / 2), window)!.Value;
-		AssertPixel(PlayerRender.SolidColor(tile.Background), frame, centre);
+			AssertShellChrome(window);
+			Bitmap frame = PlayerRender.Capture(window);
+			AssertPng(PlayerRender.Save(frame, "slot-grid"), frame);
+			//An empty slot is a FILL tile, not the classic black picture.
+			Assert.False(slots[0].Enabled);
+			Point centre = tile.TranslatePoint(new Point(tile.Bounds.Width / 2, tile.Bounds.Height / 2), window)!.Value;
+			AssertPixel(PlayerRender.SolidColor(tile.Background), frame, centre);
+		} finally {
+			EmuApi.Stop();
+			Dispatcher.UIThread.RunJobs();
+		}
+	}
+
+	//#909 (W-P4's Save states row): ONE light sheet over the paused game - the
+	//17 px title, an inset list of eleven rows (ten slots and the auto-save),
+	//each slot with a tinted *Save here* and a secondary *Load*, Load disabled
+	//while the slot is empty, the auto-save offering Load alone.
+	[AvaloniaFact]
+	public void Save_states_sheet_renders_as_one_grid_of_slots()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model) = Show(overlay: false);
+		try {
+			LoadOwnGame(window, model);
+			model.OpenPauseOverlay();
+			model.OpenSaveStatesSheet();
+			Settle(window);
+
+			Border sheet = window.FindNamed<Border>("PlayerSaveStatesSheet");
+			AssertSheet(sheet, 440);
+			AssertTitle(TitleOf(sheet), 17);
+			Border inset = sheet.FindAll<Border>().First(b => b.Classes.Contains("inset"));
+			Assert.Equal(InsetFill, PlayerRender.SolidColor(inset.Background));
+
+			ItemsControl grid = window.FindNamed<ItemsControl>("SaveStatesGrid");
+			Assert.Equal(SaveStateSheet.ManualSlots + 1, grid.ItemCount);
+			Control first = Assert.IsAssignableFrom<Control>(grid.ContainerFromIndex(0));
+			Button save = first.FindAll<Button>().Single(b => b.Name == "SlotSaveButton");
+			Button load = first.FindAll<Button>().Single(b => b.Name == "SlotLoadButton");
+			Assert.True(save.IsOnScreen() && load.IsOnScreen());
+			Assert.Contains("primary", save.Classes);
+			Assert.Equal(PlayTint, PlayerRender.SolidColor(save.Background));
+			Assert.Equal("Inter", LabelOf(save).FontFamily.Name);
+			Assert.Contains("secondary", load.Classes);
+			Assert.False(load.IsEffectivelyEnabled, "an empty slot's Load is armed");
+			TextBlock slotTitle = first.FindAll<TextBlock>().First(t => t.Classes.Contains("title"));
+			Assert.Equal("Inter", slotTitle.FontFamily.Name);
+			Assert.Equal("Slot 1", slotTitle.Text);
+			Assert.Equal("Empty", first.FindAll<TextBlock>().First(t => t.Classes.Contains("footnote")).Text);
+			Control auto = Assert.IsAssignableFrom<Control>(grid.ContainerFromIndex(SaveStateSheet.ManualSlots));
+			Assert.False(auto.FindAll<Button>().Any(b => b.Name == "SlotSaveButton" && b.IsEffectivelyVisible), "the auto-save row offers a Save here");
+
+			Bitmap frame = Render(window, "save-states-sheet", sheet);
+			AssertPng(Path.Combine(PlayerRender.OutputFolder, "save-states-sheet.png"), frame);
+			//The tint is on the pixels, not only on the brush.
+			Point centre = save.TranslatePoint(new Point(4, save.Bounds.Height / 2), window)!.Value;
+			AssertPixel(PlayTint, frame, centre);
+		} finally {
+			EmuApi.Stop();
+			Dispatcher.UIThread.RunJobs();
+		}
+	}
+
+	//The PNG on disk is the frame the assertions read: it decodes, at the
+	//window's size - a render gate whose file is empty or stale gates nothing.
+	private static void AssertPng(string path, Bitmap frame)
+	{
+		Assert.True(File.Exists(path), $"the render was not written ({path})");
+		Assert.True(File.GetLastWriteTimeUtc(path) > DateTime.UtcNow.AddMinutes(-1), $"the render on disk is stale ({path})");
+		using Bitmap saved = new(path);
+		Assert.Equal(frame.PixelSize, saved.PixelSize);
+		Assert.Equal(new PixelSize(1100, 740), saved.PixelSize);
 	}
 
 	//W-P13: the 40 px grey lock badge, the drop zone, the orange wrong-file

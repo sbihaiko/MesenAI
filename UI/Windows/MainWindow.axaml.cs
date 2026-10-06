@@ -354,6 +354,20 @@ namespace Mesen.Windows
 			}
 		}
 
+		//The grid scrolls (eleven rows do not fit the sheet), and the pad's
+		//directional search only answers a row that is on screen: with just the
+		//focused row scrolled into view, Down off the last visible row found no row
+		//below it and left the grid for Shared replays, so slots 7 … 10 and the
+		//auto-save were out of the pad's reach. Keeping one row either side of the
+		//focused one in view is what lets every Down / Up land on the next row.
+		private void OnSlotGotFocus(object? sender, FocusChangedEventArgs e)
+		{
+			if((sender as Control)?.Parent is Control row && row.Bounds.Height > 0) {
+				double h = row.Bounds.Height;
+				row.BringIntoView(new Rect(0, -h, row.Bounds.Width, h * 3));
+			}
+		}
+
 		private void OnOverlayEnhancements(object? sender, RoutedEventArgs e)
 		{
 			//P.7 (§6.1): replaces the overlay with the quick-toggle panel,

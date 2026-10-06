@@ -16,6 +16,7 @@ using Mesen.Config;
 using Mesen.Controls;
 using Mesen.Interop;
 using Mesen.Logic;
+using Mesen.Utilities;
 using Mesen.ViewModels;
 using Mesen.Windows;
 using Xunit;
@@ -300,9 +301,9 @@ public class PlayPadNavigationTests : IDisposable
 		PlayPadNavigationWiring.TickForTest(window, Array.Empty<ushort>(), TimeSpan.FromMilliseconds(milliseconds), BackendName, BackendCode);
 	}
 
-	private void LoadSyntheticGame(MainWindowViewModel model)
+	private void LoadSyntheticGame(MainWindowViewModel model, string name = "synthetic-nrom")
 	{
-		string rom = Path.Combine(_folder, "synthetic-nrom.nes");
+		string rom = Path.Combine(_folder, name + ".nes");
 		File.WriteAllBytes(rom, SyntheticNrom.Build());
 		Assert.True(EmuApi.LoadRom(rom, string.Empty), $"the core refused to load {rom}");
 		WaitFor(() => EmuApi.IsRunning() && model.RomInfo.Format != RomFormat.Unknown, "the ROM never reported as loaded");
@@ -450,15 +451,23 @@ public class PlayPadNavigationTests : IDisposable
 	}
 
 	//#909 (W-P4): the Save states sheet is ONE grid, so what the pad walks is its
-	//own rows - the ring opens on the row the rule names (no state yet: the first
-	//slot), Right reaches the *Load* beside it, Down the next slot's row, and a
-	//Confirm on *Save here* writes that slot over the real core.
+	//own rows - the ring opens on the row the rule names (the newest state), Right
+	//reaches the armed *Load* beside it, Down the next slot's row, and a Confirm
+	//on *Save here* writes that slot over the real core and arms its own Load.
+	//The ROM name is the case's own: with the suite's shared synthetic ROM the
+	//slots an earlier case (or run) wrote decided where the ring opened and
+	//whether there was a Load to reach at all.
 	[AvaloniaFact]
 	public void The_save_states_grid_is_one_pad_step_per_slot_action()
 	{
 		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
 		(MainWindow window, MainWindowViewModel model) = ShowPlay();
-		LoadSyntheticGame(model);
+		LoadSyntheticGame(model, "savesheet-step-" + Guid.NewGuid().ToString("N"));
+
+		//Slot 1 holds a state, so its Load is armed and the rule opens on it.
+		string slot1 = Path.Combine(ConfigManager.SaveStateFolder, model.RomInfo.GetRomName() + "_1." + FileDialogHelper.MesenSaveStateExt);
+		System.Threading.Tasks.Task.Run(() => EmuApi.SaveState(1)).Wait(TimeSpan.FromSeconds(30));
+		WaitFor(() => File.Exists(slot1), $"the core did not write slot 1 ({slot1})");
 
 		model.TogglePlayerOverlay();
 		WaitFor(() => FocusedName(window) == "OverlayResumeButton", "W-P4 opened without the focus on Resume");
@@ -469,28 +478,34 @@ public class PlayPadNavigationTests : IDisposable
 		Assert.Equal(11, model.SaveStateSlots.Count);
 
 		//The ring lands on the grid's own focus row, on its first action - the same
-		//row the rule answers (a slot with no state reads as slot 1).
-		WaitFor(() => FocusedRow(window) == model.FocusSaveStateSlot() && FocusedName(window) == "SlotSaveButton",
-			"the grid did not take the ring on its own row");
-		int first = model.FocusSaveStateSlot()!.Slot;
+		//row the rule answers.
+		Assert.Equal(1, model.FocusSaveStateSlot()!.Slot);
+		WaitFor(() => FocusedRow(window)?.Slot == 1 && FocusedName(window) == "SlotSaveButton",
+			$"the grid did not take the ring on its own row ({Focused(window, model)})");
 
 		//Right: the *Load* on the same row, one press away.
 		Release(window);
 		Feed(window, PadNavAction.Right);
-		WaitFor(() => FocusedRow(window)?.Slot == first && FocusedName(window) == "SlotLoadButton",
-			"the D-pad did not reach the row's own Load");
+		WaitFor(() => FocusedRow(window)?.Slot == 1 && FocusedName(window) == "SlotLoadButton",
+			$"the D-pad did not reach the row's own Load ({Focused(window, model)})");
 
-		//Left, back onto that row's *Save here*, and Confirm: the state lands in the
-		//slot the rule opened the sheet on, and that row's own Load is armed.
+		//Left, back onto that row's *Save here*, then Down to slot 2's.
 		Release(window);
 		Feed(window, PadNavAction.Left);
-		WaitFor(() => FocusedRow(window)?.Slot == first && FocusedName(window) == "SlotSaveButton",
+		WaitFor(() => FocusedRow(window)?.Slot == 1 && FocusedName(window) == "SlotSaveButton",
 			"the D-pad did not come back to the row's Save here");
 		Release(window);
+		Feed(window, PadNavAction.Down);
+		WaitFor(() => FocusedRow(window)?.Slot == 2 && FocusedName(window) == "SlotSaveButton",
+			$"Down did not reach slot 2's Save here ({Focused(window, model)})");
+		Assert.False(model.SaveStateSlot(2)!.LoadEnabled);
+
+		//Confirm: the state lands in slot 2, and that row's own Load is armed.
+		Release(window);
 		Feed(window, PadNavAction.Confirm);
-		WaitFor(() => model.SaveStateSlot(first)!.HasState, "Confirm on Save here did not write the slot");
-		Assert.True(model.SaveStateSlot(first)!.LoadEnabled);
-		Assert.True(File.Exists(model.SaveStateSlot(first)!.FileName));
+		WaitFor(() => model.SaveStateSlot(2)!.HasState, "Confirm on Save here did not write slot 2");
+		Assert.True(model.SaveStateSlot(2)!.LoadEnabled);
+		Assert.True(File.Exists(model.SaveStateSlot(2)!.FileName));
 	}
 
 	//The row the ring is on, read off the control's own DataContext - a grid of
@@ -552,46 +567,99 @@ public class PlayPadNavigationTests : IDisposable
 		Assert.False(model.IsPlayerOverlayVisible);
 	}
 
-	//Decision 3's open choice, taken as "scope the bridge to exclude the grid":
-	//StateGrid already moves its own SelectedIndex from the pad, off player 1's
-	//port mappings, in its own timer (and that same loop serves Advanced, where
-	//no Play mapping exists), so the bridge must not also move the focus there.
-	//Back is still the bridge's, because the grid's own loop has no exit and a
-	//player who cannot leave the slot grid is the failure ADR-0256 exists to
-	//prevent.
+	//#909 (W-P4 acceptance: "arrow keys / pad reach every slot action" and "Esc
+	//returns to W-P4"): the classic slot grid lost its W-P4 door - the shortcut
+	//route keeps it and Back_leaves_a_slot_grid_opened_by_the_shortcut pins that
+	//one - so the rule this case stands for now lives on the Save states sheet.
+	//The pad walks the grid row by row, every enabled action on every row takes
+	//the ring (a disabled *Load* is not a stop), and Back closes the sheet back to
+	//W-P4 with the game still paused under it.
 	[AvaloniaFact]
-	public void The_slot_grid_keeps_the_pad_and_back_still_leaves()
+	public void The_save_states_grid_keeps_the_pad_and_back_still_leaves()
 	{
 		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
 		(MainWindow window, MainWindowViewModel model) = ShowPlay();
-		LoadSyntheticGame(model);
+		//A ROM name no other case uses, so the slots holding a state are the one
+		//this case writes and nothing an earlier case left behind.
+		LoadSyntheticGame(model, "savesheet-pad-" + Guid.NewGuid().ToString("N"));
 
-		//#909: W-P4's Save states sheet is its own grid of slots now, so this classic
-		//grid is the one the load/save shortcut opens over the game - the door the
-		//rule below is about (the grid, not the door, is what must keep the pad).
-		model.RecentGames.Init(GameScreenMode.SaveState);
-		WaitFor(() => model.RecentGames.Visible, "the save shortcut did not open the slot grid");
-		WaitFor(() => GridHasFocus(window), $"the slot grid opened without the focus ({Focused(window, model)})");
+		//One slot with a state, so the walk crosses an armed *Load* and the
+		//disabled ones around it.
+		const int armed = 3;
+		string armedFile = Path.Combine(ConfigManager.SaveStateFolder, model.RomInfo.GetRomName() + "_" + armed + "." + FileDialogHelper.MesenSaveStateExt);
+		System.Threading.Tasks.Task.Run(() => EmuApi.SaveState(armed)).Wait(TimeSpan.FromSeconds(30));
+		WaitFor(() => File.Exists(armedFile), $"the core did not write slot {armed} ({armedFile})");
 
-		//The D-pad is the grid's: the focus stays where it is.
-		foreach(PadNavAction direction in Directions) {
-			Feed(window, direction);
-			Assert.True(GridHasFocus(window), $"the bridge moved the focus off the slot grid on {direction}");
+		model.TogglePlayerOverlay();
+		WaitFor(() => FocusedName(window) == "OverlayResumeButton", "W-P4 opened without the focus on Resume");
+		Click(window, "OverlaySaveStatesButton");
+		WaitFor(() => model.IsSaveStatesSheetVisible, "W-P4's Save states row did not open its sheet");
+		Assert.True(model.SaveStateSlot(armed)!.LoadEnabled, $"slot {armed}'s Load is not armed");
+
+		//The ring opens on the newest state's row; Up walks it to the first slot.
+		WaitFor(() => FocusedRow(window)?.Slot == armed, $"the sheet did not open on slot {armed} ({Focused(window, model)})");
+		for(int up = armed; up > 1; up--) {
+			int from = FocusedRow(window)!.Slot;
+			Release(window);
+			Feed(window, PadNavAction.Up);
+			WaitFor(() => FocusedRow(window)?.Slot == from - 1, $"Up did not leave slot {from} for the row above ({Focused(window, model)})");
 		}
 
-		//Confirm is the grid's too (its own loop reads the pad's A/B/X/Y/Select/
-		//Start as "load this slot"), so the sheet must still be up.
-		Release(window);
-		Feed(window, PadNavAction.Confirm);
-		Pump();
-		Assert.True(model.RecentGames.Visible, "Confirm took the slot grid's own load button away from it");
-		Assert.False(model.IsPlayerOverlayVisible);
+		//Every row, top to bottom: its *Save here*, then (when armed) the *Load*
+		//beside it, then Down to the next row.
+		HashSet<string> reached = new();
+		List<SaveStateSlotViewModel> rows = model.SaveStateSlots.ToList();
+		for(int i = 0; i < rows.Count; i++) {
+			SaveStateSlotViewModel row = rows[i];
+			if(row.SaveHereVisible) {
+				if(FocusedName(window) == "SlotLoadButton") {
+					Release(window);
+					Feed(window, PadNavAction.Left);
+				}
+				WaitFor(() => FocusedRow(window) == row && FocusedName(window) == "SlotSaveButton",
+					$"the pad did not reach slot {row.Slot}'s Save here ({Focused(window, model)})");
+				reached.Add(row.Slot + ":save");
+				if(row.LoadEnabled) {
+					Release(window);
+					Feed(window, PadNavAction.Right);
+					WaitFor(() => FocusedRow(window) == row && FocusedName(window) == "SlotLoadButton",
+						$"the pad did not reach slot {row.Slot}'s Load ({Focused(window, model)})");
+					reached.Add(row.Slot + ":load");
+				}
+			} else if(row.LoadEnabled) {
+				WaitFor(() => FocusedRow(window) == row && FocusedName(window) == "SlotLoadButton",
+					$"the pad did not reach the auto-save's Load ({Focused(window, model)})");
+				reached.Add(row.Slot + ":load");
+			}
 
-		//Back is not: it leaves, like Esc, back to W-P4.
+			//The next row that has anything enabled is one Down away - from the
+			//*Save here* column, which every manual row has: from an armed *Load*
+			//over a disabled one, Down's projection has no target in the grid.
+			if(i + 1 < rows.Count && (rows[i + 1].SaveHereVisible || rows[i + 1].LoadEnabled)) {
+				if(FocusedName(window) == "SlotLoadButton" && row.SaveHereVisible) {
+					Release(window);
+					Feed(window, PadNavAction.Left);
+					WaitFor(() => FocusedRow(window) == row && FocusedName(window) == "SlotSaveButton",
+						$"Left did not come back to slot {row.Slot}'s Save here ({Focused(window, model)})");
+				}
+				Release(window);
+				Feed(window, PadNavAction.Down);
+				SaveStateSlotViewModel next = rows[i + 1];
+				WaitFor(() => FocusedRow(window) == next, $"Down did not leave slot {row.Slot} for slot {next.Slot} ({Focused(window, model)})");
+			}
+		}
+
+		//Every enabled action, and nothing else.
+		HashSet<string> expected = rows.SelectMany(r => (r.SaveHereVisible ? new[] { r.Slot + ":save" } : Array.Empty<string>())
+			.Concat(r.LoadEnabled ? new[] { r.Slot + ":load" } : Array.Empty<string>())).ToHashSet();
+		Assert.Equal(expected.OrderBy(s => s), reached.OrderBy(s => s));
+		Assert.Contains(armed + ":load", reached);
+
+		//Back leaves, like Esc, back to W-P4 - the game still paused under it.
 		Release(window);
 		Feed(window, PadNavAction.Back);
 		Pump();
-		WaitFor(() => !model.RecentGames.Visible && model.IsPlayerOverlayVisible, "Back did not close the slot grid back to W-P4");
+		WaitFor(() => !model.IsSaveStatesSheetVisible && model.IsPlayerOverlayVisible, "Back did not close the Save states sheet back to W-P4");
 		WaitFor(() => FocusedName(window) == "OverlayResumeButton", "W-P4 came back without the focus");
 		Assert.True(EmuApi.IsPaused());
 	}
@@ -688,6 +756,15 @@ public class PlayPadNavigationTests : IDisposable
 		model.RecentGames.Init(GameScreenMode.LoadState);
 		WaitFor(() => model.RecentGames.Visible, "the Load-state shortcut did not open the slot grid");
 		WaitFor(() => GridHasFocus(window), () => $"the slot grid opened without the focus ({Focused(window, model)})");
+
+		//Decision 3's open choice, "scope the bridge to exclude the grid": StateGrid
+		//moves its own SelectedIndex from the pad in its own timer, so the D-pad is
+		//the grid's and the bridge must not move the focus off it. Back is still
+		//the bridge's, because the grid's own loop has no exit.
+		foreach(PadNavAction direction in Directions) {
+			Feed(window, direction);
+			Assert.True(GridHasFocus(window), $"the bridge moved the focus off the slot grid on {direction}");
+		}
 
 		Release(window);
 		Feed(window, PadNavAction.Back);
