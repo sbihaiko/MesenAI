@@ -1,7 +1,7 @@
 # P.12 checked web cheat lookup: measurement (2026-10-06)
 
 Issue #923, ADR-0245 section 4 (P.12). The tool is `scripts/cheat_web_lookup.py`.
-Its tests are `tests/fixtures/cheat-web-lookup/test_cheat_web_lookup.py`.
+Its tests are `scripts/test_cheat_web_lookup.py`.
 
 ## Fixed parameters
 
