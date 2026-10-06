@@ -504,6 +504,13 @@ class Checker:
         frame about to run), so the window spans `frames + 1` emulated frames
         with `frames` samples - and it does so identically on both sides, which
         is what makes the comparison sound.
+
+        Known limit (measured 2026-10-06, docs/validation/measurements/
+        p12-cheat-web-lookup-2026-10-06.md): the session's `ram` verb copies
+        raw internal RAM (HeadlessReadNesRam), while the core applies a RAM
+        code as a CPU read intercept (NesMemoryManager::Read -> ApplyCheat).
+        The "on" side therefore never sees the promised value, and no code can
+        pass until the runner offers a cheat-aware read.
         """
         if not addresses:
             raise LookupError("no address to check")
@@ -704,7 +711,7 @@ def main(argv=None, *, env=None, transport=None, session_factory=None,
             rom=args.rom, game=args.game, console=args.console, source=source,
             page=args.page, page_file=args.page_file, frames=args.frames,
             state=args.state, work=args.work, session_factory=session_factory,
-            transport=transport, timeout=args.timeout,
+            transport=transport, timeout=args.timeout, progress=sys.stderr,
         )
     except LookupError as exc:
         print(scrub(f"cheat_web_lookup: {exc}", env), file=sys.stderr)
