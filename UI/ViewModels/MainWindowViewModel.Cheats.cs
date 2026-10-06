@@ -26,6 +26,16 @@ namespace Mesen.ViewModels
 					_cheatsSheet = new PlayerCheatsSheetViewModel();
 					//G.2: back to W-P4 with its row values refreshed.
 					_cheatsSheet.Closed += OpenPauseOverlay;
+					//P.11 (#922): the search by intent runs scripts/cheat_intent.py
+					//under the python3 and tools Remaster already located.
+					IByokKeyStore keyStore = ByokKeyStores.ForCurrentOS();
+					_cheatsSheet.ConfigureIntentSearch(keyStore, async () => {
+						await Remaster.EnsureFeasibilityMeasured();
+						RemasterFeasibility? found = Remaster.Feasibility;
+						return found is { CanRunJobs: true }
+							? new CheatIntentScriptRunner(keyStore, found.PythonExecutable, found.PythonPrefixArgs, found.ToolsFolder)
+							: null;
+					});
 				}
 				return _cheatsSheet;
 			}

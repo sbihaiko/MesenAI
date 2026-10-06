@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Mesen.Interop;
 using Mesen.Logic;
@@ -40,6 +41,25 @@ namespace Mesen.ViewModels
 		[ObservableProperty] public partial string NewDescription { get; set; } = "";
 		[ObservableProperty] public partial string AddCodeError { get; private set; } = "";
 
+		//P.11 (ADR-0245 §4, #922): search by intent. The typed intent goes to
+		//scripts/cheat_intent.py (Jev, the one backend that passed the #915
+		//gate) through the injected runner; the matched listed entry is
+		//highlighted, or IntentLine says none matched. The OpenRouter key is
+		//typed here once, kept only in the OS credential store and removable
+		//from here (ADR-0242 Q1, ADR-0247).
+		[ObservableProperty] public partial string IntentText { get; set; } = "";
+		[ObservableProperty] public partial string IntentLine { get; private set; } = "";
+		[ObservableProperty] public partial bool IsIntentSearching { get; private set; }
+		[ObservableProperty] public partial bool IsIntentAvailable { get; private set; }
+		[ObservableProperty] public partial string KeyText { get; set; } = "";
+		[ObservableProperty] public partial string KeyLine { get; private set; } = "";
+
+		public string FindLabel => CheatIntentSearch.FindLabel;
+		public string IntentPlaceholder => CheatIntentSearch.IntentPlaceholder;
+		public string SaveKeyLabel => CheatIntentSearch.SaveKeyLabel;
+		public string RemoveKeyLabel => CheatIntentSearch.RemoveKeyLabel;
+		public string KeyPlaceholder => CheatIntentSearch.KeyPlaceholder;
+
 		public string ReplayNote => CheatSheet.ReplayNote;
 		public string AllOffNote => CheatSheet.AllOffNote;
 
@@ -62,6 +82,10 @@ namespace Mesen.ViewModels
 		//changes under the sheet (a caller with no running game, or a test).
 		private Func<string>? _runningCheatSha1;
 		private int _communityLoading;
+		private IByokKeyStore? _keyStore;
+		private Func<Task<ICheatIntentRunner?>>? _intentRunner;
+		private CheatDbCode? _intentMatch;
+		private int _intentToken;
 
 		//CheatCodes saves to the running game's file: a sheet left over from
 		//another copy must not write that game's list (CheatSheet.SavesTo).
@@ -96,6 +120,7 @@ namespace Mesen.ViewModels
 			NewDescription = "";
 			AddCodeError = "";
 			SetSearchTextSilently("");
+			ClearIntent();
 			Refresh();
 			IsVisible = true;
 		}
@@ -167,10 +192,88 @@ namespace Mesen.ViewModels
 			Refresh();
 		}
 
+		//The key store and a factory for the runner (null when python3 or the
+		//tools are missing); without them the intent search stays hidden.
+		public void ConfigureIntentSearch(IByokKeyStore keyStore, Func<Task<ICheatIntentRunner?>> runner)
+		{
+			_keyStore = keyStore;
+			_intentRunner = runner;
+			Refresh();
+		}
+
+		public async Task SearchByIntent()
+		{
+			CheatDbGame? game = _borrowed ?? _thisCopy;
+			if(game == null || _intentRunner == null || IsIntentSearching) {
+				return;
+			}
+			int token = ++_intentToken;
+			_intentMatch = null;
+			IntentLine = "";
+			IsIntentSearching = true;
+			CheatIntentOutcome outcome;
+			try {
+				ICheatIntentRunner? runner = await _intentRunner();
+				outcome = runner == null
+					? new CheatIntentOutcome(CheatIntentStatus.Failed, null, CheatIntentSearch.NeedsToolsLine)
+					: await CheatIntentSearch.SearchAsync(runner, game, IntentText);
+			} catch(ByokKeyMissingException) {
+				outcome = new CheatIntentOutcome(CheatIntentStatus.Failed, null, CheatIntentSearch.NeedsKeyLine);
+			} catch(Exception ex) when(ex is ByokLaunchException || ex is ByokKeyStoreException) {
+				//Their text never carries the key (ByokJobLauncher, ByokKeyStore)
+				outcome = new CheatIntentOutcome(CheatIntentStatus.Failed, null, ex.Message);
+			}
+			if(token != _intentToken) {
+				return;
+			}
+			IsIntentSearching = false;
+			_intentMatch = outcome.Entry;
+			IntentLine = outcome.Line;
+			Refresh();
+		}
+
+		public void SaveKey()
+		{
+			if(_keyStore == null || string.IsNullOrWhiteSpace(KeyText)) {
+				return;
+			}
+			try {
+				_keyStore.Write(CheatIntentSearch.Vendor, ByokKey.Normalize(KeyText));
+				KeyLine = CheatIntentSearch.KeyStoredLine;
+			} catch(ByokKeyStoreException ex) {
+				KeyLine = ex.Message;
+			}
+			KeyText = "";
+		}
+
+		public void RemoveKey()
+		{
+			if(_keyStore == null) {
+				return;
+			}
+			try {
+				KeyLine = _keyStore.Remove(CheatIntentSearch.Vendor) ? CheatIntentSearch.KeyRemovedLine : CheatIntentSearch.NoKeyLine;
+			} catch(ByokKeyStoreException ex) {
+				KeyLine = ex.Message;
+			}
+		}
+
+		private void ClearIntent()
+		{
+			_intentToken++;
+			_intentMatch = null;
+			IntentText = "";
+			IntentLine = "";
+			KeyText = "";
+			KeyLine = "";
+			IsIntentSearching = false;
+		}
+
 		//Not-in-list fallback: codes from a game picked by name, marked
 		//"made for another copy — may not work".
 		public void PickGame(CheatDbGame game)
 		{
+			ClearIntent();
 			_borrowed = game;
 			SetSearchTextSilently("");
 			Refresh();
@@ -178,6 +281,7 @@ namespace Mesen.ViewModels
 
 		public void ChangeGame()
 		{
+			ClearIntent();
 			_borrowed = null;
 			SetSearchTextSilently("");
 			Refresh();
@@ -236,7 +340,8 @@ namespace Mesen.ViewModels
 			GameResults = IsGameSearch ? CheatSheet.SearchGamesByName(_db, SearchText).ToList() : new List<CheatDbGame>();
 			string rowFilter = IsGameSearch ? "" : SearchText;
 			IReadOnlyList<CheatSheetRow> rows = CheatSheet.BuildRows(_console, game, anotherCopy, _stored, _recordingArt, rowFilter, _community);
-			Rows = rows.Select(r => new PlayerCheatRow(r, CheatShare.CanShare(r, _console, _cheatSha1))).ToList();
+			Rows = rows.Select(r => new PlayerCheatRow(r, CheatShare.CanShare(r, _console, _cheatSha1), CheatIntentSearch.IsMatch(r, _intentMatch))).ToList();
+			IsIntentAvailable = _intentRunner != null && _keyStore?.UnsupportedReason == null && game != null && CheatConsoleScope.HasCheatList(_console);
 			CountOn = CheatSheet.CountOn(_stored);
 			StatusLine = CheatSheet.StatusLine(_console, game, anotherCopy, CountOn, rows.Count(r => r.Source == CheatRowSource.Community), IsCommunityLoading);
 		}
@@ -255,11 +360,15 @@ namespace Mesen.ViewModels
 		public string CommunityMark => CommunityCheatCatalog.CommunityMark;
 		public string VotesLabel => CommunityCheatCatalog.VotesLabel(Row.Votes);
 		public bool CanShare { get; }
+		//P.11: the entry the search by intent picked.
+		public bool IsIntentMatch { get; }
+		public string IntentMatchMark => CheatIntentSearch.MatchMark;
 
-		public PlayerCheatRow(CheatSheetRow row, bool canShare = false)
+		public PlayerCheatRow(CheatSheetRow row, bool canShare = false, bool isIntentMatch = false)
 		{
 			Row = row;
 			CanShare = canShare;
+			IsIntentMatch = isIntentMatch;
 		}
 
 		public override string ToString() => Description;

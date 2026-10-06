@@ -36,6 +36,17 @@ public static class CheatIntentSearch
 	public const string Script = "cheat_intent.py";
 	public const string NoneMatchedLine = "No cheat in this game's list does that — try the search box.";
 	public const string FailedLine = "The search by intent did not answer. The search box still works.";
+	public const string NeedsKeyLine = "Store your OpenRouter key below to search by intent.";
+	public const string NeedsToolsLine = "Search by intent needs python3 and the MesenAI tools (see Remaster).";
+	public const string KeyStoredLine = "Key stored in this computer's credential store.";
+	public const string KeyRemovedLine = "Key removed from this computer.";
+	public const string NoKeyLine = "No key was stored.";
+	public const string FindLabel = "Find";
+	public const string IntentPlaceholder = "Or say what you want: don't die, start on level 5…";
+	public const string MatchMark = "Best match for what you asked";
+	public const string SaveKeyLabel = "Store Key";
+	public const string RemoveKeyLabel = "Remove Key";
+	public const string KeyPlaceholder = "Your OpenRouter key (for search by intent)";
 	public const int MaxIntentChars = 200;
 
 	//#915 ruling: a backend is offered only when, on its own held-out numbers,
