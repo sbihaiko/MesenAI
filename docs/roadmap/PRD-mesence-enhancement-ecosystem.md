@@ -1182,6 +1182,20 @@ unscheduled **F8.4**: apply `scale_mode`, honor the console aspect in the
 default viewport, letterbox inside the viewport, lint the bare root
 `border.png`. Core/pack-format work, so it stays in Part A.
 
+*Re-read against the spec, 2026-10-05* (ADR-0149's amendment carries the
+ruling): of F8.4's four parts, only the letterbox is blocked, and it is
+blocked by a MUST in a published document rather than by an open question —
+MEP-v1 §5.4's `viewport` row has the host fill the rectangle exactly and
+not letterbox inside it, so that part is a question about MEP v1.6, not a
+border slice. The console aspect in the default viewport needs no work: the
+4:3 default is scoped to a `border.json` whose `viewport` is absent or
+invalid, and any other layout is expressed by the pack's own explicit
+`viewport`. `scale_mode` needed the decision ADR-0149's 2026-09-06
+amendment asked for, and has it — it stays unapplied, because MEP-v1 §5.4
+tells authors they MUST NOT rely on `"stretch"` yet. The lint of a bare
+root `border.png` is unblocked and remains the only part that is simply
+unscheduled.
+
 #### Phase 9 — Artist-legible texture sheets (bootstrap output redesign)
 
 **Status.** Implementation through F9.29 is recorded in §3, with F9.21

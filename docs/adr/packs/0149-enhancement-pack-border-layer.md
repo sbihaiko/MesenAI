@@ -97,3 +97,36 @@ The border compositing path is integrated into `VideoRenderer` and `BaseVideoFil
 - The border asset is resolved once, not per frame. `VideoRenderer` holds a notification listener that marks the border dirty on `GameLoaded`, `BeforeGameUnload` and `EmulationStopped`; the interop setters `SetPreferredMepPack`/`SetMepPackEnabled` call `VideoRenderer::InvalidateBorderAsset()` so a UI-side pack change takes effect on the next frame. The decode thread no longer reads `MepPackManager` state per frame (that read was unsynchronised against the emu and UI threads).
 - Border PNGs above 8192 px per side or above `FrameCaptureMath::MaxCapturePixels` are refused with a log line. The overlay blend precomputes the border over black at load and blends only the clamped viewport per frame; rounding is round-to-nearest (±1 LSB versus the previous truncation).
 - Open points, deliberately unchanged: `scale_mode` is parsed but not applied (Stretch has no effect); AVI/GIF recording captures the pre-border frame. Both need a decision before the next border-related slice.
+
+## Amendment (2026-10-05) — the border viewport: MEP-v1 §5.4 governs, and two of the three blocked parts were not blocked
+
+An implementation pass (PRD Part A F8.4, squad run-20261005-210625) stopped on what it read as a
+contradiction between this ADR and the published spec, and asked which text wins. The ruling:
+**MEP-v1 §5.4 governs**, because it is the contract pack authors are handed (ADR-0004, ADR-0005)
+while this ADR is an internal decision — and the internal document is the one that yields. What the
+pass reported as three blocked parts is one blocked, one already expressible, and one that only
+needed the decision it asked for:
+
+- **Letterboxing inside the viewport — blocked, and it stays blocked.** MEP-v1 §5.4's `viewport`
+  row is a MUST: the host "scales the game frame to fill the rectangle exactly (nearest-neighbour),
+  it does **not** letterbox inside it". The Non-goals line above — "game aspect ratio is preserved
+  within the designated viewport" — is the clause that conflicts, and the one that yields.
+  Implementing the PRD's "letterbox inside the viewport" means amending the published spec, which is
+  a question about MEP v1.6, not a border slice.
+- **The console's aspect in the default viewport — not blocked.** The 4:3 default is scoped: it
+  applies "when `border.json` is absent, or its `viewport` is missing/invalid", and the same row
+  says "any other layout needs an explicit `viewport`". A pack that wants the console's aspect
+  already says so, per pack, in the format; the default exists for the "4:3 game inside a 16:9
+  bezel" case. Changing the *default* to the loaded console's aspect would be a spec change —
+  wanting the console's aspect is not.
+- **`scale_mode` — decided, and the decision is "stays unapplied".** The 2026-09-06 amendment above
+  recorded it as an open point needing "a decision before the next border-related slice". This is
+  that decision. It stays unapplied because MEP-v1 §5.4's `scale_mode` row tells authors they MUST
+  NOT rely on `"stretch"` yet and documents that the reference hands the canvas to the regular video
+  scaler: applying it would make the emulator honour a mode the published spec tells authors not to
+  use. `BorderLayout::ParseScaleMode` and `CanvasRectOnOutput` stay as they are — parsed, pinned by
+  tests, and consumed by no production caller, which is the state the spec describes.
+- **Untouched and unblocked:** the lint of a bare root `border.png`, the fourth part of F8.4.
+
+F8.4 therefore stays unscheduled, and the reason is now the spec rather than an open question: only
+its letterbox part is blocked, and only by a MUST in a published document.
