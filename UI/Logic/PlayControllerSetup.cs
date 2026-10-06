@@ -120,6 +120,31 @@ public static class ControllerDevices
 		return name.Length > 0 ? name : Label(keyName);
 	}
 
+	//#913: the controller's own name for a key-code device index, off the host's
+	//own pad list - the enumerated pad whose block the index's codes carry, found
+	//the way the controller sheet finds a pad (PadBlock of its backend and its
+	//family-relative slot, never the host's enumeration ordinal, which on Windows
+	//walks the XInput slots before the joysticks). "" when no enumerated pad owns
+	//that block - an unnamed pad, or one unplugged since - so the caller keeps
+	//DisplayName's key-name-prefix fallback.
+	public static string DeviceName(int device, IEnumerable<HostPad> pads)
+	{
+		if(device < 0) {
+			return "";
+		}
+		//DeviceOf numbers every pad key against the base family, so this index
+		//spells the pad's block even one family up: a Windows joystick at 0x2000+
+		//reads as device 16 and up, and 16 << 8 is the DirectInput family's first
+		//block - the same block PadBlock hands that joystick.
+		int block = BaseGamepadIndex + (device << 8);
+		foreach(HostPad pad in pads) {
+			if(pad.Block == block) {
+				return (pad.Name ?? "").Trim();
+			}
+		}
+		return "";
+	}
+
 	//The pad's own Start button, when its key name says so.
 	public static bool NamesStart(string keyName)
 	{
@@ -132,6 +157,13 @@ public static class ControllerDevices
 			|| button.Equals("Options", StringComparison.OrdinalIgnoreCase);
 	}
 }
+
+//#913: one pad as the host enumerated it, for the naming rule (DeviceName): the
+//block its keys carry (PadBlock of its backend and its family-relative slot) and
+//the name its backend reports for it. The name is "" where the backend has none
+//- macOS (GameController) and Windows XInput report no product name at all - and
+//the caller falls back to the key manager's device prefix.
+public sealed record HostPad(int Block, string Name);
 
 //The host whose pads a GamepadBackend enumerates (ControllerDevices.HostOf). One
 //backend per family per host is what keeps a key-code block unambiguous between
