@@ -100,9 +100,11 @@ env:
   #      mep_lint.py and the real core" carried no `continue-on-error`, so a
   #      hard failure there skipped the job's later steps — the verdict —
   #      instead of degrading to the lint-only one. All three now carry
-  #      `continue-on-error: true`.
+  #      `continue-on-error: true`, and that block comment now bounds the
+  #      promise to the cross-check steps and states that the autofix chain
+  #      past them is not covered by it.
   #   2. (credential removed; one residue open) the autofix push no longer
-  #      embeds PROJECT_PAT in the remote URL. The remote is credential-free
+  #      embeds PROJECT_PAT in the origin URL. The remote is credential-free
   #      and the push goes through a credential helper defined for that one
   #      command and fed from the environment, after dropping the extraheader
   #      actions/checkout persists — dropped in that same shell, immediately
