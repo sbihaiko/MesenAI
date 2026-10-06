@@ -275,7 +275,8 @@ namespace Mesen.ViewModels
 
 		//Every connected pad as the naming rule wants it: the block its keys carry -
 		//its backend's family plus its family-relative slot (GamepadInfo.Slot), the
-		//numbering a mapping's key codes use - and the name its backend reports. A
+		//numbering a mapping's key codes use - and its product name (HostPad.From
+		//drops XInput's synthetic slot label). A
 		//pad the host cannot describe (GetGamepadInfo false) is left out rather than
 		//guessed, the way the reconnect repair skips it.
 		private static IReadOnlyList<HostPad> ReadHostPads()
@@ -284,7 +285,7 @@ namespace Mesen.ViewModels
 			List<HostPad> pads = new((int)count);
 			for(uint i = 0; i < count; i++) {
 				if(InputApi.GetGamepadInfo(i, out GamepadInfo info)) {
-					pads.Add(new HostPad(ControllerDevices.PadBlock(info.Backend, (int)info.Slot), info.Name ?? ""));
+					pads.Add(HostPad.From(info.Backend, (int)info.Slot, info.Name));
 				}
 			}
 			return pads;

@@ -171,10 +171,20 @@ public static class ControllerDevices
 
 //#913: one pad as the host enumerated it, for the naming rule (DeviceName): the
 //block its keys carry (PadBlock of its backend and its family-relative slot) and
-//the name its backend reports for it. The name is "" where the backend has none
-//- macOS (GameController) and Windows XInput report no product name at all - and
+//the controller's product name. The name is "" where the backend has none and
 //the caller falls back to the key manager's device prefix.
-public sealed record HostPad(int Block, string Name);
+public sealed record HostPad(int Block, string Name)
+{
+	//The pad as GetGamepadInfo describes it. XInput carries no product name:
+	//WindowsKeyManager fills GamepadInfo.Name with a synthetic "XInput Pad N"
+	//label, which names the slot, not the controller, so it is dropped here and
+	//the pad takes the fallback like any other unnamed pad.
+	public static HostPad From(GamepadBackend backend, int slot, string? name)
+	{
+		string product = backend == GamepadBackend.XInput ? "" : (name ?? "").Trim();
+		return new HostPad(ControllerDevices.PadBlock(backend, slot), product);
+	}
+}
 
 //The host whose pads a GamepadBackend enumerates (ControllerDevices.HostOf). One
 //backend per family per host is what keeps a key-code block unambiguous between
