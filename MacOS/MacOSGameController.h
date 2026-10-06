@@ -15,7 +15,17 @@ private:
 	Emulator* _emu;
 
 	GCController* _controller;
-	GCExtendedGamepad* _input;
+	//W-P15 (#912): the profile this pad exposes. A controller that offers no
+	//extended gamepad is still a pad - micro (the Siri Remote and the
+	//one-button pads) or the older basic one - and the profile it does have
+	//drives the same button bits, so its keys reach the input layer instead of
+	//nothing at all. Exactly one of the three is non-nil.
+	GCExtendedGamepad* _extended;
+	GCMicroGamepad* _micro;
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+	GCGamepad* _basic;
+#pragma clang diagnostic pop
 	CHHapticEngine* _haptics;
 	id<CHHapticPatternPlayer> _player;
 
@@ -30,6 +40,11 @@ public:
 	~MacOSGameController();
 
 	bool IsGameController(GCController* controller);
+
+	//Whether this backend can use the pad at all: it exposes one of the three
+	//profiles. MacOSKeyManager::AddController asks this instead of dropping
+	//every pad without an extended gamepad (#912).
+	static bool Supports(GCController* controller);
 
 	bool IsButtonPressed(int buttonNumber);
 	std::optional<int16_t> GetAxisPosition(int axis);
