@@ -17,6 +17,18 @@ public:
 	static NoteFrame FromApu(const ApuState& apu);
 };
 
+//F6.10 (ADR-0240 A4 follow-up): the sound id the host last asked the game's
+//driver for - the "trigger id" of the extract-audio tool's enumeration.log.
+//While it is set, every segment the bootstrap recorder *opens* is stamped with
+//it (AudioFingerprint::TriggerId), which is the join key ADR-0240's A4 needed:
+//order and note onsets cannot recover it (docs/validation/slices/f6.10-*).
+//-1, the default and what any other host leaves it at, stamps nothing, so this
+//is inert for every caller but the extract-audio tool.
+//Declared before NesAudioBootstrap: its per-frame Feed reads the id, so the
+//declaration has to be visible at that point.
+void SetActiveSoundTriggerId(int id);
+int GetActiveSoundTriggerId();
+
 //Records the played music into <audioFolder>/fingerprints.json + midi/*.mid.
 //Owned by NesConsole while a bootstrap is active; saves when destroyed.
 class NesAudioBootstrap
@@ -38,6 +50,10 @@ public:
 		if(!f.IsSilent()) {
 			_audible++;
 		}
+		//F6.10: read per frame so a host that changes the id between two frames
+		//(the extract-audio tool fires one enumerated id at a time) is seen at the
+		//segment it is meant to stamp, and stale after the last one.
+		_segmenter.SetActiveTriggerId(GetActiveSoundTriggerId());
 		_segmenter.Feed(f);
 	}
 };

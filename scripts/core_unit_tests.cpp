@@ -70,6 +70,7 @@
 #include "Shared/Movies/ShareRecordingSettings.h"
 #include "Shared/ShortcutKeyRules.h"
 #include "Shared/GamepadButtonOrder.h"
+#include "Shared/AliasedKeyState.h"
 #include "Debugger/CdlFileCheck.h"
 #include "NES/NesScanlineTraceValidity.h"
 #include "NES/NesWidescreenReveal.h"
@@ -1560,6 +1561,78 @@ namespace
 		std::string text0 = ReadFileBytes(path);
 		Check(text0.find("loop") == std::string::npos, "BlocoH: Save omits the loop field when zero", text0);
 	}
+	//--- Bloco H: the F6.10 trigger id (ADR-0240 A4 follow-up) -----------------
+	//The join key ADR-0240 A4 could not recover from emission order or note
+	//onsets: the id the host asked the driver for, carried by the track it
+	//produced. `NesAudioFingerprint.h` reads the process-wide id into the
+	//segmenter one line per frame; that line is compile-checked by the core
+	//build, so what is pinned here is the rule it feeds and the JSON it reaches.
+	NoteFrame AudibleNote(int8_t note)
+	{
+		NoteFrame f;
+		f.Note[0] = note;
+		return f;
+	}
+
+	void TestTriggerIdStampedAtSegmentOpen()
+	{
+		TrackSegmenter seg;
+		seg.SetActiveTriggerId(7);
+		//A burst has to outlast MinKeepFrames (6) or Close() drops it as noise,
+		//and it is stamped where it opens.
+		for(int i = 0; i < 10; i++) { seg.Feed(AudibleNote(60)); }
+		//The id moves while this track is open: it keeps the id it opened with,
+		//so an id that produced nothing borrows nobody else's work.
+		seg.SetActiveTriggerId(-1);
+		for(int i = 0; i < 10; i++) { seg.Feed(AudibleNote(60)); }
+		for(int i = 0; i < 100; i++) { seg.Feed(NoteFrame()); }
+		seg.SetActiveTriggerId(9);
+		for(int i = 0; i < 10; i++) { seg.Feed(AudibleNote(64)); }
+		seg.Finish();
+
+		const vector<TrackSegmenter::Segment>& segs = seg.GetSegments();
+		Check(segs.size() == 2, "F6.10: two audible stretches make two tracks", std::to_string(segs.size()));
+		if(segs.size() != 2) { return; }
+		Check(segs[0].Fingerprint.TriggerId == 7, "F6.10: a track carries the id in force when it opened",
+			std::to_string(segs[0].Fingerprint.TriggerId));
+		Check(segs[1].Fingerprint.TriggerId == 9, "F6.10: an id that opened nothing leaves no trace on the next id's track",
+			std::to_string(segs[1].Fingerprint.TriggerId));
+	}
+
+	void TestTriggerIdJsonRoundTrip()
+	{
+		std::string error;
+		std::vector<AudioFingerprint> with;
+		Check(FingerprintStore::Load(WriteTempFile("fp_trigger.json", FingerprintJson("\"triggerId\":7")), with, error),
+			"F6.10: fingerprints.json with triggerId loads");
+		Check(with.size() == 1 && with[0].TriggerId == 7, "F6.10: triggerId parsed to AudioFingerprint::TriggerId");
+
+		std::vector<AudioFingerprint> without;
+		Check(FingerprintStore::Load(WriteTempFile("fp_no_trigger.json", FingerprintJson("")), without, error),
+			"F6.10: fingerprints.json without triggerId loads");
+		Check(without.size() == 1 && without[0].TriggerId == -1,
+			"F6.10: absent triggerId is -1, i.e. no trigger was fired");
+
+		std::vector<AudioFingerprint> tracks;
+		AudioFingerprint fp;
+		fp.Id = "t1"; fp.Kind = "bgm"; fp.Frames = 1200; fp.TriggerId = 7;
+		fp.Events.push_back({ 0, 0, 0 });
+		tracks.push_back(fp);
+		std::string path = WriteTempFile("fp_save_trigger.json", "");
+		Check(FingerprintStore::Save(path, tracks), "F6.10: Save writes the file");
+		Check(ReadFileBytes(path).find("\"triggerId\": 7") != std::string::npos,
+			"F6.10: Save emits the trigger id when one was fired");
+
+		//A plain bootstrap recording fired no trigger, and must stay byte for
+		//byte what it was before F6.10 - no empty field, no schema change.
+		fp.TriggerId = -1;
+		tracks[0] = fp;
+		path = WriteTempFile("fp_save_no_trigger.json", "");
+		Check(FingerprintStore::Save(path, tracks), "F6.10: Save writes the file (no trigger)");
+		Check(ReadFileBytes(path).find("triggerId") == std::string::npos,
+			"F6.10: Save omits the field when no trigger was fired");
+	}
+
 	//--- Bloco H: BorderLayout (ADR-0149, Slice F8.3b) -------------------------
 	//Host-free viewport/canvas math extracted from VideoRenderer so the border
 	//layer's layout rules are pinned without linking the Emulator.
@@ -6475,6 +6548,82 @@ namespace
 				}
 			}
 		}
+	}
+
+	//--- Bloco O.6: the host key table is partial and many-to-one ---------------
+	//Both cases below are the two properties of MacOS/MacOSKeyManager.mm's
+	//128-entry _keyCodeMap, extracted into Core/Shared/AliasedKeyState.h so they
+	//can be asserted without an NSEvent or an Emulator: the table is partial (a
+	//host code it cannot name maps to 0) and it is many-to-one (four pairs of host
+	//codes share one Mesen code). The backend in front of that table is the one
+	//that was read as a bool per Mesen code, which is what these pin.
+
+	//#902: the table maps a host code it cannot name to 0, and that code was
+	//written at slot 0 like any other - a slot KeyDefinitions names "" and every
+	//host reader drops (UI/Logic/PressedKeys.Decode skips it, StateGrid skips it),
+	//so the backend held an entry the host could not see, with nothing saying so.
+	//The rule: a host code the table leaves at NoKey publishes nothing at all.
+	void TestAHostCodeTheTableCannotNamePublishesNoKey()
+	{
+		AliasedKeyState state;
+		state.SetMapping(36, 6);   //Return
+		state.SetMapping(63, 0);   //an entry _keyCodeMap leaves at 0
+		state.SetMapping(66, 0);
+
+		//A host code past the table's own size is unmapped by construction
+		//(`[event keyCode] >= 128 ? 0 : _keyCodeMap[...]`).
+		state.SetKeyState(200, true);
+		state.SetKeyState(63, true);
+		state.SetKeyState(66, true);
+
+		Check(state.GetPressedKeys().empty(),
+			"BlocoO.6: a host code the table cannot name reports no key at all (#902)");
+		Check(!state.IsPressed(AliasedKeyState::NoKey),
+			"BlocoO.6: ...and code 0 never reads as pressed");
+
+		//The control: with a host code the table does name also down, that one is
+		//reported and the unnamed ones still are not.
+		state.SetKeyState(36, true);
+		vector<uint16_t> pressed = state.GetPressedKeys();
+		Check(pressed.size() == 1 && pressed[0] == 6,
+			"BlocoO.6: ...while the code it does name is reported instead of them");
+	}
+
+	//#904: two host codes can share one Mesen code, and the state behind them was
+	//a single bool. Holding Return, then keypad Enter, then releasing keypad Enter
+	//reported the console key released while Return was still held - for all four
+	//alias rows in the table. The rule: a shared code reads pressed while any of
+	//its host codes is down, and drops only on the last of them.
+	void TestASharedCodeStaysDownUntilItsLastHostCodeIsReleased()
+	{
+		AliasedKeyState state;
+		state.SetMapping(36, 6);   //Return
+		state.SetMapping(52, 6);   //keypad Enter
+
+		Check(state.SetKeyState(36, true),
+			"BlocoO.6: the first host key of a shared code publishes that code (#904)");
+		Check(!state.SetKeyState(52, true),
+			"BlocoO.6: ...a second host key on the same code changes nothing");
+		Check(!state.SetKeyState(52, false),
+			"BlocoO.6: ...and releasing it does not unpublish the code");
+		Check(state.IsPressed(6),
+			"BlocoO.6: releasing one of two aliased host keys keeps Enter down (#904)");
+		Check(state.GetPressedKeys().size() == 1 && state.GetPressedKeys()[0] == 6,
+			"BlocoO.6: ...and the reported set still names it exactly once");
+
+		Check(state.SetKeyState(36, false),
+			"BlocoO.6: the last host key of the code unpublishes it");
+		Check(!state.IsPressed(6) && state.GetPressedKeys().empty(),
+			"BlocoO.6: ...so the code is up again, and reported by nobody");
+
+		//macOS repeats key-down while a key is held. A repeated key-down is still
+		//one host key to release, so the count behind the code cannot be a plain
+		//increments-per-event.
+		state.SetKeyState(36, true);
+		state.SetKeyState(36, true);
+		state.SetKeyState(36, false);
+		Check(!state.IsPressed(6),
+			"BlocoO.6: a repeated key-down of one host key still needs only one release");
 	}
 
 	//A binding may name pad keys from two families at once, and no single pad can
@@ -17022,6 +17171,8 @@ int main()
 	TestFingerprintLoopAbsent();
 	TestFingerprintLoopMalformed();
 	TestFingerprintLoopSave();
+	TestTriggerIdStampedAtSegmentOpen();
+	TestTriggerIdJsonRoundTrip();
 
 	TestBorderDefaultHeuristic();
 	TestBorderParseScaleMode();
@@ -17160,6 +17311,8 @@ TestW6TheFiltersAcceptTheExtendedFrame();
 	TestAJoysticksDeviceIndexIsItsOwnFamilyNotTheHostsOrdinal();
 	TestAnAxisThresholdAppliesOnlyToTheDirectionABindingNames();
 	TestThePadsButtonOrderIsPerBackend();
+	TestAHostCodeTheTableCannotNamePublishesNoKey();
+	TestASharedCodeStaysDownUntilItsLastHostCodeIsReleased();
 	TestPadRuleLeavesTheKeyboardAndMouseExact();
 
 	TestSheetStableScreensCollapseRepeats();

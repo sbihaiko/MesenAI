@@ -9,17 +9,33 @@ is exercised by running it.
 
 Usage: python3 scripts/test_accuracy_compare.py
 """
+import contextlib
+import hashlib
+import io
 import os
+import subprocess
 import sys
 from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import accuracy_compare as ac  # noqa: E402
 
+SCRIPT = Path(__file__).resolve().parent / "accuracy_compare.py"
+
+# The line the ROM gate printed before --require-rom existed, quoted from the
+# script as it shipped (not rebuilt from the code under test): "today's
+# behaviour" is only unchanged if the *text* is unchanged too.
+TODAYS_SKIP = ("SKIP: no AccuracyCoin ROM. Pass --rom, set MESENCE_ACCURACY_ROM, "
+               "or put it in tests/accuracy/AccuracyCoin.nes "
+               "(MIT, https://github.com/100thCoin/AccuracyCoin).")
+
 FAILURES = []
+CHECKS = 0
 
 
 def check(condition, message):
+    global CHECKS
+    CHECKS += 1
     if condition:
         print(f"  ok   {message}")
     else:
@@ -225,6 +241,98 @@ def test_widescreen_centre():
            "a widescreen run whose frame was never extended is an error, not a pass")
 
 
+def test_rom_verdict(tmp):
+    """`--require-rom` turns both ways of not running the pinned suite into a
+    failure that names the input. A SKIP that reads like a PASS is the defect
+    this closes: with the flag, a run that compared nothing must not exit 0."""
+    print("rom_verdict (--require-rom)")
+    pinned = ac.SUITE_FILE_SHA1
+    suite = tmp / "AccuracyCoin.nes"
+    suite.write_bytes(b"NES\x1a pinned")
+    other_sha1 = hashlib.sha1(suite.read_bytes()).hexdigest()  # noqa: S324 - the identity hash is SHA-1 by contract (ADR-0003)
+    absent = tmp / "nowhere" / "AccuracyCoin.nes"
+
+    check(ac.rom_verdict(suite, pinned, False, [str(suite)]) == ("run", None),
+          "the pinned build runs, with no note")
+    check(ac.rom_verdict(suite, pinned, True, [str(suite)]) == ("run", None),
+          "the pinned build runs under --require-rom too - the flag is not a blanket refusal")
+
+    action, message = ac.rom_verdict(None, None, False, [None, None, absent])
+    check(action == "skip" and message == TODAYS_SKIP,
+          "no ROM without the flag is today's SKIP, word for word")
+    action, message = ac.rom_verdict(None, None, True, [None, None, absent])
+    check(action == "fail", "no ROM with --require-rom is a failure, not a skip")
+    check(str(absent) in message, "the failure names the path it looked in")
+    check("--require-rom" in message and "SKIP" not in message,
+          "the failure says why and does not read as a skip")
+
+    action, message = ac.rom_verdict(suite, other_sha1, False, [str(suite)])
+    check(action == "run" and message.startswith("WARNING:") and other_sha1 in message
+          and pinned in message,
+          "a ROM that is not the pinned build warns and runs without the flag")
+    action, message = ac.rom_verdict(suite, other_sha1, True, [str(suite)])
+    check(action == "fail", "a ROM that is not the pinned build fails under --require-rom")
+    check(str(suite) in message and other_sha1 in message and pinned in message
+          and "checkpoints" in message,
+          "the failure names the file, the hash it found and the hash it wanted")
+
+
+def test_main_require_rom(tmp):
+    """The wiring, in-process: the verdict reaches the exit code and the right
+    stream. The default search path is pointed at an absent file so the gate is
+    the only thing under test - the emulator is never reached, and the real
+    `tests/accuracy/AccuracyCoin.nes` (a file a developer may hold) cannot make
+    this case pass by being there."""
+    print("main() and --require-rom")
+    absent = tmp / "nowhere" / "AccuracyCoin.nes"
+    gone = tmp / "gone.nes"
+    saved_defaults = ac.DEFAULT_ROM_PATHS
+    saved_env = os.environ.pop("MESENCE_ACCURACY_ROM", None)
+    ac.DEFAULT_ROM_PATHS = (absent,)
+    try:
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            code = ac.main(["--rom", str(gone), "--require-rom"])
+        check(code == 2, "--require-rom with no ROM exits non-zero")
+        check(str(gone) in err.getvalue() and str(absent) in err.getvalue(),
+              "the message names every input it looked for, --rom included")
+        check("SKIP" not in out.getvalue(),
+              "nothing on stdout can be mistaken for the green skip")
+
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            code = ac.main([])
+        check(code == 0 and out.getvalue().strip() == TODAYS_SKIP,
+              "without the flag the same run is unchanged: today's SKIP, exit 0")
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            code = ac.main(["--json"])
+        check(code == 0 and '"status": "skipped"' in out.getvalue(),
+              "without the flag the --json contract is unchanged too")
+    finally:
+        ac.DEFAULT_ROM_PATHS = saved_defaults
+        if saved_env is not None:
+            os.environ["MESENCE_ACCURACY_ROM"] = saved_env
+
+
+def test_main_refuses_a_non_suite_rom(tmp):
+    """End to end, through the real entry point and `sys.exit(main())`: a ROM
+    that is not the pinned build is refused under the flag. This one is
+    hermetic without touching the default path - `--rom` wins the search - so
+    it runs the same on a machine that holds the suite and on CI, which never
+    will (ADR-0157: the ROM is not vendored)."""
+    print("a non-suite ROM is refused (subprocess)")
+    other = tmp / "SomeOtherGame.nes"
+    other.write_bytes(b"NES\x1a definitely not AccuracyCoin")
+    proc = subprocess.run([sys.executable, str(SCRIPT), "--rom", str(other), "--require-rom"],
+                          capture_output=True, text=True)
+    check(proc.returncode == 2, "the entry point exits non-zero")
+    check(str(other) in proc.stderr, "stderr names the ROM file")
+    check(hashlib.sha1(other.read_bytes()).hexdigest() in proc.stderr,  # noqa: S324 - identity hash
+          "stderr names the hash it actually found")
+    check(ac.SUITE_FILE_SHA1 in proc.stderr, "stderr names the hash it wanted")
+
+
 def main():
     import tempfile
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -237,11 +345,14 @@ def main():
         test_format_report()
         test_arm_table()
         test_widescreen_centre()
+        test_rom_verdict(tmp)
+        test_main_require_rom(tmp)
+        test_main_refuses_a_non_suite_rom(tmp)
     print()
     if FAILURES:
-        print(f"{len(FAILURES)} failure(s)")
+        print(f"{len(FAILURES)} failure(s) of {CHECKS}")
         return 1
-    print("all checks passed")
+    print(f"all {CHECKS} checks passed")
     return 0
 
 

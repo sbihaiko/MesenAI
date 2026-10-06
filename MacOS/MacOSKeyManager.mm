@@ -21,6 +21,14 @@ MacOSKeyManager::MacOSKeyManager(Emulator* emu)
 
 	ResetKeyState();
 
+	//The table is the backend's half of the contract AliasedKeyState owns: it is
+	//partial (an entry left at 0 names no key) and many-to-one (four pairs of
+	//keycodes share one Mesen code), so a host event is handed to that class
+	//instead of being written into _keyState at the Mesen code it maps to.
+	for(uint32_t rawCode = 0; rawCode < AliasedKeyState::RawCodeCount; rawCode++) {
+		_hostKeyState.SetMapping(rawCode, _keyCodeMap[rawCode]);
+	}
+
 	_keyDefinitions = KeyDefinition::GetSharedKeyDefinitions();
 
 	vector<string> buttonNames = {
@@ -74,23 +82,22 @@ MacOSKeyManager::MacOSKeyManager(Emulator* emu)
 		if([event type] == NSEventTypeFlagsChanged) {
 			HandleModifiers((uint32_t) [event modifierFlags]);
 		} else {
-			//#902: the table answers 0 - the "no key" sentinel - for a virtual key
-			//code it has no Mesen key for, and every code >= 128 maps there too,
-			//outside the range the table covers at all. 0 is not a key: writing it
-			//sets _keyState[0] and puts a code in the pressed set that no key name
-			//resolves to and no binding can name, so a key with no Mesen code
-			//records nothing.
+			//AliasedKeyState answers this line both ways it used to be wrong. It
+			//refuses a virtual key code its table cannot name - the codes with no
+			//Mesen key and every code >= 128, outside the range the table covers at
+			//all - so the "no key" sentinel (#902) is never recorded here; and it
+			//counts the host codes behind a Mesen code, so a slot four pairs of
+			//them share drops only on the last release (#904).
+			//
+			//The sentinel has a second way in that this class cannot close: the
+			//host export InputApi.SetKeyState accepts code 0 on every backend. That
+			//one is answered at the interface, in IKeyManager::WithoutNoKey.
 			//
 			//Which physical keys reach this line with such a code is not something
 			//this repo can settle: the Fn key arrives as FlagsChanged (the branch
 			//above) and media keys arrive as SystemDefined, which the event mask
-			//does not subscribe to. The write has to be safe for the codes the
-			//table does produce regardless - the sentinel's other way in is the
-			//host export (InputApi.SetKeyState), which accepts 0 on every backend.
-			uint16_t mappedKeyCode = [event keyCode] >= 128 ? IKeyManager::NoKey : _keyCodeMap[[event keyCode]];
-			if(mappedKeyCode != IKeyManager::NoKey) {
-				_keyState[mappedKeyCode] = ([event type] == NSEventTypeKeyDown);
-			}
+			//does not subscribe to.
+			_hostKeyState.SetKeyState((uint32_t) [event keyCode], [event type] == NSEventTypeKeyDown);
 		}
 
 		return nil;
@@ -168,7 +175,7 @@ bool MacOSKeyManager::IsKeyPressed(uint16_t key)
 			return _controllers[gamepadPort]->IsButtonPressed(gamepadButton);
 		}
 	} else if(key < 0x205) {
-		return _keyState[key] != 0;
+		return _keyState[key] != 0 || _hostKeyState.IsPressed(key);
 	}
 	return false;
 }
@@ -201,9 +208,12 @@ vector<uint16_t> MacOSKeyManager::GetPressedKeys()
 		}
 	}
 
-	for(int i = 0; i < 0x205; i++) {
-		if(_keyState[i]) {
-			pressedKeys.push_back(i);
+	//From 1: slot 0 is "no key" - no host reader names it (UI/Logic/
+	//PressedKeys.Decode and StateGrid both skip a code of 0), so reporting it
+	//only ever made this list longer than what the host could see (#902).
+	for(int i = 1; i < 0x205; i++) {
+		if(_keyState[i] || _hostKeyState.IsPressed((uint16_t)i)) {
+			pressedKeys.push_back((uint16_t)i);
 		}
 	}
 	return pressedKeys;
@@ -245,6 +255,7 @@ bool MacOSKeyManager::SetKeyState(uint16_t scanCode, bool state)
 void MacOSKeyManager::ResetKeyState()
 {
 	memset(_keyState, 0, sizeof(_keyState));
+	_hostKeyState.Reset();
 }
 
 void MacOSKeyManager::SetDisabled(bool disabled)

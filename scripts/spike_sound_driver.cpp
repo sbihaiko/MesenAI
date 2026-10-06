@@ -86,6 +86,11 @@ extern "C"
 	void* RegisterNotificationCallback(NotificationCb callback);
 	void SetTraceOptions(CpuType type, TraceLoggerOptions options);
 	void SetEnhancementPackConfig(EnhancementPackConfig config);
+	//F6.10: the id the driver is being asked for right now, or -1. Stamped onto
+	//every track the bootstrap recorder opens while it is set, so
+	//fingerprints.json can be joined to enumeration.log without re-deriving
+	//the link from emission order (ADR-0240 A4).
+	void SetAudioBootstrapTriggerId(int32_t id);
 	void StartLogTraceToFile(const char* filename);
 	void StopLogTraceToFile();
 	void InitializeDebugger();
@@ -475,6 +480,12 @@ int main(int argc, char** argv)
 	auto playFrom = [&](const std::string& state, const Trigger& t, int id, double seconds, bool* ok) -> Sample {
 		LoadStateFile((char*)state.c_str());
 		SleepMs(gapMs);
+		//F6.10: from here until the sample is taken, every track the bootstrap
+		//recorder opens belongs to this id. Set before the trigger fires (the
+		//segmenter stamps at the segment's open, never afterwards) and cleared
+		//after the sample, so an id that produced no track leaves no trace on
+		//the next one's.
+		SetAudioBootstrapTriggerId((int32_t)id);
 		BreakpointAbi bp = MakeBp(BreakpointTypeFlags::Execute, P, P, 500);
 		SetBreakpoints(&bp, 1);
 		if(!WaitForBreak(2.0)) {
@@ -513,7 +524,9 @@ int main(int argc, char** argv)
 		ResumeExecution();
 		SleepMs(120);
 		*ok = true;
-		return SampleApu(seconds);
+		Sample out = SampleApu(seconds);
+		SetAudioBootstrapTriggerId(-1);
+		return out;
 	};
 	auto playId = [&](const Trigger& t, int id, double seconds, bool* ok) -> Sample { return playFrom(titleState, t, id, seconds, ok); };
 

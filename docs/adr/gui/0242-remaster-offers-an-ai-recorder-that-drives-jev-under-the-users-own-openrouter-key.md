@@ -46,3 +46,23 @@ Hard constraints the GUI inherits: a **per-game RAM map** (`scripts/stages/<game
 - **Cost is the user's.** At about US$ 0.000023 per decision, the default US$ 0.25 cap is about 10 000 decisions, far above one stage.
 - **W-R1 grows from 5 to 6 controls at rest, and W-R3 from 5 to 6.** Both stay within rule 2.
 - **Reproducibility never depends on the model:** the committed script is what replays.
+
+## Amendment (2026-10-05) — Q2 and Q3 are answered by their own evidence, not by a panel
+
+**Q2 — satisfied.** The prerequisite asked for a RAM map (`scripts/stages/<game>/ram-map.json`)
+for golden games with no committed route past their first stall, and for at least two such games
+before the button could be considered. Four maps exist in the tree: `castlevania`, `megaman2`,
+`mm3` and `ninjagaiden`.
+
+**Q3 — not adopted, and this is not a decision anyone has to take.** Q3 keeps ADR-0238 §5's kit
+criterion, **clause 2 included**, and states the outcome in advance: *"Until then the button
+stays disabled."* ADR-0238's own record answers it — F14.15's third pass, re-measured on a route
+78 px further in (+97 cells, +22 keys over the same-length search-alone recording), still found
+**0 keys** that no other pack here has. Clause 1 is met (the pin, the page-3 wall and a 2859 wall
+Jev passed in 3 decisions); clause 2 is not. The verdict is therefore *do not adopt beyond the
+spike*, and W-R8 keeps its disabled state and its reason.
+
+This closes the "waits for the user to decide Q3" phrasing: the criterion was fixed in advance,
+the measurement behind it exists, and it fails. Nothing is left for the owner to rule on. If a
+later measurement finds keys no existing pack has, the criterion is met and adoption becomes a
+live question again — that is the condition to watch, not an outstanding decision.

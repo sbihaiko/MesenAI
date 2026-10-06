@@ -52,11 +52,30 @@ compare frames and the final state but not per-frame RAM (the session's `ram`
 verb reads NES RAM). Exit 0 when every transition matches its expected verdict
 (the negative control is expected to FAIL), 1 otherwise; the table is printed
 either way. `scripts/test_pack_swap_exactness.py` runs it and holds the verdicts the
-slice recorded. Bootstrap is off in every run: it writes beside the ROM, which
-is the user's library, so a swap's effect on the bootstrap is not measured here.
+slice recorded.
+
+Two cases sit beside the transitions, both from ADR-0244 (P.9):
+
+  * **The bootstrap on a swap**, where the pack the bootstrap wrote beside the
+    ROM is the source or the target (the `bootstrap` profile key). Every session
+    of the case runs with the bootstrap on, so the reload a swap makes calls the
+    same `StartBootstrapIfNeeded` a fresh load does, and the pack in play is the
+    one the bootstrap itself wrote - a sibling (MEP-v1 sec. 2.1), which outranks
+    every installed pack. It gets its own ROM copy (`work/bootstrap/rom/`),
+    because a sibling created next to the ROM every other transition loads would
+    be the pack in play in all of them. When the ROM is missing or the bootstrap
+    wrote no pack, the case is printed as NOT MEASURED with the input it lacks -
+    never as a pass.
+  * **The PPU-swap alternative of Decision 1**, which is reported as NOT
+    MEASURED: the protocol can only be run against a swap that exists, and the
+    only pack-change entry points in this tree are the session's `swap` verb and
+    `Emulator::ReloadRomKeepingState` (save state, reload, restore). Both are
+    read from the sources at run time, so a second entry point shows up in the
+    report instead of passing quietly.
 """
 import argparse
 import json
+import re
 import shutil
 import struct
 import subprocess
@@ -77,6 +96,11 @@ LIBRARY = Path("/Users/bihaiko/VSCodeProjects/EMULADORES/2. Switch")
 STAGES = ROOT / "scripts" / "stages"
 PACK_A, PACK_B, PACK_AUDIO = "p9-pack-a", "p9-pack-b", "p9-pack-audio"
 PACK_BORDER, PACK_PATCH = "p9-pack-border", "p9-pack-patch"
+#headless_record's launch flag for EnhancementPackConfig.BootstrapEnhancementFolder
+#- the setting that makes a load record the ROM's own enhancement folder.
+BOOT_FLAG = "bootstrap"
+BOOTSTRAP_CASE = "bootstrap on a swap"
+PPU_SWAP_CASE = "PPU-swap alternative (Decision 1)"
 
 #One profile per console. `mint` is what the state S0 is minted with (an input
 #script, or none: the game's own attract mode), `route` the input the run plays
@@ -89,20 +113,29 @@ PACK_BORDER, PACK_PATCH = "p9-pack-border", "p9-pack-patch"
 #`rom` None means a synthetic ROM `gen_hdpack_test_roms.py` writes into the
 #work folder: there is no commercial GB ROM in the library, and the synthetic
 #one draws a still screen, so its frames prove less than a game's do.
+#`bootstrap` whether the bootstrap-on-a-swap case runs for this console (below).
+#It is on where the run has a real game whose screen moves - the pack the
+#bootstrap wrote has to dress the frames that are compared to be worth
+#comparing - and off on GB/GBC, whose synthetic ROM draws a still screen the
+#profile never moves and whose run has no route.
 PROFILES = {
     "nes": dict(rom=LIBRARY / "G3 - Nitendinho" / "roms" / "Ninja Gaiden (1989) (Tecmo).nes",
                 mint=STAGES / "ninjagaiden" / "mint-stage1.txt", mint_seconds=18,
                 route=STAGES / "ninjagaiden" / "stage1-run.txt", record_seconds=12,
-                video="ppu.", ram="memoryManager.internalRam", read_ram=True, audio=True, extra=True),
+                video="ppu.", ram="memoryManager.internalRam", read_ram=True, audio=True, extra=True,
+                bootstrap=True),
     "sms": dict(rom=LIBRARY / "G3 - MasterSystem" / "roms" / "Sonic the Hedgehog (1991) (Sega).sms",
                 mint=None, mint_seconds=40, route=None, record_seconds=12,
-                video="vdp.", ram="memoryManager.workRam", read_ram=False, audio=False, extra=False),
+                video="vdp.", ram="memoryManager.workRam", read_ram=False, audio=False, extra=False,
+                bootstrap=True),
     "gb": dict(rom=None, synthetic="test_dmg.gb",
                mint=None, mint_seconds=5, route=None, record_seconds=12,
-               video="ppu.", ram="memoryManager.workRam", read_ram=False, audio=False, extra=False),
+               video="ppu.", ram="memoryManager.workRam", read_ram=False, audio=False, extra=False,
+               bootstrap=False),
     "gbc": dict(rom=None, synthetic="test_cgb.gbc",
                 mint=None, mint_seconds=5, route=None, record_seconds=12,
-                video="ppu.", ram="memoryManager.workRam", read_ram=False, audio=False, extra=False),
+                video="ppu.", ram="memoryManager.workRam", read_ram=False, audio=False, extra=False,
+                bootstrap=False),
 }
 #18 s covers the 1075-frame NES mint script (scripts/test_step_emu_rom.py); 12 s
 #of recording covers N + M frames from S0.
@@ -159,6 +192,44 @@ def transitions(profile):
         ]
     out.append(("negative: A -> B vs reference A", only(PACK_A), a_to_b, only(PACK_A), False, "restored"))
     return out
+
+
+def bootstrap_transitions(profile):
+    """The bootstrap case's transitions: the pack the bootstrap wrote beside the
+    ROM is the source, then the target, of the swap.
+
+    The bootstrap leaves `<romFolder>/<romName>/auto/rec-NNN/textures/` next to
+    the ROM (ADR-0049, ADR-0243), which is a sibling pack and outranks every
+    installed one, so it is the pack in play until a switch turns it off. Every
+    session here is launched with the bootstrap on - the case is "the bootstrap
+    on a swap", not a pack that happens to have been recorded once - so the
+    reload the swap makes runs the same `StartBootstrapIfNeeded` a fresh load
+    does. What it did on each load is in the session's own log
+    (`<work>/prep|ref|swap/swap.log`, the `bootstrap:` lines): with the pack
+    already beside the ROM it declines and records nothing.
+
+    The probe comes first and is the only row whose verdict is evidence. It
+    turns the Textures switch off on the swapped side while the reference plays
+    with it on, so it must FAIL: the two frames differ unless the comparison
+    cannot see which pack renders. Measured 2026-10-05 on NES, it did *not*
+    fail - the frames came back identical - and the three transitions behind it
+    were therefore comparing nothing: with the bootstrap on in every session,
+    each load writes its own `rec-NNN` beside the ROM (rec-001 ... rec-017 in one
+    run), so the reference and the swapped side are each dressed by a pack
+    recorded over the very window being compared, and the switch that should
+    separate them does not. The three rows are kept for the day the probe is
+    honest; `main` does not run them until it is, and reports the case as not
+    measured instead.
+    """
+    on = [BOOT_FLAG]
+    off = [BOOT_FLAG, "mep-notextures"]
+    return [
+        ("bootstrap probe: off vs reference on (must FAIL)", on, [("textures", "off")], on,
+         False, "restored"),
+        ("bootstrap: control (auto -> auto)", on, [], on, True, "restored"),
+        ("bootstrap: auto -> none (Textures off)", on, [("textures", "off")], off, True, "restored"),
+        ("bootstrap: none -> auto (Textures on)", off, [("textures", "on")], on, True, "restored"),
+    ]
 
 
 # ---- input script slicing ---------------------------------------------------
@@ -315,6 +386,115 @@ def session(rom, work, packs, flags):
     return step_emu.StepEmu(rom, work=work, flags=flags)
 
 
+# ---- the bootstrap case's fixtures --------------------------------------------
+
+def bootstrap_fixture(profile, work):
+    """The bootstrap case's ROM copy, empty pack folder and state S0.
+
+    The bootstrap writes beside the ROM, so the case needs a ROM copy of its
+    own: a sibling pack created next to the ROM every other transition loads
+    would outrank the installed packs and be the pack in play in all of them.
+
+    The pack is minted the way a player's own first run mints it - `bootstrap`
+    on, the ROM's directory holding nothing yet, playing from S0 - which is
+    also the evidence that a load with the bootstrap on and no pack beside the
+    ROM does start a recording and write one.
+
+    Returns `(rom, packs, s0, reason)`: `reason` is empty when the case can run
+    and otherwise names what is missing, so the caller records the case as not
+    measured rather than as a pass.
+    """
+    here = work / "bootstrap"
+    rom = prepare_rom(profile, profile["rom"], here / "rom")
+    if rom is None:
+        return None, None, None, "the ROM is not on this machine"
+    s0 = here / "s0.mss"
+    mint = [f"input={profile['mint']}"] if profile["mint"] else []
+    one_shot(rom, here / "mint" / "mint", profile["mint_seconds"], "mep-off", "hdpack-off",
+             *mint, f"save-state={s0}")
+    #The same frames the transitions play come from the same state, so the
+    #recorded tiles cover the window that is compared.
+    before = {p.name for p in rom.parent.iterdir()}
+    route = [f"input={profile['route']}"] if profile["route"] else []
+    one_shot(rom, here / "record" / "rec", profile["record_seconds"], BOOT_FLAG,
+             f"state={s0}", *route)
+    siblings = [p for p in rom.parent.iterdir() if p.is_dir() and p.name not in before]
+    if len(siblings) != 1:
+        return None, None, None, (f"the bootstrap wrote no sibling pack beside the ROM "
+                                  f"({len(siblings)} new folders in {rom.parent})")
+    if not list(siblings[0].rglob("hires.txt")):
+        return None, None, None, f"the bootstrap's '{siblings[0].name}' holds no hires.txt"
+    packs = here / "packs"
+    packs.mkdir(parents=True, exist_ok=True)
+    return rom, packs, s0, ""
+
+
+# ---- the PPU-swap alternative of Decision 1 -----------------------------------
+
+#What the tree is known to hold (ADR-0244 Decision 1). A candidate outside both
+#sets is the alarm this row exists for. The two sets are deliberately separate
+#from the scan's own filter: naming a pack and swapping one are different
+#questions, and the filter that finds candidates is broad on purpose so that a
+#new export gets looked at rather than silently missed.
+KNOWN_SWAP_ENTRY_POINTS = {"swap", "ReloadRomKeepingState"}
+CANDIDATES_THAT_SWAP_NOTHING = {
+    "GetForcedPackPatch",       # reads the patch a pack forces; changes no pack
+    "SuppressForcedPackPatch",  # a switch over that patch
+    "HasWidescreenPackArt",     # answers a question about the loaded pack
+    "RequestMepImageReload",    # re-decodes one image in the loaded pack (ADR-0212)
+}
+
+
+def pack_change_entry_points():
+    """The tree's pack-change entry points, read from the sources: the session
+    verbs a pack swap could go through (`scripts/headless_record.cpp`) and the
+    core wrapper's exports whose names read as replacing or interrogating a pack
+    (`InteropDLL/EmuApiWrapperMep.cpp`).
+
+    The export filter is a *candidate* filter - `Reload`, `Swap`, `Ppu` or
+    `Pack` anywhere in the name - so it also catches exports that name a pack
+    without swapping one. Measured 2026-10-05: it returned five, and reading
+    them as five entry points made this row report "a second pack-change entry
+    point now exists", which was false and would have hidden the day a real one
+    appears among the noise. The verdict is therefore taken against
+    KNOWN_SWAP_ENTRY_POINTS, and every other candidate must be one this file
+    already accounts for (CANDIDATES_THAT_SWAP_NOTHING)."""
+    tool = (HERE / "headless_record.cpp").read_text()
+    verbs = sorted({v for v in re.findall(r'verb == "([a-z0-9-]+)"', tool) if "swap" in v})
+    wrapper = (ROOT / "InteropDLL" / "EmuApiWrapperMep.cpp").read_text()
+    exports = re.findall(r"DllExport\s+[\w:*&<>\s]+?__stdcall\s+(\w+)", wrapper)
+    candidates = sorted(e for e in exports if any(k in e for k in ("Reload", "Swap", "Ppu", "Pack")))
+    unknown = [c for c in candidates
+               if c not in KNOWN_SWAP_ENTRY_POINTS and c not in CANDIDATES_THAT_SWAP_NOTHING]
+    return verbs, candidates, unknown
+
+
+def ppu_swap_alternative_row():
+    """ADR-0244 Decision 1 names an alternative to the reload - the in-place
+    PPU swap `StartRecordingHdPack` already does - and has to measure both
+    before the reload is kept. The protocol can only be run against a swap that
+    exists, so this row reports the case as NOT MEASURED with the entry points
+    it found; should a second one appear, the row names it instead of the case
+    passing quietly. A row here is never a verdict on the swap."""
+    verbs, candidates, unknown = pack_change_entry_points()
+    swap_verbs = [v for v in verbs if v in KNOWN_SWAP_ENTRY_POINTS]
+    swap_exports = [e for e in candidates if e in KNOWN_SWAP_ENTRY_POINTS]
+    if unknown or not swap_verbs or not swap_exports:
+        reason = ("the tree's pack-change entry points are not the ones this harness "
+                  "knows, so the alternative may already exist: known "
+                  f"{sorted(KNOWN_SWAP_ENTRY_POINTS)}, found verbs {verbs} and candidate "
+                  f"exports {candidates}, outside both sets {unknown}")
+    else:
+        reason = ("nothing in this tree implements the alternative, so the protocol "
+                  "has nothing to run against: the only pack-change entry points are the "
+                  f"session's `{swap_verbs[0]}` verb and the core export {swap_exports[0]} "
+                  "(Emulator::ReloadRomKeepingState - save state, reload, restore); the "
+                  "other exports the scan finds name a pack without swapping one (" +
+                  ", ".join(c for c in candidates if c in CANDIDATES_THAT_SWAP_NOTHING) + ")")
+    return {"case": PPU_SWAP_CASE, "measured": False, "entry_points": verbs + candidates,
+            "reason": reason}
+
+
 # ---- one transition -----------------------------------------------------------
 
 def grab(emu, read_ram):
@@ -422,13 +602,12 @@ def run_transition(rom, work, packs, s0, transition, n, m, profile):
     return out
 
 
-def prepare_rom(profile, rom_arg, work):
-    """The ROM the run uses, always a copy inside `work`. A copy, never the
+def prepare_rom(profile, rom_arg, folder):
+    """The ROM the run uses, always a copy inside `folder`. A copy, never the
     library file: a pack beside the ROM (its sibling folder, MEP-v1 sec. 2.1)
     outranks every installed pack, so in the library it would be the one
     rendering and the swaps under test would change nothing on screen. Returns
     None when the ROM is not on this machine."""
-    folder = work / "rom"
     folder.mkdir(parents=True, exist_ok=True)
     if rom_arg is None and profile["rom"] is None:
         subprocess.run([sys.executable, str(HERE / "gen_hdpack_test_roms.py"), str(folder)],
@@ -440,6 +619,12 @@ def prepare_rom(profile, rom_arg, work):
     rom = folder / source.name
     shutil.copyfile(source, rom)
     return rom
+
+
+def print_not_measured(rows):
+    print(f"{'case':34} verdict")
+    for row in rows:
+        print(f"{row['case']:34} NOT MEASURED  {row['reason']}")
 
 
 def print_table(console, rom, n, m, work, results):
@@ -471,7 +656,7 @@ def main(argv):
         return 0
     work = a.work or Path(tempfile.mkdtemp(prefix=f"p9-exactness-{a.console}-"))
     work.mkdir(parents=True, exist_ok=True)
-    rom = prepare_rom(profile, a.rom, work)
+    rom = prepare_rom(profile, a.rom, work / "rom")
     if rom is None:
         print(f"skip: the {a.console} ROM is not at {a.rom or profile['rom']}")
         return 0
@@ -485,10 +670,43 @@ def main(argv):
         result = run_transition(rom, work / f"t{index}", packs, s0, transition, a.n, a.m, profile)
         result["ram_checked"] = profile["read_ram"]
         results.append(result)
+    not_measured = [ppu_swap_alternative_row()]
+    bootstrap_measured = False
+    if profile["bootstrap"]:
+        bs_rom, bs_packs, bs_s0, why = bootstrap_fixture(profile, work)
+        if why:
+            not_measured.append({"case": BOOTSTRAP_CASE, "measured": False, "reason": why})
+        else:
+            # The probe runs first and alone: a case whose own negative control
+            # cannot tell the two states apart has nothing to report but that.
+            bs_transitions = bootstrap_transitions(profile)
+            probe = run_transition(bs_rom, work / "bootstrap" / "t0", bs_packs, bs_s0,
+                                   bs_transitions[0], a.n, a.m, profile)
+            if probe["pass"]:
+                not_measured.append({
+                    "case": BOOTSTRAP_CASE, "measured": False,
+                    "reason": ("the case's own negative control did not fail: with the "
+                               "bootstrap on, every session writes its own pack beside the "
+                               "ROM, so both sides of the comparison are dressed by a pack "
+                               "recorded over the window being compared and the Textures "
+                               "switch does not separate them - the three transitions "
+                               "behind the probe would compare nothing"),
+                })
+            else:
+                bootstrap_measured = True
+                probe["ram_checked"] = profile["read_ram"]
+                results.append(probe)
+                for index, transition in enumerate(bs_transitions[1:], start=1):
+                    result = run_transition(bs_rom, work / "bootstrap" / f"t{index}", bs_packs,
+                                            bs_s0, transition, a.n, a.m, profile)
+                    result["ram_checked"] = profile["read_ram"]
+                    results.append(result)
     print_table(a.console, rom, a.n, a.m, work, results)
+    print_not_measured(not_measured)
     if a.json:
         a.json.write_text(json.dumps({"console": a.console, "rom": rom.name, "n": a.n, "m": a.m,
-                                      "results": results}, indent=2))
+                                      "bootstrap_measured": bootstrap_measured,
+                                      "results": results, "not_measured": not_measured}, indent=2))
     return 0 if all(r["pass"] == r["expected_pass"] for r in results) else 1
 
 

@@ -90,6 +90,52 @@ env:
   # auth chain for the autofix PR). Flip back to 'true' once that path is
   # solid again — mep_lint.py-only validation (lint + classify) still runs
   # either way, this only skips the live-core cross-check and its autofix.
+  #
+  # Reviewed 2026-10-05 by a two-lens panel (Codex + Grok 4.6, blind to each
+  # other, unanimous): the flip-back condition above was NOT met, so it stays
+  # 'false'. State of that panel's three findings, re-checked here:
+  #   1. (cleared) the live-validation block's comment promised every step was
+  #      "continue-on-error / existence-gated" while "Install SDL2 dev
+  #      headers", "Cache Mesen core build" and "Detect drift between
+  #      mep_lint.py and the real core" carried no `continue-on-error`, so a
+  #      hard failure there skipped the job's later steps — the verdict —
+  #      instead of degrading to the lint-only one. All three now carry
+  #      `continue-on-error: true`, and that block comment now bounds the
+  #      promise to the cross-check steps and states that the autofix chain
+  #      past them is not covered by it.
+  #   2. (credential removed; one residue open) the autofix push no longer
+  #      embeds PROJECT_PAT in the origin URL. The remote is credential-free
+  #      and the push goes through a credential helper defined for that one
+  #      command and fed from the environment, after dropping the extraheader
+  #      actions/checkout persists — dropped in that same shell, immediately
+  #      before the push, since the earlier still-403 attempt dropped it
+  #      earlier in the job, where something re-established it. So the secret
+  #      is no longer written anywhere in the checkout. Still NOT observed: a
+  #      successful authenticated autofix push end to end on a runner. No
+  #      workstation can produce that observation; it takes one live run that
+  #      reaches drift.
+  #   3. (counted; one reduction applied) what the enabled path adds, derived
+  #      from the steps that gate on this flag — not timed on a runner. Five
+  #      cross-check steps are reachable when it is on: SDL2 install and core
+  #      cache restore (both on any run whose download succeeded), the
+  #      capture-tool build (core-cache miss only), the live run (when the
+  #      binary exists) and the drift check (when the live run found errors).
+  #      Four more — render autofix prompt, run the agent, publish the PR,
+  #      restore mep_lint.py — run only when drift was actually found. The
+  #      "~7+ min" above is the recorded per-submission figure; it counts the
+  #      SDL2 install, the core build and the live run together, and the build
+  #      is the dominant term — the repo itself calls the serial `make
+  #      capture-tool` "the dominant cost of the whole gate" and builds this
+  #      same target with `-j$(nproc)` in checks.yml, so this step now does
+  #      too. That is the only reduction the workflow allows: the build is
+  #      already skipped on a core-cache hit, the autofix chain already runs
+  #      only on drift, and the rest is load-bearing. Counted from the steps
+  #      in this file, not re-timed on a runner.
+  #
+  # Turn it back on when (2)'s residue is observed on a runner — one live run
+  # that finds drift and pushes the autofix branch. (1) and (3) are done as
+  # far as a workstation can take them, and neither is a reason to hold the
+  # flag off by itself.
   LIVE_VALIDATION_ENABLED: 'false'
 
 permissions:
@@ -445,15 +491,30 @@ jobs:
       # capture-tool`) so the next steps can drive it against the actual
       # submitted pack — a second, independent check beyond mep_lint.py's
       # Python mirror. Cached on the core sources' hash: a cold run compiles
-      # the whole core (a few minutes); most runs hit cache. Every step in
-      # this whole live-validation subsystem is continue-on-error /
-      # existence-gated: it's a second-opinion cross-check, never allowed to
-      # block the existing lint-based verdict that follows it.
+      # the whole core (a few minutes); most runs hit cache.
+      #
+      # The cross-check steps below — SDL2 install, cache restore, build, live
+      # run, drift detection — are each continue-on-error AND gated on what the
+      # previous one produced, so the worst case is that the second opinion
+      # simply does not happen. None of them may block the lint-based verdict
+      # that follows: without the `continue-on-error` on a step, a hard failure
+      # there skips every later step, verdict included (the item's Status is
+      # restored by the final failure-gated step, so it is not stranded in
+      # "Em validação" — it just never gets a new verdict at all).
+      #
+      # The autofix chain past the drift check is a separate subsystem and is
+      # NOT covered by that promise: it edits scripts/mep_lint.py in this
+      # checkout, so its steps do not carry `continue-on-error`, and the
+      # "Restore scripts/mep_lint.py" step right after it is the guard that
+      # stops anything later from grading the pack against a model-edited
+      # lint script. It only ever runs when drift was actually found.
       - name: Install SDL2 dev headers
         if: steps.download.outcome == 'success' && env.LIVE_VALIDATION_ENABLED == 'true'
+        continue-on-error: true
         run: sudo apt-get update && sudo apt-get install -y libsdl2-dev
       - name: Cache Mesen core build
         if: steps.download.outcome == 'success' && env.LIVE_VALIDATION_ENABLED == 'true'
+        continue-on-error: true
         id: core-cache
         uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
         with:
@@ -471,7 +532,17 @@ jobs:
       - name: Build live-validation tooling (capture-tool)
         if: steps.download.outcome == 'success' && env.LIVE_VALIDATION_ENABLED == 'true' && steps.core-cache.outputs.cache-hit != 'true'
         continue-on-error: true
-        run: make capture-tool
+        # -j$(nproc): this cold compile is the dominant cost of the enabled
+        # path, and the repo already builds this exact target in parallel —
+        # checks.yml's doc-checks shard runs `make -j$(nproc) capture-tool`,
+        # and the Makefile comment beside that target calls the serial
+        # `make capture-tool` "the dominant cost of the whole gate". This step
+        # was paying that serial time for nothing. It is the one reduction the
+        # enabled path allows: the rest is either load-bearing (the core really
+        # does have to be compiled and run) or already conditional (skipped
+        # entirely on a core-cache hit; the drift/autofix steps below run only
+        # when the live core actually disagreed with mep_lint.py).
+        run: make -j"$(nproc)" capture-tool
       # Reuses mep_lint.py's own pack-root discovery (imported, not
       # reimplemented) so this tests exactly the layer mep_lint.py graded.
       # Installs the pack under scripts/gen_synthetic_nrom.py's
@@ -502,6 +573,11 @@ jobs:
       - name: Detect drift between mep_lint.py and the real core
         id: drift-check
         if: env.LIVE_VALIDATION_ENABLED == 'true' && steps.live-validate.outcome == 'success' && steps.live-validate.outputs.live_errors != '0'
+        # Same contract as the steps above: this is still the second opinion.
+        # A failure here leaves `drift` unset, so the autofix chain below is
+        # skipped by its own `== '1'` gates and the lint-based verdict still
+        # runs — a missed drift signal, not a lost verdict.
+        continue-on-error: true
         run: |
           set -euo pipefail
           LINT_LINES=$(grep -oE ':[0-9]+' mep_lint_output.txt 2>/dev/null | tr -d ':' | sort -u || true)
@@ -592,21 +668,38 @@ jobs:
             echo "Autofix did not converge or made no change to scripts/mep_lint.py — not opening a PR. Summary: $SUMMARY"
             exit 0
           fi
-          # Two prior attempts at this comment both turned out wrong in
-          # practice: unsetting actions/checkout's http.extraheader, then
-          # (separately) pairing that with `gh auth setup-git`, still
-          # authenticated the push as github-actions[bot] and got a 403
-          # (confirmed live twice: runs 33045652190 and 33047829747,
-          # "remote: Permission ... denied to github-actions[bot]", exit
-          # 128) — something in this job (quite possibly the Claude Code
-          # Action step just above, which does its own internal git/gh
-          # auth setup) keeps re-establishing default-token credential
-          # state after ours. Rather than chase that further, this embeds
-          # PROJECT_PAT directly in the remote URL: a URL-embedded
-          # credential always wins over any credential helper or
-          # extraheader git might otherwise pick up, regardless of what
-          # else touched git's config earlier in the job.
-          git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git"
+          # Credential handling, and why it is not "just let actions/checkout's
+          # token work": two earlier attempts got a 403 as github-actions[bot]
+          # (runs 33045652190 and 33047829747, "remote: Permission ... denied",
+          # exit 128) because something in this job keeps re-establishing
+          # default-token git credentials — quite possibly the Claude Code
+          # Action step just above, which does its own git/gh auth setup. A
+          # third attempt embedded PROJECT_PAT in the remote URL: it worked,
+          # but at the price of the secret sitting in the checkout's git config
+          # for the rest of the job, and of publishing a lint fix only via a
+          # credential leak.
+          #
+          # Instead: the remote URL carries no credential; actions/checkout's
+          # persisted extraheader is dropped *here*, in this same shell and
+          # immediately before the push (the earlier, still-403 attempt unset
+          # it earlier in the job, where it could be — and was — re-established
+          # afterwards); and git asks a credential helper defined for this one
+          # push. The token therefore stays in the environment, exactly like
+          # GH_TOKEN for `gh pr create` below: never in the remote URL, never
+          # in .git/config, and never in this command's argv, so a runner
+          # running with debug logging on cannot print it either.
+          #
+          # Residue, named deliberately: a *successful* authenticated autofix
+          # push from this step has never been recorded anywhere this review can
+          # cite — the only authenticated-push evidence in this file is the two
+          # 403s above — so "PROJECT_PAT pushes work from a runner" is still an
+          # assumption, not a fact, and a workstation cannot settle it. One live
+          # run that actually finds drift settles it; that is why
+          # LIVE_VALIDATION_ENABLED at the top of this file stays 'false'.
+          git remote set-url origin "https://github.com/${REPO}.git"
+          git config --local --unset-all 'http.https://github.com/.extraheader' >/dev/null 2>&1 || true
+          git config --local --unset-all credential.helper >/dev/null 2>&1 || true
+          CREDENTIAL_HELPER='!f() { echo username=x-access-token; echo password="$GH_TOKEN"; }; f'
           BRANCH="autofix/mep-lint-drift-issue-${ISSUE_NUMBER}-${{ github.run_id }}"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -615,7 +708,10 @@ jobs:
           printf 'fix(mep_lint): autofix drift found validating issue #%s\n\n%s\n\nFound by the live core validation step in community-pack-validate.yml (scripts/mep_live_validate.py vs. scripts/mep_lint.py) while processing https://github.com/%s/issues/%s.\n' \
             "$ISSUE_NUMBER" "$SUMMARY" "$REPO" "$ISSUE_NUMBER" > /tmp/autofix-commit-msg.txt
           git commit -F /tmp/autofix-commit-msg.txt
-          git push origin "$BRANCH"
+          # The leading empty `-c credential.helper=` resets the helper list,
+          # so a helper baked into the runner image's global config cannot be
+          # consulted instead of (or ahead of) ours.
+          git -c credential.helper= -c credential.helper="$CREDENTIAL_HELPER" push origin "$BRANCH"
           printf 'Opened automatically by community-pack-validate.yml after the live core validation step (scripts/mep_live_validate.py) found a case scripts/mep_lint.py'"'"'s static check missed, while processing #%s.\n\n%s\n\nNot auto-merged — please review before merging.\n' \
             "$ISSUE_NUMBER" "$SUMMARY" > /tmp/autofix-pr-body.txt
           gh pr create --repo "$REPO" --base main --head "$BRANCH" \

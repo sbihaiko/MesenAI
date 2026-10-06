@@ -489,10 +489,19 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   scale 1), which is what lets a fully active texture layer still be required
   to produce a bit-identical frame. The suite ROM is not in this repo:
   `--rom`, then `$MESENCE_ACCURACY_ROM`, then `tests/accuracy/`, and with none
-  of them it prints `SKIP` and exits 0 (`--require-rom` makes that exit 2).
-  `--perturb-flag` / `--perturb-texture` exist so the comparison can be shown
-  to go red. Pure helpers are covered by `test_accuracy_compare.py`, which
-  needs no ROM and no emulator.
+  of them it prints `SKIP` and exits 0. `--require-rom` is the mode a CI gate
+  would need, because a run that compared nothing must not read as a pass: it
+  makes exit 2 a hard failure naming the input, for an absent ROM **and** for
+  one whose sha1 is not `SUITE_FILE_SHA1` — the checkpoints are frame numbers
+  read off that exact build, so another build puts them on other screens and
+  the arms are still "compared", at the wrong ones. Without the flag both keep
+  the lenient behaviour (the `SKIP` line, the warning note). It does not gate
+  anything by itself: no workflow calls this, and the pinned ROM is still
+  absent from the repo (ADR-0157 §5). `--perturb-flag` / `--perturb-texture`
+  exist so the comparison can be shown to go red. The pure `rom_verdict` and
+  the other helpers are covered by `test_accuracy_compare.py`, which needs no
+  ROM and no emulator — except the one case that runs this script as a
+  subprocess to check the refusal's exit code and message.
 - `rom_target.py` — versioned map from catalog game name to No-Intro /
   CheatDb / `GetMepRomSha1` hashes (`sha1` + optional `alt_sha1`/`crc32`).
   Extra ROM revisions go here so auto-install can match; the catalog

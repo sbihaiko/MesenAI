@@ -37,3 +37,83 @@ Non-goals:
 - The first phase needs no network and no model.
 - The LLM phases each need a measurement: share of intents answered with a correct entry, and share of web proposals that pass the check; each is accepted only on its own numbers.
 - A "found online" code that passes the RAM check can still have side effects the check does not see. Its label says it was checked, never that it is safe.
+
+## Amendment (2026-10-05) — P.11 adoption verdict
+
+**Decision: `AGREED` — compound panel, Codex (lens A) and Grok 4.6 (lens B), each blind to
+the other. Both ruled option B.**
+
+Lens B stands in for the panel's own `panel-lens-b` agent, which is pinned to Opus; the owner
+vetoed Opus for subagents on 2026-10-05 (*"nao use o Opus"*, *"use o Grok no lugar do Opus"*).
+No lens was unavailable, so no third lens was needed and no PROVISIONAL label applies.
+
+**Ruling.** Adopt P.11 — **Jev only** — but keep it **unwired** (W-P11's search-by-intent entry
+stays unbuilt) until an **independently authored, held-out intent set** passes **≥ 90 % correct
+and ≤ 5 % wrong entries**. Do not offer the local `qwen2.5:7b-instruct` model: it fails both
+bars (84.6 % correct, 10.8 % wrong entries).
+
+**Reasons, in both lenses' words.** The measured set is an upper bound, not evidence: the same
+agent wrote the intent set and the script after reading the descriptions, most intents are
+near-literal, and no held-out set written by a third party was ever run
+(`docs/validation/measurements/p11-cheat-intent-measurement-2026-10-02.md`). The harmful failure
+is a **wrong entry**, which turns on a cheat that does something else, while a wrong `NONE` only
+sends the player back to the text search — so the two bars are judged separately. Wiring costs
+the player a key to install and the project a paid `alpha` endpoint (ADR-0242 Consequences). A
+convenience feature does not warrant that on a self-graded set. Lens A added that a held-out
+**failure** would move it to option D (do not adopt), and that a stronger local model passing
+both bars on its own numbers would justify adding that specific model.
+
+**Both lenses opened the repository.** Lens A cited
+`p11-cheat-intent-measurement-2026-10-02.md:60`, `:74`, `:137`, `scripts/cheat_intent.py:151`,
+`scripts/cheat_intent_eval.py:39`, `scripts/test_cheat_intent.py:312`, ADR-0245:38, ADR-0247:40,
+ADR-0242:31 and `:45`, PRD:1138. Lens B cited the measurement table at `:73-78`, the threshold at
+`:115-121`, ADR-0245 Status `:3`, ADR-0245 Consequences `:38`, the caveat at `:60-63` and `:137-138`,
+the harmful-miss rule at `:67-70`, `scripts/cheat_intent.py:12-21`, ADR-0247 `:35-36, :38, :40-41`,
+ADR-0242 `:3, :30-34, :45-46` and PRD `:1138`. The referee re-checked the load-bearing numbers
+(64/65, 0 wrong; 55/65, 7 wrong) against the log itself and both hold; `git status` after the
+panel showed no file written by either lens.
+
+**What follows from this ruling.** The blocking work is owner-independent and is being run:
+a held-out set authored cold (its author forbidden to open the original fixture, the scoring
+internals or the old measurement log), scored against Jev under a US$ 0.10 cap, logged at
+`docs/validation/measurements/p11-heldout-gate-2026-10-05.md`. Adoption turns on that result:
+passing it makes the wiring an ordinary slice; failing it makes the answer option D, and P.11
+stays an external script.
+
+### The gate ran, and P.11 is adopted (2026-10-05)
+
+**Decision: `AGREED` again — a second compound panel, Codex (lens A) and a
+`panel-adversary-session` lens (lens B, challenger stance), both blind. Both ruled option C:
+adopt.**
+
+The held-out set is `tests/fixtures/cheat-intent/heldout-intents.json` (worktree
+`feat/p11-adopt-gate`): **121 cases over 27 games, 15 of them expecting `NONE`**, authored cold
+before the run — its author was forbidden to open the original fixture, the scoring internals or
+the 2026-10-02 log. Run against Jev `typesafe/jev-1.13` under a US$ 0.10 cap
+(`docs/validation/measurements/p11-heldout-gate-2026-10-05.md`):
+
+| Correct | Share correct | `NONE` expected | Wrong entry | Discarded | Cost |
+|---|---|---|---|---|---|
+| 120/121 | **99.2 %** | 15/15 | 1 (0.83 %) | 0 | US$ 0.00466 |
+
+**Both bars pass** (≥ 90 % correct, ≤ 5 % wrong entries). The single miss is the pt-BR
+`"não deixe o Pac-Man morrer"` (Pac-Man), answered `E8` where `E3` was expected. By the rule the
+first panel set — adoption is a convenience feature that must not turn on the wrong cheat — the
+share of wrong entries is the number that matters, and 0.83 % is far inside the bar.
+
+**Correction to the record.** The first draft of this run was reported as *86.8 % correct with
+zero `NONE` cases*, which would have failed the primary bar and forced option D. That was wrong
+twice over, and both wrongs were the referring session's, not the measurement's: the brief handed
+the set's author `accept: []` as the spelling for an expected `NONE` when the real spelling is
+`["NONE"]` (`scripts/cheat_intent_eval.py:44`, `NONE_ID` at `scripts/cheat_intent.py:68`), and the
+86.8 % figure then came from scoring the run under that wrong spelling, which counts all 15
+correct `none` answers as misses (105 = 120 − 15). Both panel lenses caught it by opening the
+files rather than trusting the brief, and the corrected figures above are re-scored from the
+run's own rows. A stale sentence in the fixture's `how_chosen` still names `accept: []`; it is a
+doc/data mismatch to clean, not evidence. This is the panel's fact-check rule doing its job: a
+load-bearing claim in a brief is not evidence until a lens opens the artifact.
+
+**What follows.** Wiring W-P11's search-by-intent entry — the client starting the external script
+and passing the key only through the child's environment (ADR-0247), reading the custody interface
+ADR-0242 Q1 delivered — is now an **ordinary slice** with no owner decision outstanding. The
+qwen2.5 7B local backend stays unoffered: it fails both bars on the original set.
