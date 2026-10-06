@@ -70,6 +70,23 @@ struct GamepadState
 class IKeyManager
 {
 public:
+	//"No key": the value an empty KeyCombination slot has, and the one code a
+	//pressed set must never carry. It is not a key - it is what "nothing here"
+	//is spelled with, so a reader that takes it for one reads a key that is not
+	//there.
+	//
+	//#902: macOS's key table answers it for every virtual key code the table has
+	//no Mesen key for, and the event handler recorded the answer, so the sentinel
+	//entered a pressed set. The set reached the host, Lua's getPressedKeys and
+	//ShortcutKeyHandler, and each one handled it differently: the host drops it in
+	//PressedKeys.Decode, Lua leaves a hole (its key name is empty, so the push is
+	//skipped while the table index still advances, and ipairs stops there), and
+	//the shortcut handler keeps it - its non-emptiness is "a key is down" and its
+	//size is a press or a release. SetKeyState is the other way in, and it is the
+	//one still open: it is a host export, and all three backends accept code 0.
+	//WithoutNoKey is the filter the facade applies to whatever a backend answers.
+	static constexpr uint16_t NoKey = 0;
+
 	static constexpr int BaseMouseButtonIndex = 0x200;
 	static constexpr int BaseGamepadIndex = 0x1000;
 	//Windows is the only backend with a second pad family: XInput above, and
@@ -78,6 +95,21 @@ public:
 	//tell the two apart - the families number their buttons independently, so the
 	//same button byte is "Start" in one and an axis direction in the other.
 	static constexpr int BaseDirectInputIndex = 0x2000;
+
+	//The pressed set a backend reports, with the sentinel removed. The backend's
+	//order is kept: ShortcutKeyHandler compares two reads of this list position
+	//by position.
+	static vector<uint16_t> WithoutNoKey(const vector<uint16_t>& keyCodes)
+	{
+		vector<uint16_t> keysOut;
+		keysOut.reserve(keyCodes.size());
+		for(uint16_t keyCode : keyCodes) {
+			if(keyCode != NoKey) {
+				keysOut.push_back(keyCode);
+			}
+		}
+		return keysOut;
+	}
 
 	virtual ~IKeyManager() {}
 

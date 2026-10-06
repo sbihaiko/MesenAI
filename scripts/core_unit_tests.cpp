@@ -70,6 +70,7 @@
 #include "Shared/Movies/ShareRecordingSettings.h"
 #include "Shared/ShortcutKeyRules.h"
 #include "Shared/GamepadButtonOrder.h"
+#include "Shared/AliasedKeyState.h"
 #include "Debugger/CdlFileCheck.h"
 #include "NES/NesScanlineTraceValidity.h"
 #include "NES/NesWidescreenReveal.h"
@@ -913,6 +914,119 @@ void TestDetectConventionLayoutBorderSection()
 		std::filesystem::remove_all(home, ec); //mesen.log/.1 written into it by MessageManager::Log
 	}
 
+	//#881: a failure AFTER the first write is reachable without fault
+	//injection - RunOps stops at the first op that fails, leaving the earlier
+	//ops' files on disk. Replacing op 3's source with an entry the primary does
+	//not contain is exactly that: ops 1 and 2 have written hires.txt and
+	//tiles.png by the time op 3 fails.
+	//
+	//The two tests below are the same failure in the two states the caller can
+	//hand the core, and together they are the ownership rule (ADR-0258): the
+	//core owns the folder's *contents* from the moment PrepareOutputFolder
+	//succeeds - it can only succeed on a folder that was absent or empty - so a
+	//later failure restores the folder to how it was found.
+	std::string RecipeWithFailingThirdOp()
+	{
+		std::string recipeJson = ReadFileBytes(kFixtureDir + "/recipe.json");
+		return ReplaceOnce(recipeJson, "\"from\": \"primary:game.ips\"", "\"from\": \"primary:absent.bin\"",
+			"partial-failure test");
+	}
+
+	void TestRecipePartialFailureRestoresTheFolderItFound()
+	{
+		//The production shape: CommunityPackInstallCoordinator.Install calls
+		//TryCreateOutFolder before EmuApi.InstallMepRecipe, so mep/ already
+		//exists and is empty when the core starts (the same shape
+		//MakeTempPackDir builds, which is why every *success* test above was
+		//already running it).
+		std::filesystem::path out = MakeTempPackDir("recipe_partial_failure_found");
+
+		MepRecipeInstallResult result;
+		bool ok = MepRecipeInstaller::Install(RecipeWithFailingThirdOp(), kFixtureDir + "/primary.zip", {}, "", out.string(), result);
+		Check(!ok && !result.Success && !result.Error.empty(), "BlocoE: an op that fails partway aborts Install()", result.Error);
+		Check(std::filesystem::exists(out), "BlocoE: a failed install leaves the folder the caller created in place");
+		Check(std::filesystem::is_empty(out), "BlocoE: a failed install leaves that folder empty, so the next install is not refused as 'not empty'");
+		Check(!std::filesystem::exists(out / "hires.txt"), "BlocoE: a failed install leaves none of the files an earlier op wrote");
+
+		std::error_code ec;
+		std::filesystem::remove_all(out, ec);
+	}
+
+	void TestRecipePartialFailureRemovesTheFolderItCreated()
+	{
+		//The same failure with the folder absent: the core created it, so the
+		//core removes it. This is the branch that already worked, kept so the
+		//new rule cannot regress it.
+		std::filesystem::path out = std::filesystem::temp_directory_path() / "mep_core_unit_tests_recipe_partial_failure_created";
+		std::error_code ec;
+		std::filesystem::remove_all(out, ec);
+
+		MepRecipeInstallResult result;
+		bool ok = MepRecipeInstaller::Install(RecipeWithFailingThirdOp(), kFixtureDir + "/primary.zip", {}, "", out.string(), result);
+		Check(!ok && !result.Success, "BlocoE: an op that fails partway aborts Install() when the folder was absent too", result.Error);
+		Check(!std::filesystem::exists(out), "BlocoE: a failed install removes the output folder it created itself");
+	}
+
+	//`PrepareOutputFolder` accepted ANY existing path that `is_empty` reports
+	//empty - and `is_empty` is true for a zero-byte regular file, not only for a
+	//directory. With the rollback now gated on "we prepared it" (#881), that path
+	//was handed to `remove_all`, so a file the caller had at the output path was
+	//deleted and replaced by a directory. A file is not an output folder:
+	//refuse it, and leave it exactly as it is.
+	void TestRecipeFailureDoesNotDeleteANonDirectoryItWasHanded()
+	{
+		std::filesystem::path out = std::filesystem::temp_directory_path() / "mep_core_unit_tests_recipe_out_is_a_file";
+		std::error_code ec;
+		std::filesystem::remove_all(out, ec);
+		WriteTestFile(out, ""); //zero bytes - the shape is_empty calls empty
+
+		MepRecipeInstallResult result;
+		bool ok = MepRecipeInstaller::Install(RecipeWithFailingThirdOp(), kFixtureDir + "/primary.zip", {}, "", out.string(), result);
+
+		//The error has to name the reason: the install fails either way, so
+		//asserting only that it failed would pass while the file was being
+		//deleted, which is the shape this test exists to catch.
+		Check(!ok && result.Error.find("not a directory") != std::string::npos,
+			"BlocoE: a path that is not a directory is refused as an output folder", result.Error);
+		Check(std::filesystem::exists(out) && !std::filesystem::is_directory(out),
+			"BlocoE: a failed install leaves a file the caller had at the output path alone");
+
+		std::filesystem::remove_all(out, ec);
+	}
+
+	//The same acceptance, for a symlink to an empty directory. The install writes
+	//through the link into the target, and `remove_all` on the link removes the
+	//link rather than the target's contents - so the residue the rollback exists
+	//to prevent stays behind in the target, and the caller's link is replaced by
+	//a real directory. Restoring the folder means emptying it, not replacing it.
+	void TestRecipeFailureKeepsASymlinkedOutputFolder()
+	{
+		std::filesystem::path target = MakeTempPackDir("recipe_symlink_target");
+		std::filesystem::path out = std::filesystem::temp_directory_path() / "mep_core_unit_tests_recipe_out_is_a_symlink";
+		std::error_code ec;
+		std::filesystem::remove_all(out, ec);
+		std::filesystem::create_directory_symlink(target, out, ec);
+		if(ec) {
+			//Windows without developer mode cannot create one, so there is nothing
+			//to assert here
+			printf("SKIP  BlocoE: a symlinked output folder is restored (create_directory_symlink: %s)\n", ec.message().c_str());
+			std::filesystem::remove_all(target, ec);
+			return;
+		}
+
+		MepRecipeInstallResult result;
+		bool ok = MepRecipeInstaller::Install(RecipeWithFailingThirdOp(), kFixtureDir + "/primary.zip", {}, "", out.string(), result);
+
+		Check(!ok, "BlocoE: an op that fails partway aborts Install() through a symlinked output folder", result.Error);
+		Check(std::filesystem::exists(out) && std::filesystem::is_symlink(out),
+			"BlocoE: a failed install keeps the symlink the caller handed it");
+		Check(std::filesystem::is_empty(target),
+			"BlocoE: a failed install removes the files it wrote through the symlink, not the link itself");
+
+		std::filesystem::remove_all(out, ec);
+		std::filesystem::remove_all(target, ec);
+	}
+
 	//F6.4c (ADR-0138 §39): the three primary-discovery edge cases must
 	//resolve to the same installed tree on both interpreters. The wrapped
 	//subfolder (ADR-0120 name-anchored) and the bare legacy probe basename
@@ -1127,6 +1241,39 @@ void TestDetectConventionLayoutBorderSection()
 				std::string got = MepContentId::ComputeRecipe(fx.GetString("primary_tree_hash"), fx.GetString("recipe_hash"), deps);
 				Check(got == expected, "BlocoG: recipe fixture '" + name + "' matches golden", got + " != " + expected);
 			}
+		}
+	}
+
+	//ADR-0139: pack.json is hashed as Python's json.dumps(sort_keys=True,
+	//separators=(",", ":")) with the default ensure_ascii=True, so the Core
+	//hasher and scripts/mep_content_id.py (normative) must return the same
+	//content_id for the same manifest. Python's ASCII escaper covers the whole
+	//non-printable range: it escapes 0x7F (DEL) as \u007f exactly like it
+	//escapes 0x00-0x1F, and leaves only 0x20-0x7E verbatim. A canonical writer
+	//that escapes < 0x20 alone therefore hashes a manifest carrying DEL - and a
+	//key carrying DEL - to a different content_id than CI does.
+	//The expected values are the normative hasher's own output:
+	//  python3 -c "import sys;sys.path.insert(0,'scripts');import
+	//  mep_content_id as m;print(m.compute_tree_content_id([('pack.json',DATA)]))"
+	void TestContentIdPackJsonEscapesTheWholeNonPrintableAsciiRange()
+	{
+		struct Case { const char* Json; const char* Expected; };
+		//The JSON text is ASCII: each case reaches the writer through a \uXXXX
+		//escape, so what diverges is the writer, not the raw bytes on disk.
+		const Case cases[] = {
+			{ "{\"name\":\"plain\"}", "7ef5d4f2d9ce7e01f02cfef9dd66b640f54f184d316e0326441566bef0450f46" },
+			{ "{\"name\":\"a\\u0001b\"}", "b7a7bc698a80c99e2a117b49cb64170e70a44cef30b2e3f6b570219a04416384" },
+			{ "{\"name\":\"a\\u007fb\"}", "b03c078c3e8069b21d31a2b86309f54437994320822f2699bf290bea6652bd41" },
+			{ "{\"name\":\"a\\u007eb\"}", "7f7b1727df89bc4cbc0122ad13af4f3a77e76671cc262f8d9f85dbfa06c4fc08" },
+			{ "{\"name\":\"caf\\u00e9\"}", "cbde1b9430b63af8dbb86222d11977b9b9009881cb6dfe9db68d9353ca70497a" },
+			{ "{\"name\":\"a\\ud83d\\ude00b\"}", "32e22f26f55032aaa2f79e954974173ece2ef26a0f4c55b30973812d4f7fcc1d" },
+			{ "{\"a\\u007fb\":\"v\"}", "a5ff3cd88e40685709e6163e08081f67e6cb407597e494ed3fd7cceb508b2128" },
+		};
+		for(const Case& testCase : cases) {
+			std::vector<MepContentId::Entry> entries;
+			entries.push_back({ "pack.json", std::vector<uint8_t>(testCase.Json, testCase.Json + strlen(testCase.Json)) });
+			std::string got = MepContentId::ComputeTree(entries);
+			Check(got == testCase.Expected, std::string("BlocoG: pack.json ") + testCase.Json + " hashes as the normative Python hasher does", got + " != " + testCase.Expected);
 		}
 	}
 
@@ -1447,6 +1594,78 @@ namespace
 		std::string text0 = ReadFileBytes(path);
 		Check(text0.find("loop") == std::string::npos, "BlocoH: Save omits the loop field when zero", text0);
 	}
+	//--- Bloco H: the F6.10 trigger id (ADR-0240 A4 follow-up) -----------------
+	//The join key ADR-0240 A4 could not recover from emission order or note
+	//onsets: the id the host asked the driver for, carried by the track it
+	//produced. `NesAudioFingerprint.h` reads the process-wide id into the
+	//segmenter one line per frame; that line is compile-checked by the core
+	//build, so what is pinned here is the rule it feeds and the JSON it reaches.
+	NoteFrame AudibleNote(int8_t note)
+	{
+		NoteFrame f;
+		f.Note[0] = note;
+		return f;
+	}
+
+	void TestTriggerIdStampedAtSegmentOpen()
+	{
+		TrackSegmenter seg;
+		seg.SetActiveTriggerId(7);
+		//A burst has to outlast MinKeepFrames (6) or Close() drops it as noise,
+		//and it is stamped where it opens.
+		for(int i = 0; i < 10; i++) { seg.Feed(AudibleNote(60)); }
+		//The id moves while this track is open: it keeps the id it opened with,
+		//so an id that produced nothing borrows nobody else's work.
+		seg.SetActiveTriggerId(-1);
+		for(int i = 0; i < 10; i++) { seg.Feed(AudibleNote(60)); }
+		for(int i = 0; i < 100; i++) { seg.Feed(NoteFrame()); }
+		seg.SetActiveTriggerId(9);
+		for(int i = 0; i < 10; i++) { seg.Feed(AudibleNote(64)); }
+		seg.Finish();
+
+		const vector<TrackSegmenter::Segment>& segs = seg.GetSegments();
+		Check(segs.size() == 2, "F6.10: two audible stretches make two tracks", std::to_string(segs.size()));
+		if(segs.size() != 2) { return; }
+		Check(segs[0].Fingerprint.TriggerId == 7, "F6.10: a track carries the id in force when it opened",
+			std::to_string(segs[0].Fingerprint.TriggerId));
+		Check(segs[1].Fingerprint.TriggerId == 9, "F6.10: an id that opened nothing leaves no trace on the next id's track",
+			std::to_string(segs[1].Fingerprint.TriggerId));
+	}
+
+	void TestTriggerIdJsonRoundTrip()
+	{
+		std::string error;
+		std::vector<AudioFingerprint> with;
+		Check(FingerprintStore::Load(WriteTempFile("fp_trigger.json", FingerprintJson("\"triggerId\":7")), with, error),
+			"F6.10: fingerprints.json with triggerId loads");
+		Check(with.size() == 1 && with[0].TriggerId == 7, "F6.10: triggerId parsed to AudioFingerprint::TriggerId");
+
+		std::vector<AudioFingerprint> without;
+		Check(FingerprintStore::Load(WriteTempFile("fp_no_trigger.json", FingerprintJson("")), without, error),
+			"F6.10: fingerprints.json without triggerId loads");
+		Check(without.size() == 1 && without[0].TriggerId == -1,
+			"F6.10: absent triggerId is -1, i.e. no trigger was fired");
+
+		std::vector<AudioFingerprint> tracks;
+		AudioFingerprint fp;
+		fp.Id = "t1"; fp.Kind = "bgm"; fp.Frames = 1200; fp.TriggerId = 7;
+		fp.Events.push_back({ 0, 0, 0 });
+		tracks.push_back(fp);
+		std::string path = WriteTempFile("fp_save_trigger.json", "");
+		Check(FingerprintStore::Save(path, tracks), "F6.10: Save writes the file");
+		Check(ReadFileBytes(path).find("\"triggerId\": 7") != std::string::npos,
+			"F6.10: Save emits the trigger id when one was fired");
+
+		//A plain bootstrap recording fired no trigger, and must stay byte for
+		//byte what it was before F6.10 - no empty field, no schema change.
+		fp.TriggerId = -1;
+		tracks[0] = fp;
+		path = WriteTempFile("fp_save_no_trigger.json", "");
+		Check(FingerprintStore::Save(path, tracks), "F6.10: Save writes the file (no trigger)");
+		Check(ReadFileBytes(path).find("triggerId") == std::string::npos,
+			"F6.10: Save omits the field when no trigger was fired");
+	}
+
 	//--- Bloco H: BorderLayout (ADR-0149, Slice F8.3b) -------------------------
 	//Host-free viewport/canvas math extracted from VideoRenderer so the border
 	//layer's layout rules are pinned without linking the Emulator.
@@ -5996,6 +6215,40 @@ namespace
 		return PadChordFires(down, ShortcutKeyRules::SinglePadFamily());
 	}
 
+	//#902: key code 0 is the "no key" sentinel, not a key. It is what an empty
+	//KeyCombination slot holds, and what macOS answers for a virtual key code its
+	//table has no Mesen key for. A pressed set carrying it describes a key that is
+	//not there, and it is read as one: ShortcutKeyHandler takes the set's
+	//non-emptiness for "a key is down" and compares two reads by size, so the
+	//sentinel is a press and a release that never happened. The filter is what
+	//keeps that knowledge out of each reader - and it has to drop that one code
+	//and keep everything else, in the backend's own order.
+	void TestTheNoKeySentinelIsNeverAKey()
+	{
+		static_assert(IKeyManager::NoKey == 0,
+			"#902: the sentinel is 0, the value an empty KeyCombination slot holds");
+
+		Check(IKeyManager::WithoutNoKey({ IKeyManager::NoKey }).empty(),
+			"#902: a set holding only the sentinel is empty - no key is down");
+		Check(IKeyManager::WithoutNoKey({ IKeyManager::NoKey, IKeyManager::NoKey }).empty(),
+			"#902: ...however many times a backend reports it");
+		Check(IKeyManager::WithoutNoKey({}).empty(),
+			"#902: an empty set stays empty");
+
+		//The low codes are the sharp end: one of them is 1, and a filter that
+		//dropped everything below a threshold - or that deduplicated, or that
+		//capped the copy - passes a set made only of 65s. Four survivors, the
+		//sentinel first and last, and one repeated code in the middle.
+		vector<uint16_t> kept = IKeyManager::WithoutNoKey({
+			IKeyManager::NoKey, 1, 2, 65, 65, (uint16_t)IKeyManager::BaseMouseButtonIndex, 0x1005, IKeyManager::NoKey
+		});
+		Check(kept.size() == 6,
+			"#902: every code but the sentinel survives the filter, repeats included");
+		Check(kept.size() == 6 && kept[0] == 1 && kept[1] == 2 && kept[2] == 65 && kept[3] == 65
+			&& kept[4] == (uint16_t)IKeyManager::BaseMouseButtonIndex && kept[5] == 0x1005,
+			"#902: ...in the backend's own order, because the shortcut handler compares two reads position by position");
+	}
+
 	void TestPadChordFiresOnWhicheverPadIsInHand()
 	{
 		Check(PadChordFires({ PadKey(0, kPadSelectButton), PadKey(0, kPadStartButton) }),
@@ -6328,6 +6581,82 @@ namespace
 				}
 			}
 		}
+	}
+
+	//--- Bloco O.6: the host key table is partial and many-to-one ---------------
+	//Both cases below are the two properties of MacOS/MacOSKeyManager.mm's
+	//128-entry _keyCodeMap, extracted into Core/Shared/AliasedKeyState.h so they
+	//can be asserted without an NSEvent or an Emulator: the table is partial (a
+	//host code it cannot name maps to 0) and it is many-to-one (four pairs of host
+	//codes share one Mesen code). The backend in front of that table is the one
+	//that was read as a bool per Mesen code, which is what these pin.
+
+	//#902: the table maps a host code it cannot name to 0, and that code was
+	//written at slot 0 like any other - a slot KeyDefinitions names "" and every
+	//host reader drops (UI/Logic/PressedKeys.Decode skips it, StateGrid skips it),
+	//so the backend held an entry the host could not see, with nothing saying so.
+	//The rule: a host code the table leaves at NoKey publishes nothing at all.
+	void TestAHostCodeTheTableCannotNamePublishesNoKey()
+	{
+		AliasedKeyState state;
+		state.SetMapping(36, 6);   //Return
+		state.SetMapping(63, 0);   //an entry _keyCodeMap leaves at 0
+		state.SetMapping(66, 0);
+
+		//A host code past the table's own size is unmapped by construction
+		//(`[event keyCode] >= 128 ? 0 : _keyCodeMap[...]`).
+		state.SetKeyState(200, true);
+		state.SetKeyState(63, true);
+		state.SetKeyState(66, true);
+
+		Check(state.GetPressedKeys().empty(),
+			"BlocoO.6: a host code the table cannot name reports no key at all (#902)");
+		Check(!state.IsPressed(AliasedKeyState::NoKey),
+			"BlocoO.6: ...and code 0 never reads as pressed");
+
+		//The control: with a host code the table does name also down, that one is
+		//reported and the unnamed ones still are not.
+		state.SetKeyState(36, true);
+		vector<uint16_t> pressed = state.GetPressedKeys();
+		Check(pressed.size() == 1 && pressed[0] == 6,
+			"BlocoO.6: ...while the code it does name is reported instead of them");
+	}
+
+	//#904: two host codes can share one Mesen code, and the state behind them was
+	//a single bool. Holding Return, then keypad Enter, then releasing keypad Enter
+	//reported the console key released while Return was still held - for all four
+	//alias rows in the table. The rule: a shared code reads pressed while any of
+	//its host codes is down, and drops only on the last of them.
+	void TestASharedCodeStaysDownUntilItsLastHostCodeIsReleased()
+	{
+		AliasedKeyState state;
+		state.SetMapping(36, 6);   //Return
+		state.SetMapping(52, 6);   //keypad Enter
+
+		Check(state.SetKeyState(36, true),
+			"BlocoO.6: the first host key of a shared code publishes that code (#904)");
+		Check(!state.SetKeyState(52, true),
+			"BlocoO.6: ...a second host key on the same code changes nothing");
+		Check(!state.SetKeyState(52, false),
+			"BlocoO.6: ...and releasing it does not unpublish the code");
+		Check(state.IsPressed(6),
+			"BlocoO.6: releasing one of two aliased host keys keeps Enter down (#904)");
+		Check(state.GetPressedKeys().size() == 1 && state.GetPressedKeys()[0] == 6,
+			"BlocoO.6: ...and the reported set still names it exactly once");
+
+		Check(state.SetKeyState(36, false),
+			"BlocoO.6: the last host key of the code unpublishes it");
+		Check(!state.IsPressed(6) && state.GetPressedKeys().empty(),
+			"BlocoO.6: ...so the code is up again, and reported by nobody");
+
+		//macOS repeats key-down while a key is held. A repeated key-down is still
+		//one host key to release, so the count behind the code cannot be a plain
+		//increments-per-event.
+		state.SetKeyState(36, true);
+		state.SetKeyState(36, true);
+		state.SetKeyState(36, false);
+		Check(!state.IsPressed(6),
+			"BlocoO.6: a repeated key-down of one host key still needs only one release");
 	}
 
 	//A binding may name pad keys from two families at once, and no single pad can
@@ -8517,7 +8846,7 @@ namespace
 	//---- ADR-0190: tileNearby selection from the background pair table -------
 	//The gate SelectTileNearby applies is the whole reason a tileNearby may be
 	//auto-attached at all, so it is tested away from the emulator. The numbers
-	//it is set to are measured in docs/validation/tilenearby-evidence-study.md.
+	//it is set to are measured in docs/validation/measurements/tilenearby-evidence-study.md.
 
 	static TileAdjacency Adjacency(uint32_t a, uint32_t b, uint32_t frames, uint32_t framesA, uint32_t framesB)
 	{
@@ -10645,8 +10974,8 @@ namespace
 		return (pixels + (pixels >= 0 ? 4 : -4)) / 8;
 	}
 
-	//Contra's player shape (docs/validation/contra-pose-offsets-and-flicker-
-	//2026-09-23.md §1): legs at y 14 under a torso shifted `torsoX` px right.
+	//Contra's player shape
+	//(docs/validation/measurements/contra-pose-offsets-and-flicker-2026-09-23.md §1): legs at y 14 under a torso shifted `torsoX` px right.
 	//OAM order puts the legs first, so they are the frontmost tiles.
 	OamFrame ContraRunFrame(uint32_t f, uint32_t torsoX, uint32_t repeat, bool legsFirst = true)
 	{
@@ -11872,7 +12201,7 @@ void TestHdPackOptionsLineOrderAndEmptiness()
 //over flat colours, with the real predicate deciding the re-apply. The
 //renderer itself is proven on the headless render: a pack without the tag
 //must come back byte-identical
-//(docs/validation/f12.15-behind-bg-sprites-2026-09-22.md).
+//(docs/validation/slices/f12.15-behind-bg-sprites-2026-09-22.md).
 namespace
 {
 	struct ModelPixel
@@ -16855,6 +17184,10 @@ int main()
 	TestMissingDepWithholdsPatchKeepsTextures();
 	TestHashMismatchAbortsWritesNothing();
 	TestUnknownOpAndVersionLogsAndSkips();
+	TestRecipePartialFailureRestoresTheFolderItFound();
+	TestRecipePartialFailureRemovesTheFolderItCreated();
+	TestRecipeFailureDoesNotDeleteANonDirectoryItWasHanded();
+	TestRecipeFailureKeepsASymlinkedOutputFolder();
 	TestDiscoveryEdgeCaseParity();
 
 	TestFoldArpeggioToChord();
@@ -16864,6 +17197,7 @@ int main()
 	TestArpeggioKeysDetection();
 
 	TestContentIdGoldenParity();
+	TestContentIdPackJsonEscapesTheWholeNonPrintableAsciiRange();
 	TestMepContentIdComputeFolder();
 	TestMepLocalIdentityCache();
 
@@ -16871,6 +17205,8 @@ int main()
 	TestFingerprintLoopAbsent();
 	TestFingerprintLoopMalformed();
 	TestFingerprintLoopSave();
+	TestTriggerIdStampedAtSegmentOpen();
+	TestTriggerIdJsonRoundTrip();
 
 	TestBorderDefaultHeuristic();
 	TestBorderParseScaleMode();
@@ -16998,6 +17334,7 @@ TestW6TheFiltersAcceptTheExtendedFrame();
 	TestKeyboardBlockOnlyAppliesWhileRunning();
 	TestKeyboardBlockSparesNonKeyboardInputs();
 	TestSupersetStillShadowsTheExemptShortcut();
+	TestTheNoKeySentinelIsNeverAKey();
 	TestPadChordFiresOnWhicheverPadIsInHand();
 	TestTheWholePadFamilyAnswersTheChord();
 	TestPadChordIsNotAnsweredAcrossPadFamilies();
@@ -17008,6 +17345,8 @@ TestW6TheFiltersAcceptTheExtendedFrame();
 	TestAJoysticksDeviceIndexIsItsOwnFamilyNotTheHostsOrdinal();
 	TestAnAxisThresholdAppliesOnlyToTheDirectionABindingNames();
 	TestThePadsButtonOrderIsPerBackend();
+	TestAHostCodeTheTableCannotNamePublishesNoKey();
+	TestASharedCodeStaysDownUntilItsLastHostCodeIsReleased();
 	TestPadRuleLeavesTheKeyboardAndMouseExact();
 
 	TestSheetStableScreensCollapseRepeats();

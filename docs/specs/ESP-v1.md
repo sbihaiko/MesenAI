@@ -140,3 +140,5 @@ is the canonical example: it contains all engine sections, all v1 fields
 with values within their usual ranges, comments, and one deliberate unknown
 field (which conformant parsers ignore). `scripts/validate-specs.py`
 validates it against this spec's grammar and field list.
+A commented starting template for authoring your own text-file preset is
+[`docs/EnhancedAudioPresets.example.cfg`](../EnhancedAudioPresets.example.cfg).

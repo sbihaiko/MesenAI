@@ -6,7 +6,9 @@ using System.Linq;
 using System.Threading;
 using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
+using Avalonia.Media;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using Mesen.Config;
 using Mesen.Interop;
 using Mesen.Logic;
@@ -132,12 +134,18 @@ public class PlayRomPickerTests : IDisposable
 	}
 
 	//A first run: no recent games, so W-P1's own action is the one on screen.
+	//
+	//The scan is stubbed to answer nothing here. Its default walks the machine
+	//this suite happens to run on - the developer's whole home folder - so without
+	//this every pad case below would depend on that disk and on a scan landing in
+	//the middle of a key press. The cases about the scan set their own source.
 	private (MainWindow Window, MainWindowViewModel Model) ShowFirstRunHome()
 	{
 		foreach(string stale in Directory.GetFiles(ConfigManager.RecentGamesFolder, "*.rgd")) {
 			File.Delete(stale);
 		}
 		(MainWindow window, MainWindowViewModel model) = ShowPlay();
+		model.RomPicker.SuggestionSource = _ => Array.Empty<RomPickerHit>();
 		model.RecentGames.Init(GameScreenMode.RecentGames);
 		Pump();
 		Assert.True(model.RecentGames.ShowFirstRunHome, "the home is not the first-run one, so this case would prove nothing");
@@ -380,5 +388,449 @@ public class PlayRomPickerTests : IDisposable
 	private static string? FocusedRow(MainWindow window)
 	{
 		return (window.FocusManager?.GetFocusedElement() as Control)?.DataContext is PlayerRomPickerRow row ? row.Label : null;
+	}
+
+	private static RomPickerRowKind? FocusedKind(MainWindow window)
+	{
+		return (window.FocusManager?.GetFocusedElement() as Control)?.DataContext is PlayerRomPickerRow row ? row.Kind : null;
+	}
+
+	//The amendment's two halves, from the pad's side: the sheet discovers the
+	//standard places to look, and the player can name the folder they walked into
+	//as the games folder without a keyboard.
+
+	//(1) The action row writes the config the classic Advanced Options row writes,
+	//re-roots in place, and STAYS - the sheet does not dismiss, so the next Confirm
+	//loads a game from the folder that just became "Your games".
+	[AvaloniaFact]
+	public void The_pad_makes_the_folder_it_walked_into_the_games_folder()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		string root = Path.Combine(_folder, "games");
+		string sub = Path.Combine(root, "nes");
+		Directory.CreateDirectory(sub);
+		File.WriteAllBytes(Path.Combine(sub, "Contra.nes"), SyntheticNrom.Build());
+		ConfigManager.Config.Preferences.GameFolder = root;
+		ConfigManager.Config.Preferences.OverrideGameFolder = true;
+		try {
+			(MainWindow window, MainWindowViewModel model) = ShowFirstRunHome();
+			//The core keeps its own list of folders a game can be found in and has
+			//no getter for it, so this seam is the only place the hand-off is
+			//observable; its default is the real EmuApi.AddKnownGameFolder call.
+			List<string> known = new();
+			model.RomPicker.KnownGameFolderSink = known.Add;
+			WaitFor(() => FocusedName(window) == "PlayHomeOpenRomPrimary",
+				"the first-run home did not put the focus on its one action");
+
+			Press(window, PadNavAction.Confirm);
+			WaitFor(() => FocusedRow(window) == "Your games", $"the picker did not open on its roots ({Focused(window)})");
+			Press(window, PadNavAction.Confirm);
+			WaitFor(() => FocusedRow(window) == "nes", $"Confirm did not descend into the configured folder ({Focused(window)})");
+			Press(window, PadNavAction.Confirm);
+			//The action row leads the list, but the ring landed on the content.
+			WaitFor(() => FocusedRow(window) == "Contra.nes", $"Confirm did not list the game ({Focused(window)})");
+			Assert.Equal(RomPickerRowKind.Game, FocusedKind(window));
+
+			//One Up reaches the action row, and Confirm makes this folder the one.
+			Press(window, PadNavAction.Up);
+			WaitFor(() => FocusedKind(window) == RomPickerRowKind.Action,
+				$"the pad could not reach the action row ({Focused(window)})");
+			Press(window, PadNavAction.Confirm);
+
+			Assert.Equal(sub, ConfigManager.Config.Preferences.GameFolder);
+			Assert.True(ConfigManager.Config.Preferences.OverrideGameFolder);
+			//And the core is told now, not at the next launch: that list is what
+			//RomFinder resolves a ROM by name and CRC against, and the core
+			//otherwise reads the configured folder only at startup.
+			Assert.Equal(new[] { sub }, known);
+			//It stays, re-claimed on the folder's own content: the action row is
+			//gone, the path line reads "Your games".
+			WaitFor(() => model.RomPicker.IsVisible && FocusedRow(window) == "Contra.nes",
+				$"the save did not re-claim the ring on the folder's content ({Focused(window)})");
+			Assert.Equal("Your games", model.RomPicker.PathText);
+			Assert.DoesNotContain(model.RomPicker.Rows, r => r.Kind == RomPickerRowKind.Action);
+		} finally {
+			ConfigManager.Config.Preferences.GameFolder = "";
+			ConfigManager.Config.Preferences.OverrideGameFolder = false;
+		}
+	}
+
+	//The failure the amendment must not introduce: a folder with nothing in it
+	//has only the action row, and a stray Confirm there would silently repoint
+	//"Your games" away from a library that worked. So the ring falls to Back.
+	[AvaloniaFact]
+	public void An_empty_folder_sends_the_ring_to_back_not_to_the_action_row()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		string root = Path.Combine(_folder, "games");
+		string empty = Path.Combine(root, "empty");
+		Directory.CreateDirectory(empty);
+		ConfigManager.Config.Preferences.GameFolder = root;
+		ConfigManager.Config.Preferences.OverrideGameFolder = true;
+		try {
+			(MainWindow window, MainWindowViewModel model) = ShowFirstRunHome();
+			WaitFor(() => FocusedName(window) == "PlayHomeOpenRomPrimary",
+				"the first-run home did not put the focus on its one action");
+
+			Press(window, PadNavAction.Confirm);
+			WaitFor(() => FocusedRow(window) == "Your games", $"the picker did not open on its roots ({Focused(window)})");
+			Press(window, PadNavAction.Confirm);
+			WaitFor(() => FocusedRow(window) == "empty", $"Confirm did not descend into the configured folder ({Focused(window)})");
+			Press(window, PadNavAction.Confirm);
+
+			WaitFor(() => FocusedName(window) == "RomPickerBack",
+				$"an empty folder did not send the ring to Back ({Focused(window)})");
+			Assert.DoesNotContain(model.RomPicker.Rows, r => r.Kind != RomPickerRowKind.Action);
+			Assert.False(string.IsNullOrEmpty(model.RomPicker.EmptyText));
+
+			//And Back leaves the folder without having changed a thing.
+			Press(window, PadNavAction.Back);
+			WaitFor(() => FocusedRow(window) == "empty", $"Back did not ascend out of the empty folder ({Focused(window)})");
+			Assert.Equal(root, ConfigManager.Config.Preferences.GameFolder);
+		} finally {
+			ConfigManager.Config.Preferences.GameFolder = "";
+			ConfigManager.Config.Preferences.OverrideGameFolder = false;
+		}
+	}
+
+	//(2) The scan's discovery, through the real async path (Task.Run ->
+	//Dispatcher.Post): an injected hit list stands in for the disk, so the case
+	//is deterministic while still exercising the thread hop the real scan uses.
+	[AvaloniaFact]
+	public void The_suggestions_appear_on_the_roots_and_the_pad_can_walk_into_one()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		string lib = Path.Combine(_folder, "lib");
+		Directory.CreateDirectory(lib);
+		File.WriteAllBytes(Path.Combine(lib, "Contra.nes"), SyntheticNrom.Build());
+
+		(MainWindow window, MainWindowViewModel model) = ShowFirstRunHome();
+		model.RomPicker.SuggestionSource = _ => new[] { new RomPickerHit(lib, 30) };
+		WaitFor(() => FocusedName(window) == "PlayHomeOpenRomPrimary",
+			"the first-run home did not put the focus on its one action");
+
+		Press(window, PadNavAction.Confirm);
+		WaitFor(() => FocusedRow(window) == "MesenAI's games folder",
+			$"the picker did not open on its roots ({Focused(window)})");
+		WaitFor(() => model.RomPicker.Suggestions.Count == 1,
+			"the scan's suggestion never landed on the roots");
+
+		//It is a row below the known roots, a place the pad can walk into.
+		PlayerRomPickerRow suggestion = Assert.Single(model.RomPicker.Rows.Where(r => r.Path == lib));
+		Assert.Equal(RomPickerRowKind.Folder, suggestion.Kind);
+		int index = model.RomPicker.Rows.IndexOf(suggestion);
+		for(int i = 0; i < index; i++) {
+			Press(window, PadNavAction.Down);
+		}
+		WaitFor(() => FocusedRow(window) == suggestion.Label,
+			$"the pad could not reach the suggestion ({Focused(window)})");
+
+		Press(window, PadNavAction.Confirm);
+		WaitFor(() => FocusedRow(window) == "Contra.nes",
+			$"Confirm on the suggestion did not list the game in it ({Focused(window)})");
+	}
+
+	//A scan that finds nothing clears its line and adds no rows - the known roots
+	//are untouched and there is no error and no nag. It is one half of a pair; the
+	//other half is A_scan_that_finds_something_puts_a_row_on_the_roots below.
+	[AvaloniaFact]
+	public void Finding_nothing_leaves_the_roots_untouched()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model) = ShowFirstRunHome();
+		model.RomPicker.SuggestionSource = _ => Array.Empty<RomPickerHit>();
+		model.RomPicker.RunScanInline = true;
+		WaitFor(() => FocusedName(window) == "PlayHomeOpenRomPrimary",
+			"the first-run home did not put the focus on its one action");
+
+		Press(window, PadNavAction.Confirm);
+		WaitFor(() => FocusedRow(window) == "MesenAI's games folder",
+			$"the picker did not open on its roots ({Focused(window)})");
+
+		Assert.Empty(model.RomPicker.Suggestions);
+		Assert.Equal("", model.RomPicker.SearchingText);
+		Assert.Equal("MesenAI's games folder", model.RomPicker.Rows[0].Label);
+	}
+
+	//The complement of the case above, and the reason that case is evidence at
+	//all: a scan that DOES find something puts a row on the roots. On its own,
+	//"finding nothing leaves the roots untouched" passes against a sheet whose
+	//whole suggestion path was never written - the assertion would be about a
+	//feature that is not there.
+	[AvaloniaFact]
+	public void A_scan_that_finds_something_puts_a_row_on_the_roots()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		string lib = Path.Combine(_folder, "lib");
+		Directory.CreateDirectory(lib);
+
+		(MainWindow window, MainWindowViewModel model) = ShowFirstRunHome();
+		model.RomPicker.SuggestionSource = _ => new[] { new RomPickerHit(lib, 30) };
+		model.RomPicker.RunScanInline = true;
+		WaitFor(() => FocusedName(window) == "PlayHomeOpenRomPrimary",
+			"the first-run home did not put the focus on its one action");
+
+		Press(window, PadNavAction.Confirm);
+		WaitFor(() => FocusedRow(window) == "MesenAI's games folder",
+			$"the picker did not open on its roots ({Focused(window)})");
+
+		PlayerRomPickerRow row = Assert.Single(model.RomPicker.Rows.Where(r => r.Path == lib));
+		Assert.Equal(RomPickerRowKind.Folder, row.Kind);
+		//Below the known roots, never above them.
+		Assert.Equal(model.RomPicker.Rows[^1], row);
+		Assert.Equal("", model.RomPicker.SearchingText);
+	}
+
+	//One scan, two passes (ADR-0256 Decision 9 amendment, second review of #845):
+	//the shallow pass is published the moment it lands and the deep pass replaces
+	//it when it returns, so a cold cache or a slow disk cannot leave the player on
+	//the plain roots with no suggestion and nothing to designate.
+	//
+	//Both passes run off the UI thread here - the real path - and the deep one is
+	//held open at the seam until this case has read the shallow answer. That is
+	//the whole point: with the two passes collapsed into one turn, "the shallow
+	//rows were published" and "the shallow rows were computed and thrown away"
+	//look exactly the same.
+	[AvaloniaFact]
+	public void The_shallow_answer_lands_first_and_the_deep_one_replaces_it()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		string shallow = Path.Combine(_folder, "shallow", "roms");
+		string deep = Path.Combine(_folder, "deep", "roms");
+		Directory.CreateDirectory(shallow);
+		Directory.CreateDirectory(deep);
+
+		(MainWindow window, MainWindowViewModel model) = ShowFirstRunHome();
+		using SemaphoreSlim hold = new(0);
+		List<RomScanPass> passes = new();
+		model.RomPicker.SuggestionSource = pass => {
+			lock(passes) {
+				passes.Add(pass);
+			}
+			if(pass == RomScanPass.Deep) {
+				//No assertion here: this runs inside the scan's own guard, where a
+				//throw is swallowed by design. The case releases it below.
+				hold.Wait(TimeSpan.FromSeconds(30));
+			}
+			return pass == RomScanPass.Shallow
+				? new[] { new RomPickerHit(shallow, 2) }
+				: new[] { new RomPickerHit(deep, 30) };
+		};
+		try {
+			WaitFor(() => FocusedName(window) == "PlayHomeOpenRomPrimary",
+				"the first-run home did not put the focus on its one action");
+
+			Press(window, PadNavAction.Confirm);
+			WaitFor(() => FocusedRow(window) == "MesenAI's games folder",
+				$"the picker did not open on its roots ({Focused(window)})");
+
+			//The shallow answer is on screen while the deep walk is still going.
+			WaitFor(() => model.RomPicker.Suggestions.Any(s => s.Folder == shallow),
+				"the shallow pass's rows never landed on the roots");
+			Assert.Contains(model.RomPicker.Rows, r => r.Path == shallow);
+			Assert.NotEqual("", model.RomPicker.SearchingText);
+
+			hold.Release();
+
+			//And the deep answer takes their place.
+			WaitFor(() => model.RomPicker.Suggestions.Any(s => s.Folder == deep),
+				"the deep pass's rows never replaced the shallow ones");
+			Assert.DoesNotContain(model.RomPicker.Rows, r => r.Path == shallow);
+			Assert.Contains(model.RomPicker.Rows, r => r.Path == deep);
+
+			lock(passes) {
+				Assert.Equal(new[] { RomScanPass.Shallow, RomScanPass.Deep }, passes);
+			}
+		} finally {
+			hold.Release();
+		}
+	}
+
+	//The other half of "the deep pass replaces the shallow one": it may not make
+	//the sheet worse. A deep pass offering fewer libraries than the shallow one
+	//already did would read to the player as "my libraries are gone", so a smaller
+	//answer is discarded and the rows on screen stay.
+	[AvaloniaFact]
+	public void A_deep_pass_that_finds_less_does_not_take_the_shallow_rows_away()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		string first = Path.Combine(_folder, "first");
+		string second = Path.Combine(_folder, "second");
+		Directory.CreateDirectory(first);
+		Directory.CreateDirectory(second);
+
+		(MainWindow window, MainWindowViewModel model) = ShowFirstRunHome();
+		model.RomPicker.SuggestionSource = pass => pass == RomScanPass.Shallow
+			? new[] { new RomPickerHit(first, 30), new RomPickerHit(second, 10) }
+			: new[] { new RomPickerHit(first, 30) };
+		model.RomPicker.RunScanInline = true;
+		WaitFor(() => FocusedName(window) == "PlayHomeOpenRomPrimary",
+			"the first-run home did not put the focus on its one action");
+
+		Press(window, PadNavAction.Confirm);
+		WaitFor(() => FocusedRow(window) == "MesenAI's games folder",
+			$"the picker did not open on its roots ({Focused(window)})");
+
+		Assert.Equal(2, model.RomPicker.Suggestions.Count);
+		Assert.Contains(model.RomPicker.Rows, r => r.Path == second);
+	}
+
+	//And a pass that throws answers nothing, which leaves the other one's rows in
+	//place: the scan runs against disks that are not ours - a volume pulled out
+	//mid-walk, a permission, a filesystem that answers with an error - and none of
+	//that is a reason to erase what the player is reading. The scanning line goes
+	//anyway, because it belongs to the scan and not to a pass.
+	[AvaloniaFact]
+	public void A_pass_that_throws_leaves_the_other_passs_rows_in_place()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		string lib = Path.Combine(_folder, "lib");
+		Directory.CreateDirectory(lib);
+
+		(MainWindow window, MainWindowViewModel model) = ShowFirstRunHome();
+		model.RomPicker.SuggestionSource = pass => pass == RomScanPass.Shallow
+			? new[] { new RomPickerHit(lib, 30) }
+			: throw new IOException("the volume went away mid-walk");
+		model.RomPicker.RunScanInline = true;
+		WaitFor(() => FocusedName(window) == "PlayHomeOpenRomPrimary",
+			"the first-run home did not put the focus on its one action");
+
+		Press(window, PadNavAction.Confirm);
+		WaitFor(() => FocusedRow(window) == "MesenAI's games folder",
+			$"the picker did not open on its roots ({Focused(window)})");
+
+		Assert.Single(model.RomPicker.Suggestions);
+		Assert.Contains(model.RomPicker.Rows, r => r.Path == lib);
+		Assert.Equal("", model.RomPicker.SearchingText);
+	}
+
+	//The scan is one per session (ADR-0256 Decision 9 amendment): it is a bounded
+	//walk of the whole machine, and a sheet dismissed and opened again must not
+	//start a second one. What it found is cached, so the second open shows the
+	//rows immediately and the source is never asked again.
+	//
+	//Kept as a separate case from the two-pass pair above because it pins a
+	//different thing: not what one scan publishes, but how many scans a session
+	//gets. One shallow answer and one deep one - two in total - and no more.
+	//
+	//Labelled honestly: the once-per-session half is a REGRESSION PIN. The cache
+	//and its _scanStarted guard came with #845 and this case exists to keep them,
+	//so it passes before and after this slice and is not evidence for it. What is
+	//new here is the count of two - a shallow answer and a deep one - which is
+	//what the amendment changed one pass into.
+	[AvaloniaFact]
+	public void The_scan_runs_once_and_the_second_open_still_shows_its_rows()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		string lib = Path.Combine(_folder, "lib");
+		Directory.CreateDirectory(lib);
+
+		(MainWindow window, MainWindowViewModel model) = ShowFirstRunHome();
+		int shallow = 0;
+		int deep = 0;
+		model.RomPicker.SuggestionSource = pass => {
+			if(pass == RomScanPass.Shallow) {
+				shallow++;
+			} else {
+				deep++;
+			}
+			return new[] { new RomPickerHit(lib, 30) };
+		};
+		model.RomPicker.RunScanInline = true;
+		WaitFor(() => FocusedName(window) == "PlayHomeOpenRomPrimary",
+			"the first-run home did not put the focus on its one action");
+
+		model.OpenRomPicker();
+		Pump();
+		Assert.True(model.RomPicker.IsVisible, "the picker did not open, so this case would prove nothing");
+		Assert.Contains(model.RomPicker.Rows, r => r.Path == lib);
+		Assert.Equal(1, shallow);
+		Assert.Equal(1, deep);
+
+		//Dismiss and open again: the sheet is on the roots with the rows it already
+		//had, and the disk is not walked a second time.
+		model.RomPicker.Back();
+		Pump();
+		Assert.False(model.RomPicker.IsVisible, "Back on the roots did not dismiss the picker");
+		model.OpenRomPicker();
+		Pump();
+
+		Assert.True(model.RomPicker.IsVisible, "the picker did not open a second time");
+		Assert.Contains(model.RomPicker.Rows, r => r.Path == lib);
+		Assert.Equal(1, shallow);
+		Assert.Equal(1, deep);
+	}
+
+	//The whole-computer root is offered on every platform with a single root - on
+	//macOS and on Linux alike - so its label may not name one of them. It read
+	//"This Mac" on the Linux sheet that offers the same "/" row. The label and the
+	//folder are built together in one place, so the two cannot drift apart again.
+	[AvaloniaFact]
+	public void The_whole_computer_root_is_named_for_a_computer()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model) = ShowFirstRunHome();
+		model.OpenRomPicker();
+		Pump();
+		Assert.True(model.RomPicker.IsVisible, "the picker did not open, so this case would prove nothing");
+
+		PlayerRomPickerRow root = Assert.Single(model.RomPicker.Rows.Where(r => r.Path == "/"));
+		Assert.Equal("This computer", root.Label);
+		//Still the last of the fixed roots: the discovered ones follow it.
+		Assert.Equal(model.RomPicker.Rows[^1], root);
+	}
+
+	//The three row kinds, read off the visual tree (ADR-0249 Decision 5's render
+	//gate covers this surface too): the action row is not a place, so it draws the
+	//sparkle and the accent - never the play icon. The template branched on
+	//`!IsFolder` before this slice, which is TRUE for an action row, so the row
+	//that means "make this my games folder" drew the icon that means "play this"
+	//and nothing failed. The kind is what the template must branch on, and this is
+	//the only case that reads what is actually drawn.
+	[AvaloniaFact]
+	public void The_action_row_draws_the_sparkle_and_the_accent_not_the_play_icon()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		string root = Path.Combine(_folder, "games");
+		string sub = Path.Combine(root, "nes");
+		Directory.CreateDirectory(sub);
+		File.WriteAllBytes(Path.Combine(sub, "Contra.nes"), SyntheticNrom.Build());
+		ConfigManager.Config.Preferences.GameFolder = root;
+		ConfigManager.Config.Preferences.OverrideGameFolder = true;
+		try {
+			(MainWindow window, MainWindowViewModel model) = ShowFirstRunHome();
+			model.OpenRomPicker();
+			Pump();
+			model.RomPicker.Choose(model.RomPicker.Rows.First(r => r.Label == "Your games"));
+			Pump();
+			model.RomPicker.Choose(model.RomPicker.Rows.First(r => r.Label == "nes"));
+			Pump();
+
+			PlayerRomPickerRow action = Assert.Single(model.RomPicker.Rows.Where(r => r.Kind == RomPickerRowKind.Action));
+			Button button = window.FindNamed<ItemsControl>("RomPickerList")
+				.GetVisualDescendants().OfType<Button>()
+				.Single(b => ReferenceEquals(b.DataContext, action));
+
+			PathIcon[] icons = button.GetVisualDescendants().OfType<PathIcon>().ToArray();
+			PathIcon drawn = Assert.Single(icons.Where(i => i.IsEffectivelyVisible));
+			//By identity, not by ToString: both resources parse to a StreamGeometry
+			//whose ToString is the same word for every geometry in the app, so a
+			//string comparison here passes whatever is drawn.
+			Geometry sparkle = Assert.IsAssignableFrom<Geometry>(window.FindResource("PlayerIconSparkle"));
+			Geometry play = Assert.IsAssignableFrom<Geometry>(window.FindResource("PlayerIconPlay"));
+			Assert.Same(sparkle, drawn.Data);
+			Assert.DoesNotContain(icons, i => i.IsEffectivelyVisible && ReferenceEquals(i.Data, play));
+
+			//And the accent, two ways: the class the theme's tint setter hangs off,
+			//and the brush that setter writes. Either alone could survive a rename
+			//of the other.
+			Assert.Contains("action", button.Classes);
+			Assert.Equal(
+				PlayerRender.SolidColor(window.FindResource("PlayerTintTextPlayBrush") as IBrush),
+				PlayerRender.SolidColor(button.Foreground));
+		} finally {
+			ConfigManager.Config.Preferences.GameFolder = "";
+			ConfigManager.Config.Preferences.OverrideGameFolder = false;
+		}
 	}
 }

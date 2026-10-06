@@ -210,7 +210,16 @@ namespace Mesen.Windows
 			//leave it, and only the first root or the alphabetically first entry of a
 			//folder was reachable with a pad (found by the second review of #845,
 			//2026-10-05; the case below presses Down).
-			focus.When(model.RomPicker, [nameof(PlayerRomPickerViewModel.IsVisible), nameof(PlayerRomPickerViewModel.PathText)],
+			//
+			//SuggestionRevision is watched beside those two because the scan's
+			//deep pass REPLACES the rows the shallow one published (ADR-0256
+			//Decision 9 amendment: a shallow answer now, the measured one when it
+			//lands). A replaced row takes its container - and the ring on it - with
+			//it, and without this the pad would be left with nothing focused to
+			//press Confirm on.
+			focus.When(model.RomPicker,
+				[nameof(PlayerRomPickerViewModel.IsVisible), nameof(PlayerRomPickerViewModel.PathText),
+				 nameof(PlayerRomPickerViewModel.SuggestionRevision)],
 				() => model.RomPicker.IsVisible, () => RomPickerFirstRow(window) ?? Named(window, "RomPickerBack"),
 				() => Named(window, "PlayerRomPickerSheet"));
 
@@ -255,9 +264,17 @@ namespace Mesen.Windows
 		//docked to the bottom, which does not move it in the tree), so "the first
 		//focusable control" is the way out rather than the way in. Fall back to
 		//that button only when the list has no rows at all.
+		//
+		//#845 amendment: the action row now LEADS a folder's list, and the ring
+		//must never land on it on a descend - otherwise a stray Confirm would
+		//silently repoint the games folder. So the first non-Action row wins; a
+		//folder with no content rows at all answers null, which the caller turns
+		//into the Back button rather than the action row.
 		private static Control? RomPickerFirstRow(MainWindow window)
 		{
-			return (Named(window, "RomPickerList") as ItemsControl)?.GetVisualDescendants().OfType<Button>().FirstOrDefault();
+			IEnumerable<Button> rows = (Named(window, "RomPickerList") as ItemsControl)?.GetVisualDescendants().OfType<Button>()
+				?? Enumerable.Empty<Button>();
+			return rows.FirstOrDefault(b => b.DataContext is not PlayerRomPickerRow row || row.Kind != RomPickerRowKind.Action);
 		}
 
 		//W-P5: the stored choice, else the first row.
@@ -487,7 +504,7 @@ namespace Mesen.Windows
 				//longer collide. The keyboard's console mapping is untouched:
 				//Decision 4 is about the pad, and the keyboard player's own choice is
 				//theirs.
-				if(action != PadNavAction.Back && IsGrid(focused)) {
+				if(action != PadNavAction.Back && IsGrid(focused) && !GridYieldsUp(focused, action)) {
 					return;
 				}
 
@@ -530,6 +547,22 @@ namespace Mesen.Windows
 			private static StateGrid? GridOf(Control focused)
 			{
 				return focused as StateGrid ?? focused.GetVisualAncestors().OfType<StateGrid>().FirstOrDefault();
+			}
+
+			//#896: the one press a grid gives back to the bridge. A grid with a
+			//single row has nothing above it - its own Up moves nothing, which is
+			//StateGrid.MovesWithUpFromPad - so the bridge keeps Up there and walks
+			//the focus out of the grid, instead of the grid holding it for good.
+			//
+			//The Play home's row of tiles (ADR-0249's W-P2) is where that mattered:
+			//its directions are the grid's by the rule above, its Back has no close
+			//box to leave by (CanCloseFromPad is false for it), and a cabinet has no
+			//Tab - so one D-pad Down off the Continue card left the player unable to
+			//reach the card, or anything on it, again. Every direction the grid does
+			//move stays the grid's; this is one press, not a second focus model.
+			private static bool GridYieldsUp(Control focused, PadNavAction action)
+			{
+				return action == PadNavAction.Up && GridOf(focused) is StateGrid grid && !grid.MovesWithUpFromPad;
 			}
 
 			private static NavigationDirection Direction(PadNavAction action)

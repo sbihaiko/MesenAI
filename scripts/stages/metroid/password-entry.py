@@ -99,7 +99,7 @@ sits on the keyboard still reports drawn keys of its own (see navigation.json's
 comment on the value this profile dropped).
 
 THE PASSWORD IS ALSO THE AREA CHECK, and this file decodes it.  The page
-`docs/validation/f1416-coverage-sweep-2026-09-26.md` and ADR-0239 section 4 ask
+`docs/validation/slices/f1416-coverage-sweep-2026-09-26.md` and ADR-0239 section 4 ask
 every value for a RAM check that proves the session reached the place it
 claims, and for this game the byte to check is `$0074` - DataCrystal's
 "Current level ($10 = Brinstar, $11 = Norfair, $12 = Kraid, $13 = Tourian, $14

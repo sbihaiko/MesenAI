@@ -6,7 +6,7 @@ F14.12, ADR-0238 section 1. The searches this replaces (`runs/route-*/solve.py`)
 launched one `scripts/headless_record` per candidate window, so every candidate
 paid a process start, a ROM load and two state files - about a second, against
 the tens of milliseconds the 29 frames it actually played cost
-(`docs/validation/f1412-step-mode-emulator-2026-09-26.md`). This module drives
+(`docs/validation/slices/f1412-step-mode-emulator-2026-09-26.md`). This module drives
 `headless_record ... session`, which is that tool's own init (scratch home,
 MesenNesDB, controller type, AllZeros power-on RAM, EmulationSpeed 0, the pack
 flags) followed by a request loop instead of a single run.

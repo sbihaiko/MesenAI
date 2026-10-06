@@ -180,7 +180,13 @@ namespace
 						case '\b': _buf += "\\b"; break;
 						case '\f': _buf += "\\f"; break;
 						default:
-							if(c < 0x20) {
+							//Python's escaper (ensure_ascii) escapes every
+							//non-printable ASCII code, DEL (0x7F) included -
+							//its short-escape table covers 0x00-0x1F and the
+							//rest of the range goes out as \u00XX. Escaping
+							//only < 0x20 would hash a manifest carrying DEL to
+							//a different content_id than the normative hasher.
+							if(c < 0x20 || c == 0x7F) {
 								_buf += "\\u00";
 								AppendHexByte(_buf, c);
 							} else {

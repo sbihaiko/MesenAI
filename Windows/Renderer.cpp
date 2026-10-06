@@ -790,7 +790,12 @@ void Renderer::DrawScreen()
 	destRect.right = _screenWidth + _leftMargin;
 	destRect.bottom = _screenHeight + _topMargin;
 
-	if(_shaderEnabled) {
+	//ADR-0246 §5 (Hold to Compare): while the button is held the frame is
+	//presented unfiltered and the chain is kept - the measured swap stutters,
+	//so bypassing it is the whole point. The CPU filters already drop on every
+	//platform (VideoDecoder::DecodeFrame reads the same flag); this is the
+	//shader half, which only macOS's MetalPresenter had.
+	if(_shaderEnabled && !_emu->GetSettings()->IsLookCompare()) {
 		libra_error_t error = _libra.d3d11_filter_chain_frame(&_filterChain, _pDeviceContext, _frameNumber, _pTextureSrv, _pShaderOutputRtv, NULL, NULL, NULL);
 		if(error) {
 			LogShaderError("[librashader] d3d11_filter_chain_frame failed: ", error);

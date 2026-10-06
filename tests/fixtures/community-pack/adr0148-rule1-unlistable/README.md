@@ -16,7 +16,7 @@ patch is present but **not wired** (no `<patch>` line in `hires.txt`, no
 pack contributes nothing once installed.
 
 Until now that behaviour was "pending confirmation on the next real CI run"
-(ADR-0148 Consequences; `docs/validation/manual-validation-automation-plan.md` Wave 2,
+(ADR-0148 Consequences; `docs/validation/process/manual-validation-automation-plan.md` Wave 2,
 row D13). This fixture confirms it locally instead — no CI run, no live
 host, no GitHub issue, no network fetch, no writes to any issue or board.
 

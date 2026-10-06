@@ -156,14 +156,21 @@ namespace
 		return true;
 	}
 
-	//`created` is set when the folder did not exist before this call, so a
-	//later failure can roll it back (a pre-existing empty folder is the
-	//caller's and is left in place).
-	bool PrepareOutputFolder(const string& outFolder, bool& created, string& error)
+	//`existed` says how to restore the folder on a later failure (ADR-0258); it
+	//is deliberately not a rollback gate: succeeding here means the folder was
+	//absent or empty, so its contents are this install's from now on.
+	bool PrepareOutputFolder(const string& outFolder, bool& existed, string& error)
 	{
 		std::error_code ec;
-		created = false;
-		if(fs::exists(fs::u8path(outFolder), ec)) {
+		existed = fs::exists(fs::u8path(outFolder), ec);
+		if(existed) {
+			//`is_empty` is true for a zero-byte regular file too, so without this
+			//a file at the output path would pass and then be handed to the
+			//rollback's remove_all. A file is not an output folder; leave it be.
+			if(!fs::is_directory(fs::u8path(outFolder), ec)) {
+				error = "output folder is not a directory: " + outFolder;
+				return false;
+			}
 			if(!fs::is_empty(fs::u8path(outFolder), ec)) {
 				error = "output folder is not empty: " + outFolder;
 				return false;
@@ -175,8 +182,40 @@ namespace
 			error = "cannot create output folder: " + outFolder;
 			return false;
 		}
-		created = true;
 		return true;
+	}
+
+	//Removes everything inside `folder` and leaves the folder itself, so what the
+	//caller handed over is kept as the same entry: a symlink stays a symlink (and
+	//the files this install wrote through it are the ones removed), and a real
+	//directory keeps its inode, mode and owner. `remove_all` on the folder would
+	//do neither.
+	//Deliberately not a range-for: that increments with the *throwing*
+	//`operator++`, so a readdir/FindNextFile failure would escape `Install` as an
+	//exception across the C API, where everything else here reports through
+	//`ec`. `increment(ec)` keeps the failure in the same channel.
+	void RemoveFolderContents(const string& folder, std::error_code& ec)
+	{
+		std::error_code iterEc;
+		fs::directory_iterator it(fs::u8path(folder), iterEc), end;
+		if(iterEc) {
+			ec = iterEc;
+			return;
+		}
+		while(it != end) {
+			std::error_code entryEc;
+			fs::remove_all(it->path(), entryEc);
+			if(entryEc && !ec) {
+				ec = entryEc;
+			}
+			it.increment(iterEc);
+			if(iterEc) {
+				if(!ec) {
+					ec = iterEc;
+				}
+				return;
+			}
+		}
 	}
 
 	//--- pack.json (§8, byte-for-byte matching mep_recipe.py's json.dumps) --
@@ -509,7 +548,11 @@ namespace
 		string PrimaryHash;
 		vector<uint8_t> PrimaryBytes; //read once by ParseAndVerify, moved into PrimarySrc
 		MepRecipeSource PrimarySrc;
-		bool CreatedOutFolder = false; //rollback: remove the folder we created on failure
+		//ADR-0258: `Prepared` is the rollback gate - "we handed out an empty
+		//folder" - and `Existed` only says how to restore it. A failure before
+		//PrepareOutputFolder leaves both false and touches nothing.
+		bool OutFolderPrepared = false;
+		bool OutFolderExisted = false;
 		unordered_map<string, MepRecipeSource> DepSources;
 		unordered_map<string, string> DepHashes;
 		unordered_set<string> MissingIds;
@@ -541,7 +584,13 @@ namespace
 	//primary source (discovering its pack root) and run the recipe's ops.
 	bool BuildContextAndRun(InstallState& state, const string& romName, const string& outFolder, string& error)
 	{
-		if(!PrepareOutputFolder(outFolder, state.CreatedOutFolder, error) || !state.PrimarySrc.LoadBytes(std::move(state.PrimaryBytes), error)) {
+		if(!PrepareOutputFolder(outFolder, state.OutFolderExisted, error)) {
+			return false;
+		}
+		//Past this point the folder is ours on failure (ADR-0258), so it is
+		//marked before the next thing that can fail
+		state.OutFolderPrepared = true;
+		if(!state.PrimarySrc.LoadBytes(std::move(state.PrimaryBytes), error)) {
 			return false;
 		}
 		DiscoverPrimaryRoot(state.PrimarySrc, romName);
@@ -605,11 +654,23 @@ bool MepRecipeInstaller::Install(const string& recipeJson, const string& primary
 	if(!ParseAndVerify(recipeJson, primaryPath, depPaths, state, result.Error)
 		|| !BuildContextAndRun(state, romName, outFolder, result.Error)
 		|| !WriteOutputs(state, recipeJson, outFolder, result.Error)) {
-		if(state.CreatedOutFolder) {
-			//Rollback: never leave a half-written pack where MepPackManager
-			//would discover it on the next scan
+		if(state.OutFolderPrepared) {
+			//Rollback (ADR-0258): restore the folder to how it was found, so
+			//never leave a half-written pack where MepPackManager would discover
+			//it on the next scan. A folder the caller handed over is emptied
+			//rather than replaced - it keeps its identity - and one this install
+			//created is removed.
 			std::error_code ec;
-			fs::remove_all(fs::u8path(outFolder), ec);
+			if(state.OutFolderExisted) {
+				RemoveFolderContents(outFolder, ec);
+			} else {
+				fs::remove_all(fs::u8path(outFolder), ec);
+			}
+			if(ec) {
+				//The residue this exists to prevent, and it would otherwise be
+				//silent: say so rather than report a clean failure
+				Log("could not clear " + outFolder + " after a failed install: " + ec.message());
+			}
 		}
 		return false;
 	}

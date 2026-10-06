@@ -158,11 +158,19 @@ namespace Mesen.Logic
 
 		//Test-facing / reusable (ADR-0125): extract the pack root of an already-
 		//open zip into targetFolder. A wrapper with one root-level nested zip
-		//(Zelda Remastered's Drive release) is unwrapped in memory and written
+		//(Zelda Remastered's Drive release) is unwrapped to a temp file and written
 		//while that inner ZipArchive is still open — ZipArchiveEntry.Open throws
 		//ObjectDisposedException after Dispose. Returns false (with error) when
 		//the zip is empty, zip-slip, or has no hires.txt.
 		public static bool ExtractToFolder(ZipArchive zip, string targetFolder, string romName, out string error)
+		{
+			return ExtractToFolder(zip, targetFolder, romName, MaxExtractedBytes, out error);
+		}
+
+		//maxBytes is the ceiling for both the nested archive's own size (#860) and
+		//the bytes inflated out of it. Injectable so a test can drive the gate with
+		//a small cap instead of a real 2 GiB bomb.
+		public static bool ExtractToFolder(ZipArchive zip, string targetFolder, string romName, long maxBytes, out string error)
 		{
 			Dictionary<string, ZipArchiveEntry>? byNorm = BuildNormMap(zip, out error);
 			if(byNorm == null || byNorm.Count == 0) {
@@ -174,7 +182,7 @@ namespace Mesen.Logic
 
 			string? rootPrefix = FindPackRoot(byNorm.Keys, romName);
 			if(rootPrefix != null) {
-				return WriteUnderRoot(byNorm, rootPrefix, targetFolder, out error);
+				return WriteUnderRoot(byNorm, rootPrefix, targetFolder, maxBytes, out error);
 			}
 
 			string? nested = FindNestedZip(byNorm.Keys) ?? FindGameFolderZip(byNorm.Keys, romName);
@@ -183,23 +191,95 @@ namespace Mesen.Logic
 				return false;
 			}
 
-			byte[] nestedBytes = ReadEntryBytes(nestedEntry);
-			using MemoryStream nestedStream = new MemoryStream(nestedBytes);
-			using ZipArchive inner = new ZipArchive(nestedStream, ZipArchiveMode.Read);
-			Dictionary<string, ZipArchiveEntry>? innerMap = BuildNormMap(inner, out error);
-			if(innerMap == null || innerMap.Count == 0) {
-				if(innerMap != null) {
-					error = "zip is empty";
+			string tempPath = Path.Combine(Path.GetTempPath(), "mesen-hd-legacy-" + Guid.NewGuid().ToString("N") + ".zip");
+			try {
+				if(!StageNestedArchive(nestedEntry, tempPath, maxBytes, out error)) {
+					return false;
 				}
-				return false;
+				using FileStream nestedStream = new FileStream(tempPath, FileMode.Open, FileAccess.Read, FileShare.Read);
+				using ZipArchive inner = new ZipArchive(nestedStream, ZipArchiveMode.Read);
+				Dictionary<string, ZipArchiveEntry>? innerMap = BuildNormMap(inner, out error);
+				if(innerMap == null || innerMap.Count == 0) {
+					if(innerMap != null) {
+						error = "zip is empty";
+					}
+					return false;
+				}
+				rootPrefix = FindPackRoot(innerMap.Keys, romName);
+				if(rootPrefix == null) {
+					error = "not a legacy HD pack (no hires.txt)";
+					return false;
+				}
+				return WriteUnderRoot(innerMap, rootPrefix, targetFolder, maxBytes, out error);
+			} finally {
+				TryDeleteTempFile(tempPath);
 			}
-			rootPrefix = FindPackRoot(innerMap.Keys, romName);
-			if(rootPrefix == null) {
-				error = "not a legacy HD pack (no hires.txt)";
-				return false;
-			}
-			return WriteUnderRoot(innerMap, rootPrefix, targetFolder, out error);
 		}
+
+		//Copies the wrapper's nested archive to a seekable temp file through a
+		//capped stream before the inner ZipArchive is opened (#860). The declared
+		//Length is checked first - a decompression bomb declares a huge size, so it
+		//is refused without inflating a single byte - but a declared size is
+		//attacker-controlled, so the copy also runs through SizeCappedStream, which
+		//throws the moment the entry hands out more than maxBytes. Staging to a file
+		//rather than a byte[] keeps the inner archive out of memory entirely.
+		private static bool StageNestedArchive(ZipArchiveEntry nestedEntry, string tempPath, long maxBytes, out string error)
+		{
+			error = "";
+			if(nestedEntry.Length > maxBytes) {
+				error = SizeLimitError(maxBytes);
+				return false;
+			}
+			SizeCappedStream? capped = null;
+			try {
+				using Stream src = nestedEntry.Open();
+				capped = new SizeCappedStream(src, maxBytes);
+				using(capped) {
+					using FileStream dst = new FileStream(tempPath, FileMode.Create, FileAccess.Write, FileShare.None);
+					capped.CopyTo(dst);
+				}
+				return true;
+			} catch(InvalidDataException) {
+				//One exception type, two causes, and they must not be reported as
+				//the same thing: the entry inflated past the ceiling, or the
+				//archive is corrupt (a truncated download, a bad local header).
+				//The capped stream can tell them apart - it stops counting at the
+				//ceiling, so having reached it means the cap is what stopped the
+				//read, and anything short of it is corruption. Telling a person
+				//their download is a 2 GiB bomb when it is merely truncated sends
+				//them looking for an attacker who is not there.
+				error = capped != null && capped.BytesRead >= maxBytes
+					? SizeLimitError(maxBytes)
+					: "legacy HD pack holds a corrupt nested archive - refusing to extract";
+				return false;
+			}
+		}
+
+		private static string SizeLimitError(long maxBytes)
+		{
+			return "legacy HD pack inflates past " + FormatByteSize(maxBytes) + " - refusing to extract";
+		}
+
+		private static string FormatByteSize(long bytes)
+		{
+			long gib = bytes >> 30;
+			if(gib > 0) {
+				return gib + " GiB";
+			}
+			return (bytes >> 20) + " MiB";
+		}
+
+		private static void TryDeleteTempFile(string path)
+		{
+			try {
+				if(File.Exists(path)) {
+					File.Delete(path);
+				}
+			} catch(IOException) {
+			} catch(UnauthorizedAccessException) {
+			}
+		}
+
 
 		private static Dictionary<string, ZipArchiveEntry>? BuildNormMap(ZipArchive zip, out string error)
 		{
@@ -219,17 +299,9 @@ namespace Mesen.Logic
 			return byNorm;
 		}
 
-		private static byte[] ReadEntryBytes(ZipArchiveEntry entry)
-		{
-			using Stream src = entry.Open();
-			using MemoryStream ms = new MemoryStream();
-			src.CopyTo(ms);
-			return ms.ToArray();
-		}
-
 		//Writes every entry under rootPrefix, counting the bytes actually
-		//inflated; aborts (false + error) once the total passes MaxExtractedBytes.
-		private static bool WriteUnderRoot(Dictionary<string, ZipArchiveEntry> byNorm, string rootPrefix, string targetFolder, out string error)
+		//inflated; aborts (false + error) once the total passes maxBytes.
+		private static bool WriteUnderRoot(Dictionary<string, ZipArchiveEntry> byNorm, string rootPrefix, string targetFolder, long maxBytes, out string error)
 		{
 			error = "";
 			long written = 0;
@@ -249,8 +321,8 @@ namespace Mesen.Logic
 				int read;
 				while((read = src.Read(buffer, 0, buffer.Length)) > 0) {
 					written += read;
-					if(written > MaxExtractedBytes) {
-						error = "legacy HD pack inflates past " + (MaxExtractedBytes >> 30) + " GiB - refusing to extract";
+					if(written > maxBytes) {
+						error = SizeLimitError(maxBytes);
 						return false;
 					}
 					outStream.Write(buffer, 0, read);
@@ -385,6 +457,63 @@ namespace Mesen.Logic
 				}
 			}
 			return SupportedRomVerdict.Contradicts;
+		}
+
+		//--- writing the MEP-ized output (ADR-0147) ---------------------------
+
+		//The stamp that makes an output folder recognisably ours on the next
+		//install: DecideOutputFolderHandling above refuses a non-empty folder
+		//without it, so a folder that carries content and no stamp is read as the
+		//user's own work.
+		public const string InstallStampFileName = ".mep-install.json";
+
+		//Opens the pack zip and extracts its pack root into targetFolder. Lives
+		//here rather than in the coordinator so that the failure classification is
+		//a return value a test can read, not a branch behind a private static
+		//(ADR-0125, the same placement rule DecideOutputFolderHandling follows).
+		//Catches Exception rather than a list of archive types (#886): the caller
+		//runs ClearFolderForReinstall only when this reports false, so anything
+		//that escaped the catch would skip that cleanup - and the input is a
+		//community-contributed archive plus a path this class did not build, which
+		//no closed list of types bounds. The objectDisposed/invalidData/IO cases
+		//are still the ones that actually occur; the ArgumentException family is
+		//what an unusable path raises before a file handle exists.
+		public static bool TryExtractPack(string zipPath, string targetFolder, string romName, out string error)
+		{
+			error = "";
+			try {
+				Directory.CreateDirectory(targetFolder);
+				using ZipArchive outer = ZipFile.OpenRead(zipPath);
+				return ExtractToFolder(outer, targetFolder, romName, out error);
+			} catch(Exception ex) {
+				error = "cannot extract legacy HD pack: " + ex.Message;
+				return false;
+			}
+		}
+
+		//Writes the two files that MEP-ize the extracted pack: pack.json, and the
+		//stamp that DecideOutputFolderHandling reads on the next install. Reports
+		//rather than throws (#886): this runs after the extraction, which is the
+		//expensive half of an install, so a failure here - a full disk is the
+		//realistic case - has to reach the caller as a value it can act on, and
+		//what it does is clear the folder it just filled. Throwing instead would
+		//leave the extracted textures on disk with no .mep-install.json beside
+		//them, and the next install would read that folder as the user's own work
+		//(RefuseNonEmptyUnstamped) and refuse it.
+		//pack.json is written first, deliberately: the stamp is what claims the
+		//folder as ours, so it must not exist beside a pack.json that never landed.
+		public static bool WriteInstallOutputs(string outFolder, string packJson, string stampJson, out string error)
+		{
+			error = "";
+			try {
+				Directory.CreateDirectory(outFolder);
+				File.WriteAllText(Path.Combine(outFolder, "pack.json"), packJson);
+				File.WriteAllText(Path.Combine(outFolder, InstallStampFileName), stampJson);
+				return true;
+			} catch(Exception ex) {
+				error = "cannot write the MEP install files in " + outFolder + ": " + ex.Message;
+				return false;
+			}
 		}
 	}
 }

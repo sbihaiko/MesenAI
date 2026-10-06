@@ -6,7 +6,7 @@ Durable documentation for this fork: open specs, execution plans, and the enhanc
 
 ## Ownership
 
-Owns `docs/specs/` (CC0), `docs/roadmap/` (the consolidated PRD), `docs/adr/` (the decision register, moved here from `.dev-squad/adr/` on 2026-09-03), `docs/media/`, `docs/validation/` (manual acceptance/validation run scripts), and top-level ecosystem notes. Does not own `AGENTS.md` files in other trees or Core/UI source.
+Owns `docs/specs/` (CC0), `docs/roadmap/` (the consolidated PRD), `docs/adr/` (the decision register, moved here from `.dev-squad/adr/` on 2026-09-03 and split into the seven area subfolders `packs/`, `sprites/`, `recorder/`, `ci-build/`, `audio/`, `gui/`, `core/` on 2026-10-05 — the area is the decision's subject, and ids are never reused, so a citation is by `ADR-NNNN`, not by path), `docs/media/`, `docs/validation/` (dated acceptance/measurement logs, grouped by what the record IS: `issues/`, `slices/`, `adr/`, `measurements/`, `process/`; plus one JSON fixture; no scripts), `docs/community-packs/` (the errata store read by `scripts/mep_errata.py` and the validate workflow, ADR-0152), `docs/releases/` (release-zip READMEs copied by `scripts/release_macos.sh`, gated by `scripts/checks/verify_release_asset_names.sh`), `docs/reviews/` (point-in-time review reports), and top-level ecosystem notes. Does not own `AGENTS.md` files in other trees or Core/UI source.
 
 ## Local Contracts
 
@@ -65,9 +65,9 @@ Owns `docs/specs/` (CC0), `docs/roadmap/` (the consolidated PRD), `docs/adr/` (t
   them (`README.md`, `CLAUDE.md`, the community-pack validation workflow) name
   `docs/` accordingly.
 - F12.2 cold-read protocol (ADR-0214, amended 2026-09-19: the evaluator is a
-  fresh **Opus** session): `docs/validation/f12.2-sweep-evaluator-briefing.md`
+  fresh **Opus** session): `docs/validation/slices/f12.2-sweep-evaluator-briefing.md`
   is the only evaluator-facing document for the 28-ROM sweep;
-  `docs/validation/f12.2-fable-evaluator-briefing.md` is the Fable-era
+  `docs/validation/slices/f12.2-fable-evaluator-briefing.md` is the Fable-era
   two-game version. The dispatcher script next to them
   (`f12.2-copy-sheet-cell-panel-script.md`) is the answer key and must not
   be pasted into an evaluator session.
@@ -76,6 +76,7 @@ Owns `docs/specs/` (CC0), `docs/roadmap/` (the consolidated PRD), `docs/adr/` (t
 
 - Specs: `python3 scripts/validate-specs.py` from the repo root.
 - ADRs: `python3 scripts/checks/verify_adr_refs.py` (also in `make doc-checks`) — every cited `ADR-NNNN` resolves to a file.
+- Links: `python3 scripts/checks/verify_md_links.py` (also in `make doc-checks`) — every markdown `](target)` resolves from the file that writes it. A target is relative to its own file, so this is the check that catches a moved document whose links were not re-relativised, which no id- or path-based check sees. It was written after the 2026-10-05 area split was swept four times and each sweep missed a shape the next one found.
 - Upstream coexistence (ADR-0163): tiers = `scripts/upstream_tiers.py`; `Upstream-Delta:` trailer check = `scripts/checks/verify_upstream_delta.py`; sync = `scripts/sync-upstream.sh` (local, merge on `main`) + `.github/workflows/sync-upstream.yml` (scheduled PR when upstream moves).
 - `hd-pack-authoring.md`: `./scripts/checks/verify_hd_pack_authoring_doc.sh`.
 - The artist-facing docs — `remastering-a-game.md`, `ai-kit-review.md`,
@@ -96,5 +97,9 @@ Owns `docs/specs/` (CC0), `docs/roadmap/` (the consolidated PRD), `docs/adr/` (t
 
 - adr/ — the decision register (`NNNN-<kebab-title>.md`); accepted ADRs are binding
 - specs/ — ESP, MEP, MEI, MEP-recipe, hires-gbsms drafts and `golden/`
-- roadmap/ — consolidated PRD (Part A: pack/core; Part B: player shell) (product consoles: NES, GB, SMS-family, GBA)
-- validation/ — acceptance/validation scripts and logs (F6.5, F12.2 dispatcher vs Fable briefing, mechanical-replay logs)
+- roadmap/ — consolidated PRD (Part A: pack/core; Part B: player shell) (product consoles: NES, GB/GBC/GBS, SMS/GG/SG-1000, GBA)
+- validation/ — dated acceptance/measurement logs (F6.5, F12.2 dispatcher vs Fable briefing, mechanical-replay logs)
+- community-packs/ — errata store for known-missing pack assets (`errata/`, ADR-0152)
+- media/ — short demo excerpts and the generated `gui-redesign/` wireframe PNGs
+- releases/ — READMEs shipped inside the release zips
+- reviews/ — point-in-time review reports (fork/upstream inherited-code review)

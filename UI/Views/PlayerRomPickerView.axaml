@@ -1,4 +1,4 @@
-<UserControl xmlns="https://github.com/avaloniaui"
+﻿<UserControl xmlns="https://github.com/avaloniaui"
 	xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
 	xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
 	xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -8,10 +8,15 @@
 	x:Class="Mesen.Views.PlayerRomPickerView"
 	x:DataType="vm:PlayerRomPickerViewModel"
 >
-	<!--#845 (ADR-0256 Decision 9): the in-app ROM picker, over Play's home. One
-	list of rows - the roots it opens on, then the folders and the games of
-	whichever one was chosen - with the path line above it and Back under it.
-	Esc and Back are the same step: up one folder, and gone at the roots.-->
+	<!--#845 (ADR-0256 Decision 9; amended): the in-app ROM picker, over Play's
+	home. One list of rows - the roots it opens on, then the folders and the games
+	of whichever one was chosen - with the path line above it and Back under it.
+	Esc and Back are the same step: up one folder, and gone at the roots.
+
+	The amendment adds two lines and a row kind: a "looking for your games" line
+	while the bounded scan runs, a notice line after the games folder is saved,
+	and the action row ("Make this my games folder") that leads a folder's list.
+	The searching and notice lines are not rows, so the pad never stops on them.-->
 	<UserControl.Styles>
 		<!--Each row sits in its own item container, so the theme's "no hairline
 		on the last row" is decided per container here (PlaySelectRomSheetView).-->
@@ -25,6 +30,13 @@
 			<Setter Property="Height" Value="44" />
 			<Setter Property="Padding" Value="16 0 14 0" />
 		</Style>
+		<!--The action row is accent, not a place: the sparkle icon and the accent
+		text say "this is a press, not a folder", which is what keeps a confirm on
+		it from reading as a descend. The ring still lands on content first (the
+		focus target skips Action rows), so it is reached on purpose, one Up away.-->
+		<Style Selector=".player Button.row.action">
+			<Setter Property="Foreground" Value="{StaticResource PlayerTintTextPlayBrush}" />
+		</Style>
 	</UserControl.Styles>
 
 	<Panel Name="RomPickerBackdrop" Classes="scrim">
@@ -35,17 +47,30 @@
 				<!--The folder being shown. Hidden on the roots list, where the rows
 				themselves say where they go.-->
 				<TextBlock Name="RomPickerPath" Classes="footnote secondary" DockPanel.Dock="Top" Text="{Binding PathText}" TextTrimming="CharacterEllipsis" IsVisible="{Binding PathText.Length}" Margin="0 10 0 0" />
+				<!--The scan, while it runs. Not a row: the pad ignores it.-->
+				<TextBlock Name="RomPickerSearching" Classes="footnote secondary" DockPanel.Dock="Top" Text="{Binding SearchingText}" IsVisible="{Binding SearchingText.Length}" Margin="0 10 0 0" />
+				<!--What the save left behind, while the folder stays on screen.-->
+				<TextBlock Name="RomPickerNotice" Classes="footnote" DockPanel.Dock="Top" Text="{Binding NoticeText}" TextWrapping="Wrap" IsVisible="{Binding NoticeText.Length}" Margin="0 10 0 0" />
 				<Button Name="RomPickerBack" DockPanel.Dock="Bottom" Classes="secondary regular" HorizontalAlignment="Right" Margin="0 18 0 0" Content="{l:Translate btnRomPickerBack}" Click="OnBack" />
 				<Border Classes="inset" Margin="0 14 0 0">
-					<Panel>
+					<!--DockPanel, not Panel: the empty sentence used to be laid OVER the
+					list, and the one folder whose list is a single row - the action row -
+					drew the sentence straight through it. Docked to the bottom it sits
+					under the list, which is where a sentence about the list belongs.-->
+					<DockPanel>
+						<!--A folder with nothing to open; the sheet stays up so Back is
+						still the visible next step (W-X2: a sentence, never a code).
+						ContentCount decides this, so the action row does not hide it.-->
+						<TextBlock Name="RomPickerEmpty" Classes="subhead secondary" DockPanel.Dock="Bottom" Text="{Binding EmptyText}" TextWrapping="Wrap" Margin="16 12" IsVisible="{Binding EmptyText.Length}" />
 						<ScrollViewer HorizontalScrollBarVisibility="Disabled" AllowAutoHide="False">
 							<ItemsControl Name="RomPickerList" ItemsSource="{Binding Rows}" XYFocus.NavigationModes="Enabled">
 								<ItemsControl.ItemTemplate>
 									<DataTemplate x:DataType="vm:PlayerRomPickerRow">
-										<Button Classes="row text" Click="OnChoose">
+										<Button Classes="row text" Classes.action="{Binding IsAction}" Click="OnChoose">
 											<DockPanel>
 												<PathIcon Classes="leading" DockPanel.Dock="Left" Data="{StaticResource PlayerIconFolder}" IsVisible="{Binding IsFolder}" />
-												<PathIcon Classes="leading" DockPanel.Dock="Left" Data="{StaticResource PlayerIconPlay}" IsVisible="{Binding !IsFolder}" />
+												<PathIcon Classes="leading" DockPanel.Dock="Left" Data="{StaticResource PlayerIconPlay}" IsVisible="{Binding IsGame}" />
+												<PathIcon Classes="leading" DockPanel.Dock="Left" Data="{StaticResource PlayerIconSparkle}" IsVisible="{Binding IsAction}" />
 												<TextBlock Classes="title" Text="{Binding Label}" TextTrimming="CharacterEllipsis" />
 											</DockPanel>
 										</Button>
@@ -53,10 +78,7 @@
 								</ItemsControl.ItemTemplate>
 							</ItemsControl>
 						</ScrollViewer>
-						<!--A folder with nothing to open; the sheet stays up so Back is
-						still the visible next step (W-X2: a sentence, never a code).-->
-						<TextBlock Name="RomPickerEmpty" Classes="subhead secondary" Text="{Binding EmptyText}" TextWrapping="Wrap" Margin="16 12" IsVisible="{Binding EmptyText.Length}" />
-					</Panel>
+					</DockPanel>
 				</Border>
 			</DockPanel>
 		</Border>

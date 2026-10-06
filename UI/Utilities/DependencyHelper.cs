@@ -6,6 +6,7 @@ using System.Linq;
 using System.Reflection;
 using System.Text;
 using System.Threading.Tasks;
+using Mesen.Logic;
 
 namespace Mesen.Utilities;
 
@@ -22,47 +23,22 @@ class DependencyHelper
 			try {
 				//In builds done via VS (without the "OptimizeUi" flag), the core is not embedded in the .exe (to improve build performance)
 				//Copy it directly from the bin folder to the home folder
-				string[] extensions = new string[] { ".dll", ".so", "dylib" };
-				foreach(string ext in extensions) {
-					string src = Path.Join(Program.OriginalFolder, "MesenCore" + ext);
+				foreach(string name in NativeDependencyExtractor.DebugCoreFileNames) {
+					string src = Path.Join(Program.OriginalFolder, name);
 					if(File.Exists(src)) {
-						File.Copy(src, Path.Join(dest, "MesenCore" + ext), true);
+						//Through a new file, like the archive walk: the destination
+						//is a library a running instance may already have mapped.
+						NativeDependencyExtractor.ReplaceFromFile(src, Path.Join(dest, name));
 					}
 				}
 			} catch { }
 #endif
 
-			using ZipArchive zip = new(depStream);
-			foreach(ZipArchiveEntry entry in zip.Entries) {
-				try {
-					if(entry.FullName.StartsWith("Internal")) {
-						continue;
-					}
-
-					string path = Path.Combine(dest, entry.FullName);
-					entry.ExternalAttributes = 0;
-					if(File.Exists(path)) {
-						if(Path.GetExtension(path)?.ToLower() == ".bin") {
-							//Don't overwrite BS-X bin files if they already exist on the disk
-							continue;
-						}
-
-						FileInfo fileInfo = new(path);
-						if(fileInfo.LastWriteTime != entry.LastWriteTime || fileInfo.Length != entry.Length) {
-							entry.ExtractToFile(path, true);
-						}
-					} else {
-						string? folderName = Path.GetDirectoryName(path);
-						if(folderName != null && !Directory.Exists(folderName)) {
-							//Create any missing directory (e.g Satellaview)
-							Directory.CreateDirectory(folderName);
-						}
-						entry.ExtractToFile(path, true);
-					}
-				} catch {
-
-				}
-			}
+			//The per-member walk lives in UI/Logic so it is dual-compiled into
+			//UI.Tests and can be run against a real archive (ADR-0123); what stays
+			//here is the part that is host-aware - reaching the embedded resource
+			//and the debug copy of the core.
+			NativeDependencyExtractor.Extract(depStream, dest);
 		}
 	}
 

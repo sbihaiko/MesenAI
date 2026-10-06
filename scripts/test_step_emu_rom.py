@@ -207,7 +207,7 @@ def main():
             #differently twice. It did: before HeadlessSaveState/
             #HeadlessLoadState took the emulator lock, 3 of 9 identical runs of
             #the 688-frame window came back with different RAM
-            #(docs/validation/f1412-step-mode-emulator-2026-09-26.md sec. 7).
+            #(docs/validation/slices/f1412-step-mode-emulator-2026-09-26.md sec. 7).
             #One replay of a checkpoint would have caught that a third of the
             #time, which is not a check; three do.
             repeats = []

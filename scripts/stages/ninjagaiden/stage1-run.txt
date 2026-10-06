@@ -45,7 +45,7 @@
 # at 20, 24, 30 and 90 (the search's hop k ends at emulated frame 29k, this
 # script's window k at 30k, because the flat script writes the idle frame a
 # one-shot run needs and the search plays the 29 input frames - see
-# docs/validation/f1413-ninjagaiden-search-2026-09-26.md).
+# docs/validation/slices/f1413-ninjagaiden-search-2026-09-26.md).
 #
 # RAM read to author this (public map: TASVideos "Game Resources / NES / Ninja
 # Gaiden" RAM Map, and Data Crystal "Ninja Gaiden (NES)/RAM map"): $0076 lives,

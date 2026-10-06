@@ -25,7 +25,7 @@ carries the 16 bytes inline and needs no ROM.
 The recording it reads must be the one the pack was written from -- the same
 route on the same binary -- otherwise the number says nothing. Two gates that
 fire on the same frame are both counted; co-gating is a different question
-(`docs/validation/adr0217-0218-anchor-gate-collisions-2026-09-20.md`).
+(`docs/validation/adr/adr0217-0218-anchor-gate-collisions-2026-09-20.md`).
 
 Usage:
   python3 scripts/measure_capture_draw_rate.py <hires.txt> <grid.txt> [--rom <rom.nes>] [--json <out>]

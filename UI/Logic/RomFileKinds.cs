@@ -15,20 +15,16 @@ namespace Mesen.Logic;
 //dialog's result took), and a library on a cabinet is usually zipped.
 public static class RomFileKinds
 {
-	private static readonly HashSet<string> _romExtensions = new(StringComparer.OrdinalIgnoreCase) {
-		".gb", ".gbc", ".gbx",
-		".nes", ".unif", ".unf", ".fds", ".qd", ".studybox",
-		".sms", ".gg", ".sg",
-		".gba"
-	};
-
+	//The ROM extensions are RomConsoleKinds' table, asked rather than copied:
+	//"is this a ROM" and "which console is this" are the same list, and a second
+	//copy of it is a second thing to forget to update.
 	private static readonly HashSet<string> _archiveExtensions = new(StringComparer.OrdinalIgnoreCase) {
 		".7z", ".zip"
 	};
 
 	public static bool IsRomFile(string path)
 	{
-		return _romExtensions.Contains(Path.GetExtension(path));
+		return RomConsoleKinds.OfFile(path) != RomConsole.Unknown;
 	}
 
 	public static bool IsArchiveFile(string path)

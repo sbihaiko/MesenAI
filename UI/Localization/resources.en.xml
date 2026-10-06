@@ -2249,6 +2249,8 @@
 		<Message ID="DoorMenuAbout">About MesenAI</Message>
 		<Message ID="DoorMenuQuit">Quit MesenAI</Message>
 		<Message ID="ShellStatusNoGame">No game loaded</Message>
+		<Message ID="ShellPadPortsOverflowOne">1 pad beyond the four ports</Message>
+		<Message ID="ShellPadPortsOverflowMany">{0} pads beyond the four ports</Message>
 		<Message ID="ShellStatusRemasterRecording">● Remaster: recording {0}</Message>
 		<Message ID="ShellStatusRemasterJob">● Remaster: preparing figures for {0} · {1} %</Message>
 		<Message ID="RemasterNoGameRunning">No game is running</Message>
@@ -2630,6 +2632,28 @@ E
 		<Message ID="BiosNeededStatus">{0} needs {1}</Message>
 		<Message ID="RomPickerTitle">Open a ROM</Message>
 		<Message ID="RomPickerEmpty">No games in this folder.</Message>
+		<Message ID="RomPickerThisComputer">This computer</Message>
+		<Message ID="RomPickerSearching">Looking for your games…</Message>
+		<Message ID="RomPickerMakeGamesFolder">Make this my games folder</Message>
+		<Message ID="RomPickerGamesFolderSaved">Saved — this is now your games folder.</Message>
+		<!-- #887: says only what holds on every surface that can show it. It must
+		     not promise where the app will open instead: the picker always opens
+		     on its roots (a folder that answers nothing simply is not a root),
+		     and `Open ROM` falls back to the last game's folder only when that
+		     folder answers something too - so "will keep opening where you last
+		     played" was false here in both cases. -->
+		<Message ID="RomPickerGamesFolderEmpty">Saved. There are no games in that folder yet, so MesenAI is not using it for now.</Message>
+		<!-- The console a discovered library holds, shown first on its row in the
+		     picker's suggestion list. The IDs are `RomConsole` + the RomConsole
+		     member (UI/Logic/RomConsoleKinds.cs), so the enum and this file must
+		     be renamed together. -->
+		<Message ID="RomConsoleNes">NES</Message>
+		<Message ID="RomConsoleGameBoy">Game Boy</Message>
+		<Message ID="RomConsoleGameBoyColor">Game Boy Color</Message>
+		<Message ID="RomConsoleGameBoyAdvance">Game Boy Advance</Message>
+		<Message ID="RomConsoleMasterSystem">Master System</Message>
+		<Message ID="RomConsoleSg1000">SG-1000</Message>
+		<Message ID="RomConsoleGameGear">Game Gear</Message>
 		<Message ID="LoadFailedTitleNotAGame">“{0}” is not a game MesenAI can open.</Message>
 		<Message ID="LoadFailedBodyNotAGame">MesenAI opens NES, Game Boy, Game Boy Color, Master System and Game Boy Advance games, or a zip holding one.</Message>
 		<Message ID="LoadFailedTitleZipWithoutGame">“{0}” has no game in it.</Message>

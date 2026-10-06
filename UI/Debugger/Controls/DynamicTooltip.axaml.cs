@@ -17,7 +17,7 @@ using System.Globalization;
 
 namespace Mesen.Debugger.Controls
 {
-	public class DynamicTooltip : UserControl
+	public class DynamicTooltip : UserControl, IDisposable
 	{
 		public static readonly StyledProperty<TooltipEntries> ItemsProperty = AvaloniaProperty.Register<DynamicTooltip, TooltipEntries>(nameof(Items));
 		public static readonly StyledProperty<int> FirstColumnWidthProperty = AvaloniaProperty.Register<DynamicTooltip, int>(nameof(FirstColumnWidth));
@@ -88,13 +88,57 @@ namespace Mesen.Debugger.Controls
 				txt.ClearSelection();
 			}
 		}
+
+		//Issue #872: a tooltip's entries can each own a subscription - a picture's
+		//DynamicCroppedBitmap subscribes to the viewer bitmap it borrows. #861
+		//released that subscription when a picture was *replaced*, but a tooltip
+		//thrown away whole (pointer exited, a preview panel dropped) still leaked
+		//its last one. Dispose() is the single seam: discarding the tooltip releases
+		//every subscription it took, and no caller needs to know which entry holds
+		//one. Safe to call more than once - the entry release Detach() is idempotent.
+		public void Dispose()
+		{
+			if(Items == null) {
+				return;
+			}
+
+			foreach(TooltipEntry item in Items) {
+				item.Dispose();
+			}
+		}
+
+		//A viewer window drops an inline preview panel by assigning null to the
+		//bound property, which removes this control from the visual tree - the same
+		//"discard it whole" event as a popup tooltip being cleared. Releasing here
+		//means a new drop site is covered without a per-site Dispose call.
+		protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
+		{
+			base.OnDetachedFromVisualTree(e);
+			Dispose();
+		}
 	}
 
-	public partial class TooltipEntry : ObservableObject
+	public partial class TooltipEntry : ObservableObject, IDisposable
 	{
 		[ObservableProperty] public partial string Name { get; set; } = "";
-		[ObservableProperty] public partial object Value { get; set; } = "";
 		[ObservableProperty] public partial bool UseMonoFont { get; set; } = false;
+
+		private object _value = "";
+
+		//The value can own a subscription (a TooltipPictureEntry's
+		//DynamicCroppedBitmap holds one on the viewer bitmap). Releasing the old
+		//value on every replacement is what keeps that subscription from piling
+		//up as the pointer moves across tiles (issue #861).
+		public object Value
+		{
+			get { return _value; }
+			set {
+				if(!ReferenceEquals(_value, value)) {
+					(_value as IDisposable)?.Dispose();
+					SetProperty(ref _value, value);
+				}
+			}
+		}
 
 		public virtual VerticalAlignment VerticalAlignment => Value is bool ? VerticalAlignment.Center : VerticalAlignment.Top;
 
@@ -103,6 +147,11 @@ namespace Mesen.Debugger.Controls
 			Name = name;
 			Value = value;
 			UseMonoFont = useMonoFont;
+		}
+
+		public void Dispose()
+		{
+			(_value as IDisposable)?.Dispose();
 		}
 	}
 
@@ -222,6 +271,7 @@ namespace Mesen.Debugger.Controls
 			for(int i = Count - 1; i >= 0; i--) {
 				if(!_updatedKeys.Contains(this[i].Name)) {
 					_entries.Remove(this[i].Name);
+					this[i].Dispose();
 					RemoveAt(i);
 					updated = true;
 				}
@@ -242,23 +292,34 @@ namespace Mesen.Debugger.Controls
 		}
 	}
 
-	public partial class TooltipPictureEntry : ObservableObject
+	public partial class TooltipPictureEntry : ObservableObject, IDisposable
 	{
 		[ObservableProperty] public partial IImage Source { get; set; }
 		[ObservableProperty] public partial double Zoom { get; set; }
 		[ObservableProperty] public partial PixelRect? CropRect { get; set; }
 		public IImage OriginalSource { get; }
 
+		private readonly DynamicCroppedBitmap? _croppedSource;
+
 		public TooltipPictureEntry(IImage src, double zoom, PixelRect? cropRect)
 		{
 			OriginalSource = src;
 			if(cropRect != null) {
-				Source = new DynamicCroppedBitmap(src, cropRect.Value);
+				_croppedSource = new DynamicCroppedBitmap(src, cropRect.Value);
+				Source = _croppedSource;
 			} else {
 				Source = src;
 			}
 			Zoom = zoom;
 			CropRect = cropRect;
+		}
+
+		//Releases the subscription the cropped bitmap took on the source. Only the
+		//cropped bitmap this entry created is detached - never the caller's source,
+		//which the tooltip borrows and shares (issue #861).
+		public void Dispose()
+		{
+			_croppedSource?.Detach();
 		}
 	}
 

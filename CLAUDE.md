@@ -33,9 +33,13 @@ Two exceptions:
 - Architecture/trade-off decisions go through an ADR — run the `adr` skill
   (`/adr`), which allocates the next id and writes the file. Bugs go to the
   bug board (below), never the other way round.
-- The register is `docs/adr/NNNN-<kebab-title>.md`, versioned like any other
-  doc and owned by `docs/AGENTS.md`. Old commits and links may point at
-  `.dev-squad/adr/` — same files, moved 2026-09-03 with history preserved.
+- The register is `docs/adr/<area>/NNNN-<kebab-title>.md`, versioned like any
+  other doc and owned by `docs/AGENTS.md`. The seven areas are `packs`,
+  `sprites`, `recorder`, `ci-build`, `audio`, `gui` and `core`; the area is the
+  decision's **subject**, and the `adr` skill carries the list. Old commits
+  and links may point at `.dev-squad/adr/` (same files, moved 2026-09-03) or
+  at the flat `docs/adr/NNNN-*.md` (same files, split into areas 2026-10-05) —
+  both moved with history preserved.
 - Every session starts with an **index** of the accepted ADRs (id, title,
   date), injected by the `SessionStart` hook in `.claude/settings.json`
   (`python3 scripts/adr_index.py`). The index is titles only — before
@@ -67,7 +71,7 @@ Two exceptions:
   line; ADR-0132 was written by hand in the same range.)
 - Verification: `python3 scripts/checks/verify_adr_refs.py` (wired into
   `make doc-checks`) fails when any cited `ADR-NNNN` has no
-  `docs/adr/NNNN-*.md`.
+  `docs/adr/<area>/NNNN-*.md`.
 
 ## Bug tracking (GitHub Project)
 

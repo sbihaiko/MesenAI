@@ -12,7 +12,7 @@ using Xunit;
 
 namespace Mesen.HeadlessTests;
 
-//P.7 "16:9 stretch", the item docs/validation/manual-validation-automation-plan.md
+//P.7 "16:9 stretch", the item docs/validation/process/manual-validation-automation-plan.md
 //still listed as "the on-window letterbox fit ... stays untested geometry".
 //
 //The rule is now host-free in UI/Logic/RendererViewportFit.cs and asserted by

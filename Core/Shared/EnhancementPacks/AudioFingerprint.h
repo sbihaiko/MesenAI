@@ -48,6 +48,14 @@ struct AudioFingerprint
 	//replacement OGG, in PCM samples at the OGG's own rate. 0 = loop the whole
 	//file (the pre-Block-C behaviour, and the default when the field is absent).
 	uint32_t Loop = 0;
+	//F6.10 (ADR-0240 A4 follow-up, 2026-10-05): the sound id the host had asked
+	//the game's driver for (the "trigger id" of enumeration.log) when this track
+	//started, so a reader can join a fingerprint to the enumeration without
+	//re-deriving the link from order or note onsets. -1 = no trigger was fired
+	//for it - every track a plain bootstrap recording makes (title music,
+	//gameplay), and the default. The store writes the field only when >= 0, so an
+	//ordinary recording's JSON is unchanged.
+	int TriggerId = -1;
 
 	static constexpr size_t MaxEvents = 32;
 };
@@ -91,11 +99,20 @@ private:
 	vector<Segment> _done;
 	uint32_t _bgmCount = 0;
 	uint32_t _sfxCount = 0;
+	//F6.10: the id every segment *opened* from now on is stamped with. Atomic
+	//because the host driving an enumeration sets it from its own thread while
+	//the emulation thread feeds frames; a segment already open keeps the id it
+	//opened with, which is what makes "an id that produced no track" land
+	//nowhere instead of borrowing the next track.
+	std::atomic<int> _activeTriggerId{ -1 };
 
 	void Close();
 
 public:
 	static void ExtractEvents(const vector<NoteFrame>& frames, vector<FingerprintEvent>& out);
+
+	//-1 (default) stops stamping: segments opened after it carry no trigger id.
+	void SetActiveTriggerId(int id) { _activeTriggerId.store(id); }
 
 	void Feed(const NoteFrame& frame);
 	void Finish() { Close(); }

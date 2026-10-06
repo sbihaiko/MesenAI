@@ -64,7 +64,9 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import zipfile
+import zlib
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent  # mep_recipe_common.REPO_ROOT needs sys.path below first
@@ -101,6 +103,13 @@ def no_intro_sha1(data: bytes) -> str:
     if offset > size:
         offset = size
     return hashlib.sha1(data[offset:size]).hexdigest().upper()  # noqa: S324 - No-Intro identity hash is SHA-1 by contract (ADR-0003/ADR-0039)
+
+
+#LegacyHdPackInstall.MaxExtractedBytes: the hard ceiling on what a single pack
+#extraction may write. A legacy HD pack is tens to a few hundred MB of PNGs; a
+#zip whose entries inflate past this is a decompression bomb, not a pack (the
+#download is already capped at 300MB compressed by fetch_pack.py).
+MAX_EXTRACTED_BYTES = 2 * 1024 * 1024 * 1024
 
 
 # ---------------------------------------------------------------------------
@@ -168,11 +177,80 @@ def _entries(zf: zipfile.ZipFile):
     return [n for n in zf.namelist() if not n.endswith("/")]
 
 
-def extract_legacy_pack(pack_zip: Path, target: Path, rom_name: str):
+_READ_CHUNK = 1 << 20  # 1 MiB read granularity for the capped nested read
+
+#LegacyHdPackInstall.SizeLimitError / the corrupt-archive branch of
+#StageNestedArchive: a cap refusal and a corrupt archive must read differently.
+_CORRUPT_NESTED_MESSAGE = (
+    "legacy HD pack holds a corrupt nested archive - refusing to extract"
+)
+
+
+def _format_byte_size(num_bytes: int) -> str:
+    """LegacyHdPackInstall.FormatByteSize: GiB once at least 1 GiB, else MiB."""
+    gib = num_bytes >> 30
+    if gib > 0:
+        return f"{gib} GiB"
+    return f"{num_bytes >> 20} MiB"
+
+
+def size_limit_message(max_bytes: int) -> str:
+    """LegacyHdPackInstall.SizeLimitError: the refusal names the cap."""
+    return f"legacy HD pack inflates past {_format_byte_size(max_bytes)} - refusing to extract"
+
+
+def _read_nested_capped(outer: zipfile.ZipFile, entry_name: str, max_bytes: int) -> bytes:
+    """The second half of the nested-archive gate, mirroring
+    UI/Logic/SizeCappedStream.cs: stream the entry through a byte counter that
+    refuses the instant more than max_bytes is handed out, so a local header
+    that lies about the size would still be caught.
+
+    Kept for parity with the client's #860 shape - a mirror must never look
+    more permissive than the client - but it is UNREACHABLE through the caller's
+    declared gate under today's runtimes: both .NET's ZipArchiveEntry stream and
+    Python's zipfile deliver at most the entry's declared Length (min(declared,
+    real), for a lying-small, lying-large and honest header alike), and the
+    caller refuses any declared Length past the cap before this runs. So the
+    declared-size check is what actually refuses a nested bomb today; this half
+    only fires if a future runtime were to deliver more than the header
+    declares, which is exactly what SizeCappedStream guards against on the
+    client. Difference from the C#: that stage copies to a seekable temp file
+    because ZipArchive needs one, whereas this mirror is in-process and hands
+    the bytes straight to zipfile - a deliberate difference in plumbing, not in
+    the ceiling."""
+    chunks = []
+    total = 0
+    try:
+        with outer.open(entry_name) as src:
+            while True:
+                #Ask for one byte past what the cap still allows: receiving it
+                #proves the cap was exceeded, exactly like SizeCappedStream.
+                chunk = src.read(min(_READ_CHUNK, max_bytes - total + 1))
+                if not chunk:
+                    break
+                total += len(chunk)
+                if total > max_bytes:
+                    raise ValueError(size_limit_message(max_bytes))
+                chunks.append(chunk)
+    except (zipfile.BadZipFile, zlib.error, EOFError) as exc:
+        #A truncated download or a bad local header, not a size bomb - reported
+        #apart from the cap refusal, which names the cap.
+        raise ValueError(_CORRUPT_NESTED_MESSAGE) from exc
+    return b"".join(chunks)
+
+
+def extract_legacy_pack(pack_zip: Path, target: Path, rom_name: str,
+                        max_bytes: int = MAX_EXTRACTED_BYTES):
     """Extract the pack into <target> so hires.txt lands directly there -
     the layout HdTilePack::LoadForRom reads. Raises ValueError with a reason
-    when the zip is not a legacy HD pack (zip-slip, no hires.txt, ambiguous)."""
-    target.mkdir(parents=True, exist_ok=True)
+    when the zip is not a legacy HD pack (zip-slip, no hires.txt, ambiguous).
+    max_bytes is LegacyHdPackInstall.MaxExtractedBytes and caps every stage the
+    client caps: a nested archive's declared size and the bytes actually read
+    out of it (StageNestedArchive), and the bytes inflated and written under
+    the pack root (WriteUnderRoot), nested or not; injectable so a test drives
+    the gates with a small cap, not a real 2 GiB bomb - the same shape as the
+    C# overload. Nothing is created under target until every ceiling has passed,
+    so a refusal leaves the target absent rather than empty."""
     with zipfile.ZipFile(pack_zip) as outer:
         names = []
         by_name = {}
@@ -186,41 +264,99 @@ def extract_legacy_pack(pack_zip: Path, target: Path, rom_name: str):
             raise ValueError("zip is empty")
 
         root = find_pack_root(names, rom_name)
-        inner = None
         if root is None:
             nested = find_nested_zip(names)
             if nested is None:
                 raise ValueError("not a legacy HD pack (no hires.txt)")
-            inner = outer.read(nested)
-            with zipfile.ZipFile(io_bytes(inner)) as inner_zip:
-                names = []
-                by_name = {}
-                for entry in _entries(inner_zip):
-                    norm = normalize_zip_path(entry)
-                    if norm is None:
-                        raise ValueError(f"zip entry escapes the pack root: {entry!r}")
-                    names.append(norm)
-                    by_name[norm] = entry
-                if not names:
-                    raise ValueError("zip is empty")
-                root = find_pack_root(names, rom_name)
-                if root is None:
-                    raise ValueError("not a legacy HD pack (no hires.txt)")
-                _extract_under(inner_zip, by_name, root, target)
+            raw_name = by_name[nested]
+            #Two-half ceiling mirroring LegacyHdPackInstall.StageNestedArchive
+            #(#860): the DECLARED size is the cheap early refusal that actually
+            #stops a declared bomb today; the byte-read cap below (the client's
+            #SizeCappedStream) is kept for parity but cannot be reached through
+            #this gate under today's runtimes - both .NET and Python deliver at
+            #most the declared Length, and a declared Length past the cap never
+            #gets here. Reading the whole entry with outer.read() and checking
+            #afterwards is still exactly what #860 removed from the client - the
+            #mirror must not be more permissive.
+            if outer.getinfo(raw_name).file_size > max_bytes:
+                raise ValueError(size_limit_message(max_bytes))
+            inner = _read_nested_capped(outer, raw_name, max_bytes)
+            try:
+                with zipfile.ZipFile(io_bytes(inner)) as inner_zip:
+                    names = []
+                    by_name = {}
+                    for entry in _entries(inner_zip):
+                        norm = normalize_zip_path(entry)
+                        if norm is None:
+                            raise ValueError(f"zip entry escapes the pack root: {entry!r}")
+                        names.append(norm)
+                        by_name[norm] = entry
+                    if not names:
+                        raise ValueError("zip is empty")
+                    root = find_pack_root(names, rom_name)
+                    if root is None:
+                        raise ValueError("not a legacy HD pack (no hires.txt)")
+                    _extract_under(inner_zip, by_name, root, target, max_bytes)
+            except zipfile.BadZipFile as exc:
+                raise ValueError(_CORRUPT_NESTED_MESSAGE) from exc
         else:
-            _extract_under(outer, by_name, root, target)
+            _extract_under(outer, by_name, root, target, max_bytes)
 
 
-def _extract_under(zf, by_name, root, target):
-    for norm, entry in by_name.items():
-        if not norm.startswith(root):
-            continue  # outside the pack root (banner art, README, ...)
-        rel = norm[len(root):]
-        if not rel:
-            continue
-        dest = target / rel
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        dest.write_bytes(zf.read(entry))
+def _extract_under(zf, by_name, root, target, max_bytes: int = MAX_EXTRACTED_BYTES):
+    """LegacyHdPackInstall.WriteUnderRoot: write every entry under root into
+    target, counting the bytes actually inflated against ONE running total and
+    refusing (ValueError naming the cap) the moment that total passes
+    max_bytes. Same running total (not per entry), same '>' boundary and same
+    refusal message as the C# loop - so the mirror refuses the archive the
+    client refuses, whether the over-cap entry is inside a wrapper's nested zip
+    (#871) or a plain non-nested pack (#860's ceiling is not nested-only).
+
+    Difference from the C#: WriteUnderRoot streams each entry straight into its
+    final file, so a mid-extraction refusal can leave a partial file behind;
+    this mirror streams into a sibling staging dir and moves the result under
+    target only once the whole extraction has passed the ceiling. A refusal
+    therefore leaves no target directory and no file behind - the from-zero
+    harness never mistakes a half-written pack for an install - while the memory
+    profile still matches the C# (entry-by-entry streaming to disk, never the
+    whole pack in RAM).
+
+    target itself is created at commit time, not before: an adversarial review
+    caught the earlier version creating it up front, so a refusal left an empty
+    directory where the docstring promised none, and a stale <target>.partial FILE
+    made shutil.rmtree(ignore_errors=True) a silent no-op whose directory then
+    raised FileExistsError from the first mkdir. A unique mkdtemp staging name
+    fixes the second and removes the shared-name race a fixed .partial would have
+    had between two extractions into the same parent."""
+    target.parent.mkdir(parents=True, exist_ok=True)
+    staging = Path(tempfile.mkdtemp(dir=target.parent, prefix=target.name + ".partial-"))
+    written = 0
+    try:
+        for norm, entry in by_name.items():
+            if not norm.startswith(root):
+                continue  # outside the pack root (banner art, README, ...)
+            rel = norm[len(root):]
+            if not rel:
+                continue
+            dest = staging / rel
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            with zf.open(entry) as src, open(dest, "wb") as out:
+                while True:
+                    chunk = src.read(_READ_CHUNK)
+                    if not chunk:
+                        break
+                    written += len(chunk)
+                    if written > max_bytes:
+                        raise ValueError(size_limit_message(max_bytes))
+                    out.write(chunk)
+        #Commit only after every entry passed the ceiling.
+        for src_path in sorted(staging.rglob("*")):
+            if src_path.is_file():
+                final = target / src_path.relative_to(staging)
+                final.parent.mkdir(parents=True, exist_ok=True)
+                shutil.move(str(src_path), str(final))
+    finally:
+        shutil.rmtree(staging, ignore_errors=True)
 
 
 def io_bytes(b: bytes):

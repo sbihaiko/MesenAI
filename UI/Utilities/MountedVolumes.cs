@@ -1,3 +1,4 @@
+using Mesen.Logic;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -38,6 +39,49 @@ namespace Mesen.Utilities
 				//has; the picker is never left without a root.
 				return Array.Empty<string>();
 			}
+		}
+
+		//The mounts the library scan must not enter (ADR-0256 Decision 9
+		//amendment): a network mount whose server is gone blocks a directory read
+		//in the kernel, where no wall-clock budget can interrupt it, so the scan
+		//would hang the sheet instead of degrading. On Windows the list is empty
+		//because WindowsDrives above never offers a network drive in the first
+		//place - the drive-type filter is already the whole rule there.
+		//
+		//The rule that reads the table is NetworkMounts', host-free and pinned in
+		//UI.Tests; this only fetches the platform's own text.
+		public static IReadOnlyList<string> NetworkMountPoints()
+		{
+			try {
+				if(OperatingSystem.IsWindows()) {
+					return Array.Empty<string>();
+				}
+				return NetworkMounts.FromTable(OperatingSystem.IsMacOS() ? MountCommand() : ReadProcMounts());
+			} catch {
+				//A machine that cannot answer offers the same scan it always did:
+				//no network mount is skipped, and none is invented.
+				return Array.Empty<string>();
+			}
+		}
+
+		//macOS has no /proc: `mount` with no arguments prints the whole table,
+		//one mount per line, and it is the same text `/sbin/mount` shows a person.
+		private static string MountCommand()
+		{
+			using System.Diagnostics.Process mount = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("/sbin/mount") {
+				RedirectStandardOutput = true,
+				UseShellExecute = false
+			}) ?? throw new InvalidOperationException("mount could not be started");
+			string table = mount.StandardOutput.ReadToEnd();
+			mount.WaitForExit(2000);
+			return table;
+		}
+
+		//Linux keeps it in /proc/mounts (the kernel's own list; /etc/mtab is a
+		//symlink to it on every modern distribution).
+		private static string ReadProcMounts()
+		{
+			return File.ReadAllText("/proc/mounts");
 		}
 
 		private static IReadOnlyList<string> WindowsDrives()

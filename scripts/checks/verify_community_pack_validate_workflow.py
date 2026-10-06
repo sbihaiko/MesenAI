@@ -34,6 +34,7 @@ from community_pack_validate import (
     autofix,
     classify,
     general,
+    live_validation,
     mep_meta,
     recipe_gate,
 )
@@ -82,6 +83,8 @@ CHECKS = (
     general.check_prompt_file_data_not_instruction,
     general.check_secret_name_comment,
     general.check_catalog_dispatch_gated_on_aceito,
+    live_validation.check_live_validation_steps_continue_on_error,
+    live_validation.check_autofix_push_keeps_credential_out_of_the_remote,
     classify.check_classify_timeout,
     classify.check_classify_recipe_fragment_required,
     classify.check_classify_top_level_required_unchanged,

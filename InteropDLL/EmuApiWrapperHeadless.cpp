@@ -363,7 +363,7 @@ extern "C"
 	//emulation thread is still using. Measured, not assumed: without the lock
 	//3 of 9 identical 688-frame runs came back with RAM that differed from the
 	//one-shot run's by 476-563 bytes
-	//(docs/validation/f1412-step-mode-emulator-2026-09-26.md sec. 7).
+	//(docs/validation/slices/f1412-step-mode-emulator-2026-09-26.md sec. 7).
 	//
 	//out = nullptr asks for the size alone. Returns the size the state would
 	//take, or 0 when no game is running.

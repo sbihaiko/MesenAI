@@ -19,6 +19,11 @@ namespace Mesen.Windows
 		//The same 50 ms cadence the Advanced key-binding grid polls at.
 		private static readonly TimeSpan PollInterval = TimeSpan.FromMilliseconds(50);
 
+		//ADR-0249 (W-S1)/ADR-0255: the port lamps are a cabinet indicator, not a
+		//frame-rate read - a pad appears or goes in human time - so they get their
+		//own 1 s cadence rather than the flows' 50 ms.
+		private static readonly TimeSpan PadPortLampInterval = TimeSpan.FromSeconds(1);
+
 		public static DispatcherTimer Attach(Window window, MainWindowViewModel model)
 		{
 			//The six sheets' focus-on-open used to be registered here, each one
@@ -45,6 +50,16 @@ namespace Mesen.Windows
 			bool listening = false;
 			DispatcherTimer timer = new DispatcherTimer(PollInterval, DispatcherPriority.Background, (s, e) => listening = Poll(model, listening));
 			timer.Start();
+
+			//The port lamps: four LEDs for the connected pads. Their own cadence and
+			//their own timer, stopped with the window - the 50 ms bridge's own reason
+			//(#840: a tick that outlived its window would run against a closed one).
+			//The first read is immediate so a cabinet with pads shows them lit from
+			//the instant the window opens, not a second later.
+			DispatcherTimer lamps = new DispatcherTimer(PadPortLampInterval, DispatcherPriority.Background, (s, e) => model.RefreshPadLamps());
+			window.Closed += (_, _) => lamps.Stop();
+			model.RefreshPadLamps();
+			lamps.Start();
 			return timer;
 		}
 

@@ -442,8 +442,16 @@ namespace Mesen.Windows
 
 				ConfigManager.Config.ApplyConfig();
 
-				if(ConfigManager.Config.Preferences.OverrideGameFolder && Directory.Exists(ConfigManager.Config.Preferences.GameFolder)) {
-					EmuApi.AddKnownGameFolder(ConfigManager.Config.Preferences.GameFolder);
+				//#887: the same rule as Open ROM's start folder - a games folder that
+				//answers nothing is not registered with the core as a known folder.
+				//What that list feeds is RomFinder alone (Core/Shared/RomFinder.h),
+				//which resolves a ROM by name and CRC; registering a folder that
+				//holds nothing buys nothing there and is the other half of the same
+				//write MakeGamesFolder makes in the picker.
+				string? gamesFolder = GamesFolderChoice.Usable(
+					ConfigManager.Config.Preferences.OverrideGameFolder ? ConfigManager.Config.Preferences.GameFolder : null);
+				if(gamesFolder != null) {
+					EmuApi.AddKnownGameFolder(gamesFolder);
 				}
 				foreach(RecentItem recentItem in ConfigManager.Config.RecentFiles.Items) {
 					EmuApi.AddKnownGameFolder(recentItem.RomFile.Folder);
@@ -866,7 +874,7 @@ namespace Mesen.Windows
 			//shader seam) and snaps width/height to whole device pixels here.
 			//Both rules live in RendererViewportFit instead, rounding down so
 			//the picture never overflows the panel (P.7) - see
-			//docs/validation/upstream-sync-3924215-2026-09-24.md.
+			//docs/validation/process/upstream-sync-3924215-2026-09-24.md.
 
 			if(WindowState == WindowState.FullScreen && !ConfigManager.Config.Video.UseExclusiveFullscreen && ConfigManager.Config.Video.EnableVariableRefreshRate) {
 				//When VRR is enabled, set the renderer to the same size as the monitor when in fullscreen mode

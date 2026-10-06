@@ -31,6 +31,8 @@ namespace Mesen.ViewModels
 		private string _packInstallStatus = "";
 		//G.5 (W-P13/W-P16): one clause an edge flow adds to Play's status line.
 		private string _playNotice = "";
+		//The last strip the poll handed over, so an unchanged one is skipped.
+		private PadPortStrip _padPorts = PadPortLamps.Empty;
 
 		[ObservableProperty] public partial Workspace Active { get; private set; }
 		[ObservableProperty] public partial bool IsPlay { get; private set; }
@@ -39,6 +41,12 @@ namespace Mesen.ViewModels
 		[ObservableProperty] public partial List<WorkspaceSwitcherRowViewModel> Rows { get; private set; } = new();
 		[ObservableProperty] public partial bool IsBarVisible { get; private set; } = true;
 		[ObservableProperty] public partial string StatusText { get; private set; } = "";
+		//ADR-0249 (W-S1)/ADR-0255: the status line's four port lamps and, when the
+		//backend reports more pads than ports, the note that says so. Four dim
+		//lamps until the window's poll feeds the first count.
+		[ObservableProperty] public partial IReadOnlyList<PadPortLamp> PadLamps { get; private set; } = PadPortLamps.Empty.Lamps;
+		[ObservableProperty] public partial string PadLampNote { get; private set; } = "";
+		[ObservableProperty] public partial bool HasPadLampNote { get; private set; }
 		//ADR-0249 (W-S1): the status line's dot is green while a game is loaded.
 		[ObservableProperty] public partial bool HasGame { get; private set; }
 		//G.3 (§13.6): the profile button's dot while Remaster records or runs a
@@ -135,6 +143,26 @@ namespace Mesen.ViewModels
 		}
 
 		public string PlayNotice => _playNotice;
+
+		//ADR-0249/ADR-0255: the window's pad poll (PlayEdgeFlowsWiring) hands the
+		//host-free strip here once a second. The rule is PadPortLamps'; this maps
+		//its overflow count to the resource sentence the strip shows beside the
+		//lamps, and nothing at all when there are four pads or fewer.
+		public void UpdatePadPorts(PadPortStrip strip)
+		{
+			//The poll rebuilds the strip every second; only a real change is applied,
+			//so the four lamps are not re-created (and a hovered tooltip dropped)
+			//once a second while nothing moves.
+			if(_padPorts.DrawsSameAs(strip)) {
+				return;
+			}
+			_padPorts = strip;
+			PadLamps = strip.Lamps;
+			HasPadLampNote = strip.HasOverflow;
+			PadLampNote = strip.HasOverflow
+				? ResourceHelper.GetMessage(PadPortLamps.OverflowKey(strip.OverflowPads), strip.OverflowPads)
+				: "";
+		}
 
 		private void Refresh()
 		{

@@ -1,4 +1,5 @@
 ﻿using Mesen.Config;
+using Mesen.Logic;
 using Mesen.Utilities;
 using System;
 using System.Collections.Generic;
@@ -41,21 +42,18 @@ namespace Mesen.Interop
 			}
 		}
 
-		[DllImport(DllPath, EntryPoint = "GetPressedKeys")] private static extern void GetPressedKeysWrapper(IntPtr keyBuffer);
+		//The capacity is passed as an explicit length so the native copy loop reads
+		//its bound from here instead of repeating a literal that can drift, and the
+		//RETURN is the size of the set the backend holds - so a set too large for
+		//the buffer is the host's to grow, not the copy loop's to lose (#895).
+		[DllImport(DllPath, EntryPoint = "GetPressedKeys")] private static extern Int32 GetPressedKeysWrapper(IntPtr keyBuffer, Int32 capacity);
 		public static unsafe List<UInt16> GetPressedKeys()
 		{
-			UInt16[] keyBuffer = new UInt16[3];
-			fixed(UInt16* ptr = keyBuffer) {
-				InputApi.GetPressedKeysWrapper((IntPtr)ptr);
-			}
-
-			List<UInt16> keys = new List<UInt16>();
-			for(int i = 0; i < 3; i++) {
-				if(keyBuffer[i] != 0) {
-					keys.Add(keyBuffer[i]);
+			return PressedKeys.Read((UInt16[] keyBuffer) => {
+				fixed(UInt16* ptr = keyBuffer) {
+					return InputApi.GetPressedKeysWrapper((IntPtr)ptr, keyBuffer.Length);
 				}
-			}
-			return keys;
+			});
 		}
 
 		//Host input tester (PRD slice I.0): enumerate connected pads and read

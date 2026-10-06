@@ -64,7 +64,7 @@ def accepted_from_output():
 
 
 def main():
-    files = sorted(adr_index.ADR_DIR.glob("[0-9][0-9][0-9][0-9]-*.md"))
+    files = sorted(adr_index.ADR_DIR.rglob("[0-9][0-9][0-9][0-9]-*.md"))
     if not files:
         print(f"FAIL: no ADRs under {adr_index.ADR_DIR}")
         return 1

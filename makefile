@@ -444,12 +444,32 @@ doc-checks-2:
 	#is the target that actually fetches them.
 	./scripts/checks/verify_download_channel.sh
 	#ADR reference integrity (PRD slice D1): every ADR-NNNN cited in docs/ADRs/
-	#AGENTS.md/CLAUDE.md must resolve to docs/adr/NNNN-*.md.
+	#AGENTS.md/CLAUDE.md must resolve to docs/adr/<area>/NNNN-*.md.
 	python3 scripts/checks/verify_adr_refs.py
+	#The companion of the line above: that one checks the ID resolves, this one
+	#checks the citation is TRUE. Two ways a consolidation makes a citation that
+	#resolves and still lies: it moves a section number (`ADR-0196 §1` is written
+	#into 68 sites across Core/ and scripts/, and after the fold `§1` was 0189's
+	#own), or it leaves a sentence claiming an ADR was absorbed after that fold was
+	#undone (`ADR-0231, consolidated into ADR-0230` sat in ten files). No
+	#allow-list: an earlier revision excused 21 "pre-existing" breaks that were its
+	#own blind spot around bold-numbered sections.
+	python3 scripts/checks/verify_adr_citations.py
 	#The session-start index is the only register a session sees by default;
 	#four accepted ADRs were missing from it (0209, 0212, 0213, 0214) because
 	#the Status parser anchored on the first word. That guard is this one.
 	python3 scripts/checks/verify_adr_index.py
+	#Every `](target)` resolves from the file that writes it. A link target is
+	#relative to its own file, so moving a file changes what its links must say
+	#even when the targets never moved - and the 2026-10-05 area split (283
+	#files, one directory deeper) was swept FOUR times, each sweep missing a
+	#shape the next one found: repo-relative literals split across lines;
+	#`../`-relative paths in code spans; a link's visible LABEL; and a target
+	#written `adr/core/0237-….md` with no `docs/` prefix. Resolving every target
+	#is the one formulation with no shape to miss, and over the tree it replaced
+	#it reports exactly the two links that were broken and nothing else. It has
+	#no allow-list, which is why it is the one worth keeping.
+	python3 scripts/checks/verify_md_links.py
 	#Roadmap freshness (PRD slice C.2): a slice that has shipped loses its row
 	#in the PRD's live tables and gains one line in the shipped record, so a
 	#live row whose Decision cell opens with "shipped" is a contract breach.
@@ -466,6 +486,22 @@ doc-checks-2:
 	#table, with no mirror in between, and the enum name for value.
 	python3 scripts/checks/verify_pad_button_tables.py
 	python3 scripts/test_verify_pad_button_tables.py
+	#Issue #895: the pressed-key read is written in two languages - the native
+	#export answers the size of the set it holds and the C# side grows its buffer
+	#to match - and UI.Tests only ever sees stand-ins for the export, so a native
+	#loop that stopped at the old literal, or one that answered min(size, capacity),
+	#passes every case there. This is the committed guard for that half: it reads
+	#the export, the DllImport and PressedKeys.Read and fails on each drift, and
+	#its own test feeds it all of them.
+	python3 scripts/checks/verify_pressed_keys_contract.py
+	python3 scripts/test_verify_pressed_keys_contract.py
+	#Issue #902: key code 0 is the "no key" sentinel, not a key, and macOS hands
+	#it out for every virtual key code it has no Mesen key for. Its writer is
+	#ObjC++ behind AppKit and KeyManager.cpp is not linked into core-unit-tests,
+	#so nothing host-free fails on it: this is the committed guard for the three
+	#sites that have to agree, and its own test feeds it each drift.
+	python3 scripts/checks/verify_no_key_sentinel.py
+	python3 scripts/test_verify_no_key_sentinel.py
 	#Issue #516: the checks themselves must be load-proof. `set -o pipefail`
 	#plus an early-exit grep as a pipeline reader makes the writer's SIGPIPE a
 	#141, which a check reads as a missing string - verify_community_pack_
@@ -637,6 +673,19 @@ doc-checks-4:
 	python3 scripts/test_mep_recipe.py
 	python3 scripts/test_mep_compare_auto_palettes.py
 	python3 scripts/test_gen_mep_recipe_fixture.py
+	#ADR-0246 §5 (Hold to Compare): every renderer that runs a librashader
+	#chain must consult IsLookCompare, or the held frames keep the shader on
+	#that platform. macOS did from the start; Windows and Linux did not until
+	#2026-10-05, which is the bug this guard would have caught. It scans the
+	#repo for the appliers and compares the set it finds against a written-down
+	#list, so a new renderer is a FAILURE until a person adds it - which is when
+	#the read gets checked - and so is an empty set. Before matching it removes
+	#comments, string and char literal contents and `#if 0` regions, so a
+	#mention is not a call. What it cannot see is listed in its docstring:
+	#whether the read's RESULT is used (`metal-presenter-tests` pins that half
+	#on macOS), a read through a member-function pointer, and `#if defined(...)`
+	#other than `#if 0`.
+	python3 scripts/checks/verify_hold_compare_bypass.py
 
 ui: check-manifest InteropDLL/$(OBJFOLDER)/$(SHAREDLIB)
 	mkdir -p $(OUTFOLDER)/Dependencies

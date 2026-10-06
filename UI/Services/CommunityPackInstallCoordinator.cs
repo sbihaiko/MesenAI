@@ -141,7 +141,7 @@ namespace Mesen.Services
 			//MEP textures section (GetSectionPath) instead of the separate
 			//HdPacks/<rom>/ path; the pack stays visible and editable in mep/.
 			string texturesFolder = Path.Combine(outFolder, "textures");
-			string stampPath = Path.Combine(outFolder, ".mep-install.json");
+			string stampPath = Path.Combine(outFolder, LegacyHdPackInstall.InstallStampFileName);
 			bool folderExists = Directory.Exists(outFolder);
 			bool folderNonEmpty = folderExists && Directory.EnumerateFileSystemEntries(outFolder).Any();
 			//ADR-0147, mirroring MepRecipeInstaller's own guard: a mep/ folder we
@@ -164,8 +164,17 @@ namespace Mesen.Services
 					break;
 			}
 
-			if(!TryExtractLegacyPack(primaryPackPath, texturesFolder, romName, out string error)) {
+			if(!LegacyHdPackInstall.TryExtractPack(primaryPackPath, texturesFolder, romName, out string error)) {
 				EmuApi.WriteLogEntry("[CommunityPackInstall] hd-legacy extract failed: " + error);
+				//Leave no mep/ behind (#878). The refusal can happen
+				//mid-extraction - MaxExtractedBytes while streaming, or a corrupt
+				//nested archive - so the folder is half-written and unstamped, and
+				//the next install of the same pack would take the
+				//RefuseNonEmptyUnstamped branch above and tell the user their own
+				//folder is in the way. Reaching here means the folder was ours to
+				//clear: the gates above either cleared it, or found it absent or
+				//empty. The Contradicts branch below states the same invariant.
+				ClearFolderForReinstall(outFolder);
 				return CommunityPackInstallOutcome.Failed(error);
 			}
 
@@ -203,9 +212,18 @@ namespace Mesen.Services
 					break;
 			}
 
-			Directory.CreateDirectory(outFolder);
-			File.WriteAllText(Path.Combine(outFolder, "pack.json"), BuildLegacyPackJson(entry, stampedSha1, romName));
-			File.WriteAllText(stampPath, BuildLegacyInstallStamp(entry, entry.Sha256));
+			if(!LegacyHdPackInstall.WriteInstallOutputs(outFolder,
+				BuildLegacyPackJson(entry, stampedSha1, romName),
+				BuildLegacyInstallStamp(entry, entry.Sha256), out string writeError)) {
+				EmuApi.WriteLogEntry("[CommunityPackInstall] hd-legacy write failed: " + writeError);
+				//Leave no mep/ behind (#886) - the same invariant the
+				//extract-failure and Contradicts branches above hold. The
+				//extraction has already filled this folder, and a folder left
+				//without our .mep-install.json is read as the user's own work by
+				//the RefuseNonEmptyUnstamped branch on the next install.
+				ClearFolderForReinstall(outFolder);
+				return CommunityPackInstallOutcome.Failed(writeError);
+			}
 			EmuApi.WriteLogEntry("[CommunityPackInstall] hd-legacy installed (MEP-ized): " + outFolder);
 			return CommunityPackInstallOutcome.Installed(containerName, Array.Empty<string>(), Array.Empty<CommunityPackDepPrompt>());
 		}
@@ -224,31 +242,6 @@ namespace Mesen.Services
 				EmuApi.WriteLogEntry("[CommunityPackInstall] could not read " + hiresPath + " for the supportedRom check: " + ex.Message);
 			}
 			return new LegacyHdPackInstall.SupportedRomDeclaration();
-		}
-
-		//Finds the pack root (the folder that holds hires.txt) inside a legacy
-		//HD pack zip and extracts its contents into targetFolder, preserving
-		//relative paths. Files outside the pack root (banner art, READMEs, ...)
-		//are skipped - the classic loader only reads what hires.txt references.
-		//A wrapper zip holding exactly one root-level nested zip (the
-		//"UnZipMeFirst"-style release, e.g. Zelda Remastered), or a GitHub
-		//repo archive with one pack zip in the matching game folder
-		//(LiQuiDz HDnes: HDnes-main/1942/1942audio.zip), is unwrapped
-		//in-memory and extracted while that inner ZipArchive is still open
-		//(ZipArchiveEntry.Open throws ObjectDisposedException after Dispose).
-		//Root discovery + zip-slip + extract live in host-free
-		//LegacyHdPackInstall (UI/Logic, unit-tested); this opens the file.
-		private static bool TryExtractLegacyPack(string zipPath, string targetFolder, string romName, out string error)
-		{
-			error = "";
-			try {
-				Directory.CreateDirectory(targetFolder);
-				using ZipArchive outer = ZipFile.OpenRead(zipPath);
-				return LegacyHdPackInstall.ExtractToFolder(outer, targetFolder, romName, out error);
-			} catch(Exception ex) when(ex is IOException or UnauthorizedAccessException or InvalidDataException or ObjectDisposedException) {
-				error = "cannot extract legacy HD pack: " + ex.Message;
-				return false;
-			}
 		}
 
 		//Minimal .mep-install.json for a legacy pack (no recipe_hash/deps): the
@@ -411,7 +404,7 @@ namespace Mesen.Services
 
 		private static string? ReadInstallStamp(string outFolder)
 		{
-			string stampPath = Path.Combine(outFolder, ".mep-install.json");
+			string stampPath = Path.Combine(outFolder, LegacyHdPackInstall.InstallStampFileName);
 			try {
 				return File.Exists(stampPath) ? File.ReadAllText(stampPath) : null;
 			} catch(Exception ex) when(ex is IOException or UnauthorizedAccessException) {
@@ -496,6 +489,12 @@ namespace Mesen.Services
 					Directory.Delete(outFolder, true);
 				}
 			} catch(Exception ex) when(ex is IOException or UnauthorizedAccessException) {
+				//A partial delete - a scanner holding one of the files, say -
+				//leaves exactly what this is here to prevent: a half-written,
+				//unstamped folder the next install refuses as the user's own
+				//(#878). The swallow stays, since the install that called this
+				//may still be fine, but silence would make the block inexplicable.
+				EmuApi.WriteLogEntry("[CommunityPackInstall] could not clear " + outFolder + ": " + ex.Message);
 			}
 		}
 

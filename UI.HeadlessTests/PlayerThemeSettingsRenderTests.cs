@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Globalization;
 using System.Linq;
 using System.Threading;
 using Avalonia;
@@ -140,8 +141,8 @@ public class PlayerThemeSettingsRenderTests : IDisposable
 	}
 
 	//W-P8 / W-P10's chrome: a white sheet (radius 14, 480 wide) in the Player
-	//scope titled Settings, the segmented Display | Look | Audio | Controls
-	//strip (96 px segments on FILL), and the 32 px Done, 90 wide.
+	//scope titled Settings, the segmented Window | Video | Audio | Controls |
+	//System strip, and the 32 px Done, 90 wide.
 	private static void AssertSettingsChrome(Border sheet)
 	{
 		Assert.True(sheet.IsOnScreen());
@@ -157,11 +158,38 @@ public class PlayerThemeSettingsRenderTests : IDisposable
 		Border track = strip.FindAll<Border>().First(b => b.Name == "PART_Track");
 		Assert.Equal(Fill, PlayerRender.SolidColor(track.Background));
 		Assert.Equal(new CornerRadius(8), track.CornerRadius);
-		foreach(TabItem tab in strip.Items.Cast<TabItem>()) {
-			Assert.Equal(96, tab.Bounds.Width, 0.5);
+
+		//#852: the strip must FIT the sheet, so a sixth tab cannot overflow it
+		//again. It overflowed once - ADR-0256 Decision 8 added a fifth tab to
+		//a 96 px-per-segment strip drawn for four, the strip ran past the
+		//sheet's right edge, and the last label rendered as "Syst".
+		//
+		//The assertions below state the invariant, not the arithmetic: the
+		//test must not re-implement the panel's layout.
+		//PlayerSettingsEssentials.SegmentWidth carries the rule and is pinned
+		//host-free in UI.Tests/Play/PlayerSettingsStripTests.
+		List<TabItem> tabs = strip.Items.Cast<TabItem>().ToList();
+		TabItem lastTab = tabs[^1];
+		double firstLeft = tabs[0].TranslatePoint(new Point(0, 0), strip)!.Value.X;
+		double lastRight = lastTab.TranslatePoint(new Point(lastTab.Bounds.Width, 0), strip)!.Value.X;
+		Assert.True(firstLeft >= -0.5, $"the strip starts at {firstLeft} px, left of the sheet");
+		Assert.True(lastRight <= strip.Bounds.Width + 0.5, $"the strip ends at {lastRight} px in a {strip.Bounds.Width} px strip");
+		foreach(TabItem tab in tabs) {
+			//One width for every segment, and never wider than the mockups'
+			//own 96 px (docs/media/gui-redesign/W-P8..W-P11.png).
+			Assert.Equal(tabs[0].Bounds.Width, tab.Bounds.Width, 0.5);
+			Assert.InRange(tab.Bounds.Width, 1, PlayerSettingsEssentials.MaxSegment);
 			Assert.Equal(22, tab.Bounds.Height, 0.5);
 			Assert.Equal(12.5, LabelOf(tab).FontSize);
 			Assert.Equal("Inter", LabelOf(tab).FontFamily.Name);
+			//The promise the geometry exists for: the label is not cut. "Syst"
+			//was a truncated "System", and it is what a person on a display
+			//saw (#852). Measured unconstrained, so the check is about the
+			//text and not about how the segment happened to be sized.
+			TextBlock label = LabelOf(tab);
+			FormattedText text = new(label.Text ?? "", CultureInfo.CurrentCulture, FlowDirection.LeftToRight,
+				new Typeface(label.FontFamily, label.FontStyle, label.FontWeight), label.FontSize, Brushes.Black);
+			Assert.True(text.Width <= tab.Bounds.Width + 0.5, $"\"{label.Text}\" needs {text.Width} px in a {tab.Bounds.Width} px segment");
 		}
 		TabItem selected = strip.Items.Cast<TabItem>().Single(t => t.IsSelected);
 		Assert.Equal(Card, PlayerRender.SolidColor(selected.FindAll<Border>().First(b => b.Name == "PART_Segment").Background));
