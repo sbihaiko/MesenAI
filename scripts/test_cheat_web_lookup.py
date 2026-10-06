@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """Tests for scripts/cheat_web_lookup.py (ADR-0245 section 4, P.12, #923).
 
-Every case runs over the real libretro-database pages committed next to this
-file (castlevania-usa.cht, contra-usa.cht) with a fake fetcher and a fake
+Every case runs over the real libretro-database pages committed under
+tests/fixtures/cheat-web-lookup/ (castlevania-usa.cht, contra-usa.cht) with a fake fetcher and a fake
 headless session, so no network and no emulator are needed. The fake session
 is a RAM model: each address has an "off" trace, and a code listed in
 `pinning` holds its value on its address while it is on. What the script
 offers is then decided by the check alone, which is what these cases assert.
 
-Run: python3 tests/fixtures/cheat-web-lookup/test_cheat_web_lookup.py
+Run: python3 scripts/test_cheat_web_lookup.py (also run by `make python-tests`)
 """
 from __future__ import annotations
 
@@ -19,8 +19,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-HERE = Path(__file__).resolve().parent
-ROOT = HERE.parents[2]
+ROOT = Path(__file__).resolve().parents[1]
+HERE = ROOT / "tests" / "fixtures" / "cheat-web-lookup"
 sys.path.insert(0, str(ROOT / "scripts"))
 import cheat_web_lookup as lookup  # noqa: E402
 
