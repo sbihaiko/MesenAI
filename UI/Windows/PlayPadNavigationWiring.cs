@@ -149,8 +149,13 @@ namespace Mesen.Windows
 			//so it is claimed before the sheet that holds it: with the tab
 			//showing, the pad lands on the storage choice; on any other tab this
 			//claim is closed and the one below puts it on the strip, as before.
+			//#932: and it names the sheet as its root, as the Settings claim does
+			//(#910). Inferred from the storage choice, the root was the tab's page,
+			//which holds neither the strip nor the footer (Done), so the D-pad
+			//could not leave the four choices.
 			focus.When(model, [nameof(MainWindowViewModel.IsPlayerSystemTabVisible)],
-				() => model.IsPlayerSystemTabVisible, () => Named(window, "SystemStorageUserFolder"));
+				() => model.IsPlayerSystemTabVisible, () => Named(window, "SystemStorageUserFolder"),
+				() => Named(window, "PlayerSettingsSheet"));
 			//#910: the sheet names its own root. Inferred from the strip's tab,
 			//the root was the TabControl, which holds neither the page's rows
 			//nor the footer (Exit full screen, Done), so the D-pad could not
