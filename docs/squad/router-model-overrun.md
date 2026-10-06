@@ -130,6 +130,7 @@ were measured:
 | `run-20261005-205624` | `node_turn_cap` | three children at 41, 46, 51 turns, $1.18–$1.40 each | the router was sizing `turns` from the 40–50 the role text quoted as the observed norm, which cannot finish a three-bug TDD task. **All three left real edits in their worktrees and returned no artifact**: `error_max_turns` ends the session mid-work, so a child at the wall never gets the turn that would have returned its object |
 | `run-20261005-210625` | `merge_conflict` | $0.84 router + three children at 61/63/78 turns | **the first run whose children worked** — three passed with artifacts. It still failed, because two of them had taken the same pair of bugs (#902/#904) and both edited `MacOS/MacOSKeyManager.mm` |
 | `run-20261005-213328` | `node_spend_cap` | one child $3.28/61 turns, one passed at $2.31 | the router **partitioned correctly** (two disjoint named slices, no overlap) and then priced a turn at the three cents the role quoted — the `claude-deepseek-v4-flash` rate, while it had chosen `claude-grok-4.6` at high effort, where a turn costs $0.054 |
+| `run-20261005-214446` | **completed** | $7.77 in all: router $0.63, children $2.22 / $2.37 / $1.37 / $1.19 | the first run to reach a verdict with every child inside its budget and **no `merge_conflict`**: four disjoint slices (Core/ bugs, UI/+scripts/ bugs, the F8.4 `border.png` lint, the CI live-validation flag), each with its own stopping rule. One child landed a real bug the board did not have (`#905`, the content_id hasher's DEL escape); one returned `fail` with `no_open_bugs_in_slice` and **no invented work**; one returned `needs-human` because the spec sanctioned the behaviour its brief called a bug; one returned `pass` on a deliberate *not cleared* rather than flipping a CI flag |
 
 Two lessons that are not about the node's own configuration:
 
@@ -143,7 +144,28 @@ Two lessons that are not about the node's own configuration:
   `git worktree list` before launching and put what those branches carry into
   the steering exclusions.
 
-By `run-20261005-213328` the routing worked as designed. The remaining two
-runs produced no work for a different reason: the bug board reached zero open
-issues, and the remaining PRD rows are owner- or hardware-gated. See
-`docs/roadmap/PRD-mesence-enhancement-ecosystem.md` §4.
+Three more from the run that completed:
+
+- **The steering prompt carries the queue's state, and nothing else does.** The
+  board emptied at 00:42Z and 00:46Z; the run started at 00:44Z, between the
+  two closes. The router had no way to know, so it spent two of its four
+  children on bug sweeps of an empty board - one of which came back after
+  auditing for a defect nobody had filed, which was the right call but not the
+  one it was dispatched for. Say "the board is empty" (or name the open issues)
+  in the prompt that starts the run.
+- **A brief that names a bug can be wrong about the spec, and the child should
+  say so.** The F8.4 child was told to make a bare root `border.png` a lint
+  error; MEP-v1 §5.4 says hosts **MAY** accept the file, so the error would have
+  invented a rule. It returned `needs-human` with the quotes instead, and the
+  coordinator's ruling - keep the discovery, drop the error - is what shipped.
+  The brief is a hypothesis; the spec is the evidence.
+- **`pass` is not the only good verdict.** Two of the four children passed; the
+  two that did not were the two that told the truth about their slice (nothing
+  to take; the condition is not cleared). A run whose value is measured by how
+  many children return `pass` will buy invented work.
+
+By `run-20261005-214446` the routing works as designed, and the limit is the
+queue rather than the graph: the bug board reached zero open issues, the run
+that completed found one more by audit alone, and the remaining PRD rows are
+owner- or hardware-gated (F6.5, F9.18, F12.11, F14.8, P.8, P.11-P.12, S10.b).
+See `docs/roadmap/PRD-mesence-enhancement-ecosystem.md` §4.
