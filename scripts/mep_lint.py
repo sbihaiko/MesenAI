@@ -75,6 +75,12 @@ import pack_id_rules  # ADR-0140 source (1): SLUG shape of the MEP root `id`
 SECTION_PATHS = {"textures": "textures", "audio": "audio", "synth": "synth/preset.cfg", "border": "border", "widescreen": "widescreen"}
 PROBES = {"textures": "textures/hires.txt", "audio": "audio/hires.txt", "synth": "synth/preset.cfg", "border": "border/border.png", "widescreen": "widescreen/widescreen.json"}
 AUDIO_ALT_PROBE = "audio/fingerprints.json"
+# MEP-v1 §5.4: besides the `border/` and `auto/border/` probes, "Hosts MAY
+# additionally accept a bare `border.png` directly at the (human) root as a
+# `border` section with `path` `""` ... mirroring the bare-`hires.txt` rule of
+# §2.1 rule 9". The same section records that the lint recognized only the two
+# probes; this is that bare root probe (see discover_sections).
+BARE_BORDER_PROBE = "border.png"
 
 # Structural fallback search limits (ADR-0120): last-priority, name-agnostic
 # discovery of a pack root one or more levels below the container root (e.g.
@@ -831,6 +837,19 @@ def discover_sections(src: Source, rep: Report, rom_name):
                 # linted nor reported.
                 rep.info(f"{fb_root}hires.txt", "Legacy HD pack (hires.txt at the fallback root) — loadable as a textures section with path \"\"")
                 sections.setdefault("textures", fb_prefix)
+
+    if not src.root_prefix and src.exists(BARE_BORDER_PROBE):
+        # MEP-v1 §5.4: the bare `border.png` at the human root is a `border`
+        # section with `path` `""` — the same shape as the bare `hires.txt`
+        # branch above, so the file is linted (PNG decode + `border.json`
+        # schema) instead of being ignored. Discovery order is deliberate: this
+        # runs after the ADR-0120 fallbacks and only when the pack root is the
+        # container root, so a container wrapping its pack in a subfolder is
+        # not misread as a border-only pack (`src.root_prefix` is "" only while
+        # no fallback won). A declared or convention `border/` section still
+        # wins (setdefault), the section being resolved once, not per entry.
+        rep.info(BARE_BORDER_PROBE, "bare border.png at the root — human layer of 'border' with path \"\" (MEP-v1 §5.4)")
+        sections.setdefault("border", "")
 
     return sections
 

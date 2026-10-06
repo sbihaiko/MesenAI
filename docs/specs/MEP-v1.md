@@ -282,8 +282,8 @@ is authored content: hosts MUST NOT synthesize a border on their own.
   `border.png` directly at the (human) root as a `border` section with
   `path` `""` — the reference implementation does (`MepPack::
   DetectConventionLayout`), mirroring the bare-`hires.txt` rule of §2.1
-  rule 9; `scripts/mep_lint.py` currently recognizes only the `border/` and
-  `auto/border/` probes.
+  rule 9; `scripts/mep_lint.py` recognizes the `border/`, `auto/border/` and
+  bare root `border.png` probes.
 - **`border.png` (MUST):** a PNG decoded as **32-bit RGBA**. Its pixel size
   **is** the composite canvas: the host's output frame becomes
   `width × height` pixels of `border.png`, and the game image is drawn into
