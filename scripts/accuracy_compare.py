@@ -33,12 +33,18 @@ The suite ROM is not in this repo. AccuracyCoin is MIT-licensed
 harness takes a path instead so it also works with a locally held suite, and
 so no binary blob is carried here. With no ROM it prints SKIP and exits 0.
 
+That skip is why `--require-rom` exists: it turns a missing ROM, and a ROM
+that is not the build the checkpoints were read from, into a hard failure that
+names the input. A CI gate needs it, because a run that compared nothing must
+not be able to pass.
+
 Usage:
   scripts/accuracy_compare.py [--rom PATH] [--work DIR] [--arms a,b,...]
                               [--json] [--require-rom] [--keep]
                               [--perturb-flag ARM=FLAG] [--perturb-texture ARM]
 
-Exit codes: 0 pass or skip, 1 divergence, 2 harness/setup error.
+Exit codes: 0 pass or skip, 1 divergence, 2 harness/setup error (a ROM
+`--require-rom` asked for and did not get is one of those).
 """
 import argparse
 import hashlib
@@ -223,6 +229,11 @@ def rotate_tile_art(hires_text):
     return "".join(lines), f"rotated the art of all {len(rules)} <tile> rules by one"
 
 
+DEFAULT_ROM_PATHS = (REPO_ROOT / "tests" / "accuracy" / f"{SUITE_NAME}.nes",)
+SUITE_REMEDY = (f"pass --rom, set MESENCE_ACCURACY_ROM, or put it in "
+                f"tests/accuracy/{SUITE_NAME}.nes (MIT, https://github.com/100thCoin/AccuracyCoin)")
+
+
 def resolve_rom(explicit, env_value, default_paths):
     """Where the suite ROM is, or None. First existing of: --rom, the
     MESENCE_ACCURACY_ROM env var, then the conventional paths."""
@@ -230,6 +241,40 @@ def resolve_rom(explicit, env_value, default_paths):
         if candidate and Path(candidate).is_file():
             return Path(candidate).resolve()
     return None
+
+
+def rom_verdict(rom, actual_sha1, require_rom, checked, expected_sha1=SUITE_FILE_SHA1,
+                name=SUITE_NAME):
+    """What the run does about the ROM it has: ("run", note), ("skip", why) or
+    ("fail", why).
+
+    Two ways of not running the pinned suite, and neither may read as a pass.
+    With `--require-rom` both are a failure that names the input: no ROM at all
+    (nothing was compared), and a ROM whose content is not the build
+    `expected_sha1` names. The second is the quieter defect - the checkpoints
+    are frame numbers read off that exact file, so another build puts them on
+    other screens and every arm is compared at the wrong ones, silently green.
+
+    Without the flag both are today's behaviour: the first is the SKIP line and
+    exit 0, the second is a warning note beside a run that proceeds. `checked`
+    is every path the search looked in, so the failure can name them.
+    """
+    if rom is None:
+        if require_rom:
+            looked = ", ".join(str(path) for path in checked if path) or "nothing"
+            return "fail", (f"--require-rom, and no {name} ROM: looked in {looked}. To run the suite, "
+                            f"{SUITE_REMEDY}")
+        return "skip", (f"SKIP: no {name} ROM. Pass --rom, set MESENCE_ACCURACY_ROM, or put it in "
+                        f"tests/accuracy/{name}.nes (MIT, https://github.com/100thCoin/AccuracyCoin).")
+    if actual_sha1 != expected_sha1:
+        if require_rom:
+            return "fail", (f"--require-rom, and {rom} is sha1 {actual_sha1}, not the {expected_sha1} "
+                            f"the checkpoints were read from: its frame numbers would land on other "
+                            f"screens, so the arms would be compared at the wrong ones. To run the "
+                            f"suite, {SUITE_REMEDY}")
+        return "run", (f"WARNING: {rom.name} is sha1 {actual_sha1}, not the {expected_sha1} the "
+                       f"checkpoints were read from - the frame numbers may land on other screens")
+    return "run", None
 
 
 def format_report(captures, divergences, arms, checkpoints):
@@ -316,7 +361,8 @@ def main(argv=None):
     parser.add_argument("--work", help="working directory (default: a temporary one)")
     parser.add_argument("--arms", default=",".join(ARMS), help="comma-separated subset of: " + ", ".join(ARMS))
     parser.add_argument("--json", action="store_true", help="machine-readable result on stdout")
-    parser.add_argument("--require-rom", action="store_true", help="exit 2 instead of skipping when the ROM is absent")
+    parser.add_argument("--require-rom", action="store_true",
+                        help="exit 2 instead of skipping when the ROM is absent or is not the pinned build")
     parser.add_argument("--keep", action="store_true", help="keep the working directory")
     parser.add_argument("--perturb-flag", action="append", default=[], metavar="ARM=FLAG",
                         help="append a headless_record flag to one arm (to prove the comparison can fail)")
@@ -324,13 +370,21 @@ def main(argv=None):
                         help="swap two tile rules in one arm's installed pack (same purpose)")
     args = parser.parse_args(argv)
 
-    rom = resolve_rom(args.rom, os.environ.get("MESENCE_ACCURACY_ROM"),
-                      [REPO_ROOT / "tests" / "accuracy" / f"{SUITE_NAME}.nes"])
-    if rom is None:
-        message = (f"SKIP: no {SUITE_NAME} ROM. Pass --rom, set MESENCE_ACCURACY_ROM, or put it in "
-                   f"tests/accuracy/{SUITE_NAME}.nes (MIT, https://github.com/100thCoin/AccuracyCoin).")
+    env_rom = os.environ.get("MESENCE_ACCURACY_ROM")
+    rom = resolve_rom(args.rom, env_rom, DEFAULT_ROM_PATHS)
+    # The checkpoints are frame numbers read off this exact ROM, so a run
+    # against another build compares the arms at the wrong screens - see
+    # rom_verdict, which is where that becomes loud under --require-rom.
+    actual_sha1 = hashlib.sha1(rom.read_bytes()).hexdigest() if rom else None  # noqa: S324 - No-Intro identity hash is SHA-1 by contract (ADR-0003/ADR-0039)
+    action, message = rom_verdict(rom, actual_sha1, args.require_rom,
+                                  (args.rom, env_rom, *DEFAULT_ROM_PATHS))
+    if action == "skip":
         print(json.dumps({"status": "skipped", "reason": message}) if args.json else message)
-        return 2 if args.require_rom else 0
+        return 0
+    if action == "fail":
+        print(message, file=sys.stderr)
+        return 2
+    notes = [message] if message else []
     if not RECORDER.is_file():
         print(f"error: {RECORDER} is missing - run `make capture-tool` first.", file=sys.stderr)
         return 2
@@ -361,13 +415,6 @@ def main(argv=None):
     script_path = work / "run-suite.txt"
     script_path.write_text(SUITE_INPUT_SCRIPT, encoding="utf-8")
     max_frame = max(frame for _, frame in CHECKPOINTS)
-    notes = []
-    # The checkpoints are frame numbers read off this exact ROM; against a
-    # different build of the suite they would point at different screens.
-    actual_sha1 = hashlib.sha1(rom.read_bytes()).hexdigest()  # noqa: S324 - No-Intro identity hash is SHA-1 by contract (ADR-0003/ADR-0039)
-    if actual_sha1 != SUITE_FILE_SHA1:
-        notes.append(f"WARNING: {rom.name} is sha1 {actual_sha1}, not the {SUITE_FILE_SHA1} the "
-                     f"checkpoints were read from - the frame numbers may land on other screens")
 
     try:
         pack = None
