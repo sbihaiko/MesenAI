@@ -129,5 +129,38 @@ namespace Mesen.Tests.Cheats
 			Assert.Equal(new[] { "jev" }, CheatIntentSearch.OfferedBackends);
 			Assert.Same(ByokVendor.OpenRouter, CheatIntentSearch.Vendor);
 		}
+			[Fact]
+		public void The_matched_entry_highlights_its_own_row_only()
+		{
+			IReadOnlyList<CheatSheetRow> rows = CheatSheet.BuildRows(Interop.ConsoleType.Nes, Contra, false, Array.Empty<StoredCheat>(), false, "");
+			CheatDbCode match = Contra.Cheats[1];
+
+			Assert.Equal(new[] { "Start with 30 lives" }, rows.Where(r => CheatIntentSearch.IsMatch(r, match)).Select(r => r.Description));
+			Assert.DoesNotContain(rows, r => CheatIntentSearch.IsMatch(r, null));
+		}
+
+		[Fact]
+		public void A_typed_code_with_the_same_text_is_not_the_listed_entry()
+		{
+			CheatSheetRow yours = new("Start with 30 lives", Interop.CheatType.NesGameGenie, "AAUZGZAP", true, true, "", CheatRowSource.Yours);
+
+			Assert.False(CheatIntentSearch.IsMatch(yours, Contra.Cheats[1]));
+		}
+
+		[Fact]
+		public async Task The_script_runner_refuses_to_start_without_a_stored_key()
+		{
+			CheatIntentScriptRunner runner = new(new InMemoryByokKeyStore(), "python3", Array.Empty<string>(), "scripts");
+
+			await Assert.ThrowsAsync<ByokKeyMissingException>(() => runner.RunAsync(new[] { "--intent", "x" }));
+		}
+
+		[Fact]
+		public void The_script_runner_puts_the_script_first_and_never_a_key_on_the_command_line()
+		{
+			CheatIntentScriptRunner runner = new(new InMemoryByokKeyStore(), "py", new[] { "-3" }, "/tools/scripts");
+
+			Assert.Equal(new[] { "-3", System.IO.Path.Combine("/tools/scripts", "cheat_intent.py"), "--intent", "x" }, runner.CommandLine(new[] { "--intent", "x" }));
+		}
 	}
 }

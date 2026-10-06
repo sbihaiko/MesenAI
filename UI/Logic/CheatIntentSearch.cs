@@ -89,5 +89,62 @@ public static class CheatIntentSearch
 		}
 	}
 
+	//The row the sheet highlights: the listed entry itself (this copy's, or the
+	//borrowed copy's), never a code the user typed with the same text.
+	public static bool IsMatch(CheatSheetRow row, CheatDbCode? match)
+	{
+		return match != null
+			&& (row.Source == CheatRowSource.ThisCopy || row.Source == CheatRowSource.AnotherCopy)
+			&& row.Description == match.Description
+			&& row.Codes == CheatSheet.ToStoredCodes(match.Code);
+	}
+
 	private static CheatIntentOutcome Failed() => new(CheatIntentStatus.Failed, null, FailedLine);
+}
+
+//The real runner: the user's python3 runs scripts/cheat_intent.py with the
+//OpenRouter key read from the OS credential store when the search starts and
+//handed to the child through its environment alone (ADR-0247, ADR-0242 Q1,
+//ByokJobLauncher). The child's output reaches the app redacted, and the
+//repo-root .env fallback in jev_client.py is never this path: no key stored
+//means no child is started.
+public sealed class CheatIntentScriptRunner : ICheatIntentRunner
+{
+	private readonly IByokKeyStore _store;
+	private readonly string _python;
+	private readonly IReadOnlyList<string> _pythonPrefixArgs;
+	private readonly string _scriptsFolder;
+
+	public CheatIntentScriptRunner(IByokKeyStore store, string python, IReadOnlyList<string> pythonPrefixArgs, string scriptsFolder)
+	{
+		_store = store;
+		_python = python;
+		_pythonPrefixArgs = pythonPrefixArgs;
+		_scriptsFolder = scriptsFolder;
+	}
+
+	public IReadOnlyList<string> CommandLine(IReadOnlyList<string> arguments)
+	{
+		List<string> all = new(_pythonPrefixArgs) { System.IO.Path.Combine(_scriptsFolder, CheatIntentSearch.Script) };
+		all.AddRange(arguments);
+		return all;
+	}
+
+	public async Task<CheatIntentRun> RunAsync(IReadOnlyList<string> arguments)
+	{
+		System.Text.StringBuilder stdout = new();
+		object gate = new();
+		using ByokJob job = ByokJobLauncher.Start(_store, CheatIntentSearch.Vendor, _python, CommandLine(arguments), null, line => {
+			//The answer is the one JSON object line; progress and errors go elsewhere
+			if(line.StartsWith('{')) {
+				lock(gate) {
+					stdout.AppendLine(line);
+				}
+			}
+		});
+		int exitCode = await job.WaitForExitAsync().ConfigureAwait(false);
+		lock(gate) {
+			return new CheatIntentRun(exitCode, stdout.ToString());
+		}
+	}
 }
