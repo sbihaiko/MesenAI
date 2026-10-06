@@ -51,6 +51,23 @@
 			<Setter Property="FontSize" Value="{StaticResource PlayerFontFootnote}" />
 			<Setter Property="Opacity" Value="0.7" />
 		</Style>
+		<!--ADR-0219: a page thumbnail's marks. Each cell lands at its own place
+		in the canvas (the same style pattern as the controller setup's chips):
+		a fill is dimmed - the shape is the ROM's, not something the artist
+		saw - and an empty cell is outlined in the legend's own red, so the
+		three states (seen, filled, empty) never look alike.-->
+		<Style Selector="ItemsControl#RemasterThumbMarks > ContentPresenter" x:DataType="vm:RemasterThumbMark">
+			<Setter Property="Canvas.Left" Value="{Binding Left}" />
+			<Setter Property="Canvas.Top" Value="{Binding Top}" />
+		</Style>
+		<Style Selector="Rectangle.thumb-fill">
+			<Setter Property="Fill" Value="#99000000" />
+		</Style>
+		<Style Selector="Rectangle.thumb-empty">
+			<Setter Property="Fill" Value="Transparent" />
+			<Setter Property="Stroke" Value="#C42828" />
+			<Setter Property="StrokeThickness" Value="1" />
+		</Style>
 		<Style Selector="TextBlock.header, TextBlock.header-line">
 			<Setter Property="FontWeight" Value="Bold" />
 		</Style>
@@ -253,7 +270,29 @@
 						<Button Classes="tile" Click="OnOpenTile">
 							<Panel>
 								<StackPanel Spacing="2">
-									<Image Source="{Binding Thumbnail}" Height="64" Stretch="Uniform" RenderOptions.BitmapInterpolationMode="None" />
+									<!--ADR-0219: the picture, and over it the page's cells the
+									kit did not see in play. Both are centered in the same
+									box, so the canvas' pixels land on the cells they name.-->
+									<Panel Height="64">
+										<Image Source="{Binding Thumbnail}" Height="64" Stretch="Uniform" RenderOptions.BitmapInterpolationMode="None" />
+										<Canvas Name="RemasterThumbCanvas" Width="{Binding ThumbWidth}" Height="{Binding ThumbHeight}" HorizontalAlignment="Center">
+											<ItemsControl Name="RemasterThumbMarks" ItemsSource="{Binding ThumbMarks}">
+												<ItemsControl.ItemsPanel>
+													<ItemsPanelTemplate>
+														<Canvas />
+													</ItemsPanelTemplate>
+												</ItemsControl.ItemsPanel>
+												<ItemsControl.ItemTemplate>
+													<DataTemplate x:DataType="vm:RemasterThumbMark">
+														<Panel>
+															<Rectangle Classes="thumb-fill" Width="{Binding Size}" Height="{Binding Size}" IsVisible="{Binding IsFill}" />
+															<Rectangle Classes="thumb-empty" Width="{Binding Size}" Height="{Binding Size}" IsVisible="{Binding IsEmpty}" />
+														</Panel>
+													</DataTemplate>
+												</ItemsControl.ItemTemplate>
+											</ItemsControl>
+										</Canvas>
+									</Panel>
 									<TextBlock Classes="name" Text="{Binding Caption}" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" />
 									<TextBlock Classes="count" Text="{Binding CountText}" TextWrapping="NoWrap" />
 								</StackPanel>
