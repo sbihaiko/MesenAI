@@ -76,6 +76,19 @@ MAPPING = re.compile(
 #The index, allowing one level of nesting: `mappedKeyCode`, `116`, and
 #`[event keyCode] & 0x7F` are all the same shape to the rule below.
 WRITE = re.compile(r"_keyState\s*\[((?:[^\[\]]|\[[^\[\]]*\])*)\]\s*=")
+#The second way the handler can be right: it hands the host key code to a class
+#that owns the translation instead of writing `_keyState` from the table here.
+#`AliasedKeyState` refuses a code the table cannot name and counts the host
+#codes behind a Mesen code, so it answers this guard's rule and #904 both - and
+#because the refusal lives in that class rather than at this line, the guard
+#reads it there (check_aliased below) instead of agreeing with a call site that
+#merely looks right.
+ALIASED_PATH = REPO_ROOT / "Core" / "Shared" / "AliasedKeyState.h"
+ALIASED_CALL = re.compile(r"_hostKeyState\s*\.\s*SetKeyState\s*\(")
+#Its refusal, in the class that owns it: a host code past the table answers NoKey.
+ALIASED_UNMAPPED = re.compile(r"rawCode\s*<\s*RawCodeCount\s*\?\s*_map\s*\[\s*rawCode\s*\]\s*:\s*NoKey")
+#...and nothing is published for it.
+ALIASED_EARLY = re.compile(r"if\s*\(\s*keyCode\s*==\s*NoKey\s*\)")
 
 
 def read(path: Path, errors: list[str]) -> str:
@@ -189,15 +202,21 @@ def check_macos(text: str, errors: list[str]) -> None:
             "key-event monitor is built somewhere else now, and this guard reads that block"
         )
         return
-    if not any(MAPPING.search(line) for line in handler):
+    #Either shape is right: the handler maps through the table and guards the
+    #write with `NoKey` here, or it routes the host code through the class that
+    #owns the translation. What this guard refuses is a third shape - a bare
+    #`_keyState[mappedKeyCode] = ...` with no refusal above it.
+    aliased = any(ALIASED_CALL.search(line) for line in handler)
+    if not aliased and not any(MAPPING.search(line) for line in handler):
         errors.append(
             "MacOS/MacOSKeyManager.mm: the key-code mapping is gone from the event handler, or no "
-            "longer answers `IKeyManager::NoKey` for a virtual key code outside the table - a "
-            "code the table cannot name would be recorded as a key again (#902)"
+            "longer answers `IKeyManager::NoKey` for a virtual key code outside the table, and the "
+            "handler does not route through `_hostKeyState.SetKeyState(...)` either - a code the "
+            "table cannot name would be recorded as a key again (#902)"
         )
 
     writes = [(index, WRITE.search(line).group(1)) for index, line in enumerate(handler) if WRITE.search(line)]
-    if not writes:
+    if not writes and not aliased:
         errors.append(
             "MacOS/MacOSKeyManager.mm: no `_keyState[...] = ...` write in the event handler - the "
             "key state is written somewhere else now, and this guard reads that write"
@@ -228,11 +247,39 @@ def check_macos(text: str, errors: list[str]) -> None:
             )
 
 
+def check_aliased(text: str, errors: list[str]) -> None:
+    """The refusal, read where the aliasing route puts it.
+
+    A handler that routes through `AliasedKeyState` no longer answers this
+    guard's rule at its own line, so the rule has to be read in that class: a
+    host code the table cannot name must answer `NoKey`, and nothing may be
+    published for it. Without these two the call site still looks right and the
+    sentinel is back in the pressed set (#902).
+    """
+    if not text:
+        return
+    lines = code_lines(text)
+    if not any(ALIASED_UNMAPPED.search(line) for line in lines):
+        errors.append(
+            "Core/Shared/AliasedKeyState.h: SetKeyState no longer answers `NoKey` for a host code "
+            "outside the table - a code the table cannot name is published as a key again (#902)"
+        )
+    if not any(ALIASED_EARLY.search(line) for line in lines):
+        errors.append(
+            "Core/Shared/AliasedKeyState.h: SetKeyState no longer returns early for `NoKey` - the "
+            "sentinel is written to the published state (#902)"
+        )
+
+
 def main() -> int:
     errors: list[str] = []
     check_interface(read(INTERFACE_PATH, errors), errors)
     check_key_manager(read(KEY_MANAGER_PATH, errors), errors)
     check_macos(read(MACOS_PATH, errors), errors)
+    #Only when that route is in use: the class is part of the same change, and a
+    #tree without it is answering through the mapping above.
+    if ALIASED_PATH.exists():
+        check_aliased(read(ALIASED_PATH, errors), errors)
 
     if errors:
         for err in errors:
