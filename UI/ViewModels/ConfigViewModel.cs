@@ -39,7 +39,7 @@ namespace Mesen.ViewModels
 		//G.4 (W-P8): the Player strip's position (PlayerSettingsEssentials.Tabs).
 		//-1 outside Player mode, as SelectedTabIndex is -1 inside it, so only one
 		//of the two strips realizes a tab's content.
-		[ObservableProperty, NotifyPropertyChangedFor(nameof(IsPlayerVideoTab)), NotifyPropertyChangedFor(nameof(IsPlayerHintTab)), NotifyPropertyChangedFor(nameof(IsPlayerMoreTab)), NotifyPropertyChangedFor(nameof(PlayerSheetHeight))] public partial int PlayerTabIndex { get; set; } = -1;
+		[ObservableProperty, NotifyPropertyChangedFor(nameof(IsPlayerVideoTab)), NotifyPropertyChangedFor(nameof(IsPlayerHintTab)), NotifyPropertyChangedFor(nameof(IsPlayerMoreTab)), NotifyPropertyChangedFor(nameof(PlayerSheetHeight)), NotifyPropertyChangedFor(nameof(ShowsPlayerExitFullscreen))] public partial int PlayerTabIndex { get; set; } = -1;
 		//W-P8: the line under the group is Display's hint, or Audio's and
 		//Controls' "More in Options…" link; Look has neither (Hold to Compare).
 		public bool IsPlayerMoreTab => PlayerSettingsEssentials.TabAt(PlayerTabIndex) is ConfigWindowTab.Audio or ConfigWindowTab.Input;
@@ -47,6 +47,8 @@ namespace Mesen.ViewModels
 		//ADR-0249 (W-P10): Look's footer is Hold to Compare; the Options hint
 		//shows on the other tabs.
 		public bool IsPlayerVideoTab => PlayerTabIndex == PlayerSettingsEssentials.IndexOf(ConfigWindowTab.Look);
+		//#910: Display's Exit fullscreen, in Done's row while the window is fullscreen.
+		public bool ShowsPlayerExitFullscreen => PlayerSettingsEssentials.ShowsExitFullscreen(PlayerSettingsEssentials.TabAt(PlayerTabIndex), Display?.IsFullscreen == true);
 		//ADR-0249 (W-P8, W-P10): the Settings sheet is as high as its tab needs.
 		public double PlayerSheetHeight => PlayerSettingsEssentials.TabAt(PlayerTabIndex) is ConfigWindowTab tab ? PlayerSettingsEssentials.SheetHeight(tab) : PlayerSettingsEssentials.SheetHeight(ConfigWindowTab.Display);
 
@@ -82,6 +84,24 @@ namespace Mesen.ViewModels
 			//§6: Player starts on one of the essentials tabs; a non-essentials
 			//selection (e.g. Preferences from the Advanced GUI) clamps to Display.
 			SelectTab(playerMode ? PlayerSettingsEssentials.ClampToEssentials(selectedTab) : selectedTab);
+		}
+
+		partial void OnDisplayChanged(PlayerWindowSettingsViewModel? oldValue, PlayerWindowSettingsViewModel? newValue)
+		{
+			if(oldValue != null) {
+				oldValue.PropertyChanged -= OnDisplayPropertyChanged;
+			}
+			if(newValue != null) {
+				newValue.PropertyChanged += OnDisplayPropertyChanged;
+			}
+			OnPropertyChanged(nameof(ShowsPlayerExitFullscreen));
+		}
+
+		private void OnDisplayPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+		{
+			if(e.PropertyName == nameof(PlayerWindowSettingsViewModel.IsFullscreen)) {
+				OnPropertyChanged(nameof(ShowsPlayerExitFullscreen));
+			}
 		}
 
 		partial void OnSelectedIndexChanged(ConfigWindowTab value)

@@ -569,6 +569,49 @@ public class PlayPadNavigationTests : IDisposable
 		WaitFor(() => FocusedName(window) == "tabPlayerWindow", $"closing the shader did not hand the focus back to the Settings sheet underneath ({Focused(window, model)})");
 	}
 
+	//#910: the Settings sheet's footer (Exit full screen, Done) is part of the
+	//surface the pad walks, not only the strip's TabControl. The claim focuses
+	//tabPlayerWindow, and the root inferred from that tab's parent was the
+	//TabControl, which does not contain the footer - so from the Window tab no
+	//D-pad press could reach Exit full screen or Done. Driven through the
+	//bridge itself (TickForTest), from the claim's own landing.
+	[AvaloniaFact]
+	public void The_pad_reaches_exit_full_screen_from_the_settings_strip()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model) = ShowPlay();
+
+		List<string> toggles = new();
+		ConfigViewModel settings = new(ConfigWindowTab.Display, playerMode: true,
+			createDisplay: () => new PlayerWindowSettingsViewModel(new VideoConfig(), true, 2, () => toggles.Add("toggle"), _ => { }),
+			audioDevices: () => new[] { "Speakers" }, connectedPads: () => 0);
+		model.OpenPlayerSettings(settings);
+		WaitFor(() => FocusedName(window) == "tabPlayerWindow", $"the Settings sheet opened without the focus on its first tab ({Focused(window, model)})");
+
+		//Down through the Window page and off its last row, then Left along
+		//Done's row: the walk a player makes with the D-pad.
+		List<string?> walk = new() { FocusedName(window) };
+		PadNavAction[] presses = { PadNavAction.Down, PadNavAction.Down, PadNavAction.Down, PadNavAction.Down, PadNavAction.Down, PadNavAction.Left };
+		foreach(PadNavAction press in presses) {
+			if(FocusedName(window) == "btnPlayerSettingsExitFullscreen") {
+				break;
+			}
+			Release(window);
+			Feed(window, press);
+			Pump();
+			walk.Add(FocusedName(window));
+		}
+		Assert.True(FocusedName(window) == "btnPlayerSettingsExitFullscreen", $"the D-pad never reached Exit full screen: {string.Join(" -> ", walk)}");
+
+		Release(window);
+		Feed(window, PadNavAction.Confirm);
+		Pump();
+		Assert.Equal(new[] { "toggle" }, toggles);
+		Assert.False(settings.Display!.IsFullscreen);
+		WaitFor(() => FocusedName(window) == "btnPlayerSettingsDone", $"Exit full screen hid without handing the focus to Done ({Focused(window, model)})");
+		model.ClosePlayerSettings();
+	}
+
 	//Defect 1: a Play surface that does NOT pause the game must not take the pad
 	//from the console. The barcode tool sheet is reachable while a game runs
 	//unpaused - the Core allows InputBarcode while running and ShortcutHandler

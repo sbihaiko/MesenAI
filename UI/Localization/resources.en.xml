@@ -1033,6 +1033,7 @@
 			<Control ID="btnPlayerSettingsMoreInOptions">More in Options…</Control>
 			<Control ID="lblPlayerSettingsEverythingElse">Everything else: Classic › Settings</Control>
 			<Control ID="btnPlayerSettingsDone">Done</Control>
+			<Control ID="btnPlayerSettingsExitFullscreen">Exit full screen</Control>
 		</Form>
 		<Form ID="ConfigWindow">
 			<Control ID="wndTitle">Settings</Control>

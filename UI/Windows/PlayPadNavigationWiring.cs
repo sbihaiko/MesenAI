@@ -151,8 +151,13 @@ namespace Mesen.Windows
 			//claim is closed and the one below puts it on the strip, as before.
 			focus.When(model, [nameof(MainWindowViewModel.IsPlayerSystemTabVisible)],
 				() => model.IsPlayerSystemTabVisible, () => Named(window, "SystemStorageUserFolder"));
+			//#910: the sheet names its own root. Inferred from the strip's tab,
+			//the root was the TabControl, which holds neither the page's rows
+			//nor the footer (Exit full screen, Done), so the D-pad could not
+			//leave the strip.
 			focus.When(model, [nameof(MainWindowViewModel.IsPlayerSettingsVisible)],
-				() => model.IsPlayerSettingsVisible, () => Named(window, "tabPlayerWindow"));
+				() => model.IsPlayerSettingsVisible, () => Named(window, "tabPlayerWindow"),
+				() => Named(window, "PlayerSettingsSheet"));
 			//ADR-0255's Controller sheet, which CurrentPlaySheet() reads right
 			//after Settings (one of the two is current at a time; the sheet
 			//replaces the Settings sheet's Controls landing), so the arbiter's
