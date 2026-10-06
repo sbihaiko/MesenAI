@@ -334,19 +334,38 @@ namespace Mesen.Windows
 		}
 
 		private void OnOverlaySaveStates(object? sender, RoutedEventArgs e) => _model.OpenSaveStatesSheet();
-		private void OnSaveStatesSave(object? sender, RoutedEventArgs e) => OpenSlotGrid(GameScreenMode.SaveState);
-		private void OnSaveStatesLoad(object? sender, RoutedEventArgs e) => OpenSlotGrid(GameScreenMode.LoadState);
 		private void OnSaveStatesBack(object? sender, RoutedEventArgs e) => _model.CloseSaveStatesSheet();
 		private void OnSaveStatesReplays(object? sender, RoutedEventArgs e) => _model.OpenReplaysSheet();
 
-		//Same path the former Save slot / Load slot items took (and the
-		//SaveStateDialog/LoadStateDialog shortcuts use).
-		private void OpenSlotGrid(GameScreenMode mode)
+		//#909 (W-P4): the grid's own per-slot actions. The row is the button's own
+		//DataContext - a DataTemplate's named controls live in its own name scope,
+		//so there is nothing to look up by name.
+		private void OnSlotSaveHere(object? sender, RoutedEventArgs e)
 		{
-			if(WindowState == WindowState.FullScreen && ConfigManager.Config.Video.UseExclusiveFullscreen) {
-				ToggleFullscreen();
+			if((sender as Control)?.DataContext is SaveStateSlotViewModel row) {
+				_model.SaveSaveStateSlot(row);
 			}
-			_model.OpenSlotGrid(mode);
+		}
+
+		private void OnSlotLoad(object? sender, RoutedEventArgs e)
+		{
+			if((sender as Control)?.DataContext is SaveStateSlotViewModel row) {
+				_model.LoadSaveStateSlot(row);
+			}
+		}
+
+		//The grid scrolls (eleven rows do not fit the sheet), and the pad's
+		//directional search only answers a row that is on screen: with just the
+		//focused row scrolled into view, Down off the last visible row found no row
+		//below it and left the grid for Shared replays, so slots 7 … 10 and the
+		//auto-save were out of the pad's reach. Keeping one row either side of the
+		//focused one in view is what lets every Down / Up land on the next row.
+		private void OnSlotGotFocus(object? sender, FocusChangedEventArgs e)
+		{
+			if((sender as Control)?.Parent is Control row && row.Bounds.Height > 0) {
+				double h = row.Bounds.Height;
+				row.BringIntoView(new Rect(0, -h, row.Bounds.Width, h * 3));
+			}
 		}
 
 		private void OnOverlayEnhancements(object? sender, RoutedEventArgs e)
