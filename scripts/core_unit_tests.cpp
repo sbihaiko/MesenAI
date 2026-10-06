@@ -70,6 +70,7 @@
 #include "Shared/Movies/ShareRecordingSettings.h"
 #include "Shared/ShortcutKeyRules.h"
 #include "Shared/GamepadButtonOrder.h"
+#include "Shared/AliasedKeyState.h"
 #include "Debugger/CdlFileCheck.h"
 #include "NES/NesScanlineTraceValidity.h"
 #include "NES/NesWidescreenReveal.h"
@@ -6441,6 +6442,82 @@ namespace
 				}
 			}
 		}
+	}
+
+	//--- Bloco O.6: the host key table is partial and many-to-one ---------------
+	//Both cases below are the two properties of MacOS/MacOSKeyManager.mm's
+	//128-entry _keyCodeMap, extracted into Core/Shared/AliasedKeyState.h so they
+	//can be asserted without an NSEvent or an Emulator: the table is partial (a
+	//host code it cannot name maps to 0) and it is many-to-one (four pairs of host
+	//codes share one Mesen code). The backend in front of that table is the one
+	//that was read as a bool per Mesen code, which is what these pin.
+
+	//#902: the table maps a host code it cannot name to 0, and that code was
+	//written at slot 0 like any other - a slot KeyDefinitions names "" and every
+	//host reader drops (UI/Logic/PressedKeys.Decode skips it, StateGrid skips it),
+	//so the backend held an entry the host could not see, with nothing saying so.
+	//The rule: a host code the table leaves at NoKey publishes nothing at all.
+	void TestAHostCodeTheTableCannotNamePublishesNoKey()
+	{
+		AliasedKeyState state;
+		state.SetMapping(36, 6);   //Return
+		state.SetMapping(63, 0);   //an entry _keyCodeMap leaves at 0
+		state.SetMapping(66, 0);
+
+		//A host code past the table's own size is unmapped by construction
+		//(`[event keyCode] >= 128 ? 0 : _keyCodeMap[...]`).
+		state.SetKeyState(200, true);
+		state.SetKeyState(63, true);
+		state.SetKeyState(66, true);
+
+		Check(state.GetPressedKeys().empty(),
+			"BlocoO.6: a host code the table cannot name reports no key at all (#902)");
+		Check(!state.IsPressed(AliasedKeyState::NoKey),
+			"BlocoO.6: ...and code 0 never reads as pressed");
+
+		//The control: with a host code the table does name also down, that one is
+		//reported and the unnamed ones still are not.
+		state.SetKeyState(36, true);
+		vector<uint16_t> pressed = state.GetPressedKeys();
+		Check(pressed.size() == 1 && pressed[0] == 6,
+			"BlocoO.6: ...while the code it does name is reported instead of them");
+	}
+
+	//#904: two host codes can share one Mesen code, and the state behind them was
+	//a single bool. Holding Return, then keypad Enter, then releasing keypad Enter
+	//reported the console key released while Return was still held - for all four
+	//alias rows in the table. The rule: a shared code reads pressed while any of
+	//its host codes is down, and drops only on the last of them.
+	void TestASharedCodeStaysDownUntilItsLastHostCodeIsReleased()
+	{
+		AliasedKeyState state;
+		state.SetMapping(36, 6);   //Return
+		state.SetMapping(52, 6);   //keypad Enter
+
+		Check(state.SetKeyState(36, true),
+			"BlocoO.6: the first host key of a shared code publishes that code (#904)");
+		Check(!state.SetKeyState(52, true),
+			"BlocoO.6: ...a second host key on the same code changes nothing");
+		Check(!state.SetKeyState(52, false),
+			"BlocoO.6: ...and releasing it does not unpublish the code");
+		Check(state.IsPressed(6),
+			"BlocoO.6: releasing one of two aliased host keys keeps Enter down (#904)");
+		Check(state.GetPressedKeys().size() == 1 && state.GetPressedKeys()[0] == 6,
+			"BlocoO.6: ...and the reported set still names it exactly once");
+
+		Check(state.SetKeyState(36, false),
+			"BlocoO.6: the last host key of the code unpublishes it");
+		Check(!state.IsPressed(6) && state.GetPressedKeys().empty(),
+			"BlocoO.6: ...so the code is up again, and reported by nobody");
+
+		//macOS repeats key-down while a key is held. A repeated key-down is still
+		//one host key to release, so the count behind the code cannot be a plain
+		//increments-per-event.
+		state.SetKeyState(36, true);
+		state.SetKeyState(36, true);
+		state.SetKeyState(36, false);
+		Check(!state.IsPressed(6),
+			"BlocoO.6: a repeated key-down of one host key still needs only one release");
 	}
 
 	//A binding may name pad keys from two families at once, and no single pad can
@@ -17125,6 +17202,8 @@ TestW6TheFiltersAcceptTheExtendedFrame();
 	TestAJoysticksDeviceIndexIsItsOwnFamilyNotTheHostsOrdinal();
 	TestAnAxisThresholdAppliesOnlyToTheDirectionABindingNames();
 	TestThePadsButtonOrderIsPerBackend();
+	TestAHostCodeTheTableCannotNamePublishesNoKey();
+	TestASharedCodeStaysDownUntilItsLastHostCodeIsReleased();
 	TestPadRuleLeavesTheKeyboardAndMouseExact();
 
 	TestSheetStableScreensCollapseRepeats();

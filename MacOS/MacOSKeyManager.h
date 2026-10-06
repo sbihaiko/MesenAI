@@ -3,6 +3,7 @@
 #include <vector>
 #include "Shared/Interfaces/IKeyManager.h"
 #include "Shared/KeyDefinitions.h"
+#include "Shared/AliasedKeyState.h"
 
 class MacOSGameController;
 class Emulator;
@@ -14,7 +15,13 @@ private:
 	std::vector<shared_ptr<MacOSGameController>> _controllers;
 
 	vector<KeyDefinition> _keyDefinitions;
+	//Keys written by code, not by a host event: the modifier flags, the mouse
+	//buttons, and SetKeyState's remap/test writes.
 	bool _keyState[0x205];
+	//Keys a host keyboard event published, through _keyCodeMap. The table is
+	//partial and many-to-one, so the events are translated there rather than
+	//written into _keyState directly (#902, #904).
+	AliasedKeyState _hostKeyState;
 	std::unordered_map<uint16_t, string> _keyNames;
 	std::unordered_map<string, uint16_t> _keyCodes;
 
