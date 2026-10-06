@@ -120,6 +120,42 @@ public static class ControllerDevices
 		return name.Length > 0 ? name : Label(keyName);
 	}
 
+	//#913: the unknown-controller pill's sentence. A pad the host names is named
+	//here too, the way the sheet's title names it (named formats the localized
+	//"New controller “{0}”..." sentence); a pad it cannot name keeps the generic
+	//sentence (unnamed). The key-name prefix is not used: "Pad1" is the generic
+	//label #913 removes, so the pill says nothing rather than that.
+	public static string PillText(string? deviceName, Func<string, string> named, string unnamed)
+	{
+		string name = (deviceName ?? "").Trim();
+		return name.Length > 0 ? named(name) : unnamed;
+	}
+
+	//#913: the controller's own name for a key-code device index, off the host's
+	//own pad list - the enumerated pad whose block the index's codes carry, found
+	//the way the controller sheet finds a pad (PadBlock of its backend and its
+	//family-relative slot, never the host's enumeration ordinal, which on Windows
+	//walks the XInput slots before the joysticks). "" when no enumerated pad owns
+	//that block - an unnamed pad, or one unplugged since - so the caller keeps
+	//DisplayName's key-name-prefix fallback.
+	public static string DeviceName(int device, IEnumerable<HostPad> pads)
+	{
+		if(device < 0) {
+			return "";
+		}
+		//DeviceOf numbers every pad key against the base family, so this index
+		//spells the pad's block even one family up: a Windows joystick at 0x2000+
+		//reads as device 16 and up, and 16 << 8 is the DirectInput family's first
+		//block - the same block PadBlock hands that joystick.
+		int block = BaseGamepadIndex + (device << 8);
+		foreach(HostPad pad in pads) {
+			if(pad.Block == block) {
+				return (pad.Name ?? "").Trim();
+			}
+		}
+		return "";
+	}
+
 	//The pad's own Start button, when its key name says so.
 	public static bool NamesStart(string keyName)
 	{
@@ -130,6 +166,23 @@ public static class ControllerDevices
 		return button.Equals("Start", StringComparison.OrdinalIgnoreCase)
 			|| button.Equals("Menu", StringComparison.OrdinalIgnoreCase)
 			|| button.Equals("Options", StringComparison.OrdinalIgnoreCase);
+	}
+}
+
+//#913: one pad as the host enumerated it, for the naming rule (DeviceName): the
+//block its keys carry (PadBlock of its backend and its family-relative slot) and
+//the controller's product name. The name is "" where the backend has none and
+//the caller falls back to the key manager's device prefix.
+public sealed record HostPad(int Block, string Name)
+{
+	//The pad as GetGamepadInfo describes it. XInput carries no product name:
+	//WindowsKeyManager fills GamepadInfo.Name with a synthetic "XInput Pad N"
+	//label, which names the slot, not the controller, so it is dropped here and
+	//the pad takes the fallback like any other unnamed pad.
+	public static HostPad From(GamepadBackend backend, int slot, string? name)
+	{
+		string product = backend == GamepadBackend.XInput ? "" : (name ?? "").Trim();
+		return new HostPad(ControllerDevices.PadBlock(backend, slot), product);
 	}
 }
 

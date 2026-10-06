@@ -57,7 +57,7 @@
 		<Border Name="ControllerSetupPill" Classes="hud compact" IsVisible="{Binding IsPillVisible}" Margin="0 40 0 0" HorizontalAlignment="Center" VerticalAlignment="Top" IsHitTestVisible="False">
 			<StackPanel Orientation="Horizontal">
 				<PathIcon Data="{StaticResource PlayerIconSettings}" />
-				<TextBlock Text="{l:Translate lblControllerSetupPill}" />
+				<TextBlock Name="ControllerSetupPillText" Text="{Binding PillText}" />
 			</StackPanel>
 		</Border>
 		<Panel Name="ControllerSetupBackdrop" IsVisible="{Binding IsVisible}" Background="{StaticResource PlayerScrimBrush}">

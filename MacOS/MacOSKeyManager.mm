@@ -136,8 +136,13 @@ MacOSKeyManager::~MacOSKeyManager()
 void MacOSKeyManager::AddController(void* cont)
 {
 	GCController* controller = static_cast<GCController*>(cont);
-	if([controller extendedGamepad] == nil) {
-		MessageManager::Log(std::string("[Input] Device ignored (Does not support extended gamepad) - Name: ") + [[controller vendorName] UTF8String]);
+	//W-P15 (#912): a pad is a pad whatever profile it exposes. A micro/basic
+	//controller has no extended gamepad and used to be dropped here, so it
+	//never got a slot, sent no key, never raised the unknown-pad pill and could
+	//not be set up. Its own profile's elements drive the same bits (see
+	//MacOSGameController), which is what the pill and the setup sheet read.
+	if(!MacOSGameController::Supports(controller)) {
+		MessageManager::Log(std::string("[Input] Device ignored (No gamepad profile) - Name: ") + [[controller vendorName] UTF8String]);
 	} else {
 		_controllers.push_back(std::shared_ptr<MacOSGameController>(new MacOSGameController(_emu, controller)));
 		MessageManager::Log(std::string("[Input Connected] Name: ") + [[controller vendorName] UTF8String]);
