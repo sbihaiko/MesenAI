@@ -60,15 +60,14 @@ public static class PauseCard
 	public const byte DimAlpha = 0x46;
 
 	//Every sheet the Esc router closes back to W-P4 (PlayEsc) was opened from
-	//it, so the card stays behind it. Two exceptions: the first-start pack
-	//picker opens without W-P4, and the slot grid fills the game area (the
-	//card behind it would draw over the grid).
+	//it, so the card stays behind it. One exception: the first-start pack picker
+	//opens without W-P4.
 	public static PauseCardLayer Layer(bool gameLoaded, bool overlayVisible, PlaySheet sheet)
 	{
 		if(!gameLoaded) {
 			return overlayVisible ? PauseCardLayer.Active : PauseCardLayer.Hidden;
 		}
-		bool behindSheet = sheet != PlaySheet.SaveStateGrid && PlayEsc.Next(true, sheet, false) == PlayEscAction.CloseSheetToOverlay;
+		bool behindSheet = PlayEsc.Next(true, sheet, false) == PlayEscAction.CloseSheetToOverlay;
 		if(behindSheet) {
 			return PauseCardLayer.Dimmed;
 		}

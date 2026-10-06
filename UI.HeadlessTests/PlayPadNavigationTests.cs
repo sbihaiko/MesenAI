@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -443,7 +443,61 @@ public class PlayPadNavigationTests : IDisposable
 
 		Assert.True(window.FindNamed<Border>("PlayerSaveStatesSheet").IsOnScreen());
 		Assert.False(window.FindNamed<Border>("PlayerOverlay").IsOnScreen());
-		Assert.Equal("SaveStatesSaveButton", FocusedName(window));
+		//#909: the sheet is a grid of slot rows; with no game there is no row to
+		//land on, so its own first control takes the ring (the fallback every
+		//surface uses). The case below drives the grid with a game loaded.
+		Assert.Equal("SaveStatesReplaysButton", FocusedName(window));
+	}
+
+	//#909 (W-P4): the Save states sheet is ONE grid, so what the pad walks is its
+	//own rows - the ring opens on the row the rule names (no state yet: the first
+	//slot), Right reaches the *Load* beside it, Down the next slot's row, and a
+	//Confirm on *Save here* writes that slot over the real core.
+	[AvaloniaFact]
+	public void The_save_states_grid_is_one_pad_step_per_slot_action()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model) = ShowPlay();
+		LoadSyntheticGame(model);
+
+		model.TogglePlayerOverlay();
+		WaitFor(() => FocusedName(window) == "OverlayResumeButton", "W-P4 opened without the focus on Resume");
+		Click(window, "OverlaySaveStatesButton");
+		WaitFor(() => model.IsSaveStatesSheetVisible, "W-P4's Save states row did not open its sheet");
+
+		//Eleven rows: the ten slots and the auto-save.
+		Assert.Equal(11, model.SaveStateSlots.Count);
+
+		//The ring lands on the grid's own focus row, on its first action - the same
+		//row the rule answers (a slot with no state reads as slot 1).
+		WaitFor(() => FocusedRow(window) == model.FocusSaveStateSlot() && FocusedName(window) == "SlotSaveButton",
+			"the grid did not take the ring on its own row");
+		int first = model.FocusSaveStateSlot()!.Slot;
+
+		//Right: the *Load* on the same row, one press away.
+		Release(window);
+		Feed(window, PadNavAction.Right);
+		WaitFor(() => FocusedRow(window)?.Slot == first && FocusedName(window) == "SlotLoadButton",
+			"the D-pad did not reach the row's own Load");
+
+		//Left, back onto that row's *Save here*, and Confirm: the state lands in the
+		//slot the rule opened the sheet on, and that row's own Load is armed.
+		Release(window);
+		Feed(window, PadNavAction.Left);
+		WaitFor(() => FocusedRow(window)?.Slot == first && FocusedName(window) == "SlotSaveButton",
+			"the D-pad did not come back to the row's Save here");
+		Release(window);
+		Feed(window, PadNavAction.Confirm);
+		WaitFor(() => model.SaveStateSlot(first)!.HasState, "Confirm on Save here did not write the slot");
+		Assert.True(model.SaveStateSlot(first)!.LoadEnabled);
+		Assert.True(File.Exists(model.SaveStateSlot(first)!.FileName));
+	}
+
+	//The row the ring is on, read off the control's own DataContext - a grid of
+	//rows has no per-slot names to look up.
+	private static SaveStateSlotViewModel? FocusedRow(MainWindow window)
+	{
+		return (window.FocusManager?.GetFocusedElement() as Control)?.DataContext as SaveStateSlotViewModel;
 	}
 
 	//Decision 2's Back: the same shortcut ADR-0251 gave the pad's chord, so a
@@ -512,11 +566,11 @@ public class PlayPadNavigationTests : IDisposable
 		(MainWindow window, MainWindowViewModel model) = ShowPlay();
 		LoadSyntheticGame(model);
 
-		model.TogglePlayerOverlay();
-		WaitFor(() => model.IsGamePaused, "Esc did not open W-P4");
-		Click(window, "OverlaySaveStatesButton");
-		Click(window, "SaveStatesSaveButton");
-		WaitFor(() => model.RecentGames.Visible, "the Save states sheet's Save did not open the slot grid");
+		//#909: W-P4's Save states sheet is its own grid of slots now, so this classic
+		//grid is the one the load/save shortcut opens over the game - the door the
+		//rule below is about (the grid, not the door, is what must keep the pad).
+		model.RecentGames.Init(GameScreenMode.SaveState);
+		WaitFor(() => model.RecentGames.Visible, "the save shortcut did not open the slot grid");
 		WaitFor(() => GridHasFocus(window), $"the slot grid opened without the focus ({Focused(window, model)})");
 
 		//The D-pad is the grid's: the focus stays where it is.

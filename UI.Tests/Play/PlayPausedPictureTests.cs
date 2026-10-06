@@ -91,12 +91,6 @@ namespace Mesen.Tests.Play
 		}
 
 		[Fact]
-		public void The_slot_grid_fills_the_game_area_so_no_card_draws_over_it()
-		{
-			Assert.Equal(PauseCardLayer.Hidden, PauseCard.Layer(true, false, PlaySheet.SaveStateGrid));
-		}
-
-		[Fact]
 		public void The_running_game_shows_no_card()
 		{
 			Assert.Equal(PauseCardLayer.Hidden, PauseCard.Layer(true, false, PlaySheet.None));

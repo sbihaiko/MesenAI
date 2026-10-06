@@ -187,8 +187,14 @@ namespace Mesen.Windows
 			focus.When(model.ReplaysSheet, [nameof(PlayerReplaysSheetViewModel.IsVisible)],
 				() => model.ReplaysSheet.IsVisible,
 				() => EnabledNamed(window, "ReplaysWatchButton") ?? Named(window, "ReplaysDoneButton"));
+			//#909: the Save states sheet is a grid of rows (#848's reason applies
+			//here too: its first control is a row of its own list), so it names its
+			//own search root and its target is the row's own *Save here* - the slot
+			//the sheet opens on, which the rule answers (newest state, else the
+			//first slot).
 			focus.When(model, [nameof(MainWindowViewModel.IsSaveStatesSheetVisible)],
-				() => model.IsSaveStatesSheetVisible, () => Named(window, "SaveStatesSaveButton"));
+				() => model.IsSaveStatesSheetVisible, () => SaveStatesFocusTarget(window, model),
+				() => Named(window, "PlayerSaveStatesSheet"));
 			//W-P4 itself, under every sheet opened from it and over the game.
 			focus.When(model, [nameof(MainWindowViewModel.IsPlayerOverlayVisible)],
 				() => model.IsPlayerOverlayVisible, () => Named(window, "OverlayResumeButton"));
@@ -287,6 +293,25 @@ namespace Mesen.Windows
 		//The window's own name scope only sees MainWindow.axaml; the sheets are
 		//UserControls with their own, so a surface's first control is found by
 		//walking the visual tree (MainWindow.FindNamedDescendant's rule).
+		//#909: the row W-P4's Save states grid opens on (SaveStateSheet.FocusSlot
+		//answers which), and its own *Save here* - the first control of the row, so
+		//the Load beside it is one Right away. A row whose *Save here* does not
+		//exist - the auto-save, which offers Load alone - hands over that button.
+		//The list answers in its own order, so the row is found by its index.
+		private static Control? SaveStatesFocusTarget(MainWindow window, MainWindowViewModel model)
+		{
+			SaveStateSlotViewModel? focus = model.FocusSaveStateSlot();
+			if(focus != null && Named(window, "SaveStatesGrid") is ItemsControl grid
+				&& grid.ContainerFromIndex(model.SaveStateSlots.IndexOf(focus)) is Control container) {
+				return container.GetVisualDescendants().OfType<Button>()
+					.FirstOrDefault(b => b.Name == "SlotSaveButton" && b.IsEffectivelyVisible)
+					?? container.GetVisualDescendants().OfType<Button>().FirstOrDefault(b => b.Name == "SlotLoadButton");
+			}
+			//No rows (the sheet is not over a game, which the app never does): the
+			//sheet's own first control, the way every other surface answers.
+			return FirstFocusable(window, "PlayerSaveStatesSheet");
+		}
+
 		private static Control? Named(MainWindow window, string name)
 		{
 			return window.GetVisualDescendants().OfType<Control>().FirstOrDefault(c => c.Name == name);

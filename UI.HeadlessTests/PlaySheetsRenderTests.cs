@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -414,9 +414,9 @@ public class PlaySheetsRenderTests : IDisposable
 	{
 		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
 		(MainWindow window, MainWindowViewModel model) = Show();
-		model.OpenSaveStatesSheet();
-		Settle(window);
-		window.FindNamed<Button>("SaveStatesLoadButton").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+		//#909: W-P4's Save states row is its own grid now; this is the classic slot
+		//grid the quick load shortcut opens over a paused game.
+		model.RecentGames.Init(GameScreenMode.LoadState);
 		Settle(window);
 
 		Border sheet = window.FindNamed<Border>("PlayHomeSlotSheet");
@@ -442,7 +442,13 @@ public class PlaySheetsRenderTests : IDisposable
 		Assert.Equal("Empty", slots[0].FindAll<TextBlock>().First(t => t.Classes.Contains("subtitle")).Text);
 		Assert.Equal("Auto-save", slots[10].FindAll<TextBlock>().First(t => t.Classes.Contains("title")).Text);
 
-		Bitmap frame = Render(window, "slot-grid", sheet);
+		//#909: the shortcut opens this grid over the Play home, whose scrim sits
+		//over the sheet's own fill (the old W-P4 door opened it over the game
+		//view). The card colour is asserted on the sheet itself just above; what
+		//the frame has to show is the tile below.
+		AssertShellChrome(window);
+		Bitmap frame = PlayerRender.Capture(window);
+		PlayerRender.Save(frame, "slot-grid");
 		//An empty slot is a FILL tile, not the classic black picture.
 		Assert.False(slots[0].Enabled);
 		Point centre = tile.TranslatePoint(new Point(tile.Bounds.Width / 2, tile.Bounds.Height / 2), window)!.Value;

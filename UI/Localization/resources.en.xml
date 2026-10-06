@@ -20,8 +20,8 @@
 			<Control ID="btnOverlaySettings">Settings</Control>
 			<Control ID="btnOverlayQuitGame">Quit Game</Control>
 			<Control ID="lblSaveStatesSheetTitle">Save States</Control>
-			<Control ID="btnSaveStatesSave">Save to a slot…</Control>
-			<Control ID="btnSaveStatesLoad">Load a slot…</Control>
+			<Control ID="btnSaveStatesSaveHere">Save here</Control>
+			<Control ID="btnSaveStatesLoadSlot">Load</Control>
 			<Control ID="btnSaveStatesReplays">Shared replays…</Control>
 			<Control ID="btnSaveStatesBack">Back</Control>
 		</Form>

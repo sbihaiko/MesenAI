@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -149,9 +149,10 @@ public class PlaySheetsContrastTests : IDisposable
 				model.CheatsSheet.Open(ConsoleType.Nes, Sha1, new[] { contra }, Array.Empty<StoredCheat>(), recordingArt: true, disableAll: false, _ => { });
 				break;
 			case "PlayHomeSlotSheet":
-				model.OpenSaveStatesSheet();
-				Dispatcher.UIThread.RunJobs();
-				window.FindNamed<Button>("SaveStatesLoadButton").RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+				//#909: the tile grid is no longer opened from W-P4 (that sheet is its
+				//own grid now). This is the classic slot grid the quick save/load
+				//shortcuts open over a paused game.
+				model.RecentGames.Init(GameScreenMode.LoadState);
 				break;
 			case "PackDepSheet":
 				model.PackDepSheet.SetPending("Contra Arcade Music", new[] { new CommunityPackDepPrompt("arcade-soundtrack", "Arcade soundtrack (MP3 set, 23 files)", "", "/packs/drop", "") });

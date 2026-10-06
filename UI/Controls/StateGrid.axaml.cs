@@ -172,10 +172,9 @@ namespace Mesen.Controls
 
 		private void RequestClose()
 		{
-			//#692 (G.2): a grid opened from the pause overlay closes back to it.
-			if(MainWindowViewModel.Instance?.CloseSlotGridToOverlay() == true) {
-				return;
-			}
+			//#909: the grid is no longer opened from the pause overlay (W-P4's Save
+			//states row is its own grid now), so the X closes the grid it belongs
+			//to: the quick save/load shortcuts' and Advanced's own.
 			if(DataContext is RecentGamesViewModel model) {
 				if(model.NeedResume) {
 					EmuApi.Resume();

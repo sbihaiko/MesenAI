@@ -340,22 +340,40 @@
 				card on screen behind it, under one more dim layer (W-P5 … W-P16).-->
 				<Border Name="PlayerSheetScrim" Background="{StaticResource PlayerSheetOverCardScrimBrush}" IsVisible="{Binding IsPauseCardDimmed}" />
 
-				<!--G.2 (W-P4 Save states row): Save and Load merged into one row; this
-				sheet opens today's slot grid in either mode. Esc (or Back) returns
-				to the overlay.-->
+				<!--#909 (W-P4 Save states row): ONE grid over the game. Each slot
+				carries its own *Save here* and *Load*, Load disabled while the slot
+				is empty, the auto-save row offering Load alone; the slot's age and
+				preview stay. Esc (or Back) returns to the overlay.-->
 				<Border
 					Name="PlayerSaveStatesSheet"
 					Classes="sheet"
-					Width="340"
+					Width="440"
 					HorizontalAlignment="Center"
 					VerticalAlignment="Center"
 					IsVisible="{Binding IsSaveStatesSheetVisible}"
 				>
-					<StackPanel Spacing="10" XYFocus.NavigationModes="Enabled">
+					<StackPanel Spacing="10">
 						<TextBlock Classes="title3" Text="{l:Translate lblSaveStatesSheetTitle}" />
 						<TextBlock Classes="secondary" Text="{Binding SaveStatesRowValue}" Margin="0 0 0 6" />
-						<Button Name="SaveStatesSaveButton" Classes="primary medium" Content="{l:Translate btnSaveStatesSave}" HorizontalAlignment="Stretch" Click="OnSaveStatesSave" />
-						<Button Name="SaveStatesLoadButton" Classes="secondary medium" Content="{l:Translate btnSaveStatesLoad}" HorizontalAlignment="Stretch" Click="OnSaveStatesLoad" />
+						<Border Classes="inset" MaxHeight="300">
+							<ScrollViewer HorizontalScrollBarVisibility="Disabled" AllowAutoHide="False">
+								<ItemsControl Name="SaveStatesGrid" ItemsSource="{Binding SaveStateSlots}" XYFocus.NavigationModes="Enabled">
+									<ItemsControl.ItemTemplate>
+										<DataTemplate x:DataType="vm:SaveStateSlotViewModel">
+											<DockPanel Margin="0 3">
+												<Button Name="SlotLoadButton" DockPanel.Dock="Right" Classes="secondary small" VerticalAlignment="Center" Content="{l:Translate btnSaveStatesLoadSlot}" IsEnabled="{Binding LoadEnabled}" Click="OnSlotLoad" />
+												<Button Name="SlotSaveButton" DockPanel.Dock="Right" Classes="primary small" VerticalAlignment="Center" Margin="0 0 6 0" Content="{l:Translate btnSaveStatesSaveHere}" IsVisible="{Binding SaveHereVisible}" Click="OnSlotSaveHere" />
+												<Image Width="52" Height="49" Margin="6 0 10 0" VerticalAlignment="Center" Source="{Binding Thumbnail}" />
+												<StackPanel VerticalAlignment="Center">
+													<TextBlock Classes="title" Text="{Binding Label}" />
+													<TextBlock Classes="footnote secondary" Text="{Binding AgeText}" />
+												</StackPanel>
+											</DockPanel>
+										</DataTemplate>
+									</ItemsControl.ItemTemplate>
+								</ItemsControl>
+							</ScrollViewer>
+						</Border>
 						<!--R.2 (ADR-0205 §7): W-P4 is at its seven controls, so the shared
 						replays for this copy open from here.-->
 						<Button Name="SaveStatesReplaysButton" Classes="secondary medium" Content="{l:Translate btnSaveStatesReplays}" HorizontalAlignment="Stretch" Click="OnSaveStatesReplays" />
