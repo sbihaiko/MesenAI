@@ -117,3 +117,33 @@ PY
 - The two earlier defects on the same node, both fixed the same day: a missing
   `instructions` field (the role text that names the spawn fields) and Anthropic
   models in `model`/`allow.models`.
+
+## Runs 14–19 (2026-10-05): the node's own budget, then the children's, then the price
+
+Each run moved the wall one step further out. The numbers, in the order they
+were measured:
+
+| run | verdict | what it cost | what it proved |
+|---|---|---|---|
+| `run-20261005-204610` | `node_spend_cap` | router $0.57 + two routing children at $1.62 and $1.22 | the `route` node's spend cap was **4** while one child may be granted 4 — the router's own pass could not fit beside a child |
+| `run-20261005-205157` | `node_turn_cap` | the same shape, $2.35 | the same arithmetic one line above: the turn cap was **60**, and the router's 14 turns plus two children at 36 reached 86. Fixing only the spend half bought this run |
+| `run-20261005-205624` | `node_turn_cap` | three children at 41, 46, 51 turns, $1.18–$1.40 each | the router was sizing `turns` from the 40–50 the role text quoted as the observed norm, which cannot finish a three-bug TDD task. **All three left real edits in their worktrees and returned no artifact**: `error_max_turns` ends the session mid-work, so a child at the wall never gets the turn that would have returned its object |
+| `run-20261005-210625` | `merge_conflict` | $0.84 router + three children at 61/63/78 turns | **the first run whose children worked** — three passed with artifacts. It still failed, because two of them had taken the same pair of bugs (#902/#904) and both edited `MacOS/MacOSKeyManager.mm` |
+| `run-20261005-213328` | `node_spend_cap` | one child $3.28/61 turns, one passed at $2.31 | the router **partitioned correctly** (two disjoint named slices, no overlap) and then priced a turn at the three cents the role quoted — the `claude-deepseek-v4-flash` rate, while it had chosen `claude-grok-4.6` at high effort, where a turn costs $0.054 |
+
+Two lessons that are not about the node's own configuration:
+
+- **A child's cap is not a place to save.** `error_max_turns` and
+  `error_max_budget_usd` end the call; the child cannot be asked to "return
+  before the wall" because the wall removes the turn it would have returned on.
+  Budgets have to fit the work, and the work has to be one deliverable.
+- **Children see only the branch.** They branch from `HEAD`, so work that lives
+  in someone else's worktree, or uncommitted in the checkout, is invisible to
+  them - and two children will independently fix the same bug. Run
+  `git worktree list` before launching and put what those branches carry into
+  the steering exclusions.
+
+By `run-20261005-213328` the routing worked as designed. The remaining two
+runs produced no work for a different reason: the bug board reached zero open
+issues, and the remaining PRD rows are owner- or hardware-gated. See
+`docs/roadmap/PRD-mesence-enhancement-ecosystem.md` §4.
