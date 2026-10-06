@@ -147,42 +147,45 @@ public class PlayerSettingsTabsTests
 	{
 		List<string> toggles = new();
 		(Window window, ConfigViewModel model) = ShowDisplaySheet(true, toggles);
-		Button exit = window.FindNamed<Button>("btnPlayerSettingsExitFullscreen");
-		Button done = window.FindNamed<Button>("btnPlayerSettingsDone");
-		Control sheet = window.FindNamed<Border>("PlayerSettingsSheet");
+		try {
+			Button exit = window.FindNamed<Button>("btnPlayerSettingsExitFullscreen");
+			Button done = window.FindNamed<Button>("btnPlayerSettingsDone");
+			Control sheet = window.FindNamed<Border>("PlayerSettingsSheet");
 
-		//Keyboard: Tab from the Fullscreen switch reaches it.
-		window.FindNamed<ToggleButton>("chkDisplayFullscreen").Focus(NavigationMethod.Tab);
-		Dispatcher.UIThread.RunJobs();
-		bool reached = false;
-		for(int i = 0; i < 12 && !reached; i++) {
-			window.KeyPressQwerty(PhysicalKey.Tab, RawInputModifiers.None);
+			//Keyboard: Tab from the Fullscreen switch reaches it.
+			window.FindNamed<ToggleButton>("chkDisplayFullscreen").Focus(NavigationMethod.Tab);
 			Dispatcher.UIThread.RunJobs();
-			reached = exit.IsFocused;
+			bool reached = false;
+			for(int i = 0; i < 12 && !reached; i++) {
+				window.KeyPressQwerty(PhysicalKey.Tab, RawInputModifiers.None);
+				Dispatcher.UIThread.RunJobs();
+				reached = exit.IsFocused;
+			}
+			Assert.True(reached, "Tab never reached Exit full screen");
+
+			//Pad: the same search PlayPadNavigationWiring runs (FindNextElement,
+			//rooted at the sheet). Left from Done is Exit; Right from Exit is Done.
+			IFocusManager manager = TopLevel.GetTopLevel(sheet)!.FocusManager!;
+			Assert.Same(exit, manager.FindNextElement(NavigationDirection.Left, new FindNextElementOptions { FocusedElement = done, SearchRoot = sheet }));
+			Assert.Same(done, manager.FindNextElement(NavigationDirection.Right, new FindNextElementOptions { FocusedElement = exit, SearchRoot = sheet }));
+
+			//The ring (ADR-0256 Decision 3): a directional focus paints it.
+			exit.Focus(NavigationMethod.Directional);
+			Dispatcher.UIThread.RunJobs();
+			Border background = exit.GetVisualDescendants().OfType<Border>().First(b => b.Name == "PART_Background");
+			Assert.Equal((BoxShadows)Application.Current!.FindResource("PlayerFocusRing")!, background.BoxShadow);
+
+			//Confirm, as the bridge's Activate raises it.
+			exit.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+			Dispatcher.UIThread.RunJobs();
+			Assert.Equal(new[] { "toggle" }, toggles);
+			Assert.False(model.Display!.IsFullscreen);
+			Assert.False(exit.IsOnScreen());
+			Assert.True(done.IsFocused);
+			Assert.False(window.FindNamed<ToggleButton>("chkDisplayFullscreen").IsChecked);
+		} finally {
+			Close(window, model);
 		}
-		Assert.True(reached, "Tab never reached Exit full screen");
-
-		//Pad: the same search PlayPadNavigationWiring runs (FindNextElement,
-		//rooted at the sheet). Left from Done is Exit; Right from Exit is Done.
-		IFocusManager manager = TopLevel.GetTopLevel(sheet)!.FocusManager!;
-		Assert.Same(exit, manager.FindNextElement(NavigationDirection.Left, new FindNextElementOptions { FocusedElement = done, SearchRoot = sheet }));
-		Assert.Same(done, manager.FindNextElement(NavigationDirection.Right, new FindNextElementOptions { FocusedElement = exit, SearchRoot = sheet }));
-
-		//The ring (ADR-0256 Decision 3): a directional focus paints it.
-		exit.Focus(NavigationMethod.Directional);
-		Dispatcher.UIThread.RunJobs();
-		Border background = exit.GetVisualDescendants().OfType<Border>().First(b => b.Name == "PART_Background");
-		Assert.Equal((BoxShadows)Application.Current!.FindResource("PlayerFocusRing")!, background.BoxShadow);
-
-		//Confirm, as the bridge's Activate raises it.
-		exit.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-		Dispatcher.UIThread.RunJobs();
-		Assert.Equal(new[] { "toggle" }, toggles);
-		Assert.False(model.Display!.IsFullscreen);
-		Assert.False(exit.IsOnScreen());
-		Assert.True(done.IsFocused);
-		Assert.False(window.FindNamed<ToggleButton>("chkDisplayFullscreen").IsChecked);
-		Close(window, model);
 	}
 
 	//The Audio and Controls tabs' view-models observe the global config
