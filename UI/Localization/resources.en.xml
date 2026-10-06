@@ -2676,6 +2676,7 @@ E
 		<Message ID="PackDepPill">{0} waits for one file. Press Esc to add it.</Message>
 		<Message ID="ControllerSetupTitle">Set up “{0}”</Message>
 		<Message ID="ControllerSetupUnnamed">your controller</Message>
+		<Message ID="ControllerSetupPillNamed">New controller “{0}”. Press Start on it to set it up.</Message>
 		<Message ID="ControllerSetupPrompt">Press the button you want as {0}</Message>
 		<Message ID="ControllerSetupStep">Step {0} of {1} · {2}</Message>
 		<Message ID="ControllerSetupSaved">{0} is set up.</Message>

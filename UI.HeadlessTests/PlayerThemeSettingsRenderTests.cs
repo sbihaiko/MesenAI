@@ -352,7 +352,8 @@ public class PlayerThemeSettingsRenderTests : IDisposable
 			Assert.Equal(new CornerRadius(10), pill.CornerRadius);
 			TextBlock pillText = LabelOf(pill);
 			AssertText(pillText, 13, FontWeight.SemiBold, Card);
-			Assert.Equal("New controller. Press Start on it to set it up.", pillText.Text);
+			//#913: the pill names the pad the way the sheet's title does.
+			Assert.Equal("New controller “8BitDo SN30”. Press Start on it to set it up.", pillText.Text);
 			PlayerRender.Save(PlayerRender.Capture(window), "W-P15-pill");
 
 			setup.Tick(Array.Empty<ushort>(), t += TimeSpan.FromMilliseconds(100));

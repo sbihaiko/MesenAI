@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Mesen.Interop;
 using Mesen.Logic;
 using Xunit;
 
@@ -286,6 +287,73 @@ namespace Mesen.Tests.Play
 		public void Device_display_name_prefers_the_controllers_own_name(string? deviceName, string keyName, string expected)
 		{
 			Assert.Equal(expected, ControllerDevices.DisplayName(deviceName, keyName));
+		}
+
+		//#913: the pill names the pad the host names, as the sheet's title does; a
+		//pad it cannot name keeps the generic sentence, never the "PadN" prefix.
+		[Theory]
+		[InlineData("8BitDo SN30", "New “8BitDo SN30”")]
+		[InlineData("  Xbox Wireless Controller ", "New “Xbox Wireless Controller”")]
+		[InlineData("", "New controller")]
+		[InlineData("   ", "New controller")]
+		[InlineData(null, "New controller")]
+		public void The_pill_names_a_named_pad_and_keeps_the_generic_sentence_otherwise(string? deviceName, string expected)
+		{
+			Assert.Equal(expected, ControllerDevices.PillText(deviceName, name => $"New “{name}”", "New controller"));
+		}
+
+		//#913: the host's pad list, the way the window hands it over - one entry
+		//per connected pad, keyed by the block its keys carry.
+		private static readonly HostPad[] HostPads = {
+			HostPad.From(GamepadBackend.Evdev, 0, "Xbox Wireless Controller"),
+			HostPad.From(GamepadBackend.DirectInput, 2, "8BitDo SN30")
+		};
+
+		[Fact]
+		public void The_name_comes_from_the_pad_whose_block_the_device_names()
+		{
+			//Base family: device 0 is the first pad of the base block.
+			Assert.Equal("Xbox Wireless Controller", ControllerDevices.DeviceName(0, HostPads));
+
+			//A Windows joystick numbers its keys above the base family, so this
+			//file's device index reads 16 and up - and the pad is still found,
+			//because the block the index spells is the block its keys carry.
+			ushort joystickButton = ControllerDevices.BaseDirectInputIndex + 2 * 0x100 + 5;
+			Assert.Equal(18, ControllerDevices.DeviceOf(joystickButton));
+			Assert.Equal("8BitDo SN30", ControllerDevices.DeviceName(ControllerDevices.DeviceOf(joystickButton)!.Value, HostPads));
+		}
+
+		//#913: Windows XInput reports a synthetic "XInput Pad N" as the pad's name.
+		//It names the slot, not the controller, so the pad takes the fallback
+		//(the key prefix on the sheet, the generic sentence on the pill).
+		[Fact]
+		public void An_XInput_pad_has_no_product_name()
+		{
+			HostPad[] pads = { HostPad.From(GamepadBackend.XInput, 0, "XInput Pad 1") };
+			Assert.Equal("", pads[0].Name);
+			Assert.Equal(ControllerDevices.PadBlock(GamepadBackend.XInput, 0), pads[0].Block);
+			Assert.Equal("", ControllerDevices.DeviceName(0, pads));
+			Assert.Equal("Pad1", ControllerDevices.DisplayName(ControllerDevices.DeviceName(0, pads), "Pad1 A"));
+			Assert.Equal("New controller", ControllerDevices.PillText(ControllerDevices.DeviceName(0, pads), name => name, "New controller"));
+		}
+
+		[Fact]
+		public void A_non_XInput_pad_keeps_its_trimmed_product_name()
+		{
+			Assert.Equal("8BitDo SN30", HostPad.From(GamepadBackend.DirectInput, 2, "  8BitDo SN30 ").Name);
+			Assert.Equal("", HostPad.From(GamepadBackend.Evdev, 1, null).Name);
+		}
+
+		[Fact]
+		public void An_unnamed_pad_and_one_that_is_gone_name_nothing()
+		{
+			HostPad[] pads = { new(ControllerDevices.PadBlock(GamepadBackend.Evdev, 1), "  ") };
+			//The backend reports a blank name: the sheet falls back to the key prefix.
+			Assert.Equal("", ControllerDevices.DeviceName(1, pads));
+			//No connected pad owns device 4's block.
+			Assert.Equal("", ControllerDevices.DeviceName(4, pads));
+			//No device at all (the keyboard's keys answer DeviceOf null).
+			Assert.Equal("", ControllerDevices.DeviceName(-1, pads));
 		}
 }
 }
