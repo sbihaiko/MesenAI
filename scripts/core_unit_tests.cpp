@@ -1244,6 +1244,39 @@ void TestDetectConventionLayoutBorderSection()
 		}
 	}
 
+	//ADR-0139: pack.json is hashed as Python's json.dumps(sort_keys=True,
+	//separators=(",", ":")) with the default ensure_ascii=True, so the Core
+	//hasher and scripts/mep_content_id.py (normative) must return the same
+	//content_id for the same manifest. Python's ASCII escaper covers the whole
+	//non-printable range: it escapes 0x7F (DEL) as \u007f exactly like it
+	//escapes 0x00-0x1F, and leaves only 0x20-0x7E verbatim. A canonical writer
+	//that escapes < 0x20 alone therefore hashes a manifest carrying DEL - and a
+	//key carrying DEL - to a different content_id than CI does.
+	//The expected values are the normative hasher's own output:
+	//  python3 -c "import sys;sys.path.insert(0,'scripts');import
+	//  mep_content_id as m;print(m.compute_tree_content_id([('pack.json',DATA)]))"
+	void TestContentIdPackJsonEscapesTheWholeNonPrintableAsciiRange()
+	{
+		struct Case { const char* Json; const char* Expected; };
+		//The JSON text is ASCII: each case reaches the writer through a \uXXXX
+		//escape, so what diverges is the writer, not the raw bytes on disk.
+		const Case cases[] = {
+			{ "{\"name\":\"plain\"}", "7ef5d4f2d9ce7e01f02cfef9dd66b640f54f184d316e0326441566bef0450f46" },
+			{ "{\"name\":\"a\\u0001b\"}", "b7a7bc698a80c99e2a117b49cb64170e70a44cef30b2e3f6b570219a04416384" },
+			{ "{\"name\":\"a\\u007fb\"}", "b03c078c3e8069b21d31a2b86309f54437994320822f2699bf290bea6652bd41" },
+			{ "{\"name\":\"a\\u007eb\"}", "7f7b1727df89bc4cbc0122ad13af4f3a77e76671cc262f8d9f85dbfa06c4fc08" },
+			{ "{\"name\":\"caf\\u00e9\"}", "cbde1b9430b63af8dbb86222d11977b9b9009881cb6dfe9db68d9353ca70497a" },
+			{ "{\"name\":\"a\\ud83d\\ude00b\"}", "32e22f26f55032aaa2f79e954974173ece2ef26a0f4c55b30973812d4f7fcc1d" },
+			{ "{\"a\\u007fb\":\"v\"}", "a5ff3cd88e40685709e6163e08081f67e6cb407597e494ed3fd7cceb508b2128" },
+		};
+		for(const Case& testCase : cases) {
+			std::vector<MepContentId::Entry> entries;
+			entries.push_back({ "pack.json", std::vector<uint8_t>(testCase.Json, testCase.Json + strlen(testCase.Json)) });
+			std::string got = MepContentId::ComputeTree(entries);
+			Check(got == testCase.Expected, std::string("BlocoG: pack.json ") + testCase.Json + " hashes as the normative Python hasher does", got + " != " + testCase.Expected);
+		}
+	}
+
 	void TestMepContentIdComputeFolder()
 	{
 		//ADR-0147: ComputeFolder must be stable against the host's own install
@@ -17130,6 +17163,7 @@ int main()
 	TestArpeggioKeysDetection();
 
 	TestContentIdGoldenParity();
+	TestContentIdPackJsonEscapesTheWholeNonPrintableAsciiRange();
 	TestMepContentIdComputeFolder();
 	TestMepLocalIdentityCache();
 
