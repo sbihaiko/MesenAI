@@ -544,6 +544,19 @@ public class PlaySheetsRenderTests : IDisposable
 			Control auto = Assert.IsAssignableFrom<Control>(grid.ContainerFromIndex(SaveStateSheet.ManualSlots));
 			Assert.False(auto.FindAll<Button>().Any(b => b.Name == "SlotSaveButton" && b.IsEffectivelyVisible), "the auto-save row offers a Save here");
 
+			//The list scrolls, and its scrollbar (always shown) sits beside the
+			//rows with a gap, never over or flush against a row's Load (the first
+			//render drew the two touching, which reads as overlap).
+			ScrollBar bar = sheet.GetVisualDescendants().OfType<ScrollBar>()
+				.Single(b => b.Orientation == Avalonia.Layout.Orientation.Vertical && b.IsEffectivelyVisible);
+			double barLeft = bar.TranslatePoint(new Point(0, 0), window)!.Value.X;
+			for(int i = 0; i < grid.ItemCount; i++) {
+				foreach(Button action in Assert.IsAssignableFrom<Control>(grid.ContainerFromIndex(i)).FindAll<Button>().Where(b => b.IsEffectivelyVisible)) {
+					double right = action.TranslatePoint(new Point(action.Bounds.Width, 0), window)!.Value.X;
+					Assert.True(right + 8 <= barLeft, $"row {i}'s {action.Name} (right edge {right:0}) is not clear of the scrollbar (left edge {barLeft:0}, gap < 8 px)");
+				}
+			}
+
 			Bitmap frame = Render(window, "save-states-sheet", sheet);
 			AssertPng(Path.Combine(PlayerRender.OutputFolder, "save-states-sheet.png"), frame);
 			//The tint is on the pixels, not only on the brush.

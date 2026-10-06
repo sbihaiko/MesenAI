@@ -360,9 +360,14 @@
 								<ItemsControl Name="SaveStatesGrid" ItemsSource="{Binding SaveStateSlots}" XYFocus.NavigationModes="Enabled">
 									<ItemsControl.ItemTemplate>
 										<DataTemplate x:DataType="vm:SaveStateSlotViewModel">
-											<DockPanel Margin="0 3">
-												<Button Name="SlotLoadButton" GotFocus="OnSlotGotFocus" DockPanel.Dock="Right" Classes="secondary small" VerticalAlignment="Center" Content="{l:Translate btnSaveStatesLoadSlot}" IsEnabled="{Binding LoadEnabled}" Click="OnSlotLoad" />
-												<Button Name="SlotSaveButton" GotFocus="OnSlotGotFocus" DockPanel.Dock="Right" Classes="primary small" VerticalAlignment="Center" Margin="0 0 6 0" Content="{l:Translate btnSaveStatesSaveHere}" IsVisible="{Binding SaveHereVisible}" Click="OnSlotSaveHere" />
+											<!--The right margin keeps the actions clear of the always-shown
+											scrollbar. Up/Down use the nearest-rectangle search: the default
+											projection only looks straight down, so from an armed Load over a
+											disabled one it skipped the next row's Save here and left the grid
+											for Shared replays (ADR-0256 Decision 3).-->
+											<DockPanel Margin="0 3 10 3">
+												<Button Name="SlotLoadButton" GotFocus="OnSlotGotFocus" XYFocus.UpNavigationStrategy="RectilinearDistance" XYFocus.DownNavigationStrategy="RectilinearDistance" DockPanel.Dock="Right" Classes="secondary small" VerticalAlignment="Center" Content="{l:Translate btnSaveStatesLoadSlot}" IsEnabled="{Binding LoadEnabled}" Click="OnSlotLoad" />
+												<Button Name="SlotSaveButton" GotFocus="OnSlotGotFocus" XYFocus.UpNavigationStrategy="RectilinearDistance" XYFocus.DownNavigationStrategy="RectilinearDistance" DockPanel.Dock="Right" Classes="primary small" VerticalAlignment="Center" Margin="0 0 6 0" Content="{l:Translate btnSaveStatesSaveHere}" IsVisible="{Binding SaveHereVisible}" Click="OnSlotSaveHere" />
 												<Image Width="52" Height="49" Margin="6 0 10 0" VerticalAlignment="Center" Source="{Binding Thumbnail}" />
 												<StackPanel VerticalAlignment="Center">
 													<TextBlock Classes="title" Text="{Binding Label}" />

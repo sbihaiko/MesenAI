@@ -508,6 +508,60 @@ public class PlayPadNavigationTests : IDisposable
 		Assert.True(File.Exists(model.SaveStateSlot(2)!.FileName));
 	}
 
+	//#909 (ADR-0256 Decision 3): Down from a focused *Load* lands on the next
+	//row - its own Load when that one is armed, else its *Save here* - and never
+	//leaves the grid for Shared replays while a row below exists. The engine's
+	//default projection only looks straight down, so a disabled Load below an
+	//armed one used to hand the press to the full-width button under the grid.
+	[AvaloniaFact]
+	public void Down_from_a_load_lands_on_the_next_row()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model) = ShowPlay();
+		LoadSyntheticGame(model, "savesheet-down-" + Guid.NewGuid().ToString("N"));
+
+		//Slots 1 and 2 hold a state, slot 3 does not.
+		foreach(uint slot in new uint[] { 1, 2 }) {
+			string file = Path.Combine(ConfigManager.SaveStateFolder, model.RomInfo.GetRomName() + "_" + slot + "." + FileDialogHelper.MesenSaveStateExt);
+			System.Threading.Tasks.Task.Run(() => EmuApi.SaveState(slot)).Wait(TimeSpan.FromSeconds(30));
+			WaitFor(() => File.Exists(file), $"the core did not write slot {slot} ({file})");
+		}
+
+		model.TogglePlayerOverlay();
+		WaitFor(() => FocusedName(window) == "OverlayResumeButton", "W-P4 opened without the focus on Resume");
+		Click(window, "OverlaySaveStatesButton");
+		WaitFor(() => model.IsSaveStatesSheetVisible, "W-P4's Save states row did not open its sheet");
+		WaitFor(() => FocusedRow(window) is not null, $"the grid did not take the ring ({Focused(window, model)})");
+		Assert.True(model.SaveStateSlot(1)!.LoadEnabled && model.SaveStateSlot(2)!.LoadEnabled);
+		Assert.False(model.SaveStateSlot(3)!.LoadEnabled);
+
+		//Onto slot 1's Load (the ring opens on whichever of 1 and 2 is newer).
+		while(FocusedRow(window)!.Slot > 1) {
+			int from = FocusedRow(window)!.Slot;
+			Release(window);
+			Feed(window, PadNavAction.Up);
+			WaitFor(() => FocusedRow(window)?.Slot == from - 1, $"Up did not leave slot {from} ({Focused(window, model)})");
+		}
+		if(FocusedName(window) != "SlotLoadButton") {
+			Release(window);
+			Feed(window, PadNavAction.Right);
+		}
+		WaitFor(() => FocusedRow(window)?.Slot == 1 && FocusedName(window) == "SlotLoadButton",
+			$"the pad did not reach slot 1's Load ({Focused(window, model)})");
+
+		//Armed Load below: Down lands on it.
+		Release(window);
+		Feed(window, PadNavAction.Down);
+		WaitFor(() => FocusedRow(window)?.Slot == 2 && FocusedName(window) == "SlotLoadButton",
+			$"Down from slot 1's Load did not land on slot 2's Load ({Focused(window, model)})");
+
+		//Disabled Load below: Down lands on that row's Save here, not on Shared replays.
+		Release(window);
+		Feed(window, PadNavAction.Down);
+		WaitFor(() => FocusedRow(window)?.Slot == 3 && FocusedName(window) == "SlotSaveButton",
+			$"Down from slot 2's Load left the grid instead of landing on slot 3's Save here ({Focused(window, model)})");
+	}
+
 	//The row the ring is on, read off the control's own DataContext - a grid of
 	//rows has no per-slot names to look up.
 	private static SaveStateSlotViewModel? FocusedRow(MainWindow window)
