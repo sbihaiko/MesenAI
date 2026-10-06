@@ -105,10 +105,13 @@ public class PlayerSettingsTabsTests
 	[AvaloniaFact]
 	public void Exit_fullscreen_is_not_offered_in_a_window()
 	{
-		(Window window, _) = ShowDisplaySheet(false, new List<string>());
-		Assert.False(window.FindNamed<Button>("btnPlayerSettingsExitFullscreen").IsOnScreen());
-		Assert.True(window.FindNamed<Button>("btnPlayerSettingsDone").IsOnScreen());
-		window.Close();
+		(Window window, ConfigViewModel model) = ShowDisplaySheet(false, new List<string>());
+		try {
+			Assert.False(window.FindNamed<Button>("btnPlayerSettingsExitFullscreen").IsOnScreen());
+			Assert.True(window.FindNamed<Button>("btnPlayerSettingsDone").IsOnScreen());
+		} finally {
+			Close(window, model);
+		}
 	}
 
 	//Visible only while fullscreen and only on Window: Video keeps Done's row
@@ -117,19 +120,22 @@ public class PlayerSettingsTabsTests
 	public void Exit_fullscreen_shows_on_window_while_fullscreen_only()
 	{
 		(Window window, ConfigViewModel model) = ShowDisplaySheet(true, new List<string>());
-		Button exit = window.FindNamed<Button>("btnPlayerSettingsExitFullscreen");
-		Assert.True(exit.IsOnScreen());
-		Assert.Equal("Exit full screen", exit.Content as string);
+		try {
+			Button exit = window.FindNamed<Button>("btnPlayerSettingsExitFullscreen");
+			Assert.True(exit.IsOnScreen());
+			Assert.Equal("Exit full screen", exit.Content as string);
 
-		foreach(ConfigWindowTab tab in PlayerSettingsEssentials.Tabs.Where(t => t is ConfigWindowTab.Audio or ConfigWindowTab.Input)) {
-			model.PlayerTabIndex = PlayerSettingsEssentials.IndexOf(tab);
+			foreach(ConfigWindowTab tab in PlayerSettingsEssentials.Tabs.Where(t => t is ConfigWindowTab.Audio or ConfigWindowTab.Input)) {
+				model.PlayerTabIndex = PlayerSettingsEssentials.IndexOf(tab);
+				Dispatcher.UIThread.RunJobs();
+				Assert.False(exit.IsOnScreen(), $"Exit full screen shows on {tab}");
+			}
+			model.PlayerTabIndex = PlayerSettingsEssentials.IndexOf(ConfigWindowTab.Display);
 			Dispatcher.UIThread.RunJobs();
-			Assert.False(exit.IsOnScreen(), $"Exit full screen shows on {tab}");
+			Assert.True(exit.IsOnScreen());
+		} finally {
+			Close(window, model);
 		}
-		model.PlayerTabIndex = PlayerSettingsEssentials.IndexOf(ConfigWindowTab.Display);
-		Dispatcher.UIThread.RunJobs();
-		Assert.True(exit.IsOnScreen());
-		window.Close();
 	}
 
 	//Keyboard (Tab) and pad (the bridge's directional search, scoped to the
@@ -176,7 +182,18 @@ public class PlayerSettingsTabsTests
 		Assert.False(exit.IsOnScreen());
 		Assert.True(done.IsFocused);
 		Assert.False(window.FindNamed<ToggleButton>("chkDisplayFullscreen").IsChecked);
+		Close(window, model);
+	}
+
+	//The Audio and Controls tabs' view-models observe the global config
+	//(ConfigManager.Config.Audio/Input) and apply every change through the
+	//native core. A sheet a test leaves undisposed keeps that observer alive, and
+	//a later case that edits the config then calls the core - a
+	//DllNotFoundException on the core-less CI runner, in someone else's test.
+	private static void Close(Window window, ConfigViewModel model)
+	{
 		window.Close();
+		model.Dispose();
 	}
 
 	//W-P8's Scale popup was blank for a window under 1× (#audit): the nearest
