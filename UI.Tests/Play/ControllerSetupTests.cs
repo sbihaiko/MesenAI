@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Mesen.Interop;
 using Mesen.Logic;
 using Xunit;
 
@@ -286,6 +287,39 @@ namespace Mesen.Tests.Play
 		public void Device_display_name_prefers_the_controllers_own_name(string? deviceName, string keyName, string expected)
 		{
 			Assert.Equal(expected, ControllerDevices.DisplayName(deviceName, keyName));
+		}
+
+		//#913: the host's pad list, the way the window hands it over - one entry
+		//per connected pad, keyed by the block its keys carry.
+		private static readonly HostPad[] HostPads = {
+			new(ControllerDevices.PadBlock(GamepadBackend.XInput, 0), "XInput Pad 1"),
+			new(ControllerDevices.PadBlock(GamepadBackend.DirectInput, 2), "8BitDo SN30")
+		};
+
+		[Fact]
+		public void The_name_comes_from_the_pad_whose_block_the_device_names()
+		{
+			//Base family: device 0 is the first XInput slot.
+			Assert.Equal("XInput Pad 1", ControllerDevices.DeviceName(0, HostPads));
+
+			//A Windows joystick numbers its keys above the base family, so this
+			//file's device index reads 16 and up - and the pad is still found,
+			//because the block the index spells is the block its keys carry.
+			ushort joystickButton = ControllerDevices.BaseDirectInputIndex + 2 * 0x100 + 5;
+			Assert.Equal(18, ControllerDevices.DeviceOf(joystickButton));
+			Assert.Equal("8BitDo SN30", ControllerDevices.DeviceName(ControllerDevices.DeviceOf(joystickButton)!.Value, HostPads));
+		}
+
+		[Fact]
+		public void An_unnamed_pad_and_one_that_is_gone_name_nothing()
+		{
+			HostPad[] pads = { new(ControllerDevices.PadBlock(GamepadBackend.Evdev, 1), "  ") };
+			//The backend reports a blank name: the sheet falls back to the key prefix.
+			Assert.Equal("", ControllerDevices.DeviceName(1, pads));
+			//No connected pad owns device 4's block.
+			Assert.Equal("", ControllerDevices.DeviceName(4, pads));
+			//No device at all (the keyboard's keys answer DeviceOf null).
+			Assert.Equal("", ControllerDevices.DeviceName(-1, pads));
 		}
 }
 }
