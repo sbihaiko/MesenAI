@@ -135,4 +135,15 @@ public:
 	virtual bool GetGamepadInfo(uint32_t index, GamepadInfo& info) { return false; }
 	virtual bool GetGamepadState(uint32_t index, GamepadState& state) { return false; }
 	virtual void TestForceFeedback(uint32_t index, uint16_t magnitudeRight, uint16_t magnitudeLeft) {}
+
+	//#925 (ruling on #916, ADR-0255): light pad `index` in a player colour. The
+	//default is the explicit no-op every backend without an addressable pad light
+	//inherits - Windows and Linux - and answers false ("nothing was lit"). macOS
+	//overrides it through GCController.light (DualShock 4 / DualSense); a pad
+	//whose light is nil, such as an Xbox pad, answers false there too, which is
+	//not an error.
+	virtual bool SetGamepadLight(uint32_t index, uint8_t r, uint8_t g, uint8_t b) { return false; }
+
+	//One byte of a player colour on the 0..1 scale GameController's GCColor takes.
+	static constexpr float LightChannel(uint8_t value) { return value / 255.0f; }
 };

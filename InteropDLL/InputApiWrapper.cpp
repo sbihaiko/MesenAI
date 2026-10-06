@@ -138,6 +138,15 @@ extern "C"
 		}
 	}
 
+	//#925: the pad light in a player colour; false where the backend has no light.
+	DllExport bool __stdcall SetGamepadLight(uint32_t index, uint8_t r, uint8_t g, uint8_t b)
+	{
+		if(_keyManager) {
+			return _keyManager->SetGamepadLight(index, r, g, b);
+		}
+		return false;
+	}
+
 	DllExport void __stdcall GetKeyName(uint16_t keyCode, char* outKeyName, uint32_t maxLength)
 	{
 		StringUtilities::CopyToBuffer(KeyManager::GetKeyName(keyCode), outKeyName, maxLength);
