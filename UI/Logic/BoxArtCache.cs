@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -46,6 +47,7 @@ namespace Mesen.Logic
 		private readonly string _cacheDirectory;
 		private readonly BoxArtCacheOptions _options;
 		private readonly SemaphoreSlim _inFlight;
+		private readonly ConcurrentDictionary<string, Task<BoxArtAttempt>> _downloads = new();
 
 		public BoxArtCache(BoxArtHttpSender sender, string cacheDirectory, BoxArtCacheOptions? options = null)
 		{
@@ -70,6 +72,13 @@ namespace Mesen.Logic
 				return null;
 			}
 
+			//One spelling of the key, whatever case the caller hands in. Two spellings
+			//of one SHA-1 are one ROM, so they must share one cache entry and one miss;
+			//left as given they would write two files for one game and pay for the
+			//download twice. Normalised here, after the check, because the value
+			//becomes a file name.
+			sha1 = sha1.ToLowerInvariant();
+
 			BoxArtCover? cached = BoxArtCacheStore.Find(_cacheDirectory, consoleTag, sha1);
 			if(cached != null) {
 				return cached;
@@ -84,7 +93,7 @@ namespace Mesen.Logic
 				return null;
 			}
 
-			BoxArtAttempt attempt = await Download(console, sha1, noIntroName, folder, cancellationToken).ConfigureAwait(false);
+			BoxArtAttempt attempt = await DownloadOnce(consoleTag, sha1, console, noIntroName, folder, cancellationToken).ConfigureAwait(false);
 			if(attempt.Cover != null) {
 				BoxArtCacheStore.ClearMiss(folder, sha1);
 				return attempt.Cover;
@@ -108,6 +117,53 @@ namespace Mesen.Logic
 		//an image) or the transport failed - which is the difference between
 		//recording a miss and not.
 		private readonly record struct BoxArtAttempt(BoxArtCover? Cover, bool Definitive);
+
+		//One download per game, however many tiles ask for it at once. Two visible
+		//tiles of the same ROM are two calls that overlap, and on their own they would
+		//be two requests finishing together and then fighting over the one name a
+		//cover is published from - the tile that lost that fight reads its own failure
+		//as "the collection has no art" and records a miss for a cover that is on disk.
+		//The second tile joins the first tile's request instead, so both answer the
+		//same thing and the collection is asked once.
+		private async Task<BoxArtAttempt> DownloadOnce(string consoleTag, string sha1, BoxArtConsole console, string noIntroName, string folder, CancellationToken cancellationToken)
+		{
+			string key = $"{consoleTag}/{sha1}";
+			while(true) {
+				if(_downloads.TryGetValue(key, out Task<BoxArtAttempt>? running)) {
+					//The join carries the same deadline as the request it joined: a tile
+					//that arrives late still falls back to its generic cover within
+					//RequestTimeout (ADR-0265 section 9) rather than waiting out somebody
+					//else's download, and a caller that walked away while waiting is a
+					//null like every other cancellation.
+					try {
+						return await running.WaitAsync(_options.RequestTimeout, cancellationToken).ConfigureAwait(false);
+					} catch(Exception) {
+						return new BoxArtAttempt(null, false);
+					}
+				}
+
+				TaskCompletionSource<BoxArtAttempt> mine = new(TaskCreationOptions.RunContinuationsAsynchronously);
+				if(!_downloads.TryAdd(key, mine.Task)) {
+					//Another tile added the entry between the read and the write: take
+					//the turn again and join it.
+					continue;
+				}
+
+				try {
+					BoxArtAttempt attempt = await Download(console, sha1, noIntroName, folder, cancellationToken).ConfigureAwait(false);
+					mine.SetResult(attempt);
+					return attempt;
+				} catch {
+					//Download answers for everything a network and a disk can do, so this
+					//cannot be reached from those - but a joined tile must never be left
+					//waiting on a task that never completes.
+					mine.SetResult(new BoxArtAttempt(null, false));
+					throw;
+				} finally {
+					_downloads.TryRemove(key, out _);
+				}
+			}
+		}
 
 		private async Task<BoxArtAttempt> Download(BoxArtConsole console, string sha1, string noIntroName, string folder, CancellationToken cancellationToken)
 		{
@@ -166,16 +222,28 @@ namespace Mesen.Logic
 			//sheet. Waiting for a turn is part of the call that never throws.
 			bool acquired = false;
 			try {
-				await _inFlight.WaitAsync(cancellationToken).ConfigureAwait(false);
-				acquired = true;
-
+				//The deadline is created before the wait, not after it, because the
+				//wait is part of the call: a tile queued behind the ceiling is holding
+				//nothing but a place in line, and it must fall back to its generic
+				//cover within RequestTimeout rather than inherit whichever request
+				//ahead of it happens to end. The timer starts with the queueing.
 				using CancellationTokenSource timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
 				timeout.CancelAfter(_options.RequestTimeout);
+
+				await _inFlight.WaitAsync(timeout.Token).ConfigureAwait(false);
+				acquired = true;
 
 				//The cap travels with the request: the adapter stops reading at it, and
 				//what comes back longer than the cap is its own overflow, which the
 				//check below turns into a definitive "no".
-				BoxArtHttpResponse response = await _sender(url, _options.MaxImageBytes, timeout.Token).ConfigureAwait(false);
+				//
+				//The deadline is enforced here as well, and not only through the token
+				//the sender was handed: honouring that token is the adapter's side of
+				//the delegate's contract, and a bug on that side would otherwise become
+				//a library that never draws. The tile gives up on the task either way.
+				BoxArtHttpResponse response = await _sender(url, _options.MaxImageBytes, timeout.Token)
+					.WaitAsync(_options.RequestTimeout, cancellationToken)
+					.ConfigureAwait(false);
 				if(response.StatusCode != 200 || response.Body.Length > _options.MaxImageBytes) {
 					return (null, true);
 				}
