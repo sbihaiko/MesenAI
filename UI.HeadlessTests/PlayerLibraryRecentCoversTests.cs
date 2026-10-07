@@ -50,6 +50,11 @@ public class PlayerLibraryRecentCoversTests : IDisposable
 	private readonly Workspace _workspace = ConfigManager.Config.Preferences.Workspace;
 	private readonly string? _gameFolder = ConfigManager.Config.Preferences.GameFolder;
 	private readonly bool _overrideGameFolder = ConfigManager.Config.Preferences.OverrideGameFolder;
+	//#1052 review finding 2: ShowLibrary turns the quit confirmation off so a
+	//window can be closed without the player being asked, and Dispose has to
+	//hand every preference this class touched back - this one included, or the
+	//cases that follow in the shared collection inherit it, on disk too.
+	private readonly bool _confirm = ConfigManager.Config.Preferences.ConfirmExitResetPower;
 	private readonly string? _recentFolderOverride = ConfigManager.RecentGamesFolderOverride;
 
 	private readonly List<MainWindow> _windows = new();
@@ -96,6 +101,7 @@ public class PlayerLibraryRecentCoversTests : IDisposable
 		prefs.Workspace = _workspace;
 		prefs.GameFolder = _gameFolder ?? "";
 		prefs.OverrideGameFolder = _overrideGameFolder;
+		prefs.ConfirmExitResetPower = _confirm;
 		ConfigManager.Config.Save();
 		ConfigManager.RecentGamesFolderOverride = _recentFolderOverride;
 
@@ -233,6 +239,89 @@ public class PlayerLibraryRecentCoversTests : IDisposable
 		Border rendered = CoverBorder(window.FindNamed<ItemsControl>("RomPickerGrid"), metroid);
 		Assert.Equal(metroid.Cover, rendered.Background);
 		Assert.True(OnCoverTitle(rendered).IsVisible, "the on-cover title went missing on the generic cover");
+	}
+
+	//#1052 review finding 2: this case turns the quit confirmation off so a
+	//window can be closed without the player being asked, and the next case in
+	//the shared collection must not inherit that - nor may the file on disk.
+	//
+	//A second instance of this fixture is the leak in miniature: what the nested
+	//case finds when it is constructed is what the next case would find, and one
+	//Dispose is exactly the call the framework makes between cases.
+	[AvaloniaFact]
+	public void A_case_that_opened_the_library_puts_the_quit_confirmation_back()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		//True is the value that must come back: the setting's own default is
+		//false, so a case that leaks would leave this assertion nothing to
+		//disagree with. The host's own value goes back at the end - a case that
+		//lectures about leaking may not leak itself.
+		bool ambient = ConfigManager.Config.Preferences.ConfirmExitResetPower;
+		ConfigManager.Config.Preferences.ConfirmExitResetPower = true;
+
+		PlayerLibraryRecentCoversTests probe = new();
+		try {
+			string root = probe.Library();
+			probe.SeedRecents(root);
+			probe.ShowLibrary();
+			Assert.False(ConfigManager.Config.Preferences.ConfirmExitResetPower,
+				"opening the library never turned the quit confirmation off, so this case proves nothing");
+
+			probe.Dispose();
+
+			Assert.True(ConfigManager.Config.Preferences.ConfirmExitResetPower,
+				"opening the library left the quit confirmation off for the cases that follow");
+			//The restore has to precede the Save the same Dispose makes: the file
+			//is what the next process reads, and what the next case would inherit.
+			string saved = File.ReadAllText(ConfigManager.ConfigFile);
+			Assert.Contains("\"ConfirmExitResetPower\": true", saved);
+		} finally {
+			probe.Dispose();
+			ConfigManager.Config.Preferences.ConfirmExitResetPower = ambient;
+			ConfigManager.Config.Save();
+		}
+	}
+
+	//#1052 review finding 3: the grid decodes new pictures on every visit, and
+	//the cover the previous visit drew must not be handed back while the
+	//compositor can still be holding its last frame. Closing the sheet and
+	//opening it again is that sequence - the Clear lands between two frames the
+	//same tile has been drawn in - so the reopened grid has to draw a live
+	//picture, and the render pass after it has to complete without the release
+	//of the previous visit's bitmap reaching through the brush still on screen.
+	[AvaloniaFact]
+	public void Reopening_the_library_draws_a_live_picture_on_the_tile()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		string root = Library();
+		string contraPath = SeedRecents(root);
+
+		(MainWindow window, MainWindowViewModel model) = ShowLibrary();
+		PlayerLibraryTile first = model.RomPicker.Tiles.Single(t => t.Path == contraPath);
+		Assert.IsType<Bitmap>(Assert.IsType<ImageBrush>(first.Cover).Source);
+		//The frame the compositor is holding when the sheet closes: the first
+		//visit's cover has been drawn at least once.
+		PlayerRender.Capture(window).Dispose();
+
+		model.RomPicker.Back();
+		Pump();
+		model.OpenRomPicker();
+		Pump();
+		WaitFor(() => model.RomPicker.Tiles.Count == 2, $"the grid never came back ({model.RomPicker.Tiles.Count})");
+
+		//The render pass over the reopened grid - where a picture released in
+		//the same turn as the Clear would be reached through the last frame's
+		//brush.
+		PlayerRender.Capture(window).Dispose();
+
+		PlayerLibraryTile second = model.RomPicker.Tiles.Single(t => t.Path == contraPath);
+		Bitmap cover = Assert.IsType<Bitmap>(Assert.IsType<ImageBrush>(second.Cover).Source);
+		Assert.Equal(new PixelSize(4, 3), cover.PixelSize);
+		//Live, not merely present: a disposed Bitmap still answers PixelSize,
+		//and only a read of its pixels says the picture is still there.
+		PlayerRender.Rgb(cover);
+		Border rendered = CoverBorder(window.FindNamed<ItemsControl>("RomPickerGrid"), second);
+		Assert.Same(second.Cover, rendered.Background);
 	}
 
 	//The cover Border the template drew for one tile, found by the tile it is
