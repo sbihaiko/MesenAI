@@ -10,7 +10,8 @@ namespace Mesen.Logic
 	//this file dual-compiles unmodified into UI.Tests (see UI.Tests/UI.Tests.csproj).
 	//
 	//Mirrors MepPack::DetectConventionLayout (Core/Shared/EnhancementPacks/MepPack.cpp):
-	//a zip is a valid pack if it has pack.json at the root, or a probe file for
+	//a zip is a valid pack if it has pack.json at the root, a classic HD pack's
+	//hires.txt with PNGs at the root (ADR-0121), or a probe file for
 	//one of the three convention sections (ADR-0049), in either the human or
 	//the `auto/` layer. The audio section additionally accepts fingerprints.json
 	//in place of hires.txt (ADR-0047) - this was the one gap between the C++
@@ -83,7 +84,20 @@ namespace Mesen.Logic
 				}
 			}
 
-			return false;
+			return IsClassicHdPackAtRoot(zip);
+		}
+
+		//The classic Mesen HD pack zip: hires.txt and its PNGs loose at the
+		//zip's root, no wrapper folder (#993). The core loads that shape
+		//(MepPack::DetectConventionLayout's root-hires.txt branch, ADR-0121);
+		//like the fallback below, a hires.txt with no image beside it is a
+		//variant manifest, not a pack (#161).
+		private static bool IsClassicHdPackAtRoot(ZipArchive zip)
+		{
+			if(zip.GetEntry("hires.txt") == null) {
+				return false;
+			}
+			return zip.Entries.Any(entry => !entry.FullName.Replace('\\', '/').Contains('/') && entry.FullName.EndsWith(".png", StringComparison.OrdinalIgnoreCase));
 		}
 
 		//Name-agnostic, last-priority fallback (ADR-0120, extended by
