@@ -167,9 +167,15 @@
   `TestGbaRevealSkippedFrameIsExtendedEvenBeforeOneWasDrawn`,
   `TestGbaRevealDrawsARowOnceWhateverTheRegisterWritesDo`,
   `TestGbaRevealDoesNotDrawIntoTheFrameItJustSent`, `TestGbaRevealOnlyRevealsTheModesTextBgs`.
-  W.7's on-screen result is **"not evaluated"**: no GBA ROM was available in the work
-  environment, so the extra columns on a real game and the black fallback for an affine BG or a
-  bitmap mode were never seen.
+  W.7's on-screen result was first recorded as **"not evaluated"**: no GBA ROM was available in
+  the work environment. **Validated headless 2026-10-06 (#954, #963):** a synthetic cartridge
+  authored in-repo (`UI.HeadlessTests/SyntheticGbaRom.cs`) runs on the real core and
+  `UI.HeadlessTests/GbaWidescreenRevealTests.cs` reads the frame back through `FrameCaptureApi`:
+  with the Reveal on the frame is 284×160, a text BG's sides carry the map's hidden columns 30–31
+  with the 6 wrapping columns per side black, an affine BG on the row and a bitmap mode turn both
+  sides black, a forced-blank row is white across all 284 px, and the switch off returns 240×160
+  (color-class and structure assertions, ADR-0249). A commercial GBA game has still not been
+  seen by a person: none is committed or available. The Decision is unchanged.
 - 2026-10-03 — **W.2** (GB/GBC, Game Gear): GB/GBC N = 48, a 256×144 frame (16:9 exactly at
   square pixels), the side columns read per scanline from the 256×256 BG map around SCX/SCY —
   wrapping, window and its mid-tile takeover included, CGB attributes, flips, palettes and VRAM
