@@ -280,7 +280,10 @@ namespace Mesen.Config
 		public static string TestFolder { get { return GetFolder(Path.Combine(ConfigManager.HomeFolder, "Tests"), null, false); } }
 		public static string HdPackFolder { get { return GetFolder(Path.Combine(ConfigManager.HomeFolder, "HdPacks"), null, false); } }
 		public static string EnhancementPackFolder { get { return GetFolder(Path.Combine(ConfigManager.HomeFolder, "EnhancementPacks"), null, false); } }
-		public static string RecentGamesFolder { get { return GetFolder(Path.Combine(ConfigManager.HomeFolder, "RecentGames"), null, false); } }
+		//Set only by tests, so a run that stamps .rgd files never touches the
+		//developer's real Recents (#1017). Null means the home folder's RecentGames.
+		public static string? RecentGamesFolderOverride { get; set; }
+		public static string RecentGamesFolder { get { return RecentGamesFolderOverride ?? GetFolder(Path.Combine(ConfigManager.HomeFolder, "RecentGames"), null, false); } }
 		public static string DumpsFolder { get { return GetFolder(Path.Combine(ConfigManager.HomeFolder, "Dumps"), null, false); } }
 
 		public static string ConfigFile
