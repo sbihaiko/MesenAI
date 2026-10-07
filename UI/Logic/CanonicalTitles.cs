@@ -32,6 +32,23 @@ namespace Mesen.Logic
 		//uppercase on the way out of the cache, matched against the table's own
 		//case-insensitive keys - and `table` is null in a build that embedded no
 		//table at all.
+		//Whether a library entry is one this rule can ever name. ADR-0264 Decision 9
+		//lists an archive (`.zip`, `.7z`) as one game of the library, and
+		//RomFileKinds is the classifier that decides what one is - but an archive's
+		//hash can never answer a table lookup: RomHashCache hashes the bytes of the
+		//file it is handed, and the table's keys are No-Intro PAYLOAD hashes
+		//(ADR-0003), which for an archive are the bytes of the ROM inside it. The
+		//caller skips what this refuses, so the walk stops reading whole archives it
+		//could never title (review finding 4 on #1038) and the tile keeps the
+		//cleaned file name the scan gave it - Decision 7's own fallback.
+		//
+		//A named gap, not a solution: naming the ROM inside an archive means opening
+		//it and hashing the entry, which nothing here does.
+		public static bool IsTitleablePath(string path)
+		{
+			return !RomFileKinds.IsArchiveFile(path);
+		}
+
 		public static string Resolve(string cleanedTitle, string? sha1, NoIntroNameTable? table)
 		{
 			if(table != null && table.TryLookup(sha1, out NoIntroRomName rom)) {

@@ -174,6 +174,14 @@ namespace Mesen.ViewModels
 		//named it and carries on with the rest.
 		private async Task<string> ResolveTitle(PlayerLibraryTile tile, CancellationToken cancellationToken)
 		{
+			//An entry this rule can never name is not read at all (review finding 4
+			//on #1038): a zipped game is one tile on the grid (ADR-0264 Decision 9),
+			//and hashing the archive would read it to the end for a lookup that
+			//cannot match - the tile keeps the scan's own title, which is the same
+			//title the loose ROM beside it gets.
+			if(!CanonicalTitles.IsTitleablePath(tile.Path)) {
+				return tile.Title;
+			}
 			try {
 				string sha1 = await RomHashSource(tile.Path, tile.Console, cancellationToken).ConfigureAwait(false);
 				return CanonicalTitles.Resolve(tile.Title, sha1, NoIntroTable);

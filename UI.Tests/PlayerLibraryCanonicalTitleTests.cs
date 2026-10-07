@@ -157,6 +157,22 @@ namespace Mesen.Tests
 			Assert.Equal(GameLibrary.CleanTitle("Castlevania (USA) [b].nes"), title);
 		}
 
+		//#1038 review finding 4, ADR-0264 Decision 9: an archive is one entry of the
+		//library, and its path is what the grid holds - but the table's keys are
+		//No-Intro PAYLOAD hashes (ADR-0003) and RomHashCache hashes the bytes of the
+		//file it is handed, so a `.zip` can never answer a lookup. The rule that
+		//says so is host-free and lives here; the pass that obeys it is the
+		//view-model's.
+		[Fact]
+		public void An_archive_can_never_be_named_by_this_rule()
+		{
+			Assert.False(CanonicalTitles.IsTitleablePath("/library/Contra (U) [!].nes.zip"));
+			Assert.False(CanonicalTitles.IsTitleablePath("/library/collection.7z"));
+
+			Assert.True(CanonicalTitles.IsTitleablePath("/library/Contra (U) [!].nes"));
+			Assert.True(CanonicalTitles.IsTitleablePath("/library/Tetris.gb"));
+		}
+
 		//A name that is nothing but tags has no title in it. NoIntroNameTable's
 		//own rule says such a name keeps its own spelling, and that answer has to
 		//survive the composition: the tile must not read as an empty string.

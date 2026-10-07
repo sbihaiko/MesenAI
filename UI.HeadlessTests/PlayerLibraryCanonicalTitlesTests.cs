@@ -168,13 +168,20 @@ public class PlayerLibraryCanonicalTitlesTests : IDisposable
 	private static string Titles(PlayerRomPickerViewModel picker) => string.Join(", ", picker.Tiles.Select(t => t.Title));
 
 	//Two ROMs under one library folder, one of which the injected table knows.
-	//The cleaned titles the scan gives them are "Contra" and "Metroid".
-	private string LibraryRoot()
+	//The cleaned titles the scan gives them are "Contra" and "Metroid" - and, with
+	//`withArchive`, a third entry that is the same game zipped, which is how a
+	//cabinet's library usually looks (ADR-0264 Decision 9).
+	private string LibraryRoot(bool withArchive = false)
 	{
 		string root = Path.Combine(_folder, "games");
 		Directory.CreateDirectory(root);
 		File.WriteAllBytes(Path.Combine(root, "Contra (U) [!].nes"), SyntheticNrom.Build());
 		File.WriteAllBytes(Path.Combine(root, "Metroid (USA).nes"), SyntheticNrom.Build());
+		if(withArchive) {
+			//The archive whose name the console classifier recognises: one game on
+			//the grid, and the entry whose bytes are an archive rather than a ROM.
+			File.WriteAllBytes(Path.Combine(root, "Contra (U) [!].nes.zip"), SyntheticNrom.Build());
+		}
 		ConfigManager.Config.Preferences.GameFolder = root;
 		ConfigManager.Config.Preferences.OverrideGameFolder = true;
 		return root;
@@ -344,6 +351,45 @@ public class PlayerLibraryCanonicalTitlesTests : IDisposable
 		//it.
 		Settle(400);
 		Assert.Equal(1, Volatile.Read(ref calls));
+	}
+
+	//#1038 review finding 4 (ADR-0264 Decision 9): a zipped game is an entry of the
+	//library, and its archive path is what the grid holds - but RomHashCache hashes
+	//the bytes of the file it is handed (ADR-0003's No-Intro payload range is a
+	//ROM's), so an archive can never answer a table lookup. Reading one is reading
+	//the whole archive to the end for a title it cannot have, on every cold cache.
+	//The pass skips archives entirely; the tile keeps the cleaned file name the
+	//scan gave it, which is the same title the archive's own ROM tile gets.
+	[AvaloniaFact]
+	public void An_archive_is_never_read_for_a_title()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+
+		LibraryRoot(withArchive: true);
+		(MainWindow _, MainWindowViewModel model) = ShowHome();
+		PlayerRomPickerViewModel picker = model.RomPicker;
+		picker.RunLibraryScanInline = true;
+		picker.NoIntroTable = TableOf(KnownSha1 + "\tnes\tContra (USA)");
+		List<string> asked = new();
+		picker.RomHashSource = (path, _, _) => {
+			lock(asked) {
+				asked.Add(path);
+			}
+			return Task.FromResult(Path.GetFileName(path).StartsWith("Contra", StringComparison.Ordinal) ? KnownSha1 : UnknownSha1);
+		};
+		model.OpenRomPicker();
+		WaitFor(() => picker.Tiles.Count == 3, $"the grid never filled ({picker.Tiles.Count} tiles)");
+
+		//Both loose ROMs are hashed, so the pass ran to the end of the walk.
+		WaitFor(() => asked.Count(p => p.EndsWith(".nes", StringComparison.Ordinal)) == 2,
+			$"the pass did not read both ROMs ([{string.Join(", ", asked)}])");
+		Settle(400);
+
+		Assert.DoesNotContain(asked, p => p.EndsWith(".zip", StringComparison.Ordinal));
+		//The archive's tile is still on the grid, named by the scan - skipped is not
+		//dropped (Decision 9: the archive path IS the entry).
+		Assert.Equal(3, picker.Tiles.Count);
+		Assert.Equal(new[] { "Contra", "Contra", "Metroid" }, picker.Tiles.Select(t => t.Title).ToArray());
 	}
 
 	//A ROM whose hash cannot be computed - the file went away between the scan
