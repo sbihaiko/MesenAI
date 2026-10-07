@@ -16,15 +16,18 @@
   pad map below has to satisfy), ADR-0262 (the shared on-screen pad keyboard
   search types through), ADR-0249 (the rendered wireframes the render gate
   reads), ADR-0241 (the GUI redesign this is a slice of), ADR-0003 (the ROM hash
-  contract the box-art match uses), ADR-0138 §41 (the host allow-list the
-  box-art host is added to), PRD Part B §8 and §13, issues #1030 and #1031.
+  contract the box-art match uses), ADR-0138 §41 (the host allow-list that
+  already carries the box-art host), PRD Part B §8 and §13, issues #1030 and
+  #1031.
 - Supersedes / amends: **supersedes ADR-0256 Decision 9's folder navigation**
-  (the folder-walking list as the primary Play open path, and the first-row
-  focus target that existed to guard its action row). Decision 9's sheet, its
-  standoff with the native dialog, its roots and its *Make this my games
+  (the folder-walking list as the primary Play open path). Decision 9's sheet,
+  its standoff with the native dialog, its roots and its *Make this my games
   folder* action row all stand; what changes is that the sheet no longer opens
   as a list of folders to descend. The folder walk survives behind
-  *Browse a file…*, which the new ADR forwards to exactly as it was.
+  *Browse a file…*, which the new ADR forwards to exactly as it was — and
+  Decision 9's first-row focus guard **lives on** inside *Browse a file…* too,
+  where it still protects the *Make this my games folder* action row, the row
+  staying where it is.
 
 ## Context
 
@@ -198,12 +201,14 @@ library.
 **What ADR-0256 Decision 9 loses, precisely.** Decision 9's sheet and its
 reason for existing stand — a pad-reachable Play open path, no native dialog.
 Its **folder navigation as the sheet's opening shape** is superseded: the
-sheet no longer opens as a list of folders to descend. Its first-row focus
-guard, which existed so that an empty folder could not silently repoint
-*Your games*, is superseded with it — the library's empty state is a named
-state with a next step, and the action row it guarded now lives inside
-*Browse a file…*, reachable one press further. Everything else Decision 9
-decided is untouched, and this ADR re-opens none of its refusals.
+sheet no longer opens as a list of folders to descend. Nothing else of
+Decision 9's is. Its first-row focus guard **lives on** inside *Browse a
+file…*, where it still protects the *Make this my games folder* action row,
+which also stays where it is; the guard is kept so that an empty folder
+cannot silently repoint *Your games*. On the library side, the empty state is
+a named state with a next step, and the action row is reachable one press
+further, inside *Browse a file…*. Everything else Decision 9 decided is
+untouched, and this ADR re-opens none of its refusals.
 
 **A second list of the same kind.** The library grid and
 `PlaySelectRomSheetView` are two lists over ROM files and stay deliberately

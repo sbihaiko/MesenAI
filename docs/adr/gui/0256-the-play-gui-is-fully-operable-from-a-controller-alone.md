@@ -61,10 +61,12 @@
   the owner's request on issue #1031: the *Open a game* sheet opens as a flat
   library of every openable ROM under the library folders, and the folder walk
   Decision 9 decided survives only behind *Browse a file…*. The sheet itself,
-  its roots, its *Make this my games folder* action row and its first-row focus
-  guard live on inside that entry point; what is retired is the folder walk as
-  the sheet's opening shape. Decision 9's text above stands unchanged as the
-  record of what was decided on 2026-10-05.
+  its roots and its *Make this my games folder* action row live on inside that
+  entry point, and Decision 9's first-row focus guard **lives on** with them:
+  the guard is kept inside *Browse a file…*, where it still protects the *Make
+  this my games folder* action row, which also stays where it is. What is
+  retired is the folder walk as the sheet's opening shape. Decision 9's text
+  above stands unchanged as the record of what was decided on 2026-10-05.
 - Date: 2026-10-04
 - Related: ADR-0241 (Play's home and the W-P4 pause overlay), ADR-0249 (the
   rendered wireframes as the visual spec), ADR-0250 (every menu entry has one
@@ -72,9 +74,11 @@
   ADR-0255 (the Controller sheet, one of the surfaces this has to drive),
   ADR-0123 (host-free rules).
 - Supersedes / amends: none. **Superseded by: ADR-0264** (2026-10-07) —
-  Decision 9's folder navigation as the *Open a game* sheet's opening shape,
-  and the first-row focus guard that went with it; the rest of Decision 9, and
-  every other Decision here, stand.
+  Decision 9's folder navigation as the *Open a game* sheet's opening shape.
+  The rest of Decision 9, and every other Decision here, stand. Decision 9's
+  first-row focus guard is **not** superseded: it lives on inside *Browse a
+  file…*, protecting the *Make this my games folder* action row, which stays
+  where it is.
 
 ## Context
 
