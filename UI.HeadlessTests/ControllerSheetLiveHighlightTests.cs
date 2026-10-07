@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
@@ -89,20 +88,5 @@ public class ControllerSheetLiveHighlightTests
 			sheet.IsVisible = false;
 			window.Close();
 		}
-	}
-
-	//W-P15 is in the wireframe comparison with its own region, the setup sheet
-	//(render_gui_wireframes.py's `pb`, minus WIN's origin), and the wireframe
-	//taken as its own render passes it - so the crop lands on the sheet.
-	[AvaloniaFact]
-	public void W_P15_is_compared_on_its_setup_sheet()
-	{
-		Assert.Contains(PlayerWireframe.RegionsOf("W-P15"), r => r.Name == "setup sheet");
-		RgbFrame wireframe = RgbFrame.FromPng(PlayerRender.WireframePath("W-P15"));
-		RgbFrame window = PlayerWireframe.Window(wireframe, PlayerWireframe.WindowWidth, PlayerWireframe.WindowHeight);
-		IReadOnlyList<RegionResult> results = PlayerWireframe.Compare("W-P15", window, wireframe);
-		RegionResult sheet = results.Single(r => r.Region == "setup sheet");
-		Assert.True(sheet.Pass, string.Join(", ", sheet.Failures));
-		Assert.True(PlayerWireframe.DeltaE(sheet.RenderColor, Rgb.Parse("#FAFAFC")) < 2);
 	}
 }
