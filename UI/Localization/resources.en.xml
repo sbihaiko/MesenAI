@@ -3550,12 +3550,12 @@ E
 			<Value ID="Unspecified">Unspecified</Value>
 			<Value ID="StandardControllers">Standard Controllers</Value>
 			<Value ID="FourScore">Four Score (NES)</Value>
-			<Value ID="FourPlayerAdapter">Four Player Adapter (Famicom)</Value>
+			<Value ID="FourPlayerAdapter">Simple Four Player Adapter (Famicom)</Value>
 			<Value ID="VsSystem">VS System</Value>
 			<Value ID="VsSystemSwapped">VS System - Swap P1/P2</Value>
-			<Value ID="VsSystemSwapAB">VS System - Swap A/B buttons</Value>
+			<Value ID="EightPlayers">Four Score (NES)+Hori Four Player Adapter (Famicom)</Value>
 			<Value ID="VsZapper">VS Zapper</Value>
-			<Value ID="Zapper">Zapper</Value>
+			<Value ID="Zapper1">Zapper ($4017)</Value>
 			<Value ID="TwoZappers">2 Zappers</Value>
 			<Value ID="BandaiHypershot">Bandai Hypershot</Value>
 			<Value ID="PowerPadSideA">Power Pad Side A</Value>
@@ -3588,7 +3588,7 @@ E
 			<Value ID="SuborKeyboard">Subor Keyboard</Value>
 			<Value ID="SuborKeyboardMouse1">Subor Keyboard+Macro Winners Mouse</Value>
 			<Value ID="SuborKeyboardMouse2">Subor Keyboard+Subor Mouse ($4016)</Value>
-			<Value ID="SnesMouse">SNES Mouse</Value>
+			<Value ID="SnesMouse1">SNES Mouse ($4016)</Value>
 			<Value ID="GenericMulticart">Generic Multicart</Value>
 			<Value ID="SnesControllers">SNES Controllers</Value>
 			<Value ID="RacerMateBicycle">RacerMate Bicycle</Value>
@@ -3607,6 +3607,27 @@ E
 			<Value ID="VenomTVDance">Venom TV Dance Mat</Value>
 			<Value ID="LgTvRemote">LG TV Remote</Value>
 			<Value ID="FcnsController">FCNS Controller</Value>
+			<Value ID="KingFishingController">King Fishing Controller</Value>
+			<Value ID="CroakyKaraokeController">Croaky Karaoke Controller</Value>
+			<Value ID="KingwonKeyboard">Kingwon Keyboard</Value>
+			<Value ID="ZechengKeyboard">Zecheng Keyboard</Value>
+			<Value ID="SuborKeyboardMouse4">Subor Keyboard+L90-rotated PS/2 Mouse ($4017)</Value>
+			<Value ID="Ps2KeyboardMouse">UM6578 PS/2 Keyboard+PS/2 Mouse ($4017)</Value>
+			<Value ID="Ps2Mouse">UM6578 PS/2 Mouse</Value>
+			<Value ID="YuxingMouse">Yuxing Mouse ($4016)</Value>
+			<Value ID="SuborKeyboardMouse5">Subor Keyboard+Yuxing Mouse ($4016)</Value>
+			<Value ID="GiggleTvPump">Giggle TV Pump</Value>
+			<Value ID="BbkKeyboardMouse">BBK Keyboard+R90-rotated PS/2 Mouse ($4017)</Value>
+			<Value ID="MagicalCooking">Magical Cooking</Value>
+			<Value ID="SnesMouse2">SNES Mouse ($4017)</Value>
+			<Value ID="Zapper2">Zapper ($4016)</Value>
+			<Value ID="ArkanoidControllerPrototype">Arkanoid Controller (Prototype)</Value>
+			<Value ID="TvMahjongGame">TV Mahjong Game Controller</Value>
+			<Value ID="MahjongGekitouDensetsu">Mahjong Gekitou Densetsu Controller</Value>
+			<Value ID="SuborKeyboardMouse6">Subor Keyboard+X-inverted PS/2 Mouse ($4017)</Value>
+			<Value ID="IbmKeyboard">IBM PC/XT Keyboard</Value>
+			<Value ID="SuborKeyboardMouse7">Subor Keyboard+Mega Book Mouse</Value>
+			<Value ID="HoriTrack">Hori Track</Value>
 		</Enum>
 
 		<Enum ID="FirmwareType">
