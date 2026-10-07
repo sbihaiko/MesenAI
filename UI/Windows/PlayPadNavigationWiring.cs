@@ -341,12 +341,12 @@ namespace Mesen.Windows
 				Control? search = Named(window, "RomPickerSearch");
 				if(search is not null && (search.IsFocused || ReferenceEquals(KeyboardFieldForTest(window), search))) {
 					return search;
-||||||| parent of 802ed3e4f (fix(library): the scan's finish waits for the last chunk, and a left scan stops (#1037))
 				}
-				//#1037: the end of a scan whose restore never landed is the sheet's
-				//fallback, not a claim over the ring - a player who walked it to Back
-				//or the search box while the scan ran keeps it there.
-				if(model.RomPicker.IsFinishFallback
+				//#1037: the end of a scan whose restore never landed, and the
+				//remembered game landing, are the sheet's own claims, not a claim
+				//over the ring - a player who walked it to Back or the search box
+				//while the scan ran keeps it there.
+				if((model.RomPicker.IsFinishFallback || model.RomPicker.IsRestoreLanding)
 					&& (window.FocusManager?.GetFocusedElement() as Control)?.Name is "RomPickerBack" or "RomPickerSearch") {
 					return window.FocusManager?.GetFocusedElement() as Control;
 				}

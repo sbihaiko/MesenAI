@@ -757,4 +757,113 @@ public class PlayerLibraryScanTests : IDisposable
 			release.Set();
 		}
 	}
+
+	//#1037 review finding 1 on #1056: the remembered game landing is a claim for
+	//the ring, and like the end of a scan it is the sheet finishing what it
+	//promised - not a hand taken off a ring the player has since moved. A player
+	//who walked to Back while the restore was pending keeps it there.
+	[AvaloniaFact]
+	public void The_remembered_game_landing_does_not_steal_a_ring_the_player_put_on_Back()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		string contra = Path.Combine(_folder, "Contra (U) [!].nes");
+		string metroid = Path.Combine(_folder, "Metroid (USA).nes");
+		string tetris = Path.Combine(_folder, "Tetris (World).gb");
+
+		LibraryScanResult InstantScan(IReadOnlyList<string> folders, FolderLister list, Action<IReadOnlyList<LibraryEntry>> onBatch)
+		{
+			LibraryEntry[] all = {
+				Entry(contra, RomConsole.Nes, "Contra"),
+				Entry(metroid, RomConsole.Nes, "Metroid"),
+				Entry(tetris, RomConsole.GameBoy, "Tetris")
+			};
+			onBatch(all);
+			return new LibraryScanResult(all, 1, false);
+		}
+
+		(MainWindow window, MainWindowViewModel model) = OpenLibrary(InstantScan, inline: true);
+		WaitFor(() => FocusedTilePath(window) == contra, $"the sheet did not open on its first game ({Focused(window)})");
+		Press(window, PadNavAction.Right);
+		Press(window, PadNavAction.Right);
+		Assert.Equal(tetris, FocusedTilePath(window));
+		Press(window, PadNavAction.Back);
+		Pump();
+		Assert.False(model.RomPicker.IsVisible, "B did not close the sheet");
+
+		using ManualResetEventSlim release = new(false);
+		LibraryScanResult SlowScan(IReadOnlyList<string> folders, FolderLister list, Action<IReadOnlyList<LibraryEntry>> onBatch)
+		{
+			LibraryEntry[] first = { Entry(contra, RomConsole.Nes, "Contra"), Entry(metroid, RomConsole.Nes, "Metroid") };
+			onBatch(first);
+			release.Wait(TimeSpan.FromSeconds(30));
+			LibraryEntry last = Entry(tetris, RomConsole.GameBoy, "Tetris");
+			onBatch(new[] { last });
+			return new LibraryScanResult(new[] { first[0], first[1], last }, 1, false);
+		}
+		model.RomPicker.LibraryScanStreamSource = SlowScan;
+		model.RomPicker.RunLibraryScanInline = false;
+
+		try {
+			Press(window, PadNavAction.Confirm);
+			Pump();
+			WaitFor(() => model.RomPicker.Tiles.Count == 2, $"the first batch never reached the grid ({Focused(window)})");
+
+			//The restore is pending and the player walks the ring to Back.
+			Button back = window.GetVisualDescendants().OfType<Button>().First(b => b.Name == "RomPickerBack");
+			back.Focus(NavigationMethod.Directional);
+			Pump();
+			Assert.Equal("RomPickerBack", (window.FocusManager?.GetFocusedElement() as Control)?.Name);
+
+			//The remembered game arrives under it.
+			release.Set();
+			WaitFor(() => model.RomPicker.Tiles.Count == 3, "the last batch never reached the grid");
+			WaitFor(() => !model.RomPicker.IsScanning, "the scan's wait never cleared");
+			Pump();
+			Assert.Equal("RomPickerBack", (window.FocusManager?.GetFocusedElement() as Control)?.Name);
+		} finally {
+			release.Set();
+		}
+	}
+
+	//#1037 review finding 2 on #1056: the library has not answered while the
+	//scan runs, so a query typed over the wait must not read as a verdict on it.
+	[AvaloniaFact]
+	public void A_query_typed_while_the_scan_runs_is_not_answered_with_no_match()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+
+		using ManualResetEventSlim release = new(false);
+		LibraryScanResult HeldScan(IReadOnlyList<string> folders, FolderLister list, Action<IReadOnlyList<LibraryEntry>> onBatch)
+		{
+			release.Wait(TimeSpan.FromSeconds(30));
+			return new LibraryScanResult(Array.Empty<LibraryEntry>(), 1, false);
+		}
+
+		(MainWindow window, MainWindowViewModel model) = OpenLibrary(HeldScan, inline: false);
+
+		try {
+			Assert.True(model.RomPicker.IsScanning, "the scan is over, so this case proves nothing about the wait");
+			string waiting = model.RomPicker.SearchingText;
+			Assert.NotEqual("", waiting);
+
+			model.RomPicker.SearchQuery = "zzzz";
+			Pump();
+			Assert.Equal("", model.RomPicker.EmptyText);
+			Assert.Equal(waiting, model.RomPicker.SearchingText);
+
+			model.RomPicker.SearchQuery = "";
+			Pump();
+			Assert.Equal(waiting, model.RomPicker.SearchingText);
+
+			//Once the scan answers, the query is judged against a library that was read.
+			model.RomPicker.SearchQuery = "zzzz";
+			release.Set();
+			WaitFor(() => !model.RomPicker.IsScanning, "the scan's wait never cleared");
+			Pump();
+			Assert.Contains("zzzz", model.RomPicker.EmptyText);
+			Assert.NotNull(window);
+		} finally {
+			release.Set();
+		}
+	}
 }

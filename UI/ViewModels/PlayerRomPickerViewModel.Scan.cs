@@ -90,6 +90,12 @@ namespace Mesen.ViewModels
 		//since moved to the header (PlayPadNavigationWiring).
 		public bool IsFinishFallback { get; private set; }
 
+		//The bump for the remembered game landing is the same kind of claim: the
+		//sheet finishing what it promised, not a hand taken off a ring the player
+		//has since walked to Back or the search box while the restore was pending
+		//(PlayPadNavigationWiring answers it the way it answers the fallback).
+		public bool IsRestoreLanding { get; private set; }
+
 		//A batch is merged into the grid in chunks this large, the rest posted at
 		//Background priority: one folder holding thousands of ROMs is one batch,
 		//and one collection change - and one container - per entry in a single UI
@@ -182,10 +188,11 @@ namespace Mesen.ViewModels
 			_tileTookRing = false;
 			_pendingChunks = 0;
 			IsFinishFallback = false;
+			IsRestoreLanding = false;
 
 			ResetLibraryGrid();
-			//The library has folders and is being read, so the box owns the empty
-			//result from here on (Search.UpdateEmptyResult).
+			//The library has folders and is being read; the box owns the empty
+			//result only once the scan has answered (Search.UpdateEmptyResult).
 			_hasLibrary = true;
 			IsScanning = true;
 			SearchingText = ResourceHelper.GetMessage("RomPickerSearching");
@@ -215,8 +222,11 @@ namespace Mesen.ViewModels
 		//The answer comes back through the return value and reaches the header
 		//through the caller's posted closure, never through a field: an older scan
 		//that finishes late must be unable to describe a sheet it no longer owns.
-		//Null means the walk produced no answer at all - it threw, or it was
-		//cancelled because the player had already left it behind.
+		//Null means the walk produced no answer at all - it threw. A cancelled
+		//walk is not guaranteed to land here: GameLibrary.List swallows the
+		//lister's exception, so the walk drains and returns what it had. That
+		//is harmless, since every cancel also moves the generation, visibility
+		//or mode and FinishLibraryStream drops the result.
 		private LibraryScanResult? RunLibraryStream(int generation, IReadOnlyList<string> folders, string? recentGamesFolder, Action<Action>? post, CancellationToken cancellation)
 		{
 			try {
@@ -330,6 +340,7 @@ namespace Mesen.ViewModels
 			//(IsRestorePending), so this is the sheet finishing what it promised
 			//rather than a claim over the player's ring.
 			if((wasEmpty && Tiles.Count > 0) || restoreLanded) {
+				IsRestoreLanding = restoreLanded;
 				TilesRevision++;
 			}
 		}
@@ -400,6 +411,9 @@ namespace Mesen.ViewModels
 			}
 			SearchingText = "";
 			if(result is null) {
+				//The scan answered nothing, but a query typed over the wait is owed
+				//its own verdict on the grid that is there.
+				UpdateEmptyResult();
 				return;
 			}
 			//#1060: a scan that answered no game is a named state that names the next

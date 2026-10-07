@@ -139,7 +139,10 @@ namespace Mesen.ViewModels
 		//sentence back, not a blank grid.
 		private void UpdateEmptyResult()
 		{
-			if(!_hasLibrary) {
+			//While the scan runs the library has not answered: "no match" over a
+			//grid still filling would read as a verdict, and clearing the box must
+			//not erase what the wait set. FinishLibraryStream calls this again.
+			if(!_hasLibrary || IsScanning) {
 				return;
 			}
 			EmptyText = HasQuery
