@@ -451,6 +451,54 @@ public class PlayerLibrarySearchTests : IDisposable
 		Assert.Equal("RomPickerSearch", FocusedName(window));
 	}
 
+	//#1033 round 4 (finding 2): a scan that lands while the player is already in
+	//the box must not take the ring away. The scan bumps TilesRevision, and the
+	//focus claim for that revision used to answer the first tile - so a player who
+	//pressed Y before a slow scan landed lost the box mid-query, and the pad
+	//keyboard was left open over a field that no longer had focus. The scan is held
+	//open by the case (the other cases run it inline, which is why this hid).
+	[AvaloniaFact]
+	public void A_scan_landing_while_the_search_box_has_focus_keeps_the_focus_there()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		LibraryRoot();
+
+		(MainWindow window, MainWindowViewModel model) = ShowOpenLibrary();
+		ManualResetEventSlim gate = new(false);
+		model.RomPicker.RunLibraryScanInline = false;
+		model.RomPicker.LibraryScanSource = (folders, lister) => {
+			gate.Wait(TimeSpan.FromSeconds(30));
+			return GameLibrary.Scan(folders, lister);
+		};
+
+		try {
+			//A fresh visit whose scan is still in flight.
+			model.RomPicker.Open();
+			Pump();
+			Assert.True(model.RomPicker.SearchingText.Length > 0, "the scan is not in flight, so this case would prove nothing");
+
+			PressSearch(window);
+			TextBox box = window.FindNamed<TextBox>("RomPickerSearch");
+			box.Text = "zel";
+			Pump();
+			Assert.Equal("zel", model.RomPicker.SearchQuery);
+			Assert.Equal("RomPickerSearch", FocusedName(window));
+		} finally {
+			gate.Set();
+		}
+
+		WaitFor(() => model.RomPicker.SearchingText.Length == 0 && model.RomPicker.Tiles.Count > 0,
+			"the scan the gate released never filled the grid");
+		Pump();
+
+		Assert.Equal("RomPickerSearch", FocusedName(window));
+		Assert.True(window.FindNamed<TextBox>("RomPickerSearch").IsFocused, "the scan took the ring off the search box");
+		//The query typed while the scan ran survives it and narrows the grid the
+		//scan filled.
+		Assert.Equal("zel", model.RomPicker.SearchQuery);
+		Assert.Equal(new[] { "The Legend of Zelda" }, TileTitles(model));
+	}
+
 	//The W-P19b render case lives in PlayerLibraryRenderTests, beside W-P19.
 	//#1033 (ADR-0264 Decision 12): the render gate runs only the cases in a
 	//`*RenderTests` class (.github/workflows/render-gate.yml filters on
