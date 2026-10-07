@@ -59,9 +59,20 @@ namespace Mesen.Utilities
 			string? file = StopAndKeep();
 			if(file != null) {
 				EmuApi.DisplayMessage("Movies", "MovieShareReady", Path.GetFileName(file));
-				Reveal(file);
-				ApplicationHelper.OpenBrowser(ReplayShare.BuildIssueUrl(ConfigManager.Config.MovieRecord.Description));
+				HandOver(file, ConfigManager.Config.MovieRecord.Description);
 			}
+		}
+
+		//#987: the two hand-offs that leave the app. Seams so a test can see the
+		//file and the issue form URL handed over without opening anything.
+		public static Action<string> RevealLauncher { get; set; } = RevealInFileManager;
+		public static Action<string> BrowserLauncher { get; set; } = ApplicationHelper.OpenBrowser;
+
+		//Reveals the finished file and opens the issue form pre-filled with notes.
+		public static void HandOver(string file, string notes)
+		{
+			Reveal(file);
+			BrowserLauncher(ReplayShare.BuildIssueUrl(notes));
 		}
 
 		//G.8 (W-H4): stops like Stop, but only hands the file back - Share's
@@ -79,15 +90,20 @@ namespace Mesen.Utilities
 		public static void Reveal(string file)
 		{
 			try {
-				if(OperatingSystem.IsMacOS()) {
-					Process.Start(new ProcessStartInfo("open") { ArgumentList = { "-R", file } })?.Dispose();
-				} else if(OperatingSystem.IsWindows()) {
-					Process.Start(new ProcessStartInfo("explorer.exe") { Arguments = "/select,\"" + file + "\"" })?.Dispose();
-				} else {
-					Process.Start(new ProcessStartInfo("xdg-open") { ArgumentList = { Path.GetDirectoryName(file) ?? "." } })?.Dispose();
-				}
+				RevealLauncher(file);
 			} catch(Exception ex) {
 				EmuApi.WriteLogEntry("[RecordAndShare] UI: could not reveal " + file + ": " + ex.Message);
+			}
+		}
+
+		private static void RevealInFileManager(string file)
+		{
+			if(OperatingSystem.IsMacOS()) {
+					Process.Start(new ProcessStartInfo("open") { ArgumentList = { "-R", file } })?.Dispose();
+			} else if(OperatingSystem.IsWindows()) {
+				Process.Start(new ProcessStartInfo("explorer.exe") { Arguments = "/select,\"" + file + "\"" })?.Dispose();
+			} else {
+				Process.Start(new ProcessStartInfo("xdg-open") { ArgumentList = { Path.GetDirectoryName(file) ?? "." } })?.Dispose();
 			}
 		}
 	}

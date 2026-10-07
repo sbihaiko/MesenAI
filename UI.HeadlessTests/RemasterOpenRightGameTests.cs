@@ -164,6 +164,8 @@ public class RemasterOpenRightGameTests : IDisposable
 
 	//#984 (rule 10): the wrong game is said once, in the row with its button;
 	//the five controls stay disabled without repeating it under each.
+	//Wiring only: the rule itself (every control's reason, IsEnabled and
+	//IsWrongGame) is pinned host-free in UI.Tests/Remaster/RemasterControlsTests.
 	[AvaloniaFact]
 	public void The_wrong_game_sentence_is_shown_once_and_the_per_control_reasons_are_hidden()
 	{
