@@ -317,10 +317,16 @@ namespace Mesen.Windows
 		//first row, as it always was. Both fall back to Back, so a state with
 		//nothing to pick still has something to press - the ring is never left
 		//with nothing at all.
+		//
+		//#1060: a library with no tile at all - no library folder yet, or folders
+		//the scan answered nothing for - lands on *Browse a file…* instead, because
+		//that is the control the empty sentence names as the next step, and Back
+		//leaves the sheet instead of taking it. Back stays the last resort: it is
+		//the one control the sheet always has.
 		private static Control? RomPickerFocusTarget(MainWindow window, MainWindowViewModel model)
 		{
 			if(model.RomPicker.Mode == RomPickerMode.Library) {
-				return RomPickerFirstTile(window) ?? Named(window, "RomPickerBack");
+				return RomPickerFirstTile(window) ?? Named(window, "RomPickerBrowseFile") ?? Named(window, "RomPickerBack");
 			}
 			return RomPickerFirstRow(window) ?? Named(window, "RomPickerBack");
 		}

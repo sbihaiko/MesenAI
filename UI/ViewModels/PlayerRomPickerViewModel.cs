@@ -348,8 +348,15 @@ namespace Mesen.ViewModels
 			SearchingText = "";
 
 			_folders = LibraryFolderSource();
+			//#1060: nothing scanned yet, so the only state known here is the folder
+			//list's own; a library with folders waits for its scan to say anything.
+			//The null is that "nothing scanned yet" - the rule cannot answer the empty
+			//sentence without a scan's count, so the wait cannot read as a verdict
+			//(review finding 1 on #1060: passing zero here showed "No games found in
+			//your library folder." next to "Looking for your games…" for the whole
+			//scan). ApplyLibraryScan is the only caller that has an answer to give.
+			EmptyText = LibraryEmptyText(PlayRomPicker.LibraryEmptyMessageId(_folders.Count, null));
 			if(_folders.Count == 0) {
-				EmptyText = ResourceHelper.GetMessage("RomPickerLibraryNoFolders");
 				return;
 			}
 			StartLibraryScan();
@@ -580,6 +587,9 @@ namespace Mesen.ViewModels
 				return;
 			}
 			SearchingText = "";
+			//#1060: a scan that answered no game is a named state that names the next
+			//step, not a blank grid. The rule is PlayRomPicker's; this is the lookup.
+			EmptyText = LibraryEmptyText(PlayRomPicker.LibraryEmptyMessageId(_folders.Count, result.Entries.Count));
 			Tiles.Clear();
 			foreach(LibraryEntry entry in result.Entries) {
 				Tiles.Add(new PlayerLibraryTile(entry, ConsoleName(entry.Console)));
@@ -593,6 +603,14 @@ namespace Mesen.ViewModels
 			//The rebuilt tiles are new containers, so whatever the arbiter had
 			//the ring on went with the old ones.
 			TilesRevision++;
+		}
+
+		//#1060: the id PlayRomPicker answered, in the player's own words. Nothing to
+		//say is an empty line, which is the length the sentence's own visibility
+		//binding reads.
+		private static string LibraryEmptyText(string? messageId)
+		{
+			return messageId is null ? "" : ResourceHelper.GetMessage(messageId);
 		}
 
 		//A counted noun: "1 game" and "11 games" are different words in English,

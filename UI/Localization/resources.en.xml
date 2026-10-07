@@ -2661,6 +2661,13 @@ E
 		     slice has no Library folders… control yet, so the step it can point
 		     at is the one that exists: the browser's own action row. -->
 		<Message ID="RomPickerLibraryNoFolders">No library folder yet. Pick a folder with Browse a file…, then choose Make this my games folder.</Message>
+		<!-- #1060 (ADR-0264 Decision 8): the OTHER empty state - a library folder the
+		     scan answered nothing for (a library still being copied, a folder of
+		     notes, games on a stick that is not plugged in). It is a different fact
+		     from the one above and it names the same next step, for the same reason:
+		     the *Library folders…* control is slice #1035 and does not exist yet, so
+		     the step this sentence can point at is the one that does. -->
+		<Message ID="RomPickerLibraryEmpty">No games found in your library folder. Pick another folder with Browse a file…, then choose Make this my games folder.</Message>
 		<Message ID="RomPickerEmpty">No games in this folder.</Message>
 		<Message ID="RomPickerThisComputer">This computer</Message>
 		<Message ID="RomPickerSearching">Looking for your games…</Message>
