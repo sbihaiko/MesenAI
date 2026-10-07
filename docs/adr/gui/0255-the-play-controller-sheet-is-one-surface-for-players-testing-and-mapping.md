@@ -77,12 +77,13 @@
   the pad's own and leaves the pad split across two - the PLAYERS move then has to
   move both slots and refuses with NoFreeSlot where one would have fit. It now
   joins the pad's slot (`ControllerSheetRemap.TargetSlot`'s `padSlot`).
-  Two limits are carried rather than solved: a rebind does not clear the same
-  pad button from another control, and the section was never visually evaluated
-  with the pad, PLAYERS and REMAP all on screen at once. (A third, the port light
-  reading the first non-zero field across the port's four slots, is closed by
-  #965: the light reads the slot the selected pad holds,
-  `ControllerSheetRemap.BoundCode`.)
+  One limit is carried rather than solved: the section was never visually
+  evaluated with the pad, PLAYERS and REMAP all on screen at once. (A second, a
+  rebind not clearing the same pad button from another control, is closed by
+  #941: assigning a button already used on the same port moves it, and the sheet
+  names the control that lost it. A third, the port light reading the first
+  non-zero field across the port's four slots, is closed by #965: the light
+  reads the slot the selected pad holds, `ControllerSheetRemap.BoundCode`.)
   Slice 4's surface (the extra buttons) is implemented: the sheet's EXTRA
   BUTTONS section, `UI/ViewModels/ControllerSheetViewModel.Extra.cs`
   (2026-10-04, #844, above).
