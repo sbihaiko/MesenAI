@@ -57,19 +57,42 @@ public static class GameLibrary
 	public const int MaxDepth = 6;
 	public const int MaxEntries = 20000;
 
+	//The comparer the scan folds two spellings of a path with when its caller
+	//names none. Folding is a FILE SYSTEM rule and not a string rule: Windows and
+	//macOS spell a path case-insensitively - `roms/Contra.nes` and
+	//`roms/contra.nes` are one file there, so one tile - while Linux does not, and
+	//folding there would hide a game the player really has.
+	public static StringComparer PathComparer { get; } = PathComparerFor(OperatingSystem.IsWindows() || OperatingSystem.IsMacOS());
+
+	//The rule PathComparer follows, with the platform NAMED rather than
+	//interrogated: the choice is the decision, so both sides of it are pinned by a
+	//test on whatever OS the test happens to run on.
+	public static StringComparer PathComparerFor(bool caseInsensitiveFileSystem)
+	{
+		return caseInsensitiveFileSystem ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+	}
+
 	//Every openable ROM under `libraryFolders`, in the order the grid shows
-	//them. `list` is the host's half: one folder in, its subfolders and its
-	//files out, and an empty answer for a folder it cannot read (a drive pulled
-	//out between listing and descending is not a crash).
+	//them, folded the way the platform folds paths.
 	public static LibraryScanResult Scan(IEnumerable<string> libraryFolders, FolderLister list)
+	{
+		return Scan(libraryFolders, list, PathComparer);
+	}
+
+	//The same scan with the fold named by the caller. `list` is the host's half:
+	//one folder in, its subfolders and its files out, and an empty answer for a
+	//folder it cannot read (a drive pulled out between listing and descending is
+	//not a crash). `pathComparer` is the "same file?" question - see PathComparer
+	//for what the default answers and why.
+	public static LibraryScanResult Scan(IEnumerable<string> libraryFolders, FolderLister list, StringComparer pathComparer)
 	{
 		List<LibraryEntry> entries = new();
 		//One spelling per file and per folder, so the same ROM reachable through
 		//two library folders - or a folder that lists itself, which is what a
 		//symlinked home or a mount pointing back up looks like - is one tile and
-		//one visit.
-		HashSet<string> seenFiles = new(StringComparer.OrdinalIgnoreCase);
-		HashSet<string> visited = new(StringComparer.OrdinalIgnoreCase);
+		//one visit. "One spelling" is the platform's answer, not this file's.
+		HashSet<string> seenFiles = new(pathComparer);
+		HashSet<string> visited = new(pathComparer);
 		int foldersAnswered = 0;
 		bool truncated = false;
 
@@ -131,7 +154,7 @@ public static class GameLibrary
 			}
 		}
 
-		entries.Sort(Compare);
+		entries.Sort((left, right) => Compare(left, right, pathComparer));
 		return new LibraryScanResult(entries, foldersAnswered, truncated);
 	}
 
@@ -270,11 +293,13 @@ public static class GameLibrary
 
 	//By title, then by path: two games of the same name (an NES and a Game Boy
 	//one, or the same ROM under two folders) keep one stable order between runs
-	//rather than whatever the disk answered first.
-	private static int Compare(LibraryEntry left, LibraryEntry right)
+	//rather than whatever the disk answered first. The path tiebreak asks the
+	//scan's own "is this the same path?" question, so two spellings that tie on
+	//Windows and macOS are still ordered on Linux instead of left to the host.
+	private static int Compare(LibraryEntry left, LibraryEntry right, StringComparer pathComparer)
 	{
 		int byTitle = string.Compare(SortTitle(left.Title), SortTitle(right.Title), StringComparison.OrdinalIgnoreCase);
-		return byTitle != 0 ? byTitle : string.Compare(left.Path, right.Path, StringComparison.OrdinalIgnoreCase);
+		return byTitle != 0 ? byTitle : pathComparer.Compare(left.Path, right.Path);
 	}
 
 	//A folder listing that threw is an empty answer: the scan runs over disks
