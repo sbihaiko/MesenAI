@@ -35,7 +35,7 @@ namespace Mesen.ViewModels
 	//is chosen here and only here. The palette is the wireframe's own
 	//(scripts/render_gui_wireframes.py, CONSOLE_TINT), so a render of this sheet
 	//and W-P19 agree on what a Game Boy game looks like.
-	public partial class PlayerLibraryTile
+	public partial class PlayerLibraryTile : ViewModelBase
 	{
 		//`cover` is the library module's answer for this entry (ADR-0264 Decision
 		//6): the art the entry already carries, or the screenshot the player's
@@ -52,7 +52,12 @@ namespace Mesen.ViewModels
 		}
 
 		public string Path { get; }
-		public string Title { get; }
+		//Settable and notifying because a tile outlives the title it was built
+		//with: the canonical-title pass (#1038) renames it in place once the
+		//ROM's hash is known, and a new Title has to reach the template without
+		//the grid rebuilding - the container, and the focus ring on it, are the
+		//reason the pass does not replace the tile.
+		[ObservableProperty] public partial string Title { get; internal set; }
 		public RomConsole Console { get; }
 		//Read by the player, so it comes from the locale files like every other
 		//string on this sheet (the caller resolves it, the way a root's label is
@@ -641,6 +646,10 @@ namespace Mesen.ViewModels
 			//The rebuilt tiles are new containers, so whatever the arbiter had
 			//the ring on went with the old ones.
 			TilesRevision++;
+			//#1038: the grid is complete and readable NOW - the tiles carry the
+			//cleaned file names the scan gave them - and the canonical titles
+			//arrive from here as the background pass resolves them.
+			StartCanonicalTitles();
 		}
 
 		//#1060: the id PlayRomPicker answered, in the player's own words. Nothing to
