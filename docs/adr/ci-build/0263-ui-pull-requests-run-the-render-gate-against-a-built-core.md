@@ -1,30 +1,33 @@
 # ADR-0263: UI pull requests run the ADR-0249 render gate against a built core, in a path-filtered Linux job outside build.yml
 
-- Status: accepted (2026-10-06). **Decided by the autonomy panel standing in
-  for the owner** on issue #968, ruling **AGREED 2–1 — option (a), outside
+- Status: proposed (2026-10-06) — **awaiting owner ratification (issues
+  #966/#968, label needs-ratification)**. The Decision below is a
+  **recommendation, not a decision**: the autonomy panel is not the owner.
+  Panel recommendation on issue #968: **AGREED 2–1 — option (a), outside
   build.yml**. Composition, quoted from the ruling: *"adversarial fallback
   (Codex out of usage until 23:42); lenses: Anthropic panel lens B,
   agy/Gemini 3.8 Flash sitting in; split → blind third lens Grok 4.6."*
   Majority reasons, quoted from the ruling: *"ADR-0249 Decision 5 wants
   renders attached to UI PRs before merge; (b)/(c)/(d) never reach the
   ordinary review path; cost is one path-gated ubuntu core build, not the
-  10-job matrix ADR-0191/0200/0203 cut."* Dissent (lens B), verbatim:
-  **"Other: reuse the core that the PR gate already builds. ... shard 1 would
-  upload that file as an artifact. A render job (or headless-ui-tests)
-  declares needs: on it, downloads it, sets MESEN_CORE_LIB and runs the render
-  and wireframe classes. Limit it to PRs that touch UI/** or UI.HeadlessTests/**.
-  Fallback if the owner refuses an ADR-0131/ADR-0122 amendment: (b)."** — kept
-  by the ruling as an implementation option (Decision 4). Accepting this ADR
-  is a request for work: the implementation is a **separate slice** and is
-  **not implemented in this PR**, which is docs only.
+  10-job matrix ADR-0191/0200/0203 cut."* Dissent (lens B), verbatim except
+  for the bracketed substitution of the live ADR: **"Other: reuse the core
+  that the PR gate already builds. ... shard 1 would upload that file as an
+  artifact. A render job (or headless-ui-tests) declares needs: on it,
+  downloads it, sets MESEN_CORE_LIB and runs the render and wireframe classes.
+  Limit it to PRs that touch UI/** or UI.HeadlessTests/**. Fallback if the
+  owner refuses an [ADR-0122 invariant 9] amendment: (b)."** — kept by the
+  recommendation as an implementation option (Decision 4). Until the owner
+  picks and their words are quoted here, this ADR binds nothing. Accepting it
+  will be a request for work: the implementation is a **separate slice** and
+  is **not implemented in this PR**, which is docs only.
 - Date: 2026-10-06
 - Related: ADR-0249 Decision 5 (the render gate; PNGs attached to UI pull
   requests before merge), ADR-0122 invariant 9 (core builds stay out of the
-  host-free job), ADR-0131 (the `unit-tests.yml` contract invariants),
-  ADR-0191, ADR-0200 and ADR-0203 (the CI cost policy and `build.yml`'s
+  host-free job; the `unit-tests.yml` contract), ADR-0191, ADR-0200 and ADR-0203 (the CI cost policy and `build.yml`'s
   `prod`-PR-plus-dispatch trigger), ADR-0150 (Avalonia.Headless), issue #968.
-- Supersedes / amends: none. ADR-0122 invariant 9, ADR-0131 and
-  ADR-0191/0200/0203 are respected, not amended.
+- Supersedes / amends: none. ADR-0122 invariant 9 and ADR-0191/0200/0203
+  are respected, not amended.
 
 ## Context
 
@@ -38,8 +41,7 @@ artifact on a normal PR is empty and the gate passes vacuously.
 
 Two accepted decisions fence where a core build may go. ADR-0122 invariant 9:
 anything that needs the `core` makefile target belongs in
-`build.yml`/`tests.yml`, never in the host-free job (ADR-0131 states that
-contract). And `build.yml` runs only on pull requests into `prod` or a manual
+`build.yml`/`tests.yml`, never in the host-free job. And `build.yml` runs only on pull requests into `prod` or a manual
 dispatch (ADR-0200, ADR-0203), after ADR-0191 cut the per-push matrix for
 cost. No existing workflow builds the core for an ordinary UI PR.
 
@@ -57,7 +59,7 @@ cost. No existing workflow builds the core for an ordinary UI PR.
 3. **It sits outside `build.yml` and outside the core-free headless job**, as
    a sibling workflow or job. `build.yml` keeps its `prod`-PR-plus-dispatch
    trigger (ADR-0200, ADR-0203), and the host-free job keeps building no core
-   (ADR-0122 invariant 9, ADR-0131).
+   (ADR-0122 invariant 9).
 4. **Allowed implementation variant (lens B's artifact reuse).** If the core
    that shard 1 of the PR gate already builds is usable by the headless host,
    shard 1 may upload that library as an artifact and the render job may

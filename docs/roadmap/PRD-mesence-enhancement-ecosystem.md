@@ -2658,10 +2658,7 @@ should cite the rule.
    Esc resumes — today's `TogglePlayerOverlay` order (picker → panel →
    overlay), kept. Never five states.
 9. **Keyboard and gamepad reach everything in Play** (§6 already requires
-   this); Remaster and Share may assume mouse/trackpad. *Amended by
-   ADR-0262:* a pad commits a shaped code (Game Genie / PAR / barcode) through
-   the bridge's code wheel; free-text fields (search, intent search, API key,
-   code description) stay keyboard-only and say so per rule 10.
+   this); Remaster and Share may assume mouse/trackpad.
 10. **The next step is written on the screen.** When the user cannot proceed
     (no ROM, no recording, nothing painted), the screen says what to do, in
     one sentence, with the button that does it.

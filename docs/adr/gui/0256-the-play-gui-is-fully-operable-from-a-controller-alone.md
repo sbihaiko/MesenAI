@@ -1,8 +1,6 @@
 # ADR-0256: The Play GUI is fully operable from a controller alone
 
-- Status: accepted (2026-10-04). **Amended by ADR-0262** (2026-10-06): the
-  stop rule covers committing a shaped code through the pad bridge's code
-  wheel, not free-text typing. **All four questions were answered by the user
+- Status: accepted (2026-10-04). **All four questions were answered by the user
   on 2026-10-04** and are recorded under Decision, quoted verbatim; the user
   accepted the ADR and asked for the work later the same day, quoted verbatim:
   **"espera a review e mergeia os três. depois que estiver no main pode
