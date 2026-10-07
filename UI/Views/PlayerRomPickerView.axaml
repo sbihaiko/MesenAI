@@ -134,6 +134,22 @@
 					grid.-->
 					<DockPanel IsVisible="{Binding IsLibraryMode}">
 						<TextBlock Name="RomPickerLibraryEmpty" Classes="subhead secondary" DockPanel.Dock="Bottom" Text="{Binding EmptyText}" TextWrapping="Wrap" Margin="16 12" IsVisible="{Binding EmptyText.Length}" />
+						<!--#1034 (ADR-0264 Decisions 3 and 5): the console filter, as
+						the theme's own segmented row. It offers All and then only the
+						consoles the library actually holds, so the player can never
+						land on a filter that holds nothing; LB/RB cycle it from the pad
+						and a click picks a segment, both writing the same selection.
+						The words are the view-model's (and so come from the locale
+						files), which is what keeps a segment and a tile's console tag
+						from ever disagreeing about what a machine is called.-->
+						<ListBox Name="RomPickerConsoleFilter" Classes="segmented" DockPanel.Dock="Top" Margin="0 14 0 0"
+							ItemsSource="{Binding ConsoleOptions}" SelectedItem="{Binding SelectedConsoleOption, Mode=TwoWay}">
+							<ListBox.ItemTemplate>
+								<DataTemplate x:DataType="vm:PlayerConsoleFilterOption">
+									<TextBlock Text="{Binding Label}" />
+								</DataTemplate>
+							</ListBox.ItemTemplate>
+						</ListBox>
 						<ScrollViewer HorizontalScrollBarVisibility="Disabled" AllowAutoHide="False" Margin="0 14 0 0">
 							<ItemsControl Name="RomPickerGrid" ItemsSource="{Binding Tiles}" XYFocus.NavigationModes="Enabled">
 								<ItemsControl.ItemsPanel>

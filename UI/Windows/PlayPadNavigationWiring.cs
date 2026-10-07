@@ -600,6 +600,23 @@ namespace Mesen.Windows
 					FocusLibrarySearch();
 				}
 
+				//#1034 (ADR-0264 Decision 3): LB/RB cycle the library's console
+				//filter. A shoulder is not one of the six the nav mapping resolves
+				//- Decision 3 gives the D-pad, A, B and Y their own meanings and
+				//the shoulders this one - so it is read off the pad in hand the
+				//same way those are, and it is applied only while the library's own
+				//surface is up: the folder browser inside the sheet has no console
+				//row to cycle, and every other Play surface has no row at all.
+				//
+				//The edge is taken from the same `_previous` the action above was,
+				//before it is recorded below, so a held shoulder cycles once.
+				if(authority && _model.RomPicker.IsVisible && _model.RomPicker.IsLibraryMode) {
+					int shoulder = ShoulderStep(pressed, _previous, pad, keyCode);
+					if(shoulder != 0) {
+						_model.RomPicker.CycleConsole(shoulder);
+					}
+				}
+
 				//#964: a hold ends on Confirm's release, which is not an action the
 				//edge rule produces - so it is read off the pressed set here, every
 				//tick and authority or not, or compare would outlive the press.
@@ -1010,6 +1027,47 @@ namespace Mesen.Windows
 			private static bool GridYieldsUp(Control focused, PadNavAction action)
 			{
 				return action == PadNavAction.Up && GridOf(focused) is StateGrid grid && !grid.MovesWithUpFromPad;
+			}
+
+			//#1034 (ADR-0264 Decision 3): which shoulder went down this tick - LB
+			//as -1, RB as +1, neither as 0. Resolved off the pad in the player's
+			//hand and the host's own name table, exactly the way PadNavControls
+			//resolves the six: the family's own spelling first ("Pad1 L1", the
+			//XInput-shaped table) and the other family's second ("Joy1 But5", the
+			//DirectInput one), because which spelling a host defines is the
+			//backend's business and a name it does not define answers 0.
+			//KeyPresets binds the console's own L/R to the same four names, so a
+			//code that is not a shoulder on this pad cannot be read as one - and
+			//the mapping itself is not extended: Decision 4's six stay the six,
+			//and a shoulder is one press on one sheet rather than a seventh
+			//navigation control every surface would have to answer for.
+			//
+			//LB is asked first, so two shoulders in one tick resolve the same way
+			//whatever order the host enumerated its pressed set in - the reason
+			//PlayPadNavigation.Next breaks its own two presses in a fixed order.
+			private static readonly (int Step, string Xbox, string Ps4)[] Shoulders = {
+				(-1, "L1", "But5"),
+				(1, "R1", "But6")
+			};
+
+			private static int ShoulderStep(IReadOnlyCollection<ushort> pressed, IReadOnlyCollection<ushort> previous, PadId? pad, Func<string, ushort> keyCode)
+			{
+				if(pad is not PadId known) {
+					return 0;
+				}
+				string padPrefix = "Pad" + (known.Device + 1).ToString() + " ";
+				string joyPrefix = "Joy" + (known.Device + 1).ToString() + " ";
+				foreach((int step, string xbox, string ps4) in Shoulders) {
+					string own = known.Family == PadFamily.Xbox ? padPrefix + xbox : joyPrefix + ps4;
+					string other = known.Family == PadFamily.Xbox ? joyPrefix + ps4 : padPrefix + xbox;
+					foreach(string name in new[] { own, other }) {
+						ushort code = keyCode(name);
+						if(code != 0 && pressed.Contains(code) && !previous.Contains(code)) {
+							return step;
+						}
+					}
+				}
+				return 0;
 			}
 
 			private static NavigationDirection Direction(PadNavAction action)
