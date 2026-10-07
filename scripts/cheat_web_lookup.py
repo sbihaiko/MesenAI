@@ -30,16 +30,23 @@ How a lookup is answered:
      written under `runs/` (gitignored), because a `.mss` is never versioned.
      The mint script is MINT_MACROS: past the title, then some play, so that the
      addresses a code promises to pin are alive in the window being measured.
-  5. **Check.** From that same state, and one session per candidate: run
-     CHECK_FRAMES frames with the code off, and the same frames with it on, the
-     code applied by the runner's own `cheat=` argument. A code passes only when
-     its target address holds the promised value in **every** "on" frame **and**
-     the "off" run differs there - a code whose address already held the value
-     with the code off has been confirmed by nothing.
-  6. **Offer.** Only the codes that pass are in the output, each labelled LABEL,
-     and the description is still the page's own text. A passing code can still
-     have side effects this check does not see; the label says it was checked,
-     never that it is safe (ADR-0245 Consequences).
+  5. **Check.** ADR-0245 Decision 4 as amended by #934 (PICK b-prime). From
+     that same state: two sessions with no code record the control trace - the
+     whole internal RAM and the frame checksum after each of CHECK_FRAMES
+     frames - and must be byte-identical, or every candidate is
+     `inconclusive`. Then one session per candidate, the code applied by the
+     runner's own `cheat=` argument, records the same trace with a counter of
+     the emulated CPU's reads of the target armed. A code passes only when its
+     trace diverges from "off" within the window, the game did not crash or
+     freeze, and the CPU read the target while the code could apply (a
+     "hit"). Debugger and probe reads never count as hits.
+  6. **Offer.** Only the codes that pass are in the output, with verdict
+     VERDICT ("checked") and label LABEL, and the description is still the
+     page's own text. "Checked" means an observed effect on this copy: the
+     game read the cheated byte and played differently. It does not establish
+     the effect the description promises, nor that the code is free of side
+     effects, so it is never worded "works" or "safe" (ADR-0245 Consequences).
+     Anything the check could not decide fails closed: not offered.
 
 What leaves the machine: the page GETs, and nothing else. No ROM byte, no RAM
 value, no screenshot, no key. This script uses no hosted model, so it reads no
@@ -52,11 +59,14 @@ Output, one JSON object on stdout:
   {"schema": "mesence.cheat-web-lookup/1",
    "game": {"name": "...", "rom": "<file name>", "rom_sha256": "..."},
    "source": {"name": "libretro-database", "page": "https://..."},
-   "frames": 120, "state": "runs/cheat-web-lookup/castlevania.mss",
-   "counts": {"entries": 140, "undecodable": 0, "multi_part": 6,
-              "no_ram_target": 120, "checked": 14, "passed": 2},
+   "frames": 120, "determinism": "identical",
+   "state": "runs/cheat-web-lookup/castlevania.mss",
+   "counts": {"entries": 139, "undecodable": 0, "multi_part": 14,
+              "no_ram_target": 111, "checked": 14, "passed": 2,
+              "reasons": {"checked": 2, "not-read": 9, "no-effect": 3}},
    "codes": [{"code": "0071:63", "desc": "...", "address": "0x0071",
-              "value": 99, "on": "120/120", "off": "0/120",
+              "value": 99, "diverged_at": 4, "reads": 31, "hits": 31,
+              "verdict": "checked",
               "label": "found online, checked on your copy"}]}
 
 Usage:
@@ -86,9 +96,10 @@ import cheat_decoder  # noqa: E402
 import step_emu  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
-SCHEMA = "mesence.cheat-web-lookup/1"
+SCHEMA = "mesence.cheat-web-lookup/2"
 
 #The label every code in the output carries, worded by ADR-0245 Decision 4.
+#"Checked", never "works" or "safe" (#934's ratification).
 LABEL = "found online, checked on your copy"
 
 #The fixed N of the check, recorded here and in the slice's measurement log
@@ -97,6 +108,15 @@ LABEL = "found online, checked on your copy"
 #writes its value once and is then overwritten by the game fails, and short
 #enough that a page's whole RAM list is a minute of checking.
 CHECK_FRAMES = 120
+
+#How long a run's whole internal RAM and frame must stand still, at the end of
+#the window, for it to count as frozen (half the window when that is shorter).
+FREEZE_FRAMES = 60
+
+#The one word a passing code's verdict carries (#934's ratification): it was
+#checked on this copy - an observed effect, never a promise that it "works"
+#as described, nor that it is "safe".
+VERDICT = "checked"
 
 #The state every check in one lookup starts from. Ten seconds of play: past the
 #title screen (the Start tap), then walking and jumping, so the addresses a code
@@ -155,13 +175,17 @@ class Candidate(NamedTuple):
 
 
 class Result(NamedTuple):
-    """One candidate's verdict, with the counts the numbers came from."""
+    """One candidate's verdict, with the evidence it came from: the first frame
+    the "on" trace diverged from "off" (None when it never did), and the
+    emulated CPU reads of the target - all of them, and the hits, those whose
+    raw byte met the code's compare so the intercept applied."""
 
     candidate: Candidate
     passed: bool
     reason: str
-    on_holding: int
-    off_differing: int
+    diverged_at: int | None
+    reads: int
+    hits: int
 
 
 class Rejected(NamedTuple):
@@ -447,31 +471,66 @@ def mint_state(rom, out_path, *, work=None, session_factory=None, macros=MINT_MA
     return out, MINT_FRAMES
 
 
-def verdict(candidate: Candidate, off_values, on_values) -> Result:
-    """ADR-0245 Decision 4's rule, and nothing more than it: the target address
-    holds the promised value in every "on" frame, and the "off" run differs
-    there. `off-unchanged` is the case a weaker check would have called a pass -
-    the address held the value anyway, so the code confirmed nothing."""
-    on_holding = sum(1 for value in on_values if value == candidate.value)
-    off_differing = sum(1 for value in off_values if value != candidate.value)
-    on_ok = on_holding == len(on_values)
-    off_differs = off_differing > 0
-    if on_ok and off_differs:
-        reason = "confirmed"
-    elif not on_ok:
-        reason = "value-missing-on"
+def first_divergence(off_trace, on_trace):
+    """The 1-based frame of the first sample where the "on" trace's RAM or
+    frame differs from the "off" one, or None when they never do."""
+    for number, (off_row, on_row) in enumerate(zip(off_trace, on_trace), 1):
+        if off_row != on_row:
+            return number
+    return None
+
+
+def is_frozen(trace, off_trace, window=FREEZE_FRAMES):
+    """A run whose RAM and frame stop changing over the last `window` samples
+    while the "off" run's keep changing. Nearly every game counts frames in
+    RAM from its NMI handler, so a whole internal RAM that stands still is a
+    game that stopped running - the freeze a destructive code can cause, and
+    one a divergence test alone would score as the largest effect of all."""
+    window = max(2, min(window, len(trace) // 2))
+    tail = trace[-window:]
+    off_tail = off_trace[-window:]
+    return len(set(tail)) == 1 and len(set(off_tail)) > 1
+
+
+def verdict(candidate: Candidate, off_trace, on_trace, reads, hits) -> Result:
+    """ADR-0245 Decision 4 as amended by #934 (PICK b-prime), for one candidate
+    whose session ran: the RAM or the frame diverges from "off" within the
+    window, the game did not freeze, and the emulated CPU read the target while
+    the code could apply (`hits`: reads whose raw byte met the compare). A
+    divergence with no hit cannot be this code's doing on a read intercept, so
+    it is `not-read`, never `checked`."""
+    diverged = first_divergence(off_trace, on_trace)
+    if is_frozen(on_trace, off_trace):
+        reason = "frozen"
+    elif hits <= 0:
+        reason = "not-read"
+    elif diverged is None:
+        reason = "no-effect"
     else:
-        reason = "off-unchanged"
-    return Result(candidate, on_ok and off_differs, reason, on_holding, off_differing)
+        reason = VERDICT
+    return Result(candidate, reason == VERDICT, reason, diverged, reads, hits)
+
+
+def failed(candidate: Candidate, reason: str) -> Result:
+    return Result(candidate, False, reason, None, 0, 0)
+
+
+#How a session failure reads: one that took the emulator with it (the
+#process gone, the emulation stopped, the 90 s stall watchdog) is a crash;
+#anything else - a verb the runner does not have, a reply it could not parse -
+#is an instrument failure, and the candidate is inconclusive.
+CRASH_MARKERS = ("session is gone", "emulation stopped", "STALLED")
 
 
 class Checker:
     """The deterministic gate between a public page and the player.
 
-    One session per side, each of them loading the same minted `.mss`: the "off"
-    window reads every candidate's address once per frame, and an "on" window
-    reads its own candidate's address the same way. Nothing about a candidate
-    reaches the output except through `verdict`.
+    Every session loads the same minted `.mss`. Two "off" sessions record the
+    control trace - the whole internal RAM and the frame checksum after every
+    frame - and must agree byte for byte, or nothing in this lookup can be
+    attributed to a code. Then one "on" session per candidate records the same
+    trace with the read-hit counter armed on its target. Nothing about a
+    candidate reaches the output except through `verdict`.
     """
 
     def __init__(self, rom, state, *, frames=CHECK_FRAMES, work=None,
@@ -487,65 +546,83 @@ class Checker:
         self.work = work
         self._sessions = session_factory or default_session_factory
         self.progress = progress
+        self.determinism = None
 
     def _say(self, text):
         if self.progress is not None:
             print(text, file=self.progress)
 
-    def samples(self, cheats, addresses) -> list:
+    def trace(self, cheats, watch=None):
         """Plays `self.frames` frames from the minted state, one frame at a time,
-        and reads `addresses` after every one of them. Returns one row per
-        frame, one value per address.
+        and records after each one the whole internal RAM and the frame's
+        checksum. Returns `(trace, (reads, hits))`; the counts are None when
+        `watch` (an `(address, compare)`) is not given.
+
+        The RAM read is raw (HeadlessReadNesRam), never the cheated value: a
+        NES RAM code is a CPU read intercept and writes nothing into RAM, so
+        raw RAM only diverges when the game's behaviour does. The hit counter
+        (`watch`/`hits`, InteropDLL/EmuApiWrapperHeadless.cpp) counts reads
+        the emulated CPU made of the target's exact bus address; the debugger
+        and this RAM probe do not go through that path, so they cannot count.
 
         The frames are single `run 1` requests rather than one `run N` because
-        "in every 'on' frame" is the rule, and a single run would only ever show
+        the divergence frame is reported, and a single run would only ever show
         the last frame. The first run out of a load covers the state's own frame
-        plus one (step_emu's arithmetic: a `.mss` carries the counter of the
-        frame about to run), so the window spans `frames + 1` emulated frames
-        with `frames` samples - and it does so identically on both sides, which
-        is what makes the comparison sound.
-
-        Known limit (measured 2026-10-06, docs/validation/measurements/
-        p12-cheat-web-lookup-2026-10-06.md): the session's `ram` verb copies
-        raw internal RAM (HeadlessReadNesRam), while the core applies a RAM
-        code as a CPU read intercept (NesMemoryManager::Read -> ApplyCheat).
-        The "on" side therefore never sees the promised value, and no code can
-        pass until the runner offers a cheat-aware read.
+        plus one (step_emu's arithmetic), identically on every side.
         """
-        if not addresses:
-            raise LookupError("no address to check")
         session = self._sessions(self.rom, list(cheats), self.work)
         try:
             session.load_file(self.state)
+            if watch is not None:
+                session.watch_reads(*watch)
             rows = []
             for _ in range(self.frames):
                 session.run(1)
-                rows.append(list(session.read_ram(*addresses)))
-            return rows
-        except (step_emu.StepEmuError, OSError, ValueError) as exc:
+                ram = session.read_ram((0, NES_INTERNAL_RAM_END - 1))[0]
+                rows.append((bytes(ram), session.capture()[3]))
+            counts = session.read_hits() if watch is not None else None
+            return rows, counts
+        except (step_emu.StepEmuError, OSError, ValueError, TypeError) as exc:
             raise CheckError(f"the headless check failed: {exc}") from None
         finally:
             session.close()
 
+    def check_one(self, candidate, off_trace) -> Result:
+        try:
+            on_trace, counts = self.trace([candidate.code],
+                                          watch=(candidate.address, candidate.compare))
+        except CheckError as exc:
+            crashed = any(marker in str(exc) for marker in CRASH_MARKERS)
+            return failed(candidate, "crashed" if crashed else "inconclusive")
+        try:
+            reads, hits = (int(value) for value in counts)
+        except (TypeError, ValueError):
+            return failed(candidate, "inconclusive")
+        return verdict(candidate, off_trace, on_trace, reads, hits)
+
     def check(self, candidates) -> list:
-        """Every candidate against the one minted state, in order."""
+        """Every candidate against the one minted state, in order. A failing
+        "off" session raises CheckError (exit 4); "off" runs that disagree make
+        every candidate `inconclusive` - fail closed, nothing offered."""
         if not candidates:
             return []
-        addresses = sorted({candidate.address for candidate in candidates})
-        column = {address: index for index, address in enumerate(addresses)}
         self._say(f"checking {len(candidates)} code(s), {self.frames} frames each side")
-        off = self.samples([], addresses)
+        off, _ = self.trace([])
+        control, _ = self.trace([])
+        self.determinism = "identical" if off == control else "differs"
+        if self.determinism != "identical":
+            self._say(f"off/off control differs (first at frame "
+                      f"{first_divergence(off, control)}): nothing can be checked")
+            return [failed(candidate, "inconclusive") for candidate in candidates]
         results = []
         for number, candidate in enumerate(candidates, 1):
-            on = [row[0] for row in self.samples([candidate.code], [candidate.address])]
-            off_values = [row[column[candidate.address]] for row in off]
-            result = verdict(candidate, off_values, on)
+            result = self.check_one(candidate, off)
             results.append(result)
             self._say(f"[{number}/{len(candidates)}] "
                       f"{'PASS' if result.passed else 'fail'} {candidate.code} "
                       f"-> ${candidate.address:04X} = {candidate.value:02X} "
-                      f"({result.reason}: on {result.on_holding}/{self.frames}, "
-                      f"off {result.off_differing}/{self.frames})")
+                      f"({result.reason}: diverged at {result.diverged_at}, "
+                      f"reads {result.reads}, hits {result.hits})")
         return results
 
 
@@ -591,7 +668,7 @@ def file_sha256(path) -> str:
 
 
 def result_json(*, game, rom, page_url, source, state_path, frames, entries,
-                candidates, rejected, results) -> dict:
+                candidates, rejected, results, determinism=None) -> dict:
     """The one JSON object the client reads. Only passing codes are in it."""
     reason_counts = {}
     for item in rejected:
@@ -602,15 +679,21 @@ def result_json(*, game, rom, page_url, source, state_path, frames, entries,
         "desc": result.candidate.desc,
         "address": f"0x{result.candidate.address:04X}",
         "value": result.candidate.value,
-        "on": f"{result.on_holding}/{frames}",
-        "off": f"{result.off_differing}/{frames}",
+        "diverged_at": result.diverged_at,
+        "reads": result.reads,
+        "hits": result.hits,
+        "verdict": result.reason,
         "label": LABEL,
     } for result in passed]
+    verdicts = {}
+    for result in results:
+        verdicts[result.reason] = verdicts.get(result.reason, 0) + 1
     return {
         "schema": SCHEMA,
         "game": {"name": game, "rom": Path(rom).name, "rom_sha256": file_sha256(rom)},
         "source": {"name": source.name, "page": page_url},
         "frames": frames,
+        "determinism": determinism,
         "state": str(state_path),
         "counts": {
             "entries": len(entries),
@@ -619,6 +702,7 @@ def result_json(*, game, rom, page_url, source, state_path, frames, entries,
             "no_ram_target": reason_counts.get("no-ram-target", 0),
             "checked": len(candidates),
             "passed": len(passed),
+            "reasons": verdicts,
         },
         "codes": codes,
     }
@@ -657,7 +741,8 @@ def lookup(*, rom, game=None, console="nes", source=LIBRETRO, page=None,
     results = checker.check(candidates)
     return result_json(game=name, rom=rom_path, page_url=page_url, source=source,
                        state_path=state_path, frames=frames, entries=entries,
-                       candidates=candidates, rejected=rejected, results=results)
+                       candidates=candidates, rejected=rejected, results=results,
+                       determinism=checker.determinism)
 
 
 def _slug(name: str) -> str:
