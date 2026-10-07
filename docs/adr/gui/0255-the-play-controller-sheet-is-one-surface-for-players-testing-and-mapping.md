@@ -81,8 +81,9 @@
   pad button from another control, the port light reads the first non-zero field
   across the port's four slots, and the section was never visually evaluated with
   the pad, PLAYERS and REMAP all on screen at once.
-  **Still not implemented**: slice 4's surface (the extra buttons), so the sheet
-  is not yet the whole of what the Decision describes.
+  Slice 4's surface (the extra buttons) is implemented: the sheet's EXTRA
+  BUTTONS section, `UI/ViewModels/ControllerSheetViewModel.Extra.cs`
+  (2026-10-04, #844, above).
   **The pad's own light has an owner (2026-10-06, #925), by the panel ruling on
   #916**, quoted verbatim: *"macOS only, through `GCController.light`
   (DualShock 4 / DualSense): a core light call with a default no-op,
