@@ -51,7 +51,7 @@ public sealed class PadKeyboard
 	//then the hex digits the letters do not already cover (Pro Action Replay,
 	//the GB/SMS Game Genie), then the separators those shapes use.
 	private const string CodeChars = "APZLGITYEOXUKSVN" + "0123456789" + "BCDF" + "-:+";
-	private const string TextChars = "abcdefghijklmnopqrstuvwxyz0123456789" + ".,'-!?&:";
+	private const string TextChars = "abcdefghijklmnopqrstuvwxyz0123456789" + ".,'-!?&:()/_+#@";
 	private const string SecretChars = "abcdefghijklmnopqrstuvwxyz0123456789" + "-_.";
 
 	private readonly int _maxLength;
