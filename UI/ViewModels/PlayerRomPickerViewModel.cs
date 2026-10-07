@@ -37,16 +37,18 @@ namespace Mesen.ViewModels
 	//and W-P19 agree on what a Game Boy game looks like.
 	public partial class PlayerLibraryTile
 	{
-		//`recentCover` is the screenshot the player's Recent list holds for this
-		//game, when it holds one (#1035) - null for a game never run, and the tile
-		//then draws the cover it always drew.
-		public PlayerLibraryTile(LibraryEntry entry, string consoleName, byte[]? recentCover = null)
+		//`cover` is the library module's answer for this entry (ADR-0264 Decision
+		//6): the art the entry already carries, or the screenshot the player's
+		//Recent list holds for it (#1035). The tile draws it and decides nothing -
+		//the priority is GameLibraryCover's, and this side only turns the answer
+		//into a brush.
+		public PlayerLibraryTile(LibraryEntry entry, string consoleName, LibraryCoverPick cover)
 		{
 			Path = entry.Path;
 			Title = entry.Title;
 			Console = entry.Console;
 			ConsoleName = consoleName;
-			(Cover, ShowsTitleOnCover) = TileCover(entry, recentCover);
+			(Cover, ShowsTitleOnCover) = TileCover(entry, cover);
 		}
 
 		public string Path { get; }
@@ -596,7 +598,7 @@ namespace Mesen.ViewModels
 			Tiles.Clear();
 			RefreshRecentCovers();
 			foreach(LibraryEntry entry in result.Entries) {
-				Tiles.Add(new PlayerLibraryTile(entry, ConsoleName(entry.Console), RecentCoverOf(entry)));
+				Tiles.Add(new PlayerLibraryTile(entry, ConsoleName(entry.Console), CoverOf(entry)));
 			}
 			CountText = ResourceHelper.GetMessage("RomPickerLibraryCount",
 				CountLabel(result.Entries.Count, "RomPickerGameOne", "RomPickerGameMany"),

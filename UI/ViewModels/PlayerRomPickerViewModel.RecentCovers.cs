@@ -37,20 +37,13 @@ namespace Mesen.ViewModels
 			_recentCovers = RecentCoverIndex.Open(ConfigManager.RecentGamesFolder);
 		}
 
-		//The screenshot of the game at this entry's path, or null - the tile keeps
-		//the cover it already had - when there is none.
-		//
-		//The guard is Decision 6's order, as far as this slice reaches it: art the
-		//scan already resolved for the entry (downloaded box art, a title screen)
-		//is cases 1 and 2 and outranks the player's own screenshot, which fills the
-		//gap the generic cover would otherwise take. The box-art slice lands there
-		//without touching this file.
-		private byte[]? RecentCoverOf(LibraryEntry entry)
+		//Which cover this entry's tile draws (ADR-0264 Decision 6) - the module's
+		//answer, not this file's: GameLibraryCover.Resolve owns the priority, and
+		//what is handed to it is the one lookup it needs, the Recent index built
+		//for this scan. The sheet only turns the answer into a brush.
+		private LibraryCoverPick CoverOf(LibraryEntry entry)
 		{
-			if(_recentCovers is null || entry.Cover != LibraryCover.Generic) {
-				return null;
-			}
-			return _recentCovers.FindCover(entry.Path);
+			return GameLibraryCover.Resolve(entry, path => _recentCovers?.FindCover(path));
 		}
 	}
 
@@ -59,18 +52,20 @@ namespace Mesen.ViewModels
 	//top of it.
 	public partial class PlayerLibraryTile
 	{
-		//Decision 6's sources in the ADR's order, for the one case this slice adds.
-		//Cases 1 and 2 - downloaded art - never reach here: the scan resolves them
-		//onto the entry before a tile exists, and the view-model asks for a Recent
-		//cover only when the entry carries none.
+		//The module's answer as the brush the template binds to. Which cover the
+		//entry gets is not decided here - the entry carries its own cover, and
+		//GameLibraryCover.Resolve already weighed it against the player's Recent
+		//list; what is left on this side is turning the answer into something
+		//Avalonia can draw.
 		//
 		//The on-cover title goes with the generic cover. It is written ON the colour
 		//because a colour says nothing about the game; a screenshot says everything,
 		//and stamping the title across the picture would be the one thing a cover
 		//must not do. The title still reads under the tile, where it always did.
-		private static (IBrush Cover, bool ShowsTitleOnCover) TileCover(LibraryEntry entry, byte[]? recentCover)
+		private static (IBrush Cover, bool ShowsTitleOnCover) TileCover(LibraryEntry entry, LibraryCoverPick cover)
 		{
-			if(recentCover is not null && RecentCoverBrush.TryImage(recentCover) is IBrush image) {
+			if(cover.Cover == LibraryCover.RecentScreenshot && cover.Screenshot is byte[] bytes
+				&& RecentCoverBrush.TryImage(bytes) is IBrush image) {
 				return (image, false);
 			}
 			return (ConsoleCover(entry.Console), true);
