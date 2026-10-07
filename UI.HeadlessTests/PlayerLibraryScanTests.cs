@@ -389,6 +389,66 @@ public class PlayerLibraryScanTests : IDisposable
 		}
 	}
 
+	//The control the sheet parked a window's ring on belongs to THAT window: a
+	//second window's sheet never sees it, and it goes with the window that
+	//closes.
+	[AvaloniaFact]
+	public void The_parked_header_control_belongs_to_its_window_and_goes_with_it()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		string contra = Path.Combine(_folder, "Contra (U) [!].nes");
+		string tetris = Path.Combine(_folder, "Tetris (World).gb");
+
+		LibraryScanResult InstantScan(IReadOnlyList<string> folders, FolderLister list, Action<IReadOnlyList<LibraryEntry>> onBatch)
+		{
+			LibraryEntry[] all = { Entry(contra, RomConsole.Nes, "Contra"), Entry(tetris, RomConsole.GameBoy, "Tetris") };
+			onBatch(all);
+			return new LibraryScanResult(all, 1, false);
+		}
+
+		(MainWindow first, MainWindowViewModel firstModel) = OpenLibrary(InstantScan, inline: true);
+		WaitFor(() => FocusedTilePath(first) == contra, $"the sheet did not open on its first game ({Focused(first)})");
+		Press(first, PadNavAction.Right);
+		Assert.Equal(tetris, FocusedTilePath(first));
+		Press(first, PadNavAction.Back);
+		Pump();
+
+		using ManualResetEventSlim release = new(false);
+		LibraryScanResult HeldScan(IReadOnlyList<string> folders, FolderLister list, Action<IReadOnlyList<LibraryEntry>> onBatch)
+		{
+			LibraryEntry entry = Entry(contra, RomConsole.Nes, "Contra");
+			onBatch(new[] { entry });
+			release.Wait(TimeSpan.FromSeconds(30));
+			return new LibraryScanResult(new[] { entry }, 1, false);
+		}
+
+		firstModel.RomPicker.LibraryScanStreamSource = HeldScan;
+		firstModel.RomPicker.RunLibraryScanInline = false;
+
+		try {
+			//Opened BEFORE the first window parks, so its own claim cannot be what
+			//leaves it with nothing parked.
+			(MainWindow second, _) = OpenLibrary(HeldScan, inline: false);
+
+			firstModel.RomPicker.Open();
+			Pump();
+			WaitFor(() => firstModel.RomPicker.Tiles.Count == 1, $"the first batch never reached the grid ({Focused(first)})");
+			Control? parked = PlayPadNavigationWiring.RomPickerParkedForTest(first);
+			Assert.True(parked is not null && parked.Name == "RomPickerBack", "the first window's sheet did not park the ring on Back");
+
+			//A second window that parked nothing has nothing parked.
+			Assert.Null(PlayPadNavigationWiring.RomPickerParkedForTest(second));
+
+			//And closing the first leaves nothing of its parking behind.
+			first.ReleaseCore = () => { };
+			first.Close();
+			Pump();
+			Assert.Null(PlayPadNavigationWiring.RomPickerParkedForTest(first));
+		} finally {
+			release.Set();
+		}
+	}
+
 	//A scan still walking when the player closes the sheet and reopens it on a
 	//library that has no folder any more (the drive was unplugged): the old
 	//walk's finish is for a generation that is gone, so the wait must be ended
