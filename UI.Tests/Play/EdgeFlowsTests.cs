@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using Mesen.Interop;
 using Mesen.Logic;
 using Xunit;
 
@@ -276,11 +277,23 @@ namespace Mesen.Tests.Play
 		}
 
 		[Fact]
-		public void Until_P9_adding_restarts_the_game()
+		public void Adding_the_file_applies_in_place_wherever_P9_does()
 		{
 			Assert.Equal(PackDepPrimaryAction.AddAndRestart, PlayPackDepPrompt.PrimaryAction(appliesInPlace: false));
 			Assert.Equal(PackDepPrimaryAction.Add, PlayPackDepPrompt.PrimaryAction(appliesInPlace: true));
-			Assert.False(PlayPackDepPrompt.AppliesInPlace);
+			//ADR-0244: the consoles measured exact keep the player's place.
+			Assert.Equal(PackDepPrimaryAction.Add, PlayPackDepPrompt.PrimaryAction(PackChangePolicy.Plan(ConsoleType.Nes, false, false)));
+			Assert.Equal(PackDepPrimaryAction.Add, PlayPackDepPrompt.PrimaryAction(PackChangePolicy.Plan(ConsoleType.Sms, false, false)));
+			Assert.Equal(PackDepPrimaryAction.Add, PlayPackDepPrompt.PrimaryAction(PackChangePolicy.Plan(ConsoleType.Gameboy, false, false)));
+		}
+
+		[Fact]
+		public void Adding_the_file_restarts_where_P9_requires_it()
+		{
+			//A movie or shared replay, netplay, or a console never measured.
+			Assert.Equal(PackDepPrimaryAction.AddAndRestart, PlayPackDepPrompt.PrimaryAction(PackChangePolicy.Plan(ConsoleType.Nes, true, false)));
+			Assert.Equal(PackDepPrimaryAction.AddAndRestart, PlayPackDepPrompt.PrimaryAction(PackChangePolicy.Plan(ConsoleType.Nes, false, true)));
+			Assert.Equal(PackDepPrimaryAction.AddAndRestart, PlayPackDepPrompt.PrimaryAction(PackChangePolicy.Plan(ConsoleType.Snes, false, false)));
 		}
 
 		[Fact]
