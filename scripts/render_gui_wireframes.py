@@ -1233,10 +1233,22 @@ def library_tile(c, x, y, w, h, title, console, seed, kind="art", focus=False):
     """One library tile: a vertical ~3:4 cover, its clean title and console tag (ADR-0264)."""
     b = (x, y, x + w, y + h)
     if kind == "generic":
-        # no database knows this ROM: a console-coloured cover carrying the title.
+        # no database knows this ROM: a console-coloured cover carrying the title
+        # (ADR-0264 Decision 6 case 4; the console tag under the tile names it).
         c.rrect(b, 8, fill=CONSOLE_TINT[console])
-        c.text(x + w / 2, y + h / 2 - 8, console, 13, 700, CARD, "mm")
-        c.text(x + w / 2, y + h / 2 + 12, "no cover", 11, 400, (222, 226, 232), "mm")
+        lines, line = [], ""
+        for word in title.split():
+            run = (line + " " + word).strip()
+            if c.tw(run, 12.5, 650) > w - 16 and line:
+                lines.append(line)
+                line = word
+            else:
+                line = run
+        if line:
+            lines.append(line)
+        top = y + h / 2 - (len(lines) - 1) * 8.5
+        for i, ln in enumerate(lines):
+            c.text(x + w / 2, top + i * 17, ln, 12.5, 650, CARD, "mm")
     else:
         c.shadow(b, 8, blur=4, dy=2, alpha=34)
         c.d.rounded_rectangle(scb(b), radius=sc(8), fill=(0, 0, 0))
@@ -1274,8 +1286,11 @@ def library_sheet(c, subtitle, tiles, focus=None, query=None):
         qx = x0 + 24 + 10 + c.tw(query, 13, 400) + 1
         c.line([(qx, y0 + 76), (qx, y0 + 92)], TEXT, 1.5)
         c.text(x0 + 392, y0 + 84, "×", 15, 500, TEXT3, "mm")
-    # console filter: only the consoles actually present (ADR-0264 Decision 5)
-    c.segmented(x0 + 444, y0 + 71, ["All", "NES", "Game Boy", "Game Boy Advance"], 0)
+    # console filter: only the consoles actually present (ADR-0264 Decision 5),
+    # in CONSOLE_TINT's order so the same library always draws the same segments.
+    drawn_consoles = {console for _, console, _ in tiles}
+    segments = [name for name in CONSOLE_TINT if name in drawn_consoles]
+    c.segmented(x0 + 444, y0 + 71, ["All", *segments], 0)
     # the grid: vertical ~3:4 cover tiles, row-major, one focus ring
     cols, gap = 8, 14
     tw_ = (x1 - 24 - (x0 + 24) - (cols - 1) * gap) / cols
