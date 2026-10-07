@@ -10,6 +10,8 @@ namespace Mesen.HeadlessTests;
 //#1018: InitAppMenu reorders the macOS app menu; About first, Settings… next. Quit is Avalonia's own
 //item, added only when the platform exports the menu; the headless platform
 //never does, so Quit-last is not observable here (see the PR body). Runs the real private InitAppMenu on a real App.
+//It drives InitAppMenu on a throwaway `new App()` and does NOT cover the OnFrameworkInitializationCompleted call
+//under OperatingSystem.IsMacOS(), which is not drivable headless.
 public class AppMenuOrderTests
 {
 	[AvaloniaFact]
