@@ -74,6 +74,10 @@ Applied:
   of `allow.models`, so no request can pin it. Not listing it on the node is
   not enough — run 11 had two of its four children accepted on Pro before the
   run was killed.
+  **Superseded again on 2026-10-07**, owner: "use o sonnet para programar":
+  `allow.models` now leads with `claude-sonnet-5-5`, so a child that pins no
+  model takes Sonnet; the router node itself is unchanged. The Pro exclusion
+  above still holds.
 
 ## Closed by run-20261005-200019 and run-20261005-200820
 
@@ -116,7 +120,9 @@ PY
   that records why each value is what it is.
 - The two earlier defects on the same node, both fixed the same day: a missing
   `instructions` field (the role text that names the spawn fields) and Anthropic
-  models in `model`/`allow.models`.
+  models in `model`/`allow.models`. The second is no longer a defect: the squad
+  process reaches Anthropic directly, and the graph's `description` records that
+  coding children run `claude-sonnet-5-5` since 2026-10-07.
 
 ## Runs 14–19 (2026-10-05): the node's own budget, then the children's, then the price
 
