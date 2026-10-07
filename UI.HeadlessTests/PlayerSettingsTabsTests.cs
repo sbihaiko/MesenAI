@@ -62,7 +62,7 @@ public class PlayerSettingsTabsTests
 		Assert.True(strip.IsOnScreen());
 		List<TabItem> tabs = strip.Items.Cast<TabItem>().ToList();
 		Assert.Equal(PlayerSettingsEssentials.Tabs.Length, tabs.Count);
-		Assert.Equal(new[] { "Window", "Video", "Audio", "Controls", "System" }, tabs.Select(t => t.Header as string).ToArray());
+		Assert.Equal(new[] { "Display", "Look", "Audio", "Controls", "System" }, tabs.Select(t => t.Header as string).ToArray());
 		Assert.All(tabs, tab => Assert.True(tab.IsOnScreen()));
 		Assert.Equal(PlayerSettingsEssentials.IndexOf(ConfigWindowTab.Input), tabs.FindIndex(t => t.IsSelected));
 

@@ -20,9 +20,9 @@ happen:
                         the skip reason), no passing case, no PNG, a `W-P*`
                         PNG without its `<name>.wireframe.md` (PlayerRender.Save
                         writes one per W-P render, #951) or a report without
-                        its PNG, an expected W-P render (EXPECTED_WIREFRAME_RENDERS)
-                        missing its PNG or report, and a PNG older than the run
-                        (committed, not fresh).
+                        its PNG, an expected render (EXPECTED_WIREFRAME_RENDERS:
+                        W-S1 and every W-P wireframe) missing its PNG, and a
+                        PNG older than the run (committed, not fresh).
   workflow [PATH]       checks that the committed workflow still holds the
                         ADR-0263 contract (path filter, cancelled superseded
                         runs, one ubuntu job, the two calls above, an upload
@@ -61,13 +61,17 @@ REQUIRED_PATHS = [
 ]
 
 # Every W-P render the *RenderTests cases write with a wireframe report
-# (PlayerRender.Save, #951), as the Linux run of 2026-10-07 wrote them. Pinned
-# so a deleted case, one renamed out of `*RenderTests`, or a run that stopped
-# before writing it fails the gate instead of leaving it green on what did run.
-# Adding a W-P render case means adding its name here.
+# (PlayerRender.Save, #951), as the Linux run of 2026-10-07 wrote them, plus
+# W-S1, the shell frame (a PNG only: PlayerRender.Save reports W-P names).
+# Pinned so a deleted case, one renamed out of `*RenderTests`, or a run that
+# stopped before writing it fails the gate instead of leaving it green on what
+# did run. Adding a W-P render case means adding its name here; every Player
+# wireframe in docs/media/gui-redesign/ has one (#1010).
 EXPECTED_WIREFRAME_RENDERS = (
-    "W-P1", "W-P2", "W-P4", "W-P5", "W-P6", "W-P7", "W-P8", "W-P10", "W-P11",
-    "W-P13", "W-P13-confirm", "W-P14", "W-P15", "W-P15-pill", "W-P16",
+    "W-S1",
+    "W-P1", "W-P2", "W-P3", "W-P4", "W-P5", "W-P6", "W-P7", "W-P8", "W-P8b",
+    "W-P8c", "W-P9", "W-P10", "W-P11", "W-P12", "W-P13", "W-P13-confirm",
+    "W-P14", "W-P15", "W-P15-pill", "W-P16",
 )
 
 # A PNG may predate the TRX's start by this much (filesystem/clock rounding).
