@@ -426,6 +426,7 @@ namespace Mesen.ViewModels
 			LetTheAiPlay = Control(s.LetTheAiPlay);
 			PrepareFigures = Control(s.PrepareFigures);
 			BuildAndShow = Control(s.BuildAndShow);
+			RefreshWrongGame(s);
 			PaintText = ResourceHelper.GetMessage(_project?.HasKit == true ? "RemasterKitReady" : "RemasterKitNotYet");
 
 			RefreshTiles();

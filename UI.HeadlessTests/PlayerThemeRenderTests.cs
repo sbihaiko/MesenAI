@@ -163,10 +163,17 @@ public class PlayerThemeRenderTests : IDisposable
 	//each known deviation (PlayerWireframe.KnownDeviationsOf, with its reason)
 	//must still fail on its named kind, so the fix that closes it also promotes
 	//it to a gated region. The rule is host-free; this only feeds it the render.
+	//#974: the fresh render must also match its committed copy in
+	//UI.Tests/Theme/PlayerRenders/, which is all CI can gate (ADR-0131); a
+	//drift fails here with a "re-commit the render" line per region.
 	private static void AssertWireframeRegions(Bitmap frame, string wId)
 	{
-		IReadOnlyList<RegionResult> results = PlayerWireframe.Compare(wId, PlayerRender.Rgb(frame), RgbFrame.FromPng(PlayerRender.WireframePath(wId)));
-		IReadOnlyList<string> violations = PlayerWireframe.Gate(wId, results, PlayerWireframe.KnownDeviationsOf(wId));
+		RgbFrame fresh = PlayerRender.Rgb(frame);
+		IReadOnlyList<RegionResult> results = PlayerWireframe.Compare(wId, fresh, RgbFrame.FromPng(PlayerRender.WireframePath(wId)));
+		List<string> violations = PlayerWireframe.Gate(wId, results, PlayerWireframe.KnownDeviationsOf(wId)).ToList();
+		string committed = PlayerRender.CommittedRenderPath(wId);
+		Assert.True(File.Exists(committed), $"{wId} has no committed render at {committed}; commit {Path.Combine(PlayerRender.OutputFolder, wId + ".png")} there");
+		violations.AddRange(PlayerWireframe.Drift(wId, fresh, RgbFrame.FromPng(committed), committed));
 		Assert.True(violations.Count == 0, string.Join(Environment.NewLine, violations));
 	}
 

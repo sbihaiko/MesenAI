@@ -135,4 +135,6 @@ named failure kind — closing the gap means promoting the region; failures of
 other kinds on that region (seeded data, port chips) are not gated. CI has no
 core, so `UI.Tests` gates the committed renders in
 `UI.Tests/Theme/PlayerRenders/` instead; re-commit a render there when its
-screen changes.
+screen changes. `PlayerThemeRenderTests` also holds each fresh render to its
+committed copy region by region (`PlayerWireframe.Drift`, #974) and fails
+locally with "re-commit the render" when one drifts.

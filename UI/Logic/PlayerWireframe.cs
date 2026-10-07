@@ -14,7 +14,7 @@ namespace Mesen.Logic;
 //(pixels far from the dominant colour) by their largest edge offset, and the
 //text lines (horizontal ink bands) by count and centre offset, top to bottom.
 //Host-free (ADR-0123): UI.Tests asserts the rules; UI.HeadlessTests only feeds
-//it real renders (PlayerWireframeReport) and gates its own screens.
+//it real renders (PlayerRender.WriteWireframeReport) and gates its own screens.
 public static class PlayerWireframe
 {
 	//The written tolerances (#951).
@@ -71,14 +71,15 @@ public static class PlayerWireframe
 	private static readonly Dictionary<string, KnownDeviation[]> Known = new() {
 		//The drop block (badge, title, subtitle, button) sits ~20 px below the
 		//wireframe's, the primary button carries a focus outline and the hint
-		//is one line where the wireframe has two.
+		//is one line where the wireframe has two. The focus outline is focus
+		//state, not layout (#974), so it is tolerated but not a ratchet.
 		["W-P1"] = new KnownDeviation[] {
 			new("content", TextLines, "drop block ~20 px low, one-line hint", true),
 			new("content", InkBox, "drop block ~20 px low", false),
 			new("status line", InkBox, Chips, false),
 			new("drop block", TextLines, "drop block ~20 px low", true),
 			new("drop block", InkBox, "drop block ~20 px low", false),
-			new("primary button", InkBox, "focus outline", true),
+			new("primary button", InkBox, "focus outline", false),
 			new("primary button", TextLines, "button rides the low drop block", false),
 		},
 		//The seeded data, not the layout, differs: three tiles where the
@@ -251,6 +252,21 @@ public static class PlayerWireframe
 				$"| {r.Region} | {r.RenderColor} | {r.WireframeColor} | {r.DeltaE:0.0} | {r.BoxOffset:0.0} | {r.RenderLines}/{r.WireframeLines} | {r.LineOffset:0.0} | {(r.Pass ? "pass" : "FAIL: " + string.Join(", ", r.Failures))} |"));
 		}
 		return sb.ToString();
+	}
+
+	//#974: a fresh render against its committed copy (UI.Tests/Theme/PlayerRenders/),
+	//region by region with the wireframe tolerances. Any region that fails, or
+	//a size change, means the committed render is stale. Returns the drifts.
+	public static IReadOnlyList<string> Drift(string wId, RgbFrame fresh, RgbFrame committed, string committedPath)
+	{
+		const string Fix = "re-commit the render";
+		if(fresh.Width != committed.Width || fresh.Height != committed.Height) {
+			return new[] { $"{wId}: the fresh render is {fresh.Width} x {fresh.Height}, {committedPath} is {committed.Width} x {committed.Height}; {Fix}" };
+		}
+		double scale = fresh.Width / (double)WindowWidth;
+		return RegionsOf(wId).Select(region => Compare(region, fresh, committed, scale)).Where(r => !r.Pass)
+			.Select(r => string.Create(CultureInfo.InvariantCulture, $"{wId} {r.Region}: the fresh render drifts from {committedPath} (fails {string.Join(", ", r.Failures)}: ΔE {r.DeltaE:0.0}, box {r.BoxOffset:0.0} px, lines {r.RenderLines}/{r.WireframeLines} off {r.LineOffset:0.0} px); {Fix}"))
+			.ToArray();
 	}
 
 	//What the hook writes for a W-P render with no wireframe to pair with.
