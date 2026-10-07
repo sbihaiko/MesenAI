@@ -2543,6 +2543,7 @@ E
 
 		<Message ID="InstallMepPackInvalidPack">The selected file is not a valid enhancement pack (no pack.json at the root of the zip, or unsafe paths).</Message>
 			<Message ID="InstallMepPackInvalidZipFile">The selected file is not a valid ZIP file or could not be copied.</Message>
+			<Message ID="DropPackInstalled">Enhancement pack installed: {0}. It loads with the next game it matches.</Message>
 			<Message ID="InstallMepPackConfirmReset">The enhancement pack has been installed. Do you want to power cycle the console to apply it now?</Message>
 			<Message ID="EnhancementPacksConfirmReset">Enhancement pack settings apply on the next power cycle. Power cycle now?</Message>
 

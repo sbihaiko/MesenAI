@@ -11,6 +11,8 @@ namespace Mesen.Tests.Play
 	{
 		private static readonly byte[] RomHeader = { (byte)'N', (byte)'E', (byte)'S', 0x1A, 0x02 };
 
+		private static readonly byte[] Zip = { (byte)'P', (byte)'K', 0x03, 0x04, 0x14 };
+
 		private static byte[] Ascii(string text) => Encoding.ASCII.GetBytes(text);
 
 		[Fact]
@@ -70,18 +72,60 @@ namespace Mesen.Tests.Play
 			Assert.Equal(DropAction.FileNotFound, DropRoute.Decide("/games/gone.nes", false, RomHeader, false));
 		}
 
-		//There is no pack branch: a pack archive goes to the ROM loader like any
-		//other archive, and a pack folder is not a file, so it is reported missing.
+		//#986: a pack is told by its manifest, found by the existing discovery
+		//rules (ADR-0040, ADR-0120): pack.json or hires.txt at the root of a zip
+		//or of its single top-level folder, or at the root of a dropped folder.
 		[Fact]
-		public void A_pack_archive_goes_to_the_rom_loader_not_a_pack_install()
+		public void A_pack_archive_goes_to_the_pack_install_not_the_rom_loader()
 		{
-			Assert.Equal(DropAction.LoadRom, DropRoute.Decide("/downloads/Contra Remastered.zip", true, Ascii("PK\u0003\u0004\u0014"), false));
+			string[] entries = { "Contra Remastered/", "Contra Remastered/pack.json", "Contra Remastered/textures/hires.txt" };
+			Assert.Equal(DropAction.InstallPack, DropRoute.Decide("/downloads/Contra Remastered.zip", true, Zip, false, false, entries));
+			Assert.Equal(DropAction.InstallPack, DropRoute.Decide("/downloads/Contra Remastered.zip", true, Zip, false, false, new[] { "pack.json", "audio/hires.txt" }));
 		}
 
 		[Fact]
-		public void A_pack_folder_is_reported_missing_not_installed()
+		public void A_pack_folder_is_installed_not_reported_missing()
 		{
-			Assert.Equal(DropAction.FileNotFound, DropRoute.Decide("/downloads/Contra Remastered", false, System.Array.Empty<byte>(), false));
+			Assert.Equal(DropAction.InstallPack, DropRoute.Decide("/downloads/Contra Remastered", false, System.Array.Empty<byte>(), false, true, new[] { "pack.json", "textures" }));
+		}
+
+		[Fact]
+		public void A_zip_with_no_manifest_still_goes_to_the_rom_loader()
+		{
+			Assert.Equal(DropAction.LoadRom, DropRoute.Decide("/games/Contra (USA).zip", true, Zip, false, false, new[] { "Contra (USA).nes" }));
+			Assert.Equal(DropAction.LoadRom, DropRoute.Decide("/games/Contra (USA).zip", true, Zip, false, false, new[] { "Contra/Contra (USA).nes", "Contra/readme.txt" }));
+		}
+
+		[Fact]
+		public void A_legacy_hd_pack_is_a_pack_at_the_root_or_in_the_single_top_level_folder()
+		{
+			Assert.Equal(DropAction.InstallPack, DropRoute.Decide("/downloads/Contra HD.zip", true, Zip, false, false, new[] { "hires.txt", "1.png" }));
+			Assert.Equal(DropAction.InstallPack, DropRoute.Decide("/downloads/Contra HD.zip", true, Zip, false, false, new[] { "Contra HD/hires.txt", "Contra HD/1.png" }));
+			Assert.Equal(DropAction.InstallPack, DropRoute.Decide("/downloads/Contra HD", false, System.Array.Empty<byte>(), false, true, new[] { "hires.txt", "1.png" }));
+		}
+
+		//Deeper than the single top-level folder, or with two top-level folders,
+		//is not found by the rule: the zip keeps the ROM loader's route.
+		[Fact]
+		public void A_manifest_outside_the_discovery_rule_does_not_make_a_pack()
+		{
+			Assert.Equal(DropAction.LoadRom, DropRoute.Decide("/downloads/a.zip", true, Zip, false, false, new[] { "A/B/pack.json" }));
+			Assert.Equal(DropAction.LoadRom, DropRoute.Decide("/downloads/a.zip", true, Zip, false, false, new[] { "A/pack.json", "B/hires.txt" }));
+			Assert.Equal(DropAction.LoadRom, DropRoute.Decide("/downloads/a.zip", true, Zip, false, false, new[] { "readme.txt", "A/pack.json" }));
+		}
+
+		[Fact]
+		public void A_folder_is_a_pack_only_by_the_manifest_at_its_root()
+		{
+			Assert.Equal(DropAction.FileNotFound, DropRoute.Decide("/downloads/stuff", false, System.Array.Empty<byte>(), false, true, new[] { "notes.txt" }));
+		}
+
+		[Fact]
+		public void Pack_json_wins_over_hires_txt()
+		{
+			Assert.Equal(PackManifest.Mep, DropRoute.FindPackManifest(new[] { "hires.txt", "pack.json" }, false));
+			Assert.Equal(PackManifest.HdLegacy, DropRoute.FindPackManifest(new[] { "P/hires.txt", "P/1.png" }, false));
+			Assert.Equal(PackManifest.None, DropRoute.FindPackManifest(new[] { "P/hires.txt" }, true));
 		}
 	}
 }

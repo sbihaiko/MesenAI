@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace Mesen.Logic;
 
@@ -6,13 +7,15 @@ public enum DropAction
 {
 	//The drop carried no file path.
 	Ignore,
-	//The path is not a file (gone, or a folder): say so.
+	//The path is not a file (gone, or a folder without a pack manifest): say so.
 	FileNotFound,
 	//An IPS/BPS/UPS patch, told by its header: the ROM beside it opens patched.
 	ApplyPatch,
 	LoadState,
 	//A movie, only while a game runs (it plays over the running game).
 	PlayMovie,
+	//#986: a pack archive or folder - installed through the pack window's path.
+	InstallPack,
 	//Anything else - a ROM, or an archive the ROM loader opens.
 	LoadRom
 }
@@ -20,20 +23,31 @@ public enum DropAction
 //#953: what a file dropped on the main window opens (MainWindow.OnDrop) and
 //what LoadRomHelper.LoadFile does with a path - decided here over plain inputs
 //so UI.Tests pins it; reading the file and acting on the answer stay in the
-//window. There is deliberately no pack branch: a pack archive reaches the ROM
-//loader like any other archive and a pack folder is not a file.
+//window. #986: a pack is told by its manifest, found by the existing discovery
+//rules (ADR-0040, ADR-0120 zip subfolder fallback) - pack.json (MEP) or
+//hires.txt (legacy HD) at the root of a zip or of its single top-level folder,
+//or at the root of a dropped folder; pack.json wins (ADR-0005). A zip with
+//neither keeps the ROM loader, so a zipped ROM still loads.
+public enum PackManifest { None, Mep, HdLegacy }
+
 public static class DropRoute
 {
 	private const string SaveStateExt = ".mss";
+	public const string ZipExt = ".zip";
+	private const string MepManifest = "pack.json";
+	private const string HdManifest = "hires.txt";
 	private static readonly string[] MovieExts = { ".mmo", ".bk2", ".gbmv" };
 
 	//How many leading bytes Decide needs to tell a patch.
 	public const int HeaderLength = 5;
 
-	public static DropAction Decide(string? path, bool fileExists, ReadOnlySpan<byte> header, bool isRunning)
+	public static DropAction Decide(string? path, bool fileExists, ReadOnlySpan<byte> header, bool isRunning, bool isFolder = false, IReadOnlyCollection<string>? packEntries = null)
 	{
 		if(string.IsNullOrEmpty(path)) {
 			return DropAction.Ignore;
+		}
+		if(isFolder) {
+			return packEntries != null && FindPackManifest(packEntries, true) != PackManifest.None ? DropAction.InstallPack : DropAction.FileNotFound;
 		}
 		if(!fileExists) {
 			return DropAction.FileNotFound;
@@ -48,7 +62,36 @@ public static class DropRoute
 		if(isRunning && Array.IndexOf(MovieExts, ext) >= 0) {
 			return DropAction.PlayMovie;
 		}
+		if(ext == ZipExt && packEntries != null && FindPackManifest(packEntries, false) != PackManifest.None) {
+			return DropAction.InstallPack;
+		}
 		return DropAction.LoadRom;
+	}
+
+	//entries: a zip's entry names, or the names directly inside a dropped
+	//folder (rootOnly). A zip whose every entry sits under one top-level folder
+	//is read from that folder instead of its root.
+	public static PackManifest FindPackManifest(IEnumerable<string> entries, bool rootOnly)
+	{
+		HashSet<string> names = new(StringComparer.Ordinal);
+		string? topFolder = null;
+		bool singleTopFolder = true;
+		foreach(string entry in entries) {
+			string name = entry.Replace('\\', '/');
+			names.Add(name);
+			int slash = name.IndexOf('/');
+			string? top = slash > 0 ? name.Substring(0, slash + 1) : null;
+			if(top == null || (topFolder != null && topFolder != top)) {
+				singleTopFolder = false;
+			}
+			topFolder ??= top;
+		}
+
+		string prefix = !rootOnly && singleTopFolder && topFolder != null ? topFolder : "";
+		if(names.Contains(prefix + MepManifest)) {
+			return PackManifest.Mep;
+		}
+		return names.Contains(prefix + HdManifest) ? PackManifest.HdLegacy : PackManifest.None;
 	}
 
 	//"PATCH" (IPS), "BPS1" or "UPS1".
