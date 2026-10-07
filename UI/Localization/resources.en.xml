@@ -2713,6 +2713,11 @@ E
 		<Message ID="RomConsoleMasterSystem">Master System</Message>
 		<Message ID="RomConsoleSg1000">SG-1000</Message>
 		<Message ID="RomConsoleGameGear">Game Gear</Message>
+		<!-- #1034 (ADR-0264 Decision 5): the library sheet's console filter, whose
+		     first segment is the narrowing's absence. It is deliberately not a
+		     RomConsole* id - `All` is not a console, and a console name here would
+		     make the segment that shows everything read as one of the machines. -->
+		<Message ID="RomPickerConsoleAll">All</Message>
 		<Message ID="LoadFailedTitleNotAGame">“{0}” is not a game MesenAI can open.</Message>
 		<Message ID="LoadFailedBodyNotAGame">MesenAI opens NES, Game Boy, Game Boy Color, Master System and Game Boy Advance games, or a zip holding one.</Message>
 		<Message ID="LoadFailedTitleZipWithoutGame">“{0}” has no game in it.</Message>

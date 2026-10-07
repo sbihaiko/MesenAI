@@ -103,7 +103,9 @@ namespace Mesen.ViewModels
 			//Titles resolved for the previous scan belong to that scan's games.
 			_titles = new LibraryTitleBook();
 			_hasLibrary = true;
-			FillTiles();
+			//The row is rebuilt from these entries, and it ends by filling the grid
+			//(#1034), so the two are never half-applied.
+			RebuildConsoleOptions();
 		}
 
 		//The library's own state, re-derived from the entries in hand after the
@@ -119,9 +121,12 @@ namespace Mesen.ViewModels
 				//asked once per entry through the one rule that owns the question.
 				//A blank query keeps everything, which is what "no search yet"
 				//means (the rule's own Decision 4 case).
+				//The console filter narrows first (#1034, Decision 5), so the query
+				//searches the games of the segment that is up.
 				//Searched by the title the tile shows (ADR-0264 Decisions 4 and
 				//7): the canonical one once the pass has resolved it.
-				foreach(LibraryGame game in _titles.Search(_libraryGames, g => g.Entry, SearchQuery)) {
+				IReadOnlyList<LibraryGame> inConsole = LibraryConsoleFilter.Apply(_libraryGames, SelectedConsole, game => game.Entry.Console);
+				foreach(LibraryGame game in _titles.Search(inConsole, g => g.Entry, SearchQuery)) {
 					Tiles.Add(TileFor(game.Entry, game.Cover));
 				}
 				UpdateEmptyResult();

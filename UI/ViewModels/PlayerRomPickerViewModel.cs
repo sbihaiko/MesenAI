@@ -364,6 +364,10 @@ namespace Mesen.ViewModels
 			//with it (#1035).
 			ClearTiles();
 			TilesRevision++;
+			//#1034: the console filter is part of the library surface, so it comes
+			//back with it - the row is redrawn from the scan that is about to run,
+			//never left carrying the last one's selection.
+			ResetConsoleFilter();
 			//Nothing to browse, so the searching line belongs to no state: it is
 			//set below, by the scan that is actually about to run.
 			SearchingText = "";
