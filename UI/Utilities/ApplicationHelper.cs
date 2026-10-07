@@ -5,6 +5,7 @@ using Mesen.Logic;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -86,6 +87,17 @@ namespace Mesen.Utilities
 			//shell command line. What program and argv that is lives in the
 			//host-free BrowserLaunch (asserted in UI.Tests).
 			using Process? process = Process.Start(BrowserLaunch.Build(url, BrowserLaunch.Host));
+		}
+
+		//Opens a folder in the platform's file manager (Finder, Explorer...).
+		//The trailing separator makes the shell treat it as a folder to open.
+		public static void OpenFolder(string folder)
+		{
+			using Process? process = Process.Start(new ProcessStartInfo() {
+				FileName = folder + Path.DirectorySeparatorChar,
+				UseShellExecute = true,
+				Verb = "open"
+			});
 		}
 	}
 }

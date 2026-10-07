@@ -156,6 +156,16 @@ namespace Mesen.ViewModels
 			return Convert.ToHexString(SHA256.HashData(stream));
 		}
 
+		//#953: Show Folder's hand-off to the file manager. A seam so a test can
+		//see the drop folder handed over without launching anything.
+		public Action<string> FolderLauncher { get; set; } = RevealFolder;
+
+		private static void RevealFolder(string folder)
+		{
+			string opener = OperatingSystem.IsWindows() ? "explorer.exe" : (OperatingSystem.IsMacOS() ? "open" : "xdg-open");
+			Process.Start(new ProcessStartInfo(opener) { ArgumentList = { folder } })?.Dispose();
+		}
+
 		public void ShowFolder()
 		{
 			if(Current is not CommunityPackDepPrompt dep) {
@@ -163,8 +173,7 @@ namespace Mesen.ViewModels
 			}
 			try {
 				Directory.CreateDirectory(dep.DropFolder);
-				string opener = OperatingSystem.IsWindows() ? "explorer.exe" : (OperatingSystem.IsMacOS() ? "open" : "xdg-open");
-				Process.Start(new ProcessStartInfo(opener) { ArgumentList = { dep.DropFolder } })?.Dispose();
+				FolderLauncher(dep.DropFolder);
 			} catch(Exception ex) {
 				ErrorText = ResourceHelper.GetMessage("PackDepSheetCopyFailed", ex.Message);
 			}
