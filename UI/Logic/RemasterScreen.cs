@@ -226,6 +226,8 @@ public static class RemasterScreen
 		return RightGameStep(reason, projectFolder, recentRoms.Where(File.Exists), FilesIn(gamesFolder));
 	}
 
+	//Deliberately top-level only (one directory read on the click): a ROM
+	//deeper in the games folder is reached by the ROM picker the miss opens.
 	private static IEnumerable<string> FilesIn(string? folder)
 	{
 		try {

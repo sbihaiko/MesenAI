@@ -184,13 +184,13 @@ public static class ShaderMenuHelper
 		ConfigManager.Config.Video.ApplyConfig();
 	}
 
+	//#987: Open Shader Folder's hand-off to the file manager. A seam so a test
+	//can see the folder handed over without launching anything.
+	public static Action<string> FolderLauncher { get; set; } = ApplicationHelper.OpenFolder;
+
 	private static void OpenShaderFolder()
 	{
-		System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo() {
-			FileName = ConfigManager.ShaderFolder + Path.DirectorySeparatorChar,
-			UseShellExecute = true,
-			Verb = "open"
-		});
+		FolderLauncher(ConfigManager.ShaderFolder);
 	}
 
 	private class FolderNode

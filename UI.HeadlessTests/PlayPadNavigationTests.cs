@@ -7,6 +7,7 @@ using System.Threading;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
+using Avalonia.Controls.Templates;
 using Avalonia.Headless.XUnit;
 using Avalonia.Input;
 using Avalonia.Interactivity;
@@ -1112,10 +1113,10 @@ public class PlayPadNavigationTests : IDisposable
 	//from the pad, through the one bridge. Each case lands the focus on the
 	//control the way the bridge does (Directional, so the ring is drawn) and then
 	//drives it with TickForTest only - no keyboard, no pointer.
-	private (MainWindow Window, MainWindowViewModel Model, ConfigViewModel Settings) ShowSettingsTab(ConfigWindowTab tab, Func<PlayerWindowSettingsViewModel>? createDisplay = null)
+	private (MainWindow Window, MainWindowViewModel Model, ConfigViewModel Settings) ShowSettingsTab(ConfigWindowTab tab, Func<PlayerWindowSettingsViewModel>? createDisplay = null, IReadOnlyList<string>? audioDevices = null)
 	{
 		(MainWindow window, MainWindowViewModel model) = ShowPlay();
-		ConfigViewModel settings = new(tab, playerMode: true, createDisplay: createDisplay, audioDevices: () => new[] { "Speakers" }, connectedPads: () => 0);
+		ConfigViewModel settings = new(tab, playerMode: true, createDisplay: createDisplay, audioDevices: () => audioDevices ?? new[] { "Speakers" }, connectedPads: () => 0);
 		model.OpenPlayerSettings(settings);
 		WaitFor(() => model.IsPlayerSettingsVisible && FocusedName(window) is not null, $"the Settings sheet never took the focus ({Focused(window, model)})");
 		window.FindNamed<TabControl>("PlayerSettingsTabs").SelectedIndex = PlayerSettingsEssentials.IndexOf(tab);
@@ -1222,6 +1223,93 @@ public class PlayPadNavigationTests : IDisposable
 		Assert.True(model.IsPlayerSettingsVisible, "Back on an open popup also closed the Settings sheet");
 		WaitFor(() => scale.IsFocused, "the focus did not come back to the drop-down after Back");
 		AssertRing(scale);
+		model.ClosePlayerSettings();
+	}
+
+	//#992 (#983): a drop-down long enough to virtualize realizes only the rows
+	//in view, so the walk scrolls the next row in before it lands. From a list
+	//scrolled away from it, the walk reaches rows that were not realized, one
+	//step per press with no stall on the current row, and Confirm commits it.
+	[AvaloniaFact]
+	public void The_pad_walks_a_virtualized_drop_down_to_an_unrealized_row_and_commits_it()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		AudioConfig audio = ConfigManager.Config.Audio;
+		string device = audio.AudioDevice;
+		audio.AudioDevice = "";
+		try {
+			string[] devices = Enumerable.Range(0, 200).Select(i => $"Device {i:000}").ToArray();
+			(MainWindow window, MainWindowViewModel model, _) = ShowSettingsTab(ConfigWindowTab.Audio, audioDevices: devices);
+			ComboBox list = Land<ComboBox>(window, "cboAudioDevice");
+			Assert.Equal(0, list.SelectedIndex);
+			//A Play drop-down's panel is a StackPanel (every row realized); the
+			//walk has to hold for one that virtualizes, so this one does.
+			list.ItemsPanel = new FuncTemplate<Panel?>(() => new VirtualizingStackPanel());
+
+			Press(window, PadNavAction.Confirm);
+			Assert.True(list.IsDropDownOpen, "Confirm did not open the drop-down");
+			const int target = 60;
+
+			//The list scrolled away from the walk (a wheel would do this), so
+			//the very next row and the target are both unrealized: without the
+			//scroll-in the first Down would stall on row 0.
+			ScrollViewer scroller = list.ItemsPanelRoot!.GetVisualAncestors().OfType<ScrollViewer>().First();
+			scroller.Offset = new Vector(0, scroller.Extent.Height);
+			scroller.UpdateLayout();
+			Pump();
+			foreach(int row in new[] { 1, target }) {
+				Assert.True(list.ContainerFromIndex(row) is null,
+					$"row {row} is realized before the walk (panel={list.ItemsPanelRoot?.GetType().Name}, realized={list.GetRealizedContainers().Count()})");
+			}
+
+			for(int step = 1; step <= target; step++) {
+				Press(window, PadNavAction.Down);
+				Control? focused = window.FocusManager?.GetFocusedElement() as Control;
+				int at = focused is null ? -1 : list.IndexFromContainer(focused);
+				Assert.True(at == step, $"press {step} left the walk on row {at} ({Describe(focused)})");
+			}
+			Assert.Equal("", audio.AudioDevice);
+
+			Press(window, PadNavAction.Confirm);
+			Assert.False(list.IsDropDownOpen, "Confirm did not close the drop-down");
+			Assert.Equal(target, list.SelectedIndex);
+			Assert.Equal("Device 060", audio.AudioDevice);
+			model.ClosePlayerSettings();
+		} finally {
+			audio.AudioDevice = device;
+		}
+	}
+
+	//#983: a sheet that hides while its drop-down is still open must not leave
+	//the pad routed into a popup nobody can see - a later Confirm would commit
+	//a row to a hidden control.
+	[AvaloniaFact]
+	public void A_popup_left_open_under_a_hidden_sheet_no_longer_takes_the_pad()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		List<double> written = new();
+		(MainWindow window, MainWindowViewModel model, ConfigViewModel settings) = ShowSettingsTab(ConfigWindowTab.Display,
+			() => new PlayerWindowSettingsViewModel(new VideoConfig(), false, 2, () => { }, written.Add));
+		ComboBox scale = Land<ComboBox>(window, "cboDisplayScale");
+
+		Press(window, PadNavAction.Confirm);
+		Press(window, PadNavAction.Down);
+		Assert.True(scale.IsDropDownOpen);
+
+		//Hidden in place, its view still attached (the harder case: a sheet
+		//that lets go of its view detaches the drop-down outright). The
+		//ComboBox closes itself when it stops being effectively visible, and
+		//the bridge follows a drop-down closed by something else - both are
+		//what keeps the pad out of the invisible rows.
+		Panel layer = window.FindNamed<Panel>("PlayerSettingsLayer");
+		layer.SetCurrentValue(Visual.IsVisibleProperty, false);
+		Pump();
+		Assert.False(scale.IsEffectivelyVisible);
+		Assert.False(scale.IsDropDownOpen, "the hidden sheet's drop-down is still open");
+
+		Press(window, PadNavAction.Confirm);
+		Assert.Empty(written);
+		Assert.Equal(2, settings.Display!.SelectedScale!.Value);
 		model.ClosePlayerSettings();
 	}
 
