@@ -190,7 +190,7 @@ namespace Mesen.Windows
 				() => model.IsEnhancementsPanelVisible, () => Named(window, "EnhancementsModernCheckBox"));
 			focus.When(model, [nameof(MainWindowViewModel.IsPackDetailVisible)],
 				() => model.IsPackDetailVisible,
-				() => Named(window, model.PackDetailCanChange ? "PackDetailChangeButton" : "PackDetailDoneButton"));
+				() => Named(window, PackDetailPendingFile.FirstControl(model.PackDepSheet.HasPending, model.PackDetailCanChange)));
 			focus.When(model.CheatsSheet, [nameof(PlayerCheatsSheetViewModel.IsVisible)],
 				() => model.CheatsSheet.IsVisible,
 				() => Named(window, model.CheatsSheet.IsSearchEnabled ? "CheatsSearchBox" : "CheatsDoneButton"));

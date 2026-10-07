@@ -46,6 +46,8 @@
 			<Control ID="lblPackDetailLayersHint">The switches apply to this game only.</Control>
 			<Control ID="lblPackDetailLayersWait">Applying…</Control>
 			<Control ID="lblPackDetailMissingMusicTitle">Some music is missing</Control>
+			<Control ID="lblPackDetailPendingFileBody">The pack's author could not share this file. If you have it, add it and the pack completes.</Control>
+			<Control ID="btnPackDetailAddFile">Add the File…</Control>
 			<Control ID="lblPackDetailOfferTitle">A community pack is available</Control>
 			<Control ID="btnPackDetailUseCommunity">Use Community Pack</Control>
 			<Control ID="btnPackDetailChange">Change Pack…</Control>
