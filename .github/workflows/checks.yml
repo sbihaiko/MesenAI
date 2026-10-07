@@ -307,4 +307,17 @@ jobs:
           dotnet-version: 10.x
 
       - name: Run headless UI wiring tests
+        env:
+          MESEN_PLAYER_RENDERS: ${{ runner.temp }}/player-renders
         run: dotnet test UI.HeadlessTests/UI.HeadlessTests.csproj -p:RuntimeIdentifier=linux-x64 --nologo
+
+      # ADR-0249 Decision 5 / #951: the Player renders and their per-region
+      # wireframe reports (<W-id>.wireframe.md). Without a built core the render
+      # tests self-skip, so the folder may be empty; that is not an error.
+      - name: Upload Player renders and wireframe reports
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: player-renders
+          path: ${{ runner.temp }}/player-renders
+          if-no-files-found: ignore

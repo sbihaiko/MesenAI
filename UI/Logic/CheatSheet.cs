@@ -25,7 +25,10 @@ namespace Mesen.Logic
 		//in the classic window).
 		Yours,
 		//From docs/community-cheats.json for the loaded copy (R.4, ADR-0248 §5).
-		Community
+		Community,
+		//Found online by scripts/cheat_web_lookup.py and checked on the loaded
+		//copy (P.12, ADR-0245 §4): only for a copy not in the bundled list.
+		WebFound
 	}
 
 	//One W-P11 row. IsOn mirrors the stored list; CanToggle is false only for
@@ -84,6 +87,15 @@ namespace Mesen.Logic
 		//one that repeats a bundled row already listed.
 		public static IReadOnlyList<CheatSheetRow> BuildRows(ConsoleType console, CheatDbGame? game, bool gameIsAnotherCopy, IReadOnlyList<StoredCheat> stored, bool recordingArt, string search, IReadOnlyList<CommunityCheat> community)
 		{
+			return BuildRows(console, game, gameIsAnotherCopy, stored, recordingArt, search, community, Array.Empty<WebFoundCode>());
+		}
+
+		//P.12 (ADR-0245 §4, #924): the codes the web lookup found for a copy not
+		//in the bundled list come after the community rows, under the same
+		//recording rule and toggle. Only a passed check is listed
+		//(CheatWebLookup.Offered); a failed, unchecked or unreadable one never is.
+		public static IReadOnlyList<CheatSheetRow> BuildRows(ConsoleType console, CheatDbGame? game, bool gameIsAnotherCopy, IReadOnlyList<StoredCheat> stored, bool recordingArt, string search, IReadOnlyList<CommunityCheat> community, IReadOnlyList<WebFoundCode> web)
+		{
 			List<CheatSheetRow> rows = new();
 			HashSet<int> matchedStored = new();
 
@@ -110,6 +122,18 @@ namespace Mesen.Logic
 					matchedStored.Add(index);
 				}
 				rows.Add(MakeRow(cheat.Description, type, codes, index >= 0 && stored[index].Enabled, recordingArt, CheatRowSource.Community) with { Issue = cheat.Issue, Votes = cheat.Votes });
+			}
+
+			foreach(WebFoundCode found in CheatWebLookup.Offered(web)) {
+				if(!CheatConsoleScope.TryParseCodes(console, found.Code, out CheatType type, out string codes)
+					|| rows.Any(r => r.Description == found.Description && r.Type == type && CheatConsoleScope.SplitCodes(r.Codes).SequenceEqual(CheatConsoleScope.SplitCodes(codes)))) {
+					continue;
+				}
+				int index = IndexOf(stored, found.Description, type, codes);
+				if(index >= 0) {
+					matchedStored.Add(index);
+				}
+				rows.Add(MakeRow(found.Description, type, codes, index >= 0 && stored[index].Enabled, recordingArt, CheatRowSource.WebFound));
 			}
 
 			for(int i = 0; i < stored.Count; i++) {
@@ -203,6 +227,19 @@ namespace Mesen.Logic
 			return communityLoading && noOwnList && communityCount == 0 ? CommunityLoadingLine : StatusLine(console, game, gameIsAnotherCopy, countOn, communityCount);
 		}
 
+		//P.12 (#924): with no bundled or community list for the copy, passed web
+		//codes say where they come from instead of "not in the list".
+		public const string WebFoundLine = "codes found online, checked on your copy";
+
+		public static string StatusLine(ConsoleType console, CheatDbGame? game, bool gameIsAnotherCopy, int countOn, int communityCount, bool communityLoading, int webCount)
+		{
+			bool noOwnList = game == null || !CheatConsoleScope.HasCheatList(console);
+			if(noOwnList && communityCount == 0 && webCount > 0) {
+				return countOn + " on · " + WebFoundLine;
+			}
+			return StatusLine(console, game, gameIsAnotherCopy, countOn, communityCount, communityLoading);
+		}
+
 		//With community rows for the copy, the "no list yet" and "not in the
 		//list" lines give way to saying where the codes come from (ADR-0248 §5).
 		public static string StatusLine(ConsoleType console, CheatDbGame? game, bool gameIsAnotherCopy, int countOn, int communityCount)
@@ -242,6 +279,7 @@ namespace Mesen.Logic
 			string? mark = source switch {
 				CheatRowSource.AnotherCopy => AnotherCopyMark,
 				CheatRowSource.ThisCopy => FromListMark,
+				CheatRowSource.WebFound => CheatWebLookup.Label,
 				_ => null
 			};
 			if(mark != null && note != CheatRecordingRule.RefusedReason) {
