@@ -311,14 +311,17 @@ namespace Mesen.Windows
 
 		private void OnDrop(object? sender, DragEventArgs e)
 		{
+			//#953: what the drop opens is DropRoute's (UI/Logic, pinned in UI.Tests).
+			//No pack branch: a pack archive goes to the ROM loader, a folder is
+			//reported missing.
 			string? filename = e.DataTransfer.TryGetFiles()?.FirstOrDefault()?.Path.LocalPath;
-			if(filename != null) {
-				if(File.Exists(filename)) {
-					LoadRomHelper.LoadFile(filename);
-					Activate();
-				} else {
-					DisplayMessageHelper.DisplayMessage("Error", ResourceHelper.GetMessage("FileNotFound", filename));
-				}
+			DropAction action = LoadRomHelper.Route(filename);
+			if(action == DropAction.Ignore) {
+				return;
+			}
+			LoadRomHelper.Run(action, filename!);
+			if(action != DropAction.FileNotFound) {
+				Activate();
 			}
 		}
 
