@@ -12,11 +12,11 @@ using Xunit;
 
 namespace Mesen.HeadlessTests;
 
-//#953: the hand-offs that leave the app from the Player's core-free sheets -
-//W-P16's Show Folder and the tool sheet's release page - pass the folder or
-//URL their button names to the injected launcher, and only on the click. The
-//launchers are stubs that record what they were handed, so nothing opens.
-//PlayFolderHandoffCoreTests covers the surfaces that need the core.
+//#953: the hand-off that leaves the app from the Player's core-free pack file
+//sheet - W-P16's Show Folder - passes the folder its button names to the
+//injected launcher, and only on the click. The launcher is a stub that records
+//what it was handed, so nothing opens. PlayFolderHandoffCoreTests covers the
+//surfaces that reach the core.
 public class PlayFolderHandoffTests : IDisposable
 {
 	private readonly string _folder = Path.Combine(Path.GetTempPath(), "mesen-953-" + Guid.NewGuid().ToString("N"));
@@ -40,9 +40,9 @@ public class PlayFolderHandoffTests : IDisposable
 		Dispatcher.UIThread.RunJobs();
 	}
 
-	private static void Click(Button button)
+	private void Click(string name)
 	{
-		button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+		_window!.FindNamed<Button>(name).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
 		Dispatcher.UIThread.RunJobs();
 	}
 
@@ -58,24 +58,10 @@ public class PlayFolderHandoffTests : IDisposable
 		Show(new PlayPackDepSheetView { DataContext = sheet });
 		Assert.Empty(_launched);
 
-		Click(_window!.FindNamed<Button>("PackDepSheetShowFolder"));
+		Click("PackDepSheetShowFolder");
 
 		Assert.Equal(new[] { dropFolder }, _launched);
 		//The folder is made first, so the file manager has something to open.
 		Assert.True(Directory.Exists(dropFolder));
-	}
-
-	[AvaloniaFact]
-	public void Open_releases_on_the_tool_sheet_hands_over_the_forks_release_page()
-	{
-		PlayerToolSheetViewModel sheet = new() { ReleasePageLauncher = _launched.Add };
-		sheet.OpenCheckForUpdates();
-		Show(new PlayerToolSheetView { DataContext = sheet });
-		Assert.Empty(_launched);
-
-		Click(_window!.FindNamed<Button>("ToolSheetOpenReleases"));
-
-		Assert.Equal(new[] { "https://github.com/sbihaiko/MesenAI/releases" }, _launched);
-		Assert.False(sheet.IsVisible);
 	}
 }

@@ -15,11 +15,12 @@ using Xunit;
 
 namespace Mesen.HeadlessTests;
 
-//#953: the hand-offs whose surface needs the core (MainWindow, EmuApi) - W-P6's
-//Show Pack in Finder, the Enhancement Packs window's Open Folder, and the
-//classic no-feed dialog's release page - pass the folder or URL to the
-//injected launcher. Stubs record what they were handed, so nothing opens.
-//Skips without a core; PlayFolderHandoffTests is the core-free half.
+//#953: the hand-offs whose surface reaches the core (MainWindow, EmuApi) - W-P6's
+//Show Pack in Finder, the Enhancement Packs window's Open Folder, the classic
+//no-feed dialog's release page, and the tool sheet's release page (its view
+//reaches EmuApi.InputBarcode) - pass the folder or URL to the injected
+//launcher. Stubs record what they were handed, so nothing opens. The cases
+//that call the core skip without one; PlayFolderHandoffTests is the core-free half.
 [Collection(NativeCoreCollection.Name)]
 public class PlayFolderHandoffCoreTests : IDisposable
 {
@@ -32,17 +33,28 @@ public class PlayFolderHandoffCoreTests : IDisposable
 	private readonly List<string> _launched = new();
 	private readonly UiMode _uiMode = ConfigManager.Config.Preferences.UiMode;
 	private readonly Workspace _workspace = ConfigManager.Config.Preferences.Workspace;
+	private readonly bool _packFolderExisted = Directory.Exists(ConfigManager.EnhancementPackFolder);
 	private MainWindow? _window;
+	private Window? _sheetWindow;
 
 	public void Dispose()
 	{
-		_window?.Close();
+		if(_window != null) {
+			//Closing must not tear down the process-global core the next case shares.
+			_window.ReleaseCore = () => { };
+			_window.Close();
+		}
+		_sheetWindow?.Close();
 		ConfigManager.Config.Preferences.UiMode = _uiMode;
 		ConfigManager.Config.Preferences.Workspace = _workspace;
 		try {
 			Directory.Delete(_folder, true);
 		} catch {
 			//The temp folder going is not what the case was proving.
+		}
+		if(!_packFolderExisted && Directory.Exists(ConfigManager.EnhancementPackFolder)
+			&& Directory.GetFileSystemEntries(ConfigManager.EnhancementPackFolder).Length == 0) {
+			Directory.Delete(ConfigManager.EnhancementPackFolder);
 		}
 	}
 
@@ -101,5 +113,22 @@ public class PlayFolderHandoffCoreTests : IDisposable
 
 		menu.AnswerReleasePageOffer(DialogResult.OK);
 		Assert.Equal(new[] { "https://github.com/sbihaiko/MesenAI/releases" }, _launched);
+	}
+
+	[AvaloniaFact]
+	public void Open_releases_on_the_tool_sheet_hands_over_the_forks_release_page()
+	{
+		PlayerToolSheetViewModel sheet = new() { ReleasePageLauncher = _launched.Add };
+		sheet.OpenCheckForUpdates();
+		_sheetWindow = new Window { Content = new PlayerToolSheetView { DataContext = sheet }, Width = 1000, Height = 700 };
+		_sheetWindow.Show();
+		Dispatcher.UIThread.RunJobs();
+		Assert.Empty(_launched);
+
+		_sheetWindow.FindNamed<Button>("ToolSheetOpenReleases").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+		Dispatcher.UIThread.RunJobs();
+
+		Assert.Equal(new[] { "https://github.com/sbihaiko/MesenAI/releases" }, _launched);
+		Assert.False(sheet.IsVisible);
 	}
 }
