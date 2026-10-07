@@ -53,26 +53,17 @@ namespace Mesen.Utilities
 			return RomFolderScan.Run(
 				bases,
 				new ScanLimits(MaxFolders, shallow ? ShallowBudget : Budget),
-				ListFolder, () => clock.Elapsed, default,
+				DiskFolderLister.List, () => clock.Elapsed, default,
 				//A dead network mount blocks a read in the kernel, where neither
 				//budget above can interrupt it (ADR-0256 Decision 9 amendment).
 				MountedVolumes.NetworkMountPoints());
 		}
 
-		//The real lister. IgnoreInaccessible answers an unreadable folder with
-		//nothing instead of throwing mid-enumeration, so the walk never sees it
-		//as a hit; the try/catch is the belt to that suspenders (a path the
-		//platform cannot spell at all).
-		private static (IReadOnlyList<string> Folders, IReadOnlyList<string> Files) ListFolder(string folder)
-		{
-			try {
-				EnumerationOptions options = new() { IgnoreInaccessible = true, RecurseSubdirectories = false };
-				return (Directory.GetDirectories(folder, "*", options), Directory.GetFiles(folder, "*", options));
-			} catch(Exception) {
-				return (Array.Empty<string>(), Array.Empty<string>());
-			}
-		}
-
+		//The real lister moved to DiskFolderLister (UI/Logic) when the library
+		//scan needed the same one: it is host-free, so UI.Tests can run the real
+		//scan over a real tree instead of through the fake seam alone (review
+		//finding 6 on #1032). This file keeps the platform half - the places to
+		//look, the mount table and the budgets.
 		private static bool SameFolder(string left, string right)
 		{
 			try {

@@ -27,9 +27,12 @@ namespace Mesen.HeadlessTests;
 //still reaches the folder browser ADR-0256 Decision 9 built, and that a player
 //with no library folder is told what to do instead of shown a blank grid.
 //
-//The library scan is stubbed to a fake tree in every case: its default reads
-//the real disk, so without this each case would depend on whatever ROMs the
-//machine running the suite happens to keep - and on a scan landing mid-press.
+//The library scan runs for real here: each case writes a tree of ROMs under
+//Path.GetTempPath() (LibraryRoot) and the production scan reads it through the
+//production lister. Only the picker's own background suggestion WALK is
+//stubbed - its default walks the home folder, so without the stub each case
+//would depend on whatever ROMs the machine running the suite happens to keep -
+//and the library scan is run inline, so no answer lands mid-press.
 [Collection(NativeCoreCollection.Name)]
 public class PlayerLibraryTests : IDisposable
 {
@@ -431,6 +434,51 @@ public class PlayerLibraryTests : IDisposable
 		Press(window, PadNavAction.Back);
 		WaitFor(() => model.RomPicker.Mode == RomPickerMode.Library, "B out of the browser's roots did not return to the library");
 		Assert.True(model.RomPicker.IsVisible, "B out of the browser closed the whole sheet");
+	}
+
+	//#1032 review finding 4: the library grid stays in the tree while the
+	//browser is up - its own DockPanel is hidden by IsLibraryMode, not removed -
+	//so a header step that only asked whether the grid EXISTS saw a grid the
+	//player cannot, and Down on Back handed the ring back to the tile the player
+	//left. The grid is read as what it is: not up.
+	[AvaloniaFact]
+	public void Down_on_Back_while_the_browser_is_up_never_reaches_the_hidden_library()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		LibraryRoot();
+
+		(MainWindow window, MainWindowViewModel model) = ShowFirstRunHome();
+		model.RomPicker.SuggestionSource = _ => Array.Empty<RomPickerHit>();
+		WaitFor(() => (window.FocusManager?.GetFocusedElement() as Control)?.Name == "PlayHomeOpenRomPrimary",
+			"the first-run home did not put the focus on its one action");
+		Press(window, PadNavAction.Confirm);
+		WaitFor(() => FocusedTilePath(window) is not null,
+			$"the sheet did not open on its first tile ({Focused(window)})");
+
+		//Up to the header, which is also the press that remembers the tile the
+		//player left - the one Down must not hand the ring back to.
+		Press(window, PadNavAction.Up);
+		WaitFor(() => HeaderFocused(window),
+			$"Up from the top grid row did not reach the header ({Focused(window)})");
+		window.FindNamed<Button>("RomPickerBrowseFile").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+		Pump();
+		WaitFor(() => model.RomPicker.Mode == RomPickerMode.BrowseFile, "Browse a file… did not open the browser");
+		Assert.False(window.FindNamed<ItemsControl>("RomPickerGrid").IsEffectivelyVisible,
+			"the library grid is still visible while the browser is up, so this case would prove nothing");
+
+		window.FindNamed<Button>("RomPickerBack").Focus();
+		Pump();
+		Press(window, PadNavAction.Down);
+		Pump();
+
+		//Down from the header is the press that walks into the browser's own
+		//list - the one thing under it the player can actually see. It must not
+		//be spent on the tile the grid was left on, and it must not be swallowed
+		//either: the ring has to land somewhere the player can press Confirm on.
+		Assert.Null(FocusedTilePath(window));
+		Control? focused = window.FocusManager?.GetFocusedElement() as Control;
+		Assert.True(focused?.DataContext is PlayerRomPickerRow && focused.IsEffectivelyVisible,
+			$"Down on Back in the browser did not reach the browser's own list ({Focused(window)})");
 	}
 
 	//#1032 (ADR-0264 Decision 8): a player who has set no library folder is told

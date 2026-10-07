@@ -227,6 +227,44 @@ namespace Mesen.Tests.Play
 			Assert.False(result.Truncated);
 		}
 
+		//Review finding 6 on #1032: every case above lists a FAKE tree through
+		//the FolderLister seam, so the disk half of the scan - the lister the app
+		//itself runs - was covered only by the headless cases, which are skipped
+		//where the native core is absent (CI runs that project with no core at
+		//all). This one writes a real tree under Path.GetTempPath() and reads it
+		//through DiskFolderLister, the production lister both the library scan
+		//and the background walk go through.
+		[Fact]
+		public void The_scan_reads_a_real_tree_on_disk_through_the_production_lister()
+		{
+			string root = Path.Combine(Path.GetTempPath(), "mesen-1032-scan-" + Guid.NewGuid().ToString("N"));
+			string nes = Path.Combine(root, "Console", "NES");
+			string notes = Path.Combine(root, "notes");
+			try {
+				Directory.CreateDirectory(nes);
+				Directory.CreateDirectory(notes);
+				File.WriteAllBytes(Path.Combine(nes, "Contra (U) [!].nes"), new byte[16]);
+				File.WriteAllBytes(Path.Combine(nes, "Metroid (USA).nes"), new byte[16]);
+				//A file that is not a ROM, and a folder with nothing openable in
+				//it: what the real disk offers that a fake tree only claims.
+				File.WriteAllText(Path.Combine(nes, "readme.txt"), "not a rom");
+				File.WriteAllText(Path.Combine(notes, "todo.txt"), "notes");
+
+				LibraryScanResult result = GameLibrary.Scan(new[] { root }, DiskFolderLister.List);
+
+				Assert.Equal(new[] { "Contra", "Metroid" }, result.Entries.Select(entry => entry.Title).ToArray());
+				//One folder answered: the one the two ROMs are directly in.
+				Assert.Equal(1, result.FolderCount);
+				Assert.False(result.Truncated);
+			} finally {
+				try {
+					Directory.Delete(root, true);
+				} catch {
+					//A case that failed before it built its tree leaves nothing to remove.
+				}
+			}
+		}
+
 		//The header counts the folders the library reads (ADR-0264 Decision 8):
 		//a folder that answered nothing is not one of them, so the count is what
 		//the scan actually found rather than what it was pointed at.

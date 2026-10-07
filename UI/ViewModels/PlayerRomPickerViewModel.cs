@@ -213,8 +213,10 @@ namespace Mesen.ViewModels
 		//it, and so does a platform the default does not know.
 		public Func<IReadOnlyList<string>> VolumeSource { get; set; } = MountedVolumes.List;
 		//One folder's entries. A seam for the same reason, and the one the rules
-		//are pinned through in UI.Tests without touching a disk.
-		public Func<string, (IReadOnlyList<string> Folders, IReadOnlyList<string> Files)> FolderSource { get; set; } = ReadFolder;
+		//are pinned through in UI.Tests without touching a disk. The default is
+		//the app's own lister, shared with the library scan and the background
+		//walk (DiskFolderLister), so the three cannot read a folder differently.
+		public Func<string, (IReadOnlyList<string> Folders, IReadOnlyList<string> Files)> FolderSource { get; set; } = DiskFolderLister.List;
 		//The scan, behind a seam: a test injects fake hits and drives the sheet
 		//deterministically, and the shell stays off the thread pool. It answers per
 		//PASS, because one scan is two of them - a shallow answer published as soon
@@ -273,10 +275,19 @@ namespace Mesen.ViewModels
 		private readonly List<PlayerRomPickerRow> _suggestionRows = new();
 		private bool _scanStarted;
 		private bool _scanDone;
-		//The surface every scan in flight was read for. A result carries the
-		//generation it was scheduled under and is dropped when that is no longer
-		//the one on the sheet (see ScanGeneration).
+		//The surface every LIBRARY scan in flight was read for. A result carries
+		//the generation it was scheduled under and is dropped when that is no
+		//longer the one on the sheet (see ScanGeneration).
 		private readonly ScanGeneration _scanGeneration = new();
+		//The suggestion walk gets a counter of its own (review finding 2 on
+		//#1032). It is not an answer about the library folders - it looks in the
+		//standard places a library hides in, and its hits are the roots list's own
+		//tail - so a library rebuild must not invalidate it: with one shared
+		//counter, a player who stepped into *Browse a file…* and came straight
+		//back before the deep pass landed (measured, 0.86 s) dropped the walk's
+		//only answer AND left _scanStarted set, so the roots showed no suggestion
+		//for the rest of the session.
+		private readonly ScanGeneration _suggestionGeneration = new();
 
 		//Opens on the roots. Called by the Play home's own action, and only when
 		//there is nothing to pause: the picker is what a machine with no game
@@ -392,7 +403,19 @@ namespace Mesen.ViewModels
 			//The browser is INSIDE the sheet (Decision 11), so walking out of
 			//its roots lands back on the library rather than closing the sheet:
 			//the escape hatch leads back, not away.
+			//
+			//Unless the browser IS the sheet, which is the case for the one
+			//caller that says so through OpenMode: the Remaster workspace's right
+			//game chooser picks a single file for a project and has no library to
+			//lead back to - rebuilding the Play grid under it would turn that
+			//sheet into a surface the artist never opened (review finding 1 on
+			//#1032). There, out of the roots is the dismiss, the way it was before
+			//the library landed.
 			if(_folder is null) {
+				if(OpenMode == RomPickerMode.BrowseFile) {
+					IsVisible = false;
+					return;
+				}
 				ShowLibrary();
 				return;
 			}
@@ -547,13 +570,16 @@ namespace Mesen.ViewModels
 			if(!_scanGeneration.IsCurrent(generation)) {
 				return;
 			}
-			SearchingText = "";
 			//A scan that landed after the player left the library - a B press, a
 			//step into *Browse a file…* - belongs to no surface: the browser's
-			//own rows must not be replaced by a grid nobody is looking at.
+			//own rows must not be replaced by a grid nobody is looking at, and
+			//its waiting line is not this scan's to clear (review finding 5 on
+			//#1032: the browser says "Looking for your games…" while its own walk
+			//runs, and a library answer landing in the meantime used to wipe it).
 			if(!IsVisible || Mode != RomPickerMode.Library) {
 				return;
 			}
+			SearchingText = "";
 			Tiles.Clear();
 			foreach(LibraryEntry entry in result.Entries) {
 				Tiles.Add(new PlayerLibraryTile(entry, ConsoleName(entry.Console)));
@@ -639,8 +665,11 @@ namespace Mesen.ViewModels
 			//This scan's tag, taken before any of its work is handed out: the
 			//surface it reads is the one the sheet is on now (see
 			//ScanGeneration), and every answer below is dropped if that surface
-			//is rebuilt before the answer lands.
-			int generation = _scanGeneration.Next();
+			//is rebuilt before the answer lands. Its own counter, because the
+			//walk answers about the places it looked in and not about the
+			//library folders a rebuild re-reads - which is why a walk in flight
+			//survives one (review finding 2 on #1032).
+			int generation = _suggestionGeneration.Next();
 
 			if(RunScanInline) {
 				PublishInline(RomScanPass.Shallow, generation);
@@ -689,7 +718,10 @@ namespace Mesen.ViewModels
 			//forever). Only the LINE is refused to a scan that no longer owns it:
 			//by then it belongs to the scan the rebuild started.
 			_scanDone = true;
-			if(_scanGeneration.IsCurrent(generation)) {
+			//As with the rows below: the line is the walk's own, so it goes only
+			//where the walk's surface is the one up. While the library is, the
+			//line belongs to the library scan (review finding 5's rule).
+			if(_suggestionGeneration.IsCurrent(generation) && Mode == RomPickerMode.BrowseFile) {
 				SearchingText = "";
 			}
 		}
@@ -705,11 +737,14 @@ namespace Mesen.ViewModels
 		//as "your libraries are gone".
 		private void ApplySuggestions(RomScanPass pass, IReadOnlyList<RomPickerHit> hits, int generation)
 		{
-			//The suggestions and the cache behind them belong to the surface this
-			//pass was read for: a pass whose surface is gone is dropped whole,
-			//before it can rewrite _suggestions (the cache every later visit to
-			//the roots reads) or put rows under a list it was never read for.
-			if(!_scanGeneration.IsCurrent(generation)) {
+			//A pass superseded by a LATER walk of the same roots is dropped whole
+			//(the walk runs once per session, so today this only guards a scan
+			//the sheet started twice). The library's own rebuild does not
+			//supersede it: this answer is about the places the walk looked in,
+			//and _suggestions is the cache every later visit to the roots reads
+			//- dropping it there is what left the roots bare for the session
+			//(review finding 2 on #1032).
+			if(!_suggestionGeneration.IsCurrent(generation)) {
 				return;
 			}
 			IReadOnlyList<RomPickerSuggestion> offered = PlayRomPicker.Suggestions(hits, _roots);
@@ -723,7 +758,11 @@ namespace Mesen.ViewModels
 				return;
 			}
 			_suggestions = offered;
-			if(IsVisible && _folder is null) {
+			//The rows are the BROWSER's, so a pass that lands while the library
+			//is up only fills the cache above: rewriting the list under a grid
+			//the player is reading would move the ring for a surface that is not
+			//on screen.
+			if(IsVisible && Mode == RomPickerMode.BrowseFile && _folder is null) {
 				ShowSuggestionRows();
 				//The rebuilt rows are new containers, so whatever the arbiter put
 				//the ring on is gone with the old one.
@@ -828,18 +867,5 @@ namespace Mesen.ViewModels
 			}
 		}
 
-		//A folder's entries, split. A folder that cannot be read (a volume pulled
-		//out between listing and descending, a permission) reads as empty rather
-		//than throwing out of a pad press.
-		private static (IReadOnlyList<string> Folders, IReadOnlyList<string> Files) ReadFolder(string folder)
-		{
-			try {
-				string[] folders = Directory.GetDirectories(folder);
-				string[] files = Directory.GetFiles(folder);
-				return (folders, files);
-			} catch {
-				return (Array.Empty<string>(), Array.Empty<string>());
-			}
-		}
 	}
 }

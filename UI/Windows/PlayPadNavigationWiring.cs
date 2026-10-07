@@ -359,17 +359,32 @@ namespace Mesen.Windows
 		//Nothing outside this sheet is touched in either direction: every other
 		//surface keeps the engine's own traversal, and this closes only the one
 		//case the engine cannot - a grid whose XY scope has nothing above it.
-		private static Control? RomPickerHeaderStep(MainWindow window, Control focused, Control? lastTile, PadNavAction action)
+		//Review finding 4 on #1032: the library grid stays in the tree while the
+		//browser is up - the sheet hides it with IsLibraryMode, it does not remove
+		//it - so a step that only asked whether the grid EXISTS answered with a
+		//tile the player cannot see, and Enter cannot focus what is hidden: the
+		//press was spent, the ring stayed on Back and the pad's Down did nothing
+		//on that surface. The step reads the surface that is UP, and answers for
+		//that one: the grid's tile on the library, the list's first row in the
+		//browser. Never a control the player cannot see.
+		private static Control? RomPickerHeaderStep(MainWindow window, MainWindowViewModel model, Control focused, Control? lastTile, PadNavAction action)
 		{
 			if(Named(window, "RomPickerGrid") is not ItemsControl grid) {
 				return null;
 			}
+			bool libraryIsUp = model.RomPicker.IsVisible && model.RomPicker.Mode == RomPickerMode.Library && grid.IsEffectivelyVisible;
 			if(action == PadNavAction.Up && focused.DataContext is PlayerLibraryTile && IsInFirstGridRow(grid, focused)) {
 				return Named(window, "RomPickerBrowseFile") ?? Named(window, "RomPickerBack");
 			}
 			if(action == PadNavAction.Down && focused.Name is "RomPickerBrowseFile" or "RomPickerBack") {
-				//The tile the player left, not the first one: Down undoes Up.
-				return lastTile ?? RomPickerFirstTile(window) ?? Named(window, "RomPickerBack");
+				if(!libraryIsUp) {
+					return RomPickerFirstRow(window) ?? Named(window, "RomPickerBack");
+				}
+				//The tile the player left, not the first one: Down undoes Up - and
+				//only while that tile is one the grid still draws (a rebuild
+				//replaced its container, and the old one is attached no longer).
+				return (lastTile is { IsEffectivelyVisible: true } ? lastTile : null)
+					?? RomPickerFirstTile(window) ?? Named(window, "RomPickerBack");
 			}
 			return null;
 		}
@@ -657,7 +672,7 @@ namespace Mesen.Windows
 				if(focused.DataContext is PlayerLibraryTile) {
 					_libraryTile = focused;
 				}
-				if(RomPickerHeaderStep(_window, focused, _libraryTile, action) is Control header) {
+				if(RomPickerHeaderStep(_window, _model, focused, _libraryTile, action) is Control header) {
 					PlayFocusOnOpen.Enter(header);
 					return;
 				}

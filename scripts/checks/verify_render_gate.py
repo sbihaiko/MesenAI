@@ -86,7 +86,7 @@ EXPECTED_WIREFRAME_RENDERS = (
 # row L.1 (#1032) builds it and moves W-P19 up into EXPECTED_WIREFRAME_RENDERS,
 # and L.2 (#1033) does the same for W-P19b. Pinned like that set is: a
 # wireframe drawn without an entry in one of the two still fails.
-WIREFRAMES_AWAITING_RENDER_CASE = ("W-P19", "W-P19b")
+WIREFRAMES_AWAITING_RENDER_CASE = ("W-P19b",)
 
 # A PNG may predate the TRX's start by this much (filesystem/clock rounding).
 FRESHNESS_SLACK_SECONDS = 2.0
