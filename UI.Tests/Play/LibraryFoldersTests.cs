@@ -169,10 +169,147 @@ namespace Mesen.Tests.Play
 			Assert.Empty(edit.Folders);
 		}
 
+<<<<<<< HEAD
 		//The enum names every answer an add gives, and nothing it cannot. A value no
 		//caller can ever receive is a branch #1032 would have to write in the view for
 		//an outcome that cannot happen, and the answer to "did the list change?" would
 		//then be spread over values that never arrive.
+||||||| parent of 121f362d6 (Library folders: keep the path as given, take the comparison from the caller (#1036))
+		//Decision 8's nested case, resolved by ADR-0264's "the folders shape the
+		//scan, not the list": a folder inside one that is already listed adds no
+		//game the list does not already reach, so it is absorbed rather than added
+		//as a second row.
+=======
+		//A folder name may END in a space, and `/roms/NES ` is then a different
+		//folder from `/roms/NES` - a real one on disk, with different games in it.
+		//Rewriting the typed path into the trimmed one would silently point the
+		//library at a folder the player never named, so the path is stored as the
+		//caller gave it. Only a path that is BLANK is refused; whitespace around a
+		//name is part of the name.
+		[Fact]
+		public void A_folder_name_that_ends_in_a_space_is_stored_as_given()
+		{
+			string games = NewTempDir();
+			string spaced = Path.Combine(games, "NES ");
+			Directory.CreateDirectory(spaced);
+			try {
+				LibraryFolderEdit edit = LibraryFolders.Add(new List<string>(), spaced);
+
+				Assert.Equal(LibraryFolderChange.Added, edit.Change);
+				Assert.Single(edit.Folders);
+				Assert.Equal(Path.GetFullPath(spaced), edit.Folders[0]);
+				Assert.EndsWith("NES ", edit.Folders[0]);
+
+				//And the trimmed spelling is a DIFFERENT folder, not the same one
+				//under another spelling: adding it is a second row.
+				edit = LibraryFolders.Add(edit.Folders, spaced.TrimEnd());
+				Assert.Equal(LibraryFolderChange.Added, edit.Change);
+				Assert.Equal(2, edit.Folders.Count);
+			} finally {
+				Directory.Delete(games, true);
+			}
+		}
+
+		//Two folders that differ only in case are two folders, or one, depending on
+		//what the file system under them says - and that is not the same answer on
+		//every Mac: the default APFS volume folds case, a case-sensitive APFS volume
+		//does not. So the caller that knows the volume (the picker, #1032's scan)
+		//passes the comparison in, and this module stops guessing from the OS name.
+		//
+		//With a case-SENSITIVE comparison `/roms/NES` and `/roms/nes` are two folders:
+		//adding the second is a second row, `/roms/nes/sub` is not inside `/roms/NES`,
+		//and the two ROMs are two entries in the grid.
+		[Fact]
+		public void A_case_sensitive_comparison_keeps_folders_that_differ_only_in_case_apart()
+		{
+			string games = NewTempDir();
+			string upper = Path.Combine(games, "NES");
+			string lower = Path.Combine(games, "nes");
+			try {
+				LibraryFolderEdit edit = LibraryFolders.Add(new[] { upper }, lower, StringComparison.Ordinal);
+				Assert.Equal(LibraryFolderChange.Added, edit.Change);
+				Assert.Equal(new[] { Path.GetFullPath(upper), Path.GetFullPath(lower) }, edit.Folders);
+
+				//`nes/sub` is not below `NES`, so it is not covered by it either.
+				edit = LibraryFolders.Add(new[] { upper }, Path.Combine(lower, "sub"), StringComparison.Ordinal);
+				Assert.Equal(LibraryFolderChange.Added, edit.Change);
+				Assert.Equal(2, edit.Folders.Count);
+
+				//And the grid keeps both ROMs: two paths, two entries.
+				IReadOnlyList<string> union = LibraryFolders.Union(new[] {
+					new[] { upper + "/contra.nes" },
+					new[] { lower + "/contra.nes" }
+				}, StringComparison.Ordinal);
+				Assert.Equal(2, union.Count);
+			} finally {
+				Directory.Delete(games, true);
+			}
+		}
+
+		//The other answer, on a volume that folds case: the same two paths are one
+		//folder, and every comparison in the file - same folder, inside, the grid's
+		//set, and remove - has to fold together, not just the first one.
+		[Fact]
+		public void A_case_insensitive_comparison_folds_folders_that_differ_only_in_case()
+		{
+			string games = NewTempDir();
+			string upper = Path.Combine(games, "NES");
+			string lower = Path.Combine(games, "nes");
+			try {
+				LibraryFolderEdit edit = LibraryFolders.Add(new[] { upper }, lower, StringComparison.OrdinalIgnoreCase);
+				Assert.Equal(LibraryFolderChange.AlreadyListed, edit.Change);
+				Assert.Single(edit.Folders);
+
+				//`nes/sub` IS below `NES` here, so it is absorbed rather than listed.
+				edit = LibraryFolders.Add(new[] { upper }, Path.Combine(lower, "sub"), StringComparison.OrdinalIgnoreCase);
+				Assert.Equal(LibraryFolderChange.CoveredByListed, edit.Change);
+				Assert.Single(edit.Folders);
+
+				IReadOnlyList<string> union = LibraryFolders.Union(new[] {
+					new[] { upper + "/contra.nes" },
+					new[] { lower + "/contra.nes" }
+				}, StringComparison.OrdinalIgnoreCase);
+				Assert.Single(union);
+
+				Assert.Empty(LibraryFolders.Remove(new[] { upper }, lower, StringComparison.OrdinalIgnoreCase));
+			} finally {
+				Directory.Delete(games, true);
+			}
+		}
+
+		//A caller that names no comparison gets the rule this file had before the
+		//comparison became injectable: Windows and macOS fold case, everything else
+		//does not. Pinned behaviourally as well as by the exposed default, so the
+		//default cannot drift without a test going red on the platform it changes on.
+		[Fact]
+		public void The_default_comparison_is_the_operating_systems_own_rule()
+		{
+			bool foldsCase = OperatingSystem.IsWindows() || OperatingSystem.IsMacOS();
+			StringComparison expected = foldsCase ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+			Assert.Equal(expected, LibraryFolders.DefaultComparison);
+
+			string games = NewTempDir();
+			string upper = Path.Combine(games, "NES");
+			string lower = Path.Combine(games, "nes");
+			try {
+				LibraryFolderEdit edit = LibraryFolders.Add(new[] { upper }, lower);
+				if(foldsCase) {
+					Assert.Equal(LibraryFolderChange.AlreadyListed, edit.Change);
+					Assert.Single(edit.Folders);
+				} else {
+					Assert.Equal(LibraryFolderChange.Added, edit.Change);
+					Assert.Equal(2, edit.Folders.Count);
+				}
+			} finally {
+				Directory.Delete(games, true);
+			}
+		}
+
+		//Decision 8's nested case, resolved by ADR-0264's "the folders shape the
+		//scan, not the list": a folder inside one that is already listed adds no
+		//game the list does not already reach, so it is absorbed rather than added
+		//as a second row.
+>>>>>>> 121f362d6 (Library folders: keep the path as given, take the comparison from the caller (#1036))
 		[Fact]
 		public void Add_only_answers_the_answers_it_can_give()
 		{

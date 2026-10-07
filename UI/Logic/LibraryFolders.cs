@@ -100,6 +100,34 @@ public static class LibraryFolders
 		}
 	}
 
+<<<<<<< HEAD
+||||||| parent of 121f362d6 (Library folders: keep the path as given, take the comparison from the caller (#1036))
+	//Is `child` strictly below `parent`? The separator after the prefix is what
+	//keeps `/games2` from reading as inside `/games`.
+	private static bool IsInside(string parent, string child)
+	{
+		if(_comparer.Equals(parent, child)) {
+			return false;
+		}
+		string prefix = Path.EndsInDirectorySeparator(parent) ? parent : parent + Path.DirectorySeparatorChar;
+		return child.StartsWith(prefix, _comparison);
+	}
+
+=======
+	//Is `child` strictly below `parent`? The separator after the prefix is what
+	//keeps `/games2` from reading as inside `/games`. "Inside" folds exactly when
+	//"the same folder" does: on a folding file system `/roms/nes/sub` is below
+	//`/roms/NES`, and on a case-sensitive one it is a folder of its own.
+	private static bool IsInside(string parent, string child, StringComparison comparison)
+	{
+		if(string.Equals(parent, child, comparison)) {
+			return false;
+		}
+		string prefix = Path.EndsInDirectorySeparator(parent) ? parent : parent + Path.DirectorySeparatorChar;
+		return child.StartsWith(prefix, comparison);
+	}
+
+>>>>>>> 121f362d6 (Library folders: keep the path as given, take the comparison from the caller (#1036))
 	private static IReadOnlyList<string> Copy(IReadOnlyList<string> folders)
 	{
 		return new List<string>(folders);
@@ -131,6 +159,7 @@ public static class LibraryFolders
 		return seeded != null ? new List<string> { seeded } : new List<string>();
 	}
 
+<<<<<<< HEAD
 	//The nested case, decided: **keep every root, do not absorb one into another.**
 	//A nested folder looks redundant - the parent is a prefix of it - and the walk
 	//that reads this list is BOUNDED: ADR-0264 Decision 9 caps the scan at six
@@ -147,6 +176,26 @@ public static class LibraryFolders
 	//player a second row in the list and the header's folder count - which is the
 	//truth about their library - and buy back the games that only the deeper root
 	//reaches.
+||||||| parent of 121f362d6 (Library folders: keep the path as given, take the comparison from the caller (#1036))
+	//The nested case, decided: **absorb, do not reject.** A folder inside one that
+	//is already listed adds no game the list does not already reach - the scan
+	//walks a folder's whole subtree - so listing it too would show the player two
+	//rows that are one library and make the header's folder count claim a folder
+	//that contributes nothing. The same rule read the other way is why adding a
+	//folder that CONTAINS listed ones takes their place instead of standing beside
+	//them. Neither is an error: `CoveredByListed` and `MergedWithListed` are
+	//answers, not refusals, and in both the list is already right.
+	public static LibraryFolderEdit Add(IReadOnlyList<string> folders, string? folder)
+=======
+	//The nested case, decided: **absorb, do not reject.** A folder inside one that
+	//is already listed adds no game the list does not already reach - the scan
+	//walks a folder's whole subtree - so listing it too would show the player two
+	//rows that are one library and make the header's folder count claim a folder
+	//that contributes nothing. The same rule read the other way is why adding a
+	//folder that CONTAINS listed ones takes their place instead of standing beside
+	//them. Neither is an error: `CoveredByListed` and `MergedWithListed` are
+	//answers, not refusals, and in both the list is already right.
+>>>>>>> 121f362d6 (Library folders: keep the path as given, take the comparison from the caller (#1036))
 	//
 	//`comparison` is how the CALLER's file system folds case (see `DefaultComparison`),
 	//so a caller that knows its volume - a case-sensitive APFS volume is the case
@@ -168,14 +217,64 @@ public static class LibraryFolders
 		//here.
 		foreach(string listed in folders) {
 			string? normalized = Normalize(listed);
+<<<<<<< HEAD
 			if(normalized != null && string.Equals(normalized, added, compare)) {
+||||||| parent of 121f362d6 (Library folders: keep the path as given, take the comparison from the caller (#1036))
+			if(normalized == null) {
+				continue;
+			}
+			if(_comparer.Equals(normalized, added)) {
+=======
+			if(normalized == null) {
+				continue;
+			}
+			if(string.Equals(normalized, added, compare)) {
+>>>>>>> 121f362d6 (Library folders: keep the path as given, take the comparison from the caller (#1036))
 				return new LibraryFolderEdit(Copy(folders), LibraryFolderChange.AlreadyListed);
 			}
+<<<<<<< HEAD
+||||||| parent of 121f362d6 (Library folders: keep the path as given, take the comparison from the caller (#1036))
+			if(IsInside(normalized, added)) {
+				return new LibraryFolderEdit(Copy(folders), LibraryFolderChange.CoveredByListed);
+			}
+=======
+			if(IsInside(normalized, added, compare)) {
+				return new LibraryFolderEdit(Copy(folders), LibraryFolderChange.CoveredByListed);
+			}
+>>>>>>> 121f362d6 (Library folders: keep the path as given, take the comparison from the caller (#1036))
 		}
 
+<<<<<<< HEAD
 		List<string> withAdded = new(folders);
 		withAdded.Add(added);
 		return new LibraryFolderEdit(withAdded, LibraryFolderChange.Added);
+||||||| parent of 121f362d6 (Library folders: keep the path as given, take the comparison from the caller (#1036))
+		List<string> merged = new();
+		bool replacedAny = false;
+		foreach(string listed in folders) {
+			string? normalized = Normalize(listed);
+			if(normalized != null && IsInside(added, normalized)) {
+				replacedAny = true;
+				continue;
+			}
+			merged.Add(listed);
+		}
+		merged.Add(added);
+		return new LibraryFolderEdit(merged, replacedAny ? LibraryFolderChange.MergedWithListed : LibraryFolderChange.Added);
+=======
+		List<string> merged = new();
+		bool replacedAny = false;
+		foreach(string listed in folders) {
+			string? normalized = Normalize(listed);
+			if(normalized != null && IsInside(added, normalized, compare)) {
+				replacedAny = true;
+				continue;
+			}
+			merged.Add(listed);
+		}
+		merged.Add(added);
+		return new LibraryFolderEdit(merged, replacedAny ? LibraryFolderChange.MergedWithListed : LibraryFolderChange.Added);
+>>>>>>> 121f362d6 (Library folders: keep the path as given, take the comparison from the caller (#1036))
 	}
 
 	//Removing takes the row out of the list and does nothing else - there is no
