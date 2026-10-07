@@ -129,6 +129,7 @@ namespace Mesen.ViewModels
 		//and the dispatcher otherwise.
 		private void RunLibraryStream(int generation, IReadOnlyList<string> folders, string? recentGamesFolder, Action<Action>? post)
 		{
+			LibraryScanResult result;
 			try {
 				//The Recent index is built here, once per scan and on this thread:
 				//it reads and unzips every record the folder names, which is the
@@ -136,13 +137,19 @@ namespace Mesen.ViewModels
 				//for the whole walk is what keeps a library of two hundred folders
 				//from unzipping each record once per folder.
 				RecentCoverIndex index = RecentCoverIndex.Open(recentGamesFolder);
-				_scanResult = LibraryScanStreamSource(folders, new FolderLister(FolderSource),
+				result = LibraryScanStreamSource(folders, new FolderLister(FolderSource),
 					batch => Deliver(generation, batch, CoversFor(batch, index), post));
 			} catch {
 				//A walk that threw answers nothing to show - an unreadable disk is
 				//not a reason to keep a wait on screen - and leaves whatever the
 				//batches before it already put in the grid.
-				_scanResult = NoEntries;
+				result = NoEntries;
+			}
+			//A scan the player has already left keeps its answer to itself: its
+			//batches are dropped by the same check, and a header built from its
+			//count would belong to a sheet that is no longer up.
+			if(_scanGeneration.IsCurrent(generation)) {
+				_scanResult = result;
 			}
 		}
 
