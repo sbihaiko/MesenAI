@@ -111,11 +111,17 @@ namespace Mesen.ViewModels
 		//not only a row: the cover the previous visit decoded is released with it
 		//(#1035). A rebuild that took the rows and left the pictures behind would
 		//leak one decoded image per visit.
-		private void ResetLibraryGrid()
+		//
+		//ShowLibrary resets the grid and then starts the scan, which resets it
+		//again: a fresh visit is one rebuild of the grid and so one bump, so the
+		//scan's own reset passes bump: false.
+		private void ResetLibraryGrid(bool bump = true)
 		{
 			_libraryGames.Clear();
 			ClearTiles();
-			TilesRevision++;
+			if(bump) {
+				TilesRevision++;
+			}
 		}
 
 		//A scan the player has left stops reading the library: closing the sheet or
@@ -195,7 +201,7 @@ namespace Mesen.ViewModels
 			IsFinishFallback = false;
 			IsRestoreLanding = false;
 
-			ResetLibraryGrid();
+			ResetLibraryGrid(bump: false);
 			//The library has folders and is being read; the box owns the empty
 			//result only once the scan has answered (Search.UpdateEmptyResult).
 			_hasLibrary = true;
@@ -332,14 +338,14 @@ namespace Mesen.ViewModels
 				restoreLanded |= _restoreTargetPath.Length > 0 && entry.Path == _restoreTargetPath;
 			}
 			//#1034: a console the scan has just found joins the row (the row lists
-			//only the consoles present). The rebuild refills the grid, so it is done
-			//only when the set actually grew, never once per batch.
-			if(ConsoleOptions.Count - 1 != LibraryConsoleFilter.Options(_libraryGames.Select(game => game.Entry.Console)).Count - 1) {
+			//only the consoles present). The rebuild refills the grid itself, so it
+			//is done only when the set actually grew, never once per batch.
+			if(ConsoleOptions.Count != LibraryConsoleFilter.Options(_libraryGames.Select(game => game.Entry.Console)).Count) {
 				RebuildConsoleOptions();
-				return;
+			} else if(query) {
+				FillTiles();
 			}
 			if(query) {
-				FillTiles();
 				return;
 			}
 			//The first games to arrive are the ones the ring has been waiting for:
