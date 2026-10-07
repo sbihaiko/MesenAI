@@ -139,7 +139,8 @@ public class WorkspaceShellTests : IDisposable
 		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
 		(MainWindow window, MainWindowViewModel model) = ShowShell();
 
-		Assert.Equal(new[] { "Reset", "Power Cycle", "Screenshot", "Fullscreen" }.Concat(Tail).ToArray(), DoorToolsLabels(window));
+		//Ruling (a) on #1007: Play alone ends with the disabled hint row.
+		Assert.Equal(new[] { "Reset", "Power Cycle", "Screenshot", "Fullscreen" }.Concat(Tail).Append(ContextMenuHint.Sentinel).ToArray(), DoorToolsLabels(window));
 
 		model.SelectWorkspace(Workspace.Remaster);
 		Dispatcher.UIThread.RunJobs();

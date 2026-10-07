@@ -151,6 +151,9 @@ namespace Mesen.ViewModels
 				}
 				items.AddRange(group.Select(GetDoorItem));
 			}
+			if(WorkspaceMenu.HasToolsHint(door)) {
+				items.Add(new ContextMenuHint() { Text = ResourceHelper.GetMessage("DoorMenuToolsHint") });
+			}
 			DoorMenuItems = items;
 			return true;
 		}

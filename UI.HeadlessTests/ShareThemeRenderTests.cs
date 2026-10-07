@@ -13,6 +13,7 @@ using Avalonia.Media.Imaging;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using Mesen.Config;
+using Mesen.Debugger.Utilities;
 using Mesen.Interop;
 using Mesen.Logic;
 using Mesen.Utilities;
@@ -500,7 +501,19 @@ public class ShareThemeRenderTests : IDisposable
 		MenuItem tools = window.FindNamed<MenuItem>("ToolsMenuButton");
 		tools.IsSubMenuOpen = true;
 		Dispatcher.UIThread.RunJobs();
-		MenuItem[] items = tools.GetRealizedContainers().OfType<MenuItem>().Where(m => m.FindAll<TextBlock>().Any(t => !string.IsNullOrEmpty(t.Text) && t.Text != "-")).ToArray();
+		MenuItem[] all = tools.GetRealizedContainers().OfType<MenuItem>().Where(m => m.FindAll<TextBlock>().Any(t => !string.IsNullOrEmpty(t.Text) && t.Text != "-")).ToArray();
+		//Ruling (a) on #1007: the disabled, Play-only footer hint below the tail
+		//(W-S2: grey 11.5 px note, wrapped, no highlight) - not an action row.
+		MenuItem hint = all.Last();
+		Assert.Equal(ContextMenuHint.Sentinel, hint.Header);
+		Assert.False(hint.IsEffectivelyEnabled, "the hint row is enabled");
+		TextBlock hintText = hint.FindNamed<Border>("PlayerHintRow").FindAll<TextBlock>().Single();
+		Assert.Equal("Disk, coin and tape items appear when the game uses them.", hintText.Text);
+		Assert.True(hintText.IsOnScreen(), "the hint row is not drawn");
+		Assert.Equal(Color.Parse("#A1A1A6"), PlayerRender.SolidColor(hintText.Foreground));
+		Assert.Equal(11.5, hintText.FontSize);
+		Assert.False(hint.FindNamed<Border>("PART_LayoutRoot").IsOnScreen(), "the hint row also draws an action row");
+		MenuItem[] items = all.Where(m => m != hint).ToArray();
 		MenuItem fullscreen = items.Single(m => LabelOf(m).Text == "Fullscreen");
 		fullscreen.IsSelected = true;
 		Dispatcher.UIThread.RunJobs();
