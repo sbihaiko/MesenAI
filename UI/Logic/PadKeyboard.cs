@@ -113,11 +113,12 @@ public sealed class PadKeyboard
 
 	//The text the field keeps when the keyboard is closed from outside
 	//(ADR-0262 Decision 4): losing pad authority commits the draft, so a
-	//stray key or mouse event never silently drops a half-typed code; the
-	//field going away or the focus moving elsewhere is a cancel.
+	//stray key or mouse event never silently drops a half-typed code - except
+	//on a secret, which is never stored unconfirmed (#1004); the field going
+	//away or the focus moving elsewhere is a cancel.
 	public string TextOnLeave(PadKeyboardLeave why)
 	{
-		return why == PadKeyboardLeave.AuthorityLost ? Draft : Original;
+		return why == PadKeyboardLeave.AuthorityLost && Shape != PadKeyboardShape.Secret ? Draft : Original;
 	}
 
 	public PadKeyboardOutcome Press(PadNavAction action)

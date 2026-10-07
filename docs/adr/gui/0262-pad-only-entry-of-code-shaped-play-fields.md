@@ -18,6 +18,12 @@
   ships with unit tests covering the decision (`UI.Tests/Play/PadKeyboardTests`)
   and synthetic-pad headless coverage (`UI.HeadlessTests/PlayPadKeyboardTests`).
   The real-pad couch check joins issue #926.
+  **Amended 2026-10-07 (authority-loss rule, Decision 4) by the agent, while
+  the owner was away** — decided in the review of PR #1001 and refined on
+  issue #1004. Neither the owner nor the human proxy decided or signed off
+  on these amendments: losing pad authority commits the draft, and a secret
+  field instead cancels and restores its original value. Pinned by
+  `UI.Tests/Play/PadKeyboardTests`.
 - Date: 2026-10-06 (proposed), 2026-10-07 (accepted, rewritten to option (a))
 - Related: ADR-0256 (the Play GUI is fully operable from a controller alone —
   its stop rule, and the bridge that owns pad focus), ADR-0245 (W-P11 Cheats:
@@ -86,7 +92,10 @@ wheel leaves intent search, descriptions and key entry out of reach.
    as a cancel. The focus moving off the field (a mouse click elsewhere) also
    closes it as a cancel. The pad losing authority mid-entry (a stray key or
    mouse event, the load card) closes it **committing** the draft, so a
-   player never silently loses typed text. In these three outside closes the
+   player never silently loses typed text — except on a secret field (a
+   masked box, such as the Cheats sheet API key), which closes as a
+   **cancel** and gets back its original value, so a half-typed secret is
+   never stored without the player's commit. In these three outside closes the
    focus is left where it went: the field is not refocused, so the pad never
    comes back editing a field it no longer holds. The rule is host-free
    (`PadKeyboard.TextOnLeave`).
