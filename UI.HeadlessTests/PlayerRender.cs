@@ -81,18 +81,21 @@ internal static class PlayerRender
 		Log("wireframe report: " + path);
 	}
 
-	public static string WireframePath(string wId) => Path.Combine(GuiRedesignFolder, wId + ".png");
+	public static string WireframePath(string wId) => Path.Combine(RepoFolder("docs", "media", "gui-redesign"), wId + ".png");
 
-	private static string GuiRedesignFolder {
-		get {
-			for(DirectoryInfo? dir = new(AppContext.BaseDirectory); dir != null; dir = dir.Parent) {
-				string candidate = Path.Combine(dir.FullName, "docs", "media", "gui-redesign");
-				if(Directory.Exists(candidate)) {
-					return candidate;
-				}
+	//#974: the render UI.Tests gates on CI in place of a fresh one.
+	public static string CommittedRenderPath(string wId) => Path.Combine(RepoFolder("UI.Tests", "Theme", "PlayerRenders"), wId + ".png");
+
+	private static string RepoFolder(params string[] parts)
+	{
+		string relative = Path.Combine(parts);
+		for(DirectoryInfo? dir = new(AppContext.BaseDirectory); dir != null; dir = dir.Parent) {
+			string candidate = Path.Combine(dir.FullName, relative);
+			if(Directory.Exists(candidate)) {
+				return candidate;
 			}
-			throw new DirectoryNotFoundException("docs/media/gui-redesign not found above " + AppContext.BaseDirectory);
 		}
+		throw new DirectoryNotFoundException(relative + " not found above " + AppContext.BaseDirectory);
 	}
 
 	//The frame as the comparator's opaque RGB copy (same format rule as Pixel).
