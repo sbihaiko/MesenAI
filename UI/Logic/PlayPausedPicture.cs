@@ -20,18 +20,20 @@ public static class PlayFrozenFrame
 	//PlayGameLayer hides that picture for a surface: in the game view, with
 	//no home/slot grid over it. The software renderer already draws its last
 	//frame as an Avalonia image under the scrim, so it needs no copy.
-	public static bool Shows(bool gameViewVisible, bool recentsVisible, bool softwareFrame, bool surfaceOverGame)
+	//pictureOut is false while a pause that cut the load card short holds the
+	//game before its first picture (ADR-0254): there is no frame to stand in.
+	public static bool Shows(bool gameViewVisible, bool recentsVisible, bool softwareFrame, bool surfaceOverGame, bool pictureOut = true)
 	{
-		return gameViewVisible && !recentsVisible && !softwareFrame && surfaceOverGame;
+		return gameViewVisible && !recentsVisible && !softwareFrame && surfaceOverGame && pictureOut;
 	}
 
 	//Taken once when a surface first covers a loaded game (the core keeps the
 	//last frame while paused, so a later capture would be the same picture),
 	//dropped when nothing covers the game any more (it resumed) or the game is
 	//gone - a previous game's frame never shows behind the next one's sheets.
-	public static FrozenFrameStep Next(bool holding, bool surfaceOverGame, bool gameLoaded)
+	public static FrozenFrameStep Next(bool holding, bool surfaceOverGame, bool gameLoaded, bool pictureOut = true)
 	{
-		bool wanted = surfaceOverGame && gameLoaded;
+		bool wanted = surfaceOverGame && gameLoaded && pictureOut;
 		if(wanted && !holding) {
 			return FrozenFrameStep.Capture;
 		}
@@ -60,15 +62,14 @@ public static class PauseCard
 	public const byte DimAlpha = 0x46;
 
 	//Every sheet the Esc router closes back to W-P4 (PlayEsc) was opened from
-	//it, so the card stays behind it. Two exceptions: the first-start pack
-	//picker opens without W-P4, and the slot grid fills the game area (the
-	//card behind it would draw over the grid).
+	//it, so the card stays behind it. One exception: the first-start pack picker
+	//opens without W-P4.
 	public static PauseCardLayer Layer(bool gameLoaded, bool overlayVisible, PlaySheet sheet)
 	{
 		if(!gameLoaded) {
 			return overlayVisible ? PauseCardLayer.Active : PauseCardLayer.Hidden;
 		}
-		bool behindSheet = sheet != PlaySheet.SaveStateGrid && PlayEsc.Next(true, sheet, false) == PlayEscAction.CloseSheetToOverlay;
+		bool behindSheet = PlayEsc.Next(true, sheet, false) == PlayEscAction.CloseSheetToOverlay;
 		if(behindSheet) {
 			return PauseCardLayer.Dimmed;
 		}

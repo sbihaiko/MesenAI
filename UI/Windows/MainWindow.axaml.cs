@@ -112,6 +112,10 @@ namespace Mesen.Windows
 		//the player's Esc instead of firing the moment the window comes forward.
 		private bool _focusPausedWithOverlay;
 
+		//#967: where the focus poll reads "is the app active"; a headless test
+		//swaps it to lose and regain focus.
+		public IAppFocus AppFocus { get; set; } = Mesen.Windows.AppFocus.Desktop;
+
 		public Control Renderer => _usesSoftwareRenderer ? _softwareRenderer : _renderer;
 
 		static MainWindow()
@@ -311,14 +315,16 @@ namespace Mesen.Windows
 
 		private void OnDrop(object? sender, DragEventArgs e)
 		{
+			//#953: what the drop opens is DropRoute's (UI/Logic, pinned in UI.Tests).
+			//#986: a pack archive or folder (told by its manifest) is installed.
 			string? filename = e.DataTransfer.TryGetFiles()?.FirstOrDefault()?.Path.LocalPath;
-			if(filename != null) {
-				if(File.Exists(filename)) {
-					LoadRomHelper.LoadFile(filename);
-					Activate();
-				} else {
-					DisplayMessageHelper.DisplayMessage("Error", ResourceHelper.GetMessage("FileNotFound", filename));
-				}
+			DropAction action = LoadRomHelper.Route(filename);
+			if(action == DropAction.Ignore) {
+				return;
+			}
+			LoadRomHelper.Run(action, filename!);
+			if(action != DropAction.FileNotFound) {
+				Activate();
 			}
 		}
 
@@ -334,19 +340,38 @@ namespace Mesen.Windows
 		}
 
 		private void OnOverlaySaveStates(object? sender, RoutedEventArgs e) => _model.OpenSaveStatesSheet();
-		private void OnSaveStatesSave(object? sender, RoutedEventArgs e) => OpenSlotGrid(GameScreenMode.SaveState);
-		private void OnSaveStatesLoad(object? sender, RoutedEventArgs e) => OpenSlotGrid(GameScreenMode.LoadState);
 		private void OnSaveStatesBack(object? sender, RoutedEventArgs e) => _model.CloseSaveStatesSheet();
 		private void OnSaveStatesReplays(object? sender, RoutedEventArgs e) => _model.OpenReplaysSheet();
 
-		//Same path the former Save slot / Load slot items took (and the
-		//SaveStateDialog/LoadStateDialog shortcuts use).
-		private void OpenSlotGrid(GameScreenMode mode)
+		//#909 (W-P4): the grid's own per-slot actions. The row is the button's own
+		//DataContext - a DataTemplate's named controls live in its own name scope,
+		//so there is nothing to look up by name.
+		private void OnSlotSaveHere(object? sender, RoutedEventArgs e)
 		{
-			if(WindowState == WindowState.FullScreen && ConfigManager.Config.Video.UseExclusiveFullscreen) {
-				ToggleFullscreen();
+			if((sender as Control)?.DataContext is SaveStateSlotViewModel row) {
+				_model.SaveSaveStateSlot(row);
 			}
-			_model.OpenSlotGrid(mode);
+		}
+
+		private void OnSlotLoad(object? sender, RoutedEventArgs e)
+		{
+			if((sender as Control)?.DataContext is SaveStateSlotViewModel row) {
+				_model.LoadSaveStateSlot(row);
+			}
+		}
+
+		//The grid scrolls (eleven rows do not fit the sheet), and the pad's
+		//directional search only answers a row that is on screen: with just the
+		//focused row scrolled into view, Down off the last visible row found no row
+		//below it and left the grid for Shared replays, so slots 7 … 10 and the
+		//auto-save were out of the pad's reach. Keeping one row either side of the
+		//focused one in view is what lets every Down / Up land on the next row.
+		private void OnSlotGotFocus(object? sender, FocusChangedEventArgs e)
+		{
+			if((sender as Control)?.Parent is Control row && row.Bounds.Height > 0) {
+				double h = row.Bounds.Height;
+				row.BringIntoView(new Rect(0, -h, row.Bounds.Width, h * 3));
+			}
 		}
 
 		private void OnOverlayEnhancements(object? sender, RoutedEventArgs e)
@@ -1104,6 +1129,42 @@ namespace Mesen.Windows
 			return true;
 		}
 
+		//#1007, W-S2: the Fullscreen row prints ⌃⌘F (Ctrl+F off macOS), so those keys
+		//toggle it - WorkspaceMenu.IsFullscreenShortcut is the rule behind both.
+		//This stays a hard-coded key (not a secondary ToggleFullscreen binding in
+		//PreferencesConfig) because that path cannot carry it: AddShortcut only seeds
+		//a default for an action that has no entry yet, so every existing
+		//settings.json would never get it; the second slot is user-editable, so it
+		//is not a non-removable default; and the bindings are evaluated by the Core
+		//from raw key state, where the ⌘ half of ⌃⌘F has no portable key name.
+		//So it yields to what the configurable system owns: the focused menu, a
+		//focused text input, and a Ctrl+F the user bound to another shortcut.
+		private bool ProcessFullscreenShortcut(KeyEventArgs e)
+		{
+			if(!WorkspaceMenu.IsFullscreenShortcut(e.Key.ToString(), (ShortcutModifiers)(int)e.KeyModifiers, OperatingSystem.IsMacOS())) {
+				return false;
+			}
+			if(_focusInMenu || TopLevel.GetTopLevel(this)?.FocusManager?.GetFocusedElement() is TextBox || IsCtrlFBoundElsewhere()) {
+				return false;
+			}
+			ToggleFullscreen();
+			e.Handled = true;
+			return true;
+		}
+
+		private static bool IsCtrlFBoundElsewhere()
+		{
+			UInt16 f = InputApi.GetKeyCode("F");
+			UInt16[] ctrls = { InputApi.GetKeyCode("Left Ctrl"), InputApi.GetKeyCode("Right Ctrl") };
+			return ConfigManager.Config.Preferences.ShortcutKeys.Any(info => info.Shortcut != EmulatorShortcut.ToggleFullscreen && (IsCtrlF(info.KeyCombination, f, ctrls) || IsCtrlF(info.KeyCombination2, f, ctrls)));
+		}
+
+		private static bool IsCtrlF(KeyCombination combo, UInt16 f, UInt16[] ctrls)
+		{
+			UInt16[] keys = { combo.Key1, combo.Key2, combo.Key3 };
+			return keys.Count(k => k != 0) == 2 && keys.Contains(f) && keys.Any(k => ctrls.Contains(k));
+		}
+
 		private void OnPreviewKeyDown(object? sender, KeyEventArgs e)
 		{
 			if(_testModeEnabled && e.KeyModifiers == KeyModifiers.Alt && ProcessTestModeShortcuts(e.Key)) {
@@ -1111,6 +1172,10 @@ namespace Mesen.Windows
 			}
 
 			if(ProcessWorkspaceShortcut(e)) {
+				return;
+			}
+
+			if(ProcessFullscreenShortcut(e)) {
 				return;
 			}
 
@@ -1204,7 +1269,7 @@ namespace Mesen.Windows
 
 		private void UpdateAutoPause()
 		{
-			Window? activeWindow = ApplicationHelper.GetActiveWindow();
+			Window? activeWindow = AppFocus.GetActiveWindow();
 			PreferencesConfig cfg = ConfigManager.Config.Preferences;
 
 			//ADR-0254: the focus half is resolved on its own, because it is the one

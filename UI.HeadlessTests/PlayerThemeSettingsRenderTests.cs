@@ -141,7 +141,7 @@ public class PlayerThemeSettingsRenderTests : IDisposable
 	}
 
 	//W-P8 / W-P10's chrome: a white sheet (radius 14, 480 wide) in the Player
-	//scope titled Settings, the segmented Window | Video | Audio | Controls |
+	//scope titled Settings, the segmented Display | Look | Audio | Controls |
 	//System strip, and the 32 px Done, 90 wide.
 	private static void AssertSettingsChrome(Border sheet)
 	{
@@ -352,7 +352,8 @@ public class PlayerThemeSettingsRenderTests : IDisposable
 			Assert.Equal(new CornerRadius(10), pill.CornerRadius);
 			TextBlock pillText = LabelOf(pill);
 			AssertText(pillText, 13, FontWeight.SemiBold, Card);
-			Assert.Equal("New controller. Press Start on it to set it up.", pillText.Text);
+			//#913: the pill names the pad the way the sheet's title does.
+			Assert.Equal("New controller “8BitDo SN30”. Press Start on it to set it up.", pillText.Text);
 			PlayerRender.Save(PlayerRender.Capture(window), "W-P15-pill");
 
 			setup.Tick(Array.Empty<ushort>(), t += TimeSpan.FromMilliseconds(100));
@@ -386,6 +387,11 @@ public class PlayerThemeSettingsRenderTests : IDisposable
 
 			Bitmap frame = PlayerRender.Capture(window);
 			PlayerRender.Save(frame, "W-P15");
+			//#952 AC2: W-P15 is gated like PlayerThemeRenderTests' renders - every
+			//region passes except the deviations PlayerWireframe names for W-P15.
+			IReadOnlyList<RegionResult> results = PlayerWireframe.Compare("W-P15", PlayerRender.Rgb(frame), RgbFrame.FromPng(PlayerRender.WireframePath("W-P15")));
+			IReadOnlyList<string> violations = PlayerWireframe.Gate("W-P15", results, PlayerWireframe.KnownDeviationsOf("W-P15"));
+			Assert.True(violations.Count == 0, string.Join(Environment.NewLine, violations));
 			Point inside = sheet.TranslatePoint(new Point(12, 12), window)!.Value;
 			PlayerRender.AssertPixel(OverlayCard, frame, (int)inside.X, (int)inside.Y + 30);
 		} finally {

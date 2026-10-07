@@ -1245,6 +1245,17 @@ namespace Mesen.ViewModels
 			};
 		}
 
+		//#953: the release page's hand-off to the browser once the no-feed
+		//dialog is answered. A seam so a test can see the URL handed over.
+		public Action<string> ReleasePageLauncher { get; set; } = ApplicationHelper.OpenBrowser;
+
+		public void AnswerReleasePageOffer(DialogResult answer)
+		{
+			if(answer == DialogResult.OK) {
+				ReleasePageLauncher(UpdateChannel.ReleasesPageUrl);
+			}
+		}
+
 		public void CheckForUpdate(Window mainWindow, bool silent)
 		{
 			//#672: the fork has no update feed (ADR-0204 publishes no version
@@ -1262,9 +1273,7 @@ namespace Mesen.ViewModels
 						return;
 					}
 					Dispatcher.UIThread.Post(async () => {
-						if(await MesenMsgBox.Show(mainWindow, "UpdateCheckNoFeed", MessageBoxButtons.OKCancel, MessageBoxIcon.Info, UpdateChannel.ReleasesPageUrl) == DialogResult.OK) {
-							ApplicationHelper.OpenBrowser(UpdateChannel.ReleasesPageUrl);
-						}
+						AnswerReleasePageOffer(await MesenMsgBox.Show(mainWindow, "UpdateCheckNoFeed", MessageBoxButtons.OKCancel, MessageBoxIcon.Info, UpdateChannel.ReleasesPageUrl));
 					});
 					return;
 			}

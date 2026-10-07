@@ -33,13 +33,85 @@ static double AxisThresholdForDirection(Emulator* emu, int direction, double hos
 	return ShortcutKeyRules::AxisThresholdRatio(units, hostRatio);
 }
 
+//---------------------------------------------------------------------------
+//W-P15 (#912): a pad that exposes no extended gamepad.
+//
+//The GameController framework gives a controller one of three profiles -
+//extended, micro (the Siri Remote and the one-button pads) or the older basic
+//one - and this backend used to keep only the extended one: a micro/basic pad
+//was dropped by MacOSKeyManager::AddController (so it never got a slot) or,
+//one layer down, was kept with a nil handler, and every key it had was lost.
+//The unknown-pad pill fires on a pad's first press, so a pad that sends no key
+//never reaches it and can never be set up.
+//
+//A profile's elements drive the same button bits every other pad on this host
+//drives - MacOSKeyManager's own `buttonNames` order: A 0, B 1, X 2, Y 3, L1 4,
+//R1 5, Start 6, Select 7, Up 8, Down 9, Left 10, Right 11, L2 12, R2 13, L3
+//14, R3 15. The tables below are that mapping as data, one per profile a pad
+//can expose, so the bits can be read back off disk against that same order
+//(UI.Tests/Play/MacOSPadProfileTests). The extended profile's own handler is
+//unchanged: it still drives all sixteen bits and the four stick directions.
+struct PadProfileKey
+{
+	//The GameController selector that returns the element.
+	const char* element;
+	//The button bit it drives, or PadDpad for a direction pad (bits 8..11).
+	int bit;
+};
+
+//A direction pad's own element: it drives four bits, not one.
+static const int PadDpad = -1;
+
+static const PadProfileKey kMicroGamepadKeys[] = {
+	{ "buttonA", 0 },
+	{ "buttonX", 2 },
+	{ "buttonMenu", 6 },
+	{ "dpad", PadDpad },
+};
+
+static const PadProfileKey kBasicGamepadKeys[] = {
+	{ "buttonA", 0 },
+	{ "buttonB", 1 },
+	{ "buttonX", 2 },
+	{ "buttonY", 3 },
+	{ "leftShoulder", 4 },
+	{ "rightShoulder", 5 },
+	{ "dpad", PadDpad },
+};
+
+//Lands the element a profile just reported on the bit its own table names.
+static void HandleProfileElement(id profile, GCControllerElement* element, const PadProfileKey* keys, size_t count, bool* buttonState)
+{
+	for(size_t i = 0; i < count; i++) {
+		SEL selector = NSSelectorFromString([NSString stringWithUTF8String:keys[i].element]);
+		if(![profile respondsToSelector:selector] || (GCControllerElement*)[profile performSelector:selector] != element) {
+			continue;
+		}
+		if(keys[i].bit == PadDpad) {
+			GCControllerDirectionPad* dpad = (GCControllerDirectionPad*)element;
+			buttonState[8] = [[dpad up] isPressed];
+			buttonState[9] = [[dpad down] isPressed];
+			buttonState[10] = [[dpad left] isPressed];
+			buttonState[11] = [[dpad right] isPressed];
+		} else {
+			buttonState[keys[i].bit] = [((GCControllerButtonInput*)element) isPressed];
+		}
+	}
+}
+
 MacOSGameController::MacOSGameController(Emulator* emu, GCController* controller)
 {
 	_emu = emu;
 	_controller = [controller retain];
-	_input = [[_controller extendedGamepad] retain];
+	_extended = [[_controller extendedGamepad] retain];
+	_micro = [[_controller microGamepad] retain];
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+	_basic = [[_controller gamepad] retain];
+#pragma clang diagnostic pop
 
-	[_input setValueChangedHandler:^ void (GCExtendedGamepad* input, GCControllerElement* element) {
+	if(_extended != nil) {
+	[_extended setValueChangedHandler:^ void (GCExtendedGamepad* input, GCControllerElement* element) {
 		if([input buttonA] == element) _buttonState[0] = [((GCControllerButtonInput*) element) isPressed];
 		if([input buttonB] == element) _buttonState[1] = [((GCControllerButtonInput*) element) isPressed];
 		if([input buttonX] == element) _buttonState[2] = [((GCControllerButtonInput*) element) isPressed];
@@ -56,6 +128,20 @@ MacOSGameController::MacOSGameController(Emulator* emu, GCController* controller
 		if([input leftThumbstick] == element) HandleThumbstick((GCControllerDirectionPad*) element, 0);
 		if([input rightThumbstick] == element) HandleThumbstick((GCControllerDirectionPad*) element, 1);
 	}];
+	} else if(_micro != nil) {
+		[_micro setValueChangedHandler:^ void (GCMicroGamepad* input, GCControllerElement* element) {
+			HandleProfileElement(input, element, kMicroGamepadKeys, sizeof(kMicroGamepadKeys) / sizeof(kMicroGamepadKeys[0]), _buttonState);
+		}];
+	} else if(_basic != nil) {
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+		[_basic setValueChangedHandler:^ void (GCGamepad* input, GCControllerElement* element) {
+			HandleProfileElement(input, element, kBasicGamepadKeys, sizeof(kBasicGamepadKeys) / sizeof(kBasicGamepadKeys[0]), _buttonState);
+		}];
+#pragma clang diagnostic pop
+	}
+	//(A pad with none of the three never reaches this class:
+	//MacOSGameController::Supports is what AddController asks.)
 
 	_haptics = nil;
 	_player = nil;
@@ -83,8 +169,18 @@ MacOSGameController::~MacOSGameController()
 		[_haptics stopWithCompletionHandler:^ void (NSError* error) {}];
 		[_haptics release];
 	}
-	[_input setValueChangedHandler:nil];
-	[_input release];
+	[_extended setValueChangedHandler:nil];
+	[_micro setValueChangedHandler:nil];
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+	[_basic setValueChangedHandler:nil];
+#pragma clang diagnostic pop
+	[_extended release];
+	[_micro release];
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+	[_basic release];
+#pragma clang diagnostic pop
 	[_controller release];
 }
 
@@ -120,6 +216,20 @@ bool MacOSGameController::IsGameController(GCController* controller)
 	return _controller == controller;
 }
 
+bool MacOSGameController::Supports(GCController* controller)
+{
+	if(controller == nil) {
+		return false;
+	}
+	if([controller extendedGamepad] != nil || [controller microGamepad] != nil) {
+		return true;
+	}
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+	return [controller gamepad] != nil;
+#pragma clang diagnostic pop
+}
+
 bool MacOSGameController::IsButtonPressed(int buttonNumber)
 {
 	if(buttonNumber < 0 || buttonNumber >= 24) {
@@ -146,6 +256,18 @@ std::string MacOSGameController::GetName()
 bool MacOSGameController::HasRumble()
 {
 	return _haptics != nil;
+}
+
+bool MacOSGameController::SetLight(uint8_t r, uint8_t g, uint8_t b)
+{
+	GCDeviceLight* light = [_controller light];
+	if(light == nil) {
+		return false;
+	}
+	GCColor* color = [[GCColor alloc] initWithRed:IKeyManager::LightChannel(r) green:IKeyManager::LightChannel(g) blue:IKeyManager::LightChannel(b)];
+	[light setColor:color];
+	[color release];
+	return true;
 }
 
 void MacOSGameController::SetForceFeedback(uint16_t magnitudeRight, uint16_t magnitudeLeft)

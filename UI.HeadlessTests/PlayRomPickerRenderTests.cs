@@ -80,15 +80,21 @@ public class PlayRomPickerRenderTests : IDisposable
 		prefs.UiMode = UiMode.Player;
 		prefs.Workspace = Workspace.Play;
 
+		//#999: the stale recents go BEFORE the window starts. The window's own
+		//startup Init reads them, and a second Init in the same mode with entries
+		//on screen returns early (the anti-flicker guard), so deleting them
+		//afterwards left the recents home up whenever an earlier class had left
+		//an .rgd behind.
+		foreach(string stale in Directory.GetFiles(ConfigManager.RecentGamesFolder, "*.rgd")) {
+			File.Delete(stale);
+		}
+
 		MainWindow window = new() { Width = 1100, Height = 740 };
 		window.ShowStarted();
 		_windows.Add(window);
 		MainWindowViewModel model = Assert.IsType<MainWindowViewModel>(window.DataContext);
 		WaitFor(() => model.MainMenu.HelpMenuItems.Count > 0, "MainWindow never finished building its menus.");
 
-		foreach(string stale in Directory.GetFiles(ConfigManager.RecentGamesFolder, "*.rgd")) {
-			File.Delete(stale);
-		}
 		model.RecentGames.Init(GameScreenMode.RecentGames);
 		Pump();
 		Assert.True(model.RecentGames.ShowFirstRunHome, "the home is not the first-run one, so the render would be of the wrong surface");
@@ -155,7 +161,7 @@ public class PlayRomPickerRenderTests : IDisposable
 		Pump();
 
 		AssertSheetIsUp(window, model);
-		PlayerRomPickerRow suggestion = Assert.Single(model.RomPicker.Rows.Where(r => r.Path == lib));
+		PlayerRomPickerRow suggestion = Assert.Single(model.RomPicker.Rows, r => r.Path == lib);
 		Assert.Equal(RomPickerRowKind.Folder, suggestion.Kind);
 		Assert.Equal(model.RomPicker.Rows[^1], suggestion);
 		//The line is gone: the scan is done, and the state on screen is the answer.
@@ -217,7 +223,7 @@ public class PlayRomPickerRenderTests : IDisposable
 		Pump();
 
 		AssertSheetIsUp(window, model);
-		PlayerRomPickerRow action = Assert.Single(model.RomPicker.Rows.Where(r => r.Kind == RomPickerRowKind.Action));
+		PlayerRomPickerRow action = Assert.Single(model.RomPicker.Rows, r => r.Kind == RomPickerRowKind.Action);
 		Assert.Equal(model.RomPicker.Rows[0], action);
 		Assert.Contains("nes", model.RomPicker.PathText);
 		Assert.False(window.FindNamed<TextBlock>("RomPickerEmpty").IsOnScreen());
@@ -243,7 +249,7 @@ public class PlayRomPickerRenderTests : IDisposable
 		Pump();
 		model.RomPicker.Choose(model.RomPicker.Rows.First(r => r.Label == "nes"));
 		Pump();
-		model.RomPicker.Choose(Assert.Single(model.RomPicker.Rows.Where(r => r.Kind == RomPickerRowKind.Action)));
+		model.RomPicker.Choose(Assert.Single(model.RomPicker.Rows, r => r.Kind == RomPickerRowKind.Action));
 		Pump();
 
 		AssertSheetIsUp(window, model);
@@ -281,7 +287,7 @@ public class PlayRomPickerRenderTests : IDisposable
 		AssertSheetIsUp(window, model);
 		WaitFor(() => (window.FocusManager?.GetFocusedElement() as Control)?.Name == "RomPickerBack",
 			"an empty folder did not send the ring to Back");
-		Assert.Single(model.RomPicker.Rows.Where(r => r.Kind == RomPickerRowKind.Action));
+		Assert.Single(model.RomPicker.Rows, r => r.Kind == RomPickerRowKind.Action);
 		Assert.True(model.RomPicker.EmptyText.Length > 0, "the empty folder says nothing");
 		//Nothing openable, so the action row is the whole list.
 		Assert.DoesNotContain(model.RomPicker.Rows, r => r.Kind != RomPickerRowKind.Action);

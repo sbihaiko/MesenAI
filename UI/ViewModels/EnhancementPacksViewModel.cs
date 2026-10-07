@@ -42,6 +42,9 @@ namespace Mesen.ViewModels
 		private bool _suppressPreferenceApply;
 
 		public string PacksFolder => ConfigManager.EnhancementPackFolder;
+		//#953: Open Folder's hand-off to the file manager. A seam so a test can
+		//see the folder handed over without launching anything.
+		public Action<string> FolderLauncher { get; set; } = ApplicationHelper.OpenFolder;
 
 		public EnhancementPacksViewModel()
 		{
@@ -170,11 +173,7 @@ namespace Mesen.ViewModels
 		private void OpenFolder(string folder)
 		{
 			if(Directory.Exists(folder)) {
-				System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo() {
-					FileName = folder + Path.DirectorySeparatorChar,
-					UseShellExecute = true,
-					Verb = "open"
-				});
+				FolderLauncher(folder);
 			}
 		}
 
@@ -192,10 +191,47 @@ namespace Mesen.ViewModels
 
 			IsBusy = true;
 			try {
+				return await InstallPackFile(filename, PacksFolder);
+			} finally {
+				IsBusy = false;
+			}
+		}
+
+		//#986: the install itself, shared by the Install button and a pack
+		//dropped on the main window. A dropped folder is zipped first (under its
+		//own name, so its root becomes the zip's single top-level folder, which
+		//the validator's ADR-0120 fallback reads) and installed like a .zip.
+		//Returns "" on success, a message ID otherwise.
+		private static void DeleteTempZip(string? tempZip)
+		{
+			if(tempZip == null) {
+				return;
+			}
+			try {
+				File.Delete(tempZip);
+			} catch(Exception ex) when(ex is IOException or UnauthorizedAccessException) {
+				//A temp file left behind is not worth failing the install.
+			}
+		}
+
+		public static async Task<string> InstallPackFile(string path, string packsFolder)
+		{
+			string? tempZip = null;
+			try {
+				string source = path;
+				string target = Path.Combine(packsFolder, Path.GetFileName(path));
+				if(Directory.Exists(path)) {
+					string folder = Path.TrimEndingDirectorySeparator(path);
+					tempZip = Path.Combine(Path.GetTempPath(), "mesen-pack-" + Guid.NewGuid().ToString("N") + ".zip");
+					await Task.Run(() => ZipFile.CreateFromDirectory(folder, tempZip, CompressionLevel.Fastest, true));
+					source = tempZip;
+					target = Path.Combine(packsFolder, Path.GetFileName(folder) + ".zip");
+				}
+
 				//A pack zip can be hundreds of MB - keep the validation and the
 				//copy off the UI thread, so the bar keeps moving.
 				string? error = await Task.Run(() => {
-					using(ZipArchive zip = ZipFile.OpenRead(filename)) {
+					using(ZipArchive zip = ZipFile.OpenRead(source)) {
 						return MepZipValidator.Validate(zip);
 					}
 				});
@@ -203,12 +239,15 @@ namespace Mesen.ViewModels
 					return error;
 				}
 
-				string target = Path.Combine(PacksFolder, Path.GetFileName(filename));
-				await Task.Run(() => File.Copy(filename, target, true));
-			} catch(Exception ex) when(ex is IOException or UnauthorizedAccessException or InvalidDataException) {
+				await Task.Run(() => File.Copy(source, target, true));
+			} catch(Exception) {
+				//#993: a dropped pack reaches here from an async void, so any
+				//failure (an odd file name ZipFile/File.Copy refuse with
+				//ArgumentException/NotSupportedException, too) is a message,
+				//never an exception that takes the app down.
 				return "InstallMepPackInvalidZipFile";
 			} finally {
-				IsBusy = false;
+				DeleteTempZip(tempZip);
 			}
 
 			return "";

@@ -2,9 +2,9 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using Mesen.Localization;
 using Mesen.Logic;
 using Mesen.Services;
+using Mesen.Utilities;
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.IO;
 using System.Security.Cryptography;
 using System.Threading.Tasks;
@@ -16,8 +16,8 @@ namespace Mesen.ViewModels
 	//CommunityPackDepPrompt (Hints, License, DropFolder, Sha256); the sheet
 	//replaces the OSD line in Player mode. The app never fetches the file: a
 	//file the user drops or picks is checked by content hash, copied into the
-	//drop folder, and the game is reloaded so the pack re-resolves (until
-	//ADR-0244's P.9 applies it in place).
+	//drop folder, and the pack completes: in place where ADR-0244 (P.9) allows
+	//it, otherwise the game is reloaded so the pack re-resolves (#938).
 	public partial class PlayPackDepSheetViewModel : ViewModelBase
 	{
 		[ObservableProperty] public partial bool IsVisible { get; private set; }
@@ -28,6 +28,9 @@ namespace Mesen.ViewModels
 		[ObservableProperty] public partial string PrimaryLabel { get; private set; } = "";
 		[ObservableProperty] public partial string DropHint { get; private set; } = "";
 		[ObservableProperty] public partial bool IsBusy { get; private set; }
+		//#939: W-P6's orange line - whether a file is pending, and its title.
+		[ObservableProperty] public partial bool HasPending { get; private set; }
+		[ObservableProperty] public partial string PendingTitle { get; private set; } = "";
 
 		public PackDepNoticeState Notice { get; } = new();
 
@@ -35,7 +38,7 @@ namespace Mesen.ViewModels
 
 		//Play Without It (or Esc): back to the pause overlay (rule 8).
 		public event Action? Closed;
-		//The file is in the drop folder: the owner reloads the game.
+		//The file is in the drop folder: the owner completes the pack.
 		public event Action? FileAdded;
 
 		public CommunityPackDepPrompt? Current => _pending.Count > 0 ? _pending[0] : null;
@@ -44,16 +47,25 @@ namespace Mesen.ViewModels
 		{
 			_pending = pending;
 			Notice.Pending(packName, pending.Count);
+			HasPending = PackDetailPendingFile.Shows(Notice);
+			PendingTitle = !HasPending ? ""
+				: Notice.FileCount == 1 ? ResourceHelper.GetMessage("PackDepSheetTitleOne", Notice.PackName)
+				: ResourceHelper.GetMessage("PackDepSheetTitleMany", Notice.PackName, Notice.FileCount);
 		}
 
 		public void Clear()
 		{
 			_pending = Array.Empty<CommunityPackDepPrompt>();
 			Notice.Clear();
+			HasPending = false;
+			PendingTitle = "";
 			IsVisible = false;
 		}
 
-		public void Open()
+		//appliesInPlace: the pack change policy's answer for the loaded game
+		//(MainWindowViewModel.PackDepAppliesInPlace) - the button promises a
+		//restart only where adding the file restarts the game.
+		public void Open(bool appliesInPlace = false)
 		{
 			if(Current is not CommunityPackDepPrompt dep) {
 				return;
@@ -64,7 +76,7 @@ namespace Mesen.ViewModels
 				: ResourceHelper.GetMessage("PackDepSheetTitleMany", Notice.PackName, Notice.FileCount);
 			FileTitle = string.IsNullOrWhiteSpace(dep.Hints) ? dep.DepId : dep.Hints;
 			LicenseText = ResourceHelper.GetMessage("PackDepSheetLicense", string.IsNullOrWhiteSpace(dep.License) ? CommunityPackDepResolver.LicenseNotDeclared : dep.License);
-			bool inPlace = PlayPackDepPrompt.PrimaryAction(PlayPackDepPrompt.AppliesInPlace) == PackDepPrimaryAction.Add;
+			bool inPlace = PlayPackDepPrompt.PrimaryAction(appliesInPlace) == PackDepPrimaryAction.Add;
 			PrimaryLabel = ResourceHelper.GetMessage(inPlace ? "PackDepSheetAdd" : "PackDepSheetAddAndRestart");
 			DropHint = ResourceHelper.GetMessage(inPlace ? "PackDepSheetDropHint" : "PackDepSheetDropHintRestart");
 			ErrorText = "";
@@ -144,6 +156,10 @@ namespace Mesen.ViewModels
 			return Convert.ToHexString(SHA256.HashData(stream));
 		}
 
+		//#953: Show Folder's hand-off to the file manager. A seam so a test can
+		//see the drop folder handed over without launching anything.
+		public Action<string> FolderLauncher { get; set; } = ApplicationHelper.OpenFolder;
+
 		public void ShowFolder()
 		{
 			if(Current is not CommunityPackDepPrompt dep) {
@@ -151,8 +167,7 @@ namespace Mesen.ViewModels
 			}
 			try {
 				Directory.CreateDirectory(dep.DropFolder);
-				string opener = OperatingSystem.IsWindows() ? "explorer.exe" : (OperatingSystem.IsMacOS() ? "open" : "xdg-open");
-				Process.Start(new ProcessStartInfo(opener) { ArgumentList = { dep.DropFolder } })?.Dispose();
+				FolderLauncher(dep.DropFolder);
 			} catch(Exception ex) {
 				ErrorText = ResourceHelper.GetMessage("PackDepSheetCopyFailed", ex.Message);
 			}

@@ -30,6 +30,25 @@
 			<TextBlock Classes="title3" Text="{l:Translate lblCheatsTitle}" Margin="0 4 0 12" />
 			<TextBox Name="CheatsSearchBox" Text="{Binding SearchText}" PlaceholderText="{Binding SearchPlaceholder}" IsEnabled="{Binding IsSearchEnabled}" Margin="0 0 0 12" />
 
+			<!--P.11 (ADR-0245 §4, #922): search by intent. The answer is one of the
+			listed entries (highlighted below) or a line saying none matched; the
+			OpenRouter key lives in the OS credential store and is removable here.-->
+			<StackPanel Name="CheatsIntentPanel" Spacing="8" Margin="0 0 0 12" IsVisible="{Binding IsIntentAvailable}">
+				<DockPanel>
+					<Button Name="CheatsIntentFind" Classes="secondary regular" DockPanel.Dock="Right" Margin="8 0 0 0" Content="{Binding FindLabel}" IsEnabled="{Binding !IsIntentSearching}" Click="OnFindIntent" />
+					<TextBox Name="CheatsIntentBox" Text="{Binding IntentText}" PlaceholderText="{Binding IntentPlaceholder}" MaxLength="200" KeyDown="OnIntentKeyDown" />
+				</DockPanel>
+				<!--Every wait moves (2026-10-03).-->
+				<ProgressBar Name="CheatsIntentBar" IsIndeterminate="True" Width="200" HorizontalAlignment="Left" IsVisible="{Binding IsIntentSearching}" />
+				<TextBlock Name="CheatsIntentLine" Classes="subhead secondary" TextWrapping="Wrap" Text="{Binding IntentLine}" IsVisible="{Binding IntentLine.Length}" />
+				<DockPanel>
+					<Button Name="CheatsKeyRemove" Classes="plain small" DockPanel.Dock="Right" Content="{Binding RemoveKeyLabel}" Click="OnRemoveKey" />
+					<Button Name="CheatsKeySave" Classes="plain small" DockPanel.Dock="Right" Content="{Binding SaveKeyLabel}" Click="OnSaveKey" />
+					<TextBox Name="CheatsKeyBox" Text="{Binding KeyText}" PasswordChar="•" PlaceholderText="{Binding KeyPlaceholder}" />
+				</DockPanel>
+				<TextBlock Classes="footnote secondary" TextWrapping="Wrap" Text="{Binding KeyLine}" IsVisible="{Binding KeyLine.Length}" />
+			</StackPanel>
+
 			<!--Not in the list: games by name; picking one borrows its codes.-->
 			<ItemsControl Name="CheatsGameResults" ItemsSource="{Binding GameResults}" IsVisible="{Binding IsGameSearch}" Margin="0 0 0 12">
 				<ItemsControl.ItemsPanel>
@@ -43,6 +62,15 @@
 					</DataTemplate>
 				</ItemsControl.ItemTemplate>
 			</ItemsControl>
+
+			<!--P.12 (ADR-0245 §4, #924): a copy not in the list can look its codes up
+			online; only codes checked on this copy come back, as rows below.-->
+			<StackPanel Name="CheatsWebPanel" Spacing="8" Margin="0 0 0 12" IsVisible="{Binding IsWebLookupAvailable}">
+				<Button Name="CheatsLookOnline" Classes="secondary regular" HorizontalAlignment="Left" Content="{Binding LookOnlineLabel}" IsEnabled="{Binding !IsWebSearching}" Click="OnLookOnline" />
+				<!--Every wait moves (2026-10-03).-->
+				<ProgressBar Name="CheatsWebBar" IsIndeterminate="True" Width="200" HorizontalAlignment="Left" IsVisible="{Binding IsWebSearching}" />
+				<TextBlock Name="CheatsWebLine" Classes="subhead secondary" TextWrapping="Wrap" Text="{Binding WebLine}" IsVisible="{Binding WebLine.Length}" />
+			</StackPanel>
 
 			<!--The inset is drawn behind the list, not around it: CheatsList stays
 			in the visual tree when there are no rows (only the chrome hides).-->
@@ -58,6 +86,8 @@
 											<CheckBox Classes="switch" Classes.subtitled="{Binding HasNote}" Content="{Binding Description}" IsChecked="{Binding IsOn, Mode=OneWay}" IsEnabled="{Binding CanToggle}" Click="OnToggleCheat" />
 											<TextBlock Classes="row-subtitle" TextTrimming="CharacterEllipsis" Text="{Binding Note}" IsVisible="{Binding HasNote}" />
 										</Panel>
+										<!--P.11: the entry the search by intent picked.-->
+										<TextBlock Name="CheatsIntentMatchMark" Classes="footnote" Margin="0 -6 0 8" Text="{Binding IntentMatchMark}" IsVisible="{Binding IsIntentMatch}" />
 										<!--R.4 (ADR-0248 §5): a community row, "from the community · 👍 N";
 										the count opens the submission issue to vote there (↗).-->
 										<StackPanel Name="CheatsCommunityMark" Orientation="Horizontal" Spacing="6" Margin="0 -6 0 8" IsVisible="{Binding IsCommunity}">
@@ -83,7 +113,7 @@
 
 			<!--*Add a Code…*: a code typed by hand; the full editor stays in Classic › Tools › Cheats.-->
 			<StackPanel Name="CheatsAddCodePanel" Spacing="8" Margin="0 14 0 0" IsVisible="{Binding IsAddCodeOpen}">
-				<TextBox Name="CheatsNewCodeBox" Text="{Binding NewCode}" PlaceholderText="{l:Translate lblCheatsCodePlaceholder}" />
+				<TextBox Name="CheatsNewCodeBox" Classes="padCode" Text="{Binding NewCode}" PlaceholderText="{l:Translate lblCheatsCodePlaceholder}" />
 				<TextBox Text="{Binding NewDescription}" PlaceholderText="{l:Translate lblCheatsDescriptionPlaceholder}" />
 				<Border Classes="warning notice" IsVisible="{Binding AddCodeError.Length}">
 					<TextBlock Name="CheatsAddCodeError" TextWrapping="Wrap" Text="{Binding AddCodeError}" />

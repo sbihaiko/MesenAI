@@ -31,7 +31,7 @@ namespace Mesen.ViewModels
 			PauseCardLayer card = PauseCard.Layer(IsGameLoaded, IsPlayerOverlayVisible, CurrentPlaySheet());
 			IsPauseCardVisible = card != PauseCardLayer.Hidden;
 			IsPauseCardDimmed = card == PauseCardLayer.Dimmed;
-			IsPausedGameFrameVisible = PlayFrozenFrame.Shows(IsGameViewVisible, RecentGames.Visible, SoftwareRenderer.FrameSurface != null, surfaceOverGame);
+			IsPausedGameFrameVisible = PlayFrozenFrame.Shows(IsGameViewVisible, RecentGames.Visible, SoftwareRenderer.FrameSurface != null, surfaceOverGame, !LoadWait.PictureCutShort);
 
 			//Moving between W-P4 and a sheet hides one before showing the other,
 			//so for an instant nothing covers the game; the capture/drop decision
@@ -46,7 +46,7 @@ namespace Mesen.ViewModels
 		private void UpdatePausedFrame()
 		{
 			_pausedFramePending = false;
-			switch(PlayFrozenFrame.Next(PausedGameFrame != null, IsPlaySurfaceOverGame, IsGameLoaded)) {
+			switch(PlayFrozenFrame.Next(PausedGameFrame != null, IsPlaySurfaceOverGame, IsGameLoaded, !LoadWait.PictureCutShort)) {
 				case FrozenFrameStep.Capture:
 					PausedGameFrame = FrameCaptureApi.CaptureFrame();
 					break;

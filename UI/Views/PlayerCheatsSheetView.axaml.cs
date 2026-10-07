@@ -22,6 +22,32 @@ namespace Mesen.Views
 
 		private PlayerCheatsSheetViewModel? Model => DataContext as PlayerCheatsSheetViewModel;
 
+		private async void OnLookOnline(object? sender, RoutedEventArgs e)
+		{
+			if(Model != null) {
+				await Model.LookOnline();
+			}
+		}
+
+		private async void OnFindIntent(object? sender, RoutedEventArgs e)
+		{
+			if(Model != null) {
+				await Model.SearchByIntent();
+			}
+		}
+
+		private async void OnIntentKeyDown(object? sender, Avalonia.Input.KeyEventArgs e)
+		{
+			if(e.Key == Avalonia.Input.Key.Enter && Model != null) {
+				e.Handled = true;
+				await Model.SearchByIntent();
+			}
+		}
+
+		private void OnSaveKey(object? sender, RoutedEventArgs e) => Model?.SaveKey();
+
+		private void OnRemoveKey(object? sender, RoutedEventArgs e) => Model?.RemoveKey();
+
 		private void OnToggleCheat(object? sender, RoutedEventArgs e)
 		{
 			if(sender is Control { DataContext: PlayerCheatRow row }) {

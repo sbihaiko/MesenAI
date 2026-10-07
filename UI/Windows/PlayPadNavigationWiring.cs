@@ -1,3 +1,4 @@
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Input;
@@ -97,6 +98,22 @@ namespace Mesen.Windows
 			}
 		}
 
+		//#994 review 3: where the keyboard panel is drawn; a headless case swaps
+		//it to stand in for a field with no overlay layer. Null puts it back.
+		private static Func<Visual, OverlayLayer?> _overlayOf = OverlayLayer.GetOverlayLayer;
+
+		public static void SetOverlayLookupForTest(Func<Visual, OverlayLayer?>? lookup)
+		{
+			_overlayOf = lookup ?? OverlayLayer.GetOverlayLayer;
+		}
+
+		//ADR-0262: the keyboard the pad has open, or null - so a headless case can
+		//walk its keys the way a player does instead of guessing the layout.
+		public static PadKeyboard? KeyboardForTest(MainWindow window)
+		{
+			return Installed.TryGetValue(window, out Bridge? bridge) ? bridge.Keyboard : null;
+		}
+
 		//ADR-0256 Decision 3: ONE path decides who holds the focus when a Play
 		//surface opens or closes. The surfaces are registered in the order the Esc
 		//router itself walks them - TogglePlayerOverlay's QuitGameConfirm first,
@@ -149,10 +166,20 @@ namespace Mesen.Windows
 			//so it is claimed before the sheet that holds it: with the tab
 			//showing, the pad lands on the storage choice; on any other tab this
 			//claim is closed and the one below puts it on the strip, as before.
+			//#932: and it names the sheet as its root, as the Settings claim does
+			//(#910). Inferred from the storage choice, the root was the tab's page,
+			//which holds neither the strip nor the footer (Done), so the D-pad
+			//could not leave the four choices.
 			focus.When(model, [nameof(MainWindowViewModel.IsPlayerSystemTabVisible)],
-				() => model.IsPlayerSystemTabVisible, () => Named(window, "SystemStorageUserFolder"));
+				() => model.IsPlayerSystemTabVisible, () => Named(window, "SystemStorageUserFolder"),
+				() => Named(window, "PlayerSettingsSheet"));
+			//#910: the sheet names its own root. Inferred from the strip's tab,
+			//the root was the TabControl, which holds neither the page's rows
+			//nor the footer (Exit full screen, Done), so the D-pad could not
+			//leave the strip.
 			focus.When(model, [nameof(MainWindowViewModel.IsPlayerSettingsVisible)],
-				() => model.IsPlayerSettingsVisible, () => Named(window, "tabPlayerWindow"));
+				() => model.IsPlayerSettingsVisible, () => Named(window, "tabPlayerWindow"),
+				() => Named(window, "PlayerSettingsSheet"));
 			//ADR-0255's Controller sheet, which CurrentPlaySheet() reads right
 			//after Settings (one of the two is current at a time; the sheet
 			//replaces the Settings sheet's Controls landing), so the arbiter's
@@ -180,15 +207,21 @@ namespace Mesen.Windows
 				() => model.IsEnhancementsPanelVisible, () => Named(window, "EnhancementsModernCheckBox"));
 			focus.When(model, [nameof(MainWindowViewModel.IsPackDetailVisible)],
 				() => model.IsPackDetailVisible,
-				() => Named(window, model.PackDetailCanChange ? "PackDetailChangeButton" : "PackDetailDoneButton"));
+				() => Named(window, PackDetailPendingFile.FirstControl(model.PackDepSheet.HasPending, model.PackDetailCanChange)));
 			focus.When(model.CheatsSheet, [nameof(PlayerCheatsSheetViewModel.IsVisible)],
 				() => model.CheatsSheet.IsVisible,
 				() => Named(window, model.CheatsSheet.IsSearchEnabled ? "CheatsSearchBox" : "CheatsDoneButton"));
 			focus.When(model.ReplaysSheet, [nameof(PlayerReplaysSheetViewModel.IsVisible)],
 				() => model.ReplaysSheet.IsVisible,
 				() => EnabledNamed(window, "ReplaysWatchButton") ?? Named(window, "ReplaysDoneButton"));
+			//#909: the Save states sheet is a grid of rows (#848's reason applies
+			//here too: its first control is a row of its own list), so it names its
+			//own search root and its target is the row's own *Save here* - the slot
+			//the sheet opens on, which the rule answers (newest state, else the
+			//first slot).
 			focus.When(model, [nameof(MainWindowViewModel.IsSaveStatesSheetVisible)],
-				() => model.IsSaveStatesSheetVisible, () => Named(window, "SaveStatesSaveButton"));
+				() => model.IsSaveStatesSheetVisible, () => SaveStatesFocusTarget(window, model),
+				() => Named(window, "PlayerSaveStatesSheet"));
 			//W-P4 itself, under every sheet opened from it and over the game.
 			focus.When(model, [nameof(MainWindowViewModel.IsPlayerOverlayVisible)],
 				() => model.IsPlayerOverlayVisible, () => Named(window, "OverlayResumeButton"));
@@ -287,6 +320,25 @@ namespace Mesen.Windows
 		//The window's own name scope only sees MainWindow.axaml; the sheets are
 		//UserControls with their own, so a surface's first control is found by
 		//walking the visual tree (MainWindow.FindNamedDescendant's rule).
+		//#909: the row W-P4's Save states grid opens on (SaveStateSheet.FocusSlot
+		//answers which), and its own *Save here* - the first control of the row, so
+		//the Load beside it is one Right away. A row whose *Save here* does not
+		//exist - the auto-save, which offers Load alone - hands over that button.
+		//The list answers in its own order, so the row is found by its index.
+		private static Control? SaveStatesFocusTarget(MainWindow window, MainWindowViewModel model)
+		{
+			SaveStateSlotViewModel? focus = model.FocusSaveStateSlot();
+			if(focus != null && Named(window, "SaveStatesGrid") is ItemsControl grid
+				&& grid.ContainerFromIndex(model.SaveStateSlots.IndexOf(focus)) is Control container) {
+				return container.GetVisualDescendants().OfType<Button>()
+					.FirstOrDefault(b => b.Name == "SlotSaveButton" && b.IsEffectivelyVisible)
+					?? container.GetVisualDescendants().OfType<Button>().FirstOrDefault(b => b.Name == "SlotLoadButton");
+			}
+			//No rows (the sheet is not over a game, which the app never does): the
+			//sheet's own first control, the way every other surface answers.
+			return FirstFocusable(window, "PlayerSaveStatesSheet");
+		}
+
 		private static Control? Named(MainWindow window, string name)
 		{
 			return window.GetVisualDescendants().OfType<Control>().FirstOrDefault(c => c.Name == name);
@@ -324,6 +376,18 @@ namespace Mesen.Windows
 			private readonly Stopwatch _clock = Stopwatch.StartNew();
 			private HashSet<ushort> _previous = new();
 			private TimeSpan _lastTick;
+			//#964: the drop-down the pad opened and the row it is on (committed
+			//only by Confirm), and the hold button Confirm is holding down.
+			private ComboBox? _openPopup;
+			private int _walk = -1;
+			private Button? _holding;
+			//ADR-0262: the one on-screen keyboard, the field it fills and the
+			//panel it is drawn in (the window's overlay layer, below the field).
+			private PadKeyboard? _keyboard;
+			private TextBox? _keyboardField;
+			private Border? _keyboardPanel;
+
+			public PadKeyboard? Keyboard => _keyboard;
 
 			public Bridge(MainWindow window, MainWindowViewModel model)
 			{
@@ -389,10 +453,35 @@ namespace Mesen.Windows
 					action = PadNavAction.Back;
 				}
 
+				//#964: a hold ends on Confirm's release, which is not an action the
+				//edge rule produces - so it is read off the pressed set here, every
+				//tick and authority or not, or compare would outlive the press.
+				if(PlayPadValueRules.EndsHold(_holding is not null, pressed, mapping)) {
+					SetHold(_holding!, false);
+					_holding = null;
+				}
+
 				//Recorded on EVERY tick, authority or not: a button held across
 				//the moment the overlay opens would otherwise look like a new
 				//press and step the menu the instant it appeared.
 				_previous = new HashSet<ushort>(pressed);
+
+				//ADR-0262 Decision 4: a field that went away under its keyboard
+				//(the sheet closed by something else) or the focus leaving it (a
+				//mouse click) closes the keyboard as a cancel; the pad losing
+				//authority closes it keeping the draft. Either way the pad never
+				//comes back editing a field it no longer holds, and the focus is
+				//left where it went.
+				if(_keyboardField is TextBox keyboardField && _keyboard is not null) {
+					PadKeyboardLeave? leave = !keyboardField.IsEffectivelyVisible ? PadKeyboardLeave.FieldGone
+						: !authority ? PadKeyboardLeave.AuthorityLost
+						: !ReferenceEquals(_window.FocusManager?.GetFocusedElement(), keyboardField) ? PadKeyboardLeave.FocusMoved
+						: null;
+					if(leave is PadKeyboardLeave why) {
+						keyboardField.Text = _keyboard.TextOnLeave(why);
+						CloseKeyboard(cancel: false, refocus: false);
+					}
+				}
 
 				if(action != PadNavAction.None) {
 					Apply(action);
@@ -448,6 +537,12 @@ namespace Mesen.Windows
 			//the pad; Confirm activates what the focus is on; Back is Esc.
 			private void Apply(PadNavAction action)
 			{
+				if(ApplyKeyboard(action)) {
+					return;
+				}
+				if(ApplyValue(action)) {
+					return;
+				}
 				if(action == PadNavAction.Back) {
 					//The grid's Back closes the grid through the grid's own path,
 					//never the Esc router: for a grid opened from W-P4 the two agree
@@ -508,6 +603,9 @@ namespace Mesen.Windows
 					return;
 				}
 
+				if(action == PadNavAction.Confirm && focused is TextBox field && field.IsEffectivelyEnabled && !field.IsReadOnly && OpenKeyboard(field)) {
+					return;
+				}
 				if(action == PadNavAction.Confirm) {
 					Activate(focused);
 					return;
@@ -533,6 +631,180 @@ namespace Mesen.Windows
 						PlayFocusOnOpen.Enter(next);
 					}
 				}
+			}
+
+			//#964: the focused control's own value semantics first (a slider's
+			//step, a drop-down's open/walk/commit/cancel, Hold to Compare's hold),
+			//as PlayPadValueRules answers them; false hands the press on to focus
+			//movement and Activate, as before. An open drop-down is asked even when
+			//the focus sits on one of its rows, because Avalonia focuses the rows
+			//when the popup opens.
+			private bool ApplyValue(PadNavAction action)
+			{
+				if(_openPopup is not null && !_openPopup.IsDropDownOpen) {
+					//Closed by something else (a pointer, the sheet going away:
+					//#983, a ComboBox closes itself once hidden or detached).
+					_openPopup = null;
+				}
+				Control? target = _openPopup ?? _window.FocusManager?.GetFocusedElement() as Control;
+				if(target is null) {
+					return false;
+				}
+				PadValueAnswer answer = PlayPadValueRules.Next(KindOf(target), _openPopup is not null, action);
+				switch(answer.Verb) {
+					case PadValueVerb.None:
+						return false;
+					case PadValueVerb.Step when target is Slider slider:
+						slider.Value = PlayPadValueRules.Step(slider.Value, slider.SmallChange, slider.Minimum, slider.Maximum, answer.Delta);
+						break;
+					case PadValueVerb.Open when target is ComboBox combo:
+						_walk = combo.SelectedIndex;
+						_openPopup = combo;
+						combo.IsDropDownOpen = true;
+						break;
+					case PadValueVerb.Walk when target is ComboBox combo:
+						//The row is only highlighted (focused, so the ring shows it);
+						//the value is written by the commit alone, so Back can leave it.
+						//#983: a virtualized list realizes only the rows in view, so
+						//the next row is scrolled in first and the walk lands on it
+						//only if it is then shown.
+						int next = PlayPadValueRules.Walk(_walk, combo.ItemCount, answer.Delta);
+						if(next >= 0) {
+							combo.ScrollIntoView(next);
+						}
+						Control? row = next >= 0 ? combo.ContainerFromIndex(next) as Control : null;
+						_walk = PlayPadValueRules.Land(_walk, next, row is not null && row.IsEffectivelyVisible);
+						if(_walk == next) {
+							row?.Focus(NavigationMethod.Directional);
+						}
+						break;
+					case PadValueVerb.Commit when target is ComboBox combo:
+						if(_walk >= 0) {
+							combo.SelectedIndex = _walk;
+						}
+						ClosePopup(combo);
+						break;
+					case PadValueVerb.Cancel when target is ComboBox combo:
+						ClosePopup(combo);
+						break;
+					case PadValueVerb.HoldStart when target is Button button:
+						_holding = button;
+						SetHold(button, true);
+						break;
+				}
+				return true;
+			}
+
+			//What the focused control is to the value rule. Hold to Compare is the
+			//one hold button in Play, and it is named here because nothing else
+			//marks a hold: its view listens only to the pointer and Space.
+			private static PadValueKind KindOf(Control focused)
+			{
+				return focused switch {
+					Slider => PadValueKind.Slider,
+					ComboBox => PadValueKind.Popup,
+					Button { Name: "btnLookHoldToCompare", DataContext: LookConfigViewModel } => PadValueKind.Hold,
+					_ => PadValueKind.None
+				};
+			}
+
+			private void ClosePopup(ComboBox combo)
+			{
+				//The focus comes back BEFORE the popup closes: Avalonia's ComboBox
+				//refocuses itself on close without a navigation method, and a focus
+				//it already holds is not re-entered - so the ring would be lost.
+				//Directly, not PlayFocusOnOpen.Enter: the focus is on a row of the
+				//popup, which Enter's other-top-level guard would refuse.
+				_openPopup = null;
+				_walk = -1;
+				combo.Focus(NavigationMethod.Directional);
+				combo.IsDropDownOpen = false;
+			}
+
+			//ADR-0262: while the keyboard is open every press is the keyboard's -
+			//the D-pad walks its keys, A presses one, B cancels - so the focus
+			//cannot walk off the field it is filling and Back cannot close the
+			//sheet under it. What a press means is PadKeyboard's; this writes the
+			//draft into the field as it changes, so a search filters while typed.
+			private bool ApplyKeyboard(PadNavAction action)
+			{
+				if(_keyboard is null || _keyboardField is null) {
+					return false;
+				}
+				switch(_keyboard.Press(action)) {
+					case PadKeyboardOutcome.Edited:
+						_keyboardField.Text = _keyboard.Draft;
+						_keyboardField.CaretIndex = _keyboard.Draft.Length;
+						PaintKeyboard();
+						break;
+					case PadKeyboardOutcome.Moved:
+						PaintKeyboard();
+						break;
+					case PadKeyboardOutcome.Committed:
+						CloseKeyboard(cancel: false);
+						break;
+					case PadKeyboardOutcome.Cancelled:
+						CloseKeyboard(cancel: true);
+						break;
+				}
+				return true;
+			}
+
+			//The field declares its own shape (ADR-0262 Decision 2): its mask, or
+			//the padCode style class a code-shaped box carries in its view.
+			//#994 review 3: no overlay layer means nowhere to draw the keyboard,
+			//and an invisible keyboard would swallow every press, Back included -
+			//so it does not open, and the press falls through as before.
+			private bool OpenKeyboard(TextBox field)
+			{
+				if(_overlayOf(field) is not OverlayLayer layer) {
+					return false;
+				}
+				PadKeyboardShape shape = PadKeyboard.ShapeOf(field.PasswordChar != default(char), field.Classes.Contains(PadCodeClass));
+				_keyboard = new PadKeyboard(shape, field.Text ?? "", field.MaxLength);
+				_keyboardField = field;
+				_keyboardPanel = PadKeyboardPanel.Build(_keyboard);
+				layer.Children.Add(_keyboardPanel);
+				PaintKeyboard();
+				PadKeyboardPanel.Place(field, layer, _keyboardPanel);
+				return true;
+			}
+
+			//Cancel gives the field back its original value. Closed by the pad
+			//(OK, B), the focus comes back to the field, ring drawn; closed because
+			//the focus or the pad went elsewhere, the focus is left where it is.
+			private void CloseKeyboard(bool cancel, bool refocus = true)
+			{
+				TextBox? field = _keyboardField;
+				if(cancel && field is not null && _keyboard is not null) {
+					field.Text = _keyboard.Original;
+				}
+				if(_keyboardPanel?.Parent is OverlayLayer layer) {
+					layer.Children.Remove(_keyboardPanel);
+				}
+				_keyboard = null;
+				_keyboardField = null;
+				_keyboardPanel = null;
+				if(refocus && field is not null && field.IsEffectivelyVisible) {
+					field.Focus(NavigationMethod.Directional);
+				}
+			}
+
+			private const string PadCodeClass = "padCode";
+
+			private void PaintKeyboard()
+			{
+				if(_keyboard is not null && _keyboardPanel is not null) {
+					PadKeyboardPanel.Paint(_keyboardPanel, _keyboard);
+				}
+			}
+
+			//The view model's own SetCompare, the call the view's pointer and Space
+			//handlers make - not a synthetic Space, which MainWindow's tunnel key
+			//handler would hand to the console as a key press.
+			private static void SetHold(Button button, bool on)
+			{
+				(button.DataContext as LookConfigViewModel)?.SetCompare(on);
 			}
 
 			//The grid itself, or a control inside one (nothing puts one there today,
@@ -582,10 +854,10 @@ namespace Mesen.Windows
 			//listen to, and the state is what a surface binds to, so a surface
 			//that uses either one works.
 			//
-			//A TextBox falls through to the raise, which its surface may ignore:
-			//a pad cannot type, and the Play sheets that lead with a search box
-			//are the ones an arcade cabinet has no keyboard for. That is a real
-			//limit, not a TODO silently swallowed here.
+			//A TextBox reaches here only when the on-screen keyboard could not
+			//open (no overlay layer, #994 review 3): Apply opens it instead
+			//(ADR-0262), because a pad cannot type and an arcade cabinet has no
+			//keyboard.
 			private static void Activate(Control focused)
 			{
 				switch(focused) {

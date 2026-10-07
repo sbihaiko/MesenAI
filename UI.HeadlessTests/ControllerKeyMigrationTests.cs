@@ -139,4 +139,44 @@ public class ControllerKeyMigrationTests
 		Assert.Equal(0, ControllerKeyMigration.Apply(config, new[] { new DeviceMove(GamepadBackend.Evdev, 2, 3) }));
 		Assert.Equal(Key(1, 3), config.Nes.Port1.Mapping1.A);
 	}
+
+	[Fact]
+	public void A_repair_of_the_Four_Score_P3_and_P4_keys_reaches_the_core_config()
+	{
+		//Issue #943: P3/P4 are Port1C/Port1D (Port1A/Port1B go out with Port1's and
+		//Port2's keys), so a repair of P3/P4 only holds if those two ports are walked
+		//AND pushed with their own keys. NesConfig.ToInterop is the struct
+		//ApplyConfig hands the Core, built without calling it.
+		Configuration config = new();
+		config.Nes.Port1C.Mapping1.A = Key(1, 3);
+		config.Nes.Port1D.Mapping2.Start = Key(1, 6);
+
+		int moved = ControllerKeyMigration.Apply(config, new[] { new DeviceMove(GamepadBackend.Evdev, 1, 0) });
+		InteropNesConfig pushed = config.Nes.ToInterop();
+
+		Assert.Equal(2, moved);
+		Assert.Equal(Key(0, 3), pushed.Port1C.Keys.Mapping1.A);
+		Assert.Equal(Key(0, 6), pushed.Port1D.Keys.Mapping2.Start);
+	}
+
+	[Fact]
+	public void The_Four_Score_P1_and_P2_go_out_with_Port1s_and_Port2s_keys_under_their_own_type()
+	{
+		//ADR-0255 (issue #943): Port1A/Port1B are P1/P2 and are filled with
+		//Port1's/Port2's keys under their own Type; their own keys never reach the Core.
+		Configuration config = new();
+		config.Nes.Port1.Mapping1.A = Key(0, 1);
+		config.Nes.Port1A.Mapping1.A = Key(2, 1);
+		config.Nes.Port1A.Type = ControllerType.NesController;
+		config.Nes.Port2.Mapping1.B = Key(1, 2);
+		config.Nes.Port1B.Mapping1.B = Key(3, 2);
+		config.Nes.Port1B.Type = ControllerType.FamicomController;
+
+		InteropNesConfig pushed = config.Nes.ToInterop();
+
+		Assert.Equal(Key(0, 1), pushed.Port1A.Keys.Mapping1.A);
+		Assert.Equal(Key(1, 2), pushed.Port1B.Keys.Mapping1.B);
+		Assert.Equal(ControllerType.NesController, pushed.Port1A.Type);
+		Assert.Equal(ControllerType.FamicomController, pushed.Port1B.Type);
+	}
 }

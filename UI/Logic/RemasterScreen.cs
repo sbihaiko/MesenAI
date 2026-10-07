@@ -1,4 +1,7 @@
 using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
 using Mesen.Interop;
 
 namespace Mesen.Logic;
@@ -84,6 +87,13 @@ public sealed record RemasterScreenState(
 	//The probe's wait (a sentence and a moving bar) where the banner would be.
 	bool ShowFeasibilityChecking = false
 );
+
+//#969 (W-X2, rule 10): Open the Right Game…'s next step - the project's ROM,
+//or "" when none was found and the button opens the ROM picker instead.
+public sealed record RemasterRightGame(string RomPath)
+{
+	public bool OpensPicker => RomPath.Length == 0;
+}
 
 public static class RemasterScreen
 {
@@ -192,6 +202,51 @@ public static class RemasterScreen
 			return Off(RemasterReason.NeedsTools);
 		}
 		return RemasterControl.On;
+	}
+
+	//#969: "This is not the game the project was recorded from." comes with the
+	//button that fixes it. The project folder is named after its ROM file
+	//(ADR-0049 sibling `<dir>/<Game>/`), so the ROM is the recent game, then the
+	//games-folder file, whose name without extension is the folder's name.
+	//Nothing found: the button opens the picker. Any other reason: no step.
+	public static RemasterRightGame? RightGameStep(RemasterReason reason, string projectFolder, IEnumerable<string> recentRoms, IEnumerable<string> gamesFolderRoms)
+	{
+		if(reason != RemasterReason.NotThisProjectsGame) {
+			return null;
+		}
+		string game = Path.GetFileName((projectFolder ?? "").TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+		string? rom = game.Length == 0 ? null : FirstNamed(recentRoms, game) ?? FirstNamed(gamesFolderRoms, game);
+		return new RemasterRightGame(rom ?? "");
+	}
+
+	//The on-disk form OpenRightGame asks: recents still on disk, then the
+	//games folder's files.
+	public static RemasterRightGame? RightGameStepOnDisk(RemasterReason reason, string projectFolder, IEnumerable<string> recentRoms, string? gamesFolder)
+	{
+		return RightGameStep(reason, projectFolder, recentRoms.Where(File.Exists), FilesIn(gamesFolder));
+	}
+
+	//Deliberately top-level only (one directory read on the click): a ROM
+	//deeper in the games folder is reached by the ROM picker the miss opens.
+	private static IEnumerable<string> FilesIn(string? folder)
+	{
+		try {
+			return string.IsNullOrEmpty(folder) || !Directory.Exists(folder) ? Array.Empty<string>() : Directory.GetFiles(folder);
+		} catch(Exception) {
+			return Array.Empty<string>();
+		}
+	}
+
+	//A same-named patch, save or movie beside the ROM is not the game: only a
+	//file the picker would call a ROM matches (RomFileKinds' table, asked).
+	private static string? FirstNamed(IEnumerable<string> roms, string game)
+	{
+		foreach(string rom in roms) {
+			if(!string.IsNullOrEmpty(rom) && RomFileKinds.IsRomFile(rom) && string.Equals(Path.GetFileNameWithoutExtension(rom), game, StringComparison.OrdinalIgnoreCase)) {
+				return rom;
+			}
+		}
+		return null;
 	}
 
 	//After Stop, the kit runs by itself (W-R2: "Esc or Stop ends the

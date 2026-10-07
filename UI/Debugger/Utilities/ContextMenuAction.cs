@@ -272,6 +272,24 @@ namespace Mesen.Debugger.Utilities
 		}
 	}
 
+	//W-S2 (#1007): the disabled footer hint under Play's Tools ⋯. Its Name is the
+	//"~hint" sentinel the Player menu row template draws as a wrapped grey note
+	//(Text rides in the shortcut slot, as ContextMenuSeparator's Header does).
+	public class ContextMenuHint : ContextMenuAction
+	{
+		public const string Sentinel = "~hint";
+
+		public override string Name => Sentinel;
+		protected override string InternalShortcutText => Text;
+
+		public string Text { get; set; } = "";
+
+		public ContextMenuHint()
+		{
+			IsEnabled = () => false;
+		}
+	}
+
 	public class SimpleCommand : ICommand
 	{
 		private Action _commandAction;

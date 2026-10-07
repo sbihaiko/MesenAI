@@ -12,9 +12,9 @@ namespace Mesen.ViewModels
 {
 	//One button on the sheet's picture: lit for the current step, ticked once
 	//bound, placed where it sits on the pad (ADR-0249 W-P15).
-	public sealed record ControllerSetupChip(string Name, bool IsCurrent, bool IsDone, SetupButton Button = SetupButton.A)
+	public sealed record ControllerSetupChip(string Name, bool IsCurrent, bool IsDone, SetupButton Button = SetupButton.A, SetupConsole Console = SetupConsole.Nes)
 	{
-		private PadKey Key => ControllerPadLayout.Of(Button);
+		private PadKey Key => ControllerPadLayout.Of(Console, Button);
 		public double Left => Key.Left;
 		public double Top => Key.Top;
 		public double Width => Key.Width;
@@ -35,6 +35,8 @@ namespace Mesen.ViewModels
 	public partial class PlayControllerSetupViewModel : ViewModelBase
 	{
 		[ObservableProperty] public partial bool IsPillVisible { get; private set; }
+		//#913: the pill's sentence, naming the pad when the host reports its name.
+		[ObservableProperty] public partial string PillText { get; private set; } = "";
 		[ObservableProperty] public partial bool IsVisible { get; private set; }
 		[ObservableProperty] public partial string Title { get; private set; } = "";
 		[ObservableProperty] public partial string Prompt { get; private set; } = "";
@@ -42,6 +44,12 @@ namespace Mesen.ViewModels
 		[ObservableProperty] public partial double Progress { get; private set; }
 		[ObservableProperty] public partial string ErrorText { get; private set; } = "";
 		[ObservableProperty] public partial IReadOnlyList<ControllerSetupChip> Chips { get; private set; } = Array.Empty<ControllerSetupChip>();
+		//#940: the loaded console's own pad body (the Game Boy's carries its screen).
+		[ObservableProperty]
+		[NotifyPropertyChangedFor(nameof(HasScreen), nameof(Screen))]
+		public partial PadBody Pad { get; private set; } = ControllerPadLayout.BodyOf(SetupConsole.Nes);
+		public bool HasScreen => Pad.Screen != null;
+		public PadKey Screen => Pad.Screen ?? default;
 
 		private readonly UnknownControllerDetector _detector = new();
 		private readonly Stopwatch _clock = Stopwatch.StartNew();
@@ -52,10 +60,24 @@ namespace Mesen.ViewModels
 
 		//Injectable for the headless tests; the Core's names by default.
 		public Func<ushort, string> KeyName { get; set; } = InputApi.GetKeyName;
-		//W-P15: the controller's own name for a key-code device index. macOS and
-		//Linux number GetGamepadInfo like the key codes; Windows numbers XInput
-		//and DirectInput pads apart from them, so there the key prefix is used.
-		public Func<int, string> DeviceName { get; set; } = DefaultDeviceName;
+		//W-P15: the controller's own name for a key-code device index, or "" when
+		//the host has none for that pad. Windows used to answer "" outright (#913):
+		//its GetGamepadInfo is handed a global ordinal - the four XInput slots, then
+		//the joysticks - while this index numbers a key's device within its own
+		//family, so the two are different pads. The default resolves the pad through
+		//the Core's own enumeration by key-code block, which is the same rule the
+		//controller sheet names a pad by (ControllerSheetViewModel.DeviceLabel), and
+		//so reaches a DirectInput joystick's product name.
+		public Func<int, string> DeviceName { get; set; }
+		//The host's connected pads, as the naming rule wants them (HostPad). The
+		//default reads the Core; injectable so a test can name pads this machine
+		//does not have (the tester's own lookup is, ADR-0255).
+		public Func<IReadOnlyList<HostPad>> HostPads { get; set; } = ReadHostPads;
+
+		public PlayControllerSetupViewModel()
+		{
+			DeviceName = device => ControllerDevices.DeviceName(device, HostPads());
+		}
 		public Func<ConsoleType> CurrentConsole { get; set; } = () => EmuApi.GetRomInfo().ConsoleType;
 		public Action Pause { get; set; } = EmuApi.Pause;
 		public Action Resume { get; set; } = EmuApi.Resume;
@@ -79,10 +101,19 @@ namespace Mesen.ViewModels
 			ControllerConfig? port = PortFor(CurrentConsole(), out _);
 			IEnumerable<ushort> mapped = port == null ? Array.Empty<ushort>() : MappedKeys(CurrentConsole());
 			switch(_detector.OnPressed(pressed, mapped, k => ControllerDevices.NamesStart(KeyName(k)), now)) {
-				case DetectorEvent.ShowPill: IsPillVisible = true; break;
+				case DetectorEvent.ShowPill: ShowPill(_detector.PillDevice); break;
 				case DetectorEvent.DismissPill: IsPillVisible = false; break;
 				case DetectorEvent.OpenSheet: OpenSheet(_detector.SheetDevice, pressed, now); break;
 			}
+		}
+
+		private void ShowPill(int device)
+		{
+			PillText = ControllerDevices.PillText(
+				DeviceName(device),
+				name => ResourceHelper.GetMessage("ControllerSetupPillNamed", name),
+				ResourceHelper.GetViewLabel("PlayControllerSetupView", "lblControllerSetupPill"));
+			IsPillVisible = true;
 		}
 
 		//#660: the owner stopped ticking (the game paused or quit): the pill
@@ -101,6 +132,7 @@ namespace Mesen.ViewModels
 				return;
 			}
 			_console = console;
+			Pad = ControllerPadLayout.BodyOf(console);
 			ushort any = pressed.FirstOrDefault(k => ControllerDevices.DeviceOf(k) == device);
 			_label = ControllerDevices.DisplayName(DeviceName(device), KeyName(any));
 			if(string.IsNullOrEmpty(_label)) {
@@ -140,7 +172,7 @@ namespace Mesen.ViewModels
 			Prompt = ResourceHelper.GetMessage("ControllerSetupPrompt", ButtonName(step));
 			StepText = ResourceHelper.GetMessage("ControllerSetupStep", session.StepIndex + 1, session.Steps.Count, string.Join(", ", session.Steps.Select(ButtonName)));
 			Progress = session.Progress;
-			Chips = session.Steps.Select((b, i) => new ControllerSetupChip(ButtonName(b), i == session.StepIndex, session.Bindings.ContainsKey(b), b)).ToList();
+			Chips = session.Steps.Select((b, i) => new ControllerSetupChip(ButtonName(b), i == session.StepIndex, session.Bindings.ContainsKey(b), b, _console)).ToList();
 		}
 
 		private void Close(ControllerSetupSession session)
@@ -248,12 +280,22 @@ namespace Mesen.ViewModels
 				: button.ToString();
 		}
 
-		private static string DefaultDeviceName(int device)
+		//Every connected pad as the naming rule wants it: the block its keys carry -
+		//its backend's family plus its family-relative slot (GamepadInfo.Slot), the
+		//numbering a mapping's key codes use - and its product name (HostPad.From
+		//drops XInput's synthetic slot label). A
+		//pad the host cannot describe (GetGamepadInfo false) is left out rather than
+		//guessed, the way the reconnect repair skips it.
+		private static IReadOnlyList<HostPad> ReadHostPads()
 		{
-			if(OperatingSystem.IsWindows() || device < 0) {
-				return "";
+			uint count = InputApi.GetConnectedGamepadCount();
+			List<HostPad> pads = new((int)count);
+			for(uint i = 0; i < count; i++) {
+				if(InputApi.GetGamepadInfo(i, out GamepadInfo info)) {
+					pads.Add(HostPad.From(info.Backend, (int)info.Slot, info.Name));
+				}
 			}
-			return InputApi.GetGamepadInfo((uint)device, out GamepadInfo info) ? info.Name ?? "" : "";
+			return pads;
 		}
 	}
 }

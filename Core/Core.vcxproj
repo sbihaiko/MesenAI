@@ -556,6 +556,7 @@
     <ClInclude Include="NES\Debugger\NesDebugger.h" />
     <ClInclude Include="NES\NesHeader.h" />
     <ClInclude Include="NES\NesMemoryManager.h" />
+    <ClInclude Include="NES\NesReadHitCounter.h" />
     <ClInclude Include="NES\NesPpu.h" />
     <ClInclude Include="NES\EnhancedSynth.h" />
     <ClInclude Include="NES\NesSoundMixer.h" />

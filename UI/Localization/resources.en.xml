@@ -20,8 +20,8 @@
 			<Control ID="btnOverlaySettings">Settings</Control>
 			<Control ID="btnOverlayQuitGame">Quit Game</Control>
 			<Control ID="lblSaveStatesSheetTitle">Save States</Control>
-			<Control ID="btnSaveStatesSave">Save to a slot…</Control>
-			<Control ID="btnSaveStatesLoad">Load a slot…</Control>
+			<Control ID="btnSaveStatesSaveHere">Save here</Control>
+			<Control ID="btnSaveStatesLoadSlot">Load</Control>
 			<Control ID="btnSaveStatesReplays">Shared replays…</Control>
 			<Control ID="btnSaveStatesBack">Back</Control>
 		</Form>
@@ -46,6 +46,8 @@
 			<Control ID="lblPackDetailLayersHint">The switches apply to this game only.</Control>
 			<Control ID="lblPackDetailLayersWait">Applying…</Control>
 			<Control ID="lblPackDetailMissingMusicTitle">Some music is missing</Control>
+			<Control ID="lblPackDetailPendingFileBody">The pack's author could not share this file. If you have it, add it and the pack completes.</Control>
+			<Control ID="btnPackDetailAddFile">Add the File…</Control>
 			<Control ID="lblPackDetailOfferTitle">A community pack is available</Control>
 			<Control ID="btnPackDetailUseCommunity">Use Community Pack</Control>
 			<Control ID="btnPackDetailChange">Change Pack…</Control>
@@ -67,7 +69,7 @@
 			<Control ID="chkEnhancementsWideScrn">Widescreen</Control>
 			<Control ID="chkEnhancementsOverclock">Overclock</Control>
 			<Control ID="lblEnhancementsAppliesOnReload">Applies on reload</Control>
-			<Control ID="lblEnhancementsLookHint">How the picture looks: Settings › Video</Control>
+			<Control ID="lblEnhancementsLookHint">How the picture looks: Settings › Look</Control>
 		</Form>
 		<Form ID="PlayHomeView">
 			<Control ID="lblPlayHomeDropTitle">Drop a game here</Control>
@@ -153,6 +155,7 @@
 			<Control ID="lblZonePaint">PAINT</Control>
 			<Control ID="lblZoneSeeIt">SEE IT</Control>
 			<Control ID="btnRecordWhileIPlay">Record While I Play</Control>
+			<Control ID="btnOpenRightGame">Open the Right Game…</Control>
 			<Control ID="btnRecordFromTas">Record from a TAS Movie…</Control>
 			<Control ID="btnLetTheAiPlay">Let the AI Play…</Control>
 			<Control ID="btnPrepareFigures">Prepare Figures</Control>
@@ -268,6 +271,7 @@
 			<Control ID="lblControllerSheetRemapHint">Pick a control, then press the controller button you want on it. Esc cancels.</Control>
 			<Control ID="lblControllerSheetRemapPadLight">What the controller sends</Control>
 			<Control ID="lblControllerSheetRemapPortLight">What the game receives</Control>
+			<Control ID="lblControllerSheetRemapMoved">It was on {0}, which is now unbound.</Control>
 			<Control ID="lblControllerSheetExtra">EXTRA BUTTONS</Control>
 			<Control ID="lblControllerSheetExtraHint">A controller button the console has no use for can carry one of the emulator's own actions. Pick a row, then press the button you want on it. Esc cancels.</Control>
 			<Control ID="btnControllerSheetExtraClear">Clear</Control>
@@ -1025,14 +1029,15 @@
 		</Form>
 		<Form ID="PlayerSettingsSheetView">
 			<Control ID="lblPlayerSettingsTitle">Settings</Control>
-			<Control ID="tabDisplay">Window</Control>
-			<Control ID="tabLook">Video</Control>
+			<Control ID="tabDisplay">Display</Control>
+			<Control ID="tabLook">Look</Control>
 			<Control ID="tabAudio">Audio</Control>
 			<Control ID="tabPlayerControls">Controls</Control>
 			<Control ID="tabSystem">System</Control>
 			<Control ID="btnPlayerSettingsMoreInOptions">More in Options…</Control>
 			<Control ID="lblPlayerSettingsEverythingElse">Everything else: Classic › Settings</Control>
 			<Control ID="btnPlayerSettingsDone">Done</Control>
+			<Control ID="btnPlayerSettingsExitFullscreen">Exit full screen</Control>
 		</Form>
 		<Form ID="ConfigWindow">
 			<Control ID="wndTitle">Settings</Control>
@@ -2234,6 +2239,7 @@
 		<Message ID="PlayerToolSheetTitleVideoRecord">Record Video</Message>
 		<Message ID="PlayerToolSheetTitleBarcode">Insert Barcode</Message>
 		<Message ID="DoorMenuPowerCycle">Power Cycle</Message>
+		<Message ID="DoorMenuToolsHint">Disk, coin and tape items appear when the game uses them.</Message>
 		<Message ID="DoorMenuScreenshot">Screenshot</Message>
 		<Message ID="DoorMenuReloadPackImages">Reload Pack Images</Message>
 		<Message ID="DoorMenuEnhancementPacks">Enhancement Packs</Message>
@@ -2538,6 +2544,7 @@ E
 
 		<Message ID="InstallMepPackInvalidPack">The selected file is not a valid enhancement pack (no pack.json at the root of the zip, or unsafe paths).</Message>
 			<Message ID="InstallMepPackInvalidZipFile">The selected file is not a valid ZIP file or could not be copied.</Message>
+			<Message ID="DropPackInstalled">Enhancement pack installed: {0}. It loads with the next game it matches.</Message>
 			<Message ID="InstallMepPackConfirmReset">The enhancement pack has been installed. Do you want to power cycle the console to apply it now?</Message>
 			<Message ID="EnhancementPacksConfirmReset">Enhancement pack settings apply on the next power cycle. Power cycle now?</Message>
 
@@ -2676,6 +2683,7 @@ E
 		<Message ID="PackDepPill">{0} waits for one file. Press Esc to add it.</Message>
 		<Message ID="ControllerSetupTitle">Set up “{0}”</Message>
 		<Message ID="ControllerSetupUnnamed">your controller</Message>
+		<Message ID="ControllerSetupPillNamed">New controller “{0}”. Press Start on it to set it up.</Message>
 		<Message ID="ControllerSetupPrompt">Press the button you want as {0}</Message>
 		<Message ID="ControllerSetupStep">Step {0} of {1} · {2}</Message>
 		<Message ID="ControllerSetupSaved">{0} is set up.</Message>

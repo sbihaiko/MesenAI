@@ -1,0 +1,129 @@
+name: Render gate
+
+# ADR-0263 (accepted 2026-10-07, #968): the ADR-0249 Decision 5 render gate,
+# run against a core this job builds, on the pull requests that can change a
+# render. Before it, the render classes ran only in checks.yml's
+# `headless-ui-tests`, which builds no core (ADR-0122 invariant 9 / ADR-0131),
+# so every render case skipped and the `player-renders` artifact was empty.
+#
+# Why a workflow of its own, not a job in checks.yml or build.yml:
+#   - build.yml keeps its `prod`-PR-plus-dispatch trigger (ADR-0200, ADR-0203);
+#     the release matrix ADR-0191 cut does not come back to ordinary PRs.
+#   - checks.yml is the host-free gate and must not build or link the core
+#     (ADR-0131; verify_ci_platform_matrix.sh section 4 enforces it), and it
+#     runs on every PR and every push to `main`. A file of its own is what
+#     gets a real `paths:` filter: a PR that touches no render path starts no
+#     run at all.
+#   - It is not named `tests.yml`, the name the ratification used: that file
+#     was deleted by ADR-0191 and verify_ci_platform_matrix.sh section 1 fails
+#     if it comes back. Same job, a name the guard does not reserve.
+#
+# The cost is one ubuntu core build per qualifying PR (ccache-backed), not the
+# matrix. The repository is public, so standard-runner minutes are not billed.
+# Not a required check of the `main` ruleset: a required check that does not
+# run on a path-filtered PR would block that PR forever.
+#
+# scripts/checks/verify_render_gate.py does the failing: `core` before the
+# tests (the library must load and answer TestDll), `verify` after (no skipped
+# or failed render case, at least one passed, fresh PNGs, a wireframe report
+# per W-P render). scripts/test_verify_render_gate.py pins this file's contract
+# from the python-tests job.
+
+on:
+  pull_request:
+    branches:
+      - 'main'
+    # The UI, the headless tests, the render specs (the wireframe PNGs, the
+    # token source ADR-0249 Decision 2 transcribes, the committed renders the
+    # fresh ones drift against, #974) and the gate's own dependencies.
+    # `Core/` is not listed: the render cases exercise no emulation, and a PR
+    # that breaks the core build is already red in checks.yml's shard 1.
+    paths:
+      - 'UI/**'
+      - 'UI.HeadlessTests/**'
+      - 'docs/media/gui-redesign/**'
+      - 'scripts/render_gui_wireframes.py'
+      - 'UI.Tests/Theme/PlayerRenders/**'
+      - 'InteropDLL/**'
+      - 'makefile'
+      - '.github/workflows/render-gate.yml'
+      - 'scripts/checks/verify_render_gate.py'
+
+# A new push to the PR supersedes the run on the old head.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_CLI_TELEMETRY_OPTOUT: 1
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 1
+
+jobs:
+  render-gate:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+
+      - name: Install SDL2
+        run: |
+          sudo apt-get install -qy libsdl2-dev ccache || { sudo apt-get update -qy; sudo apt-get install -qy libsdl2-dev ccache; }
+
+      # Falls back to the cache checks.yml's shard 1 saves on `main`: the same
+      # Core/ objects, so a PR that did not touch Core/ compiles little.
+      - name: Restore the compiler cache
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
+        with:
+          path: /home/runner/.cache/ccache
+          key: ccache-render-gate-${{ github.sha }}
+          restore-keys: |
+            ccache-render-gate-
+            ccache-doc-checks-
+
+      - name: Install .NET
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
+        with:
+          dotnet-version: 10.x
+
+      - name: Build the core
+        env:
+          CCACHE_DIR: /home/runner/.cache/ccache
+          CCACHE_BASEDIR: ${{ github.workspace }}
+          CCACHE_MAXSIZE: 500M
+        run: |
+          make -j$(nproc) core
+          ccache -s
+
+      # Fails here, naming the library, rather than as skipped render cases.
+      - name: Require the core to load
+        id: core
+        run: python3 scripts/checks/verify_render_gate.py core "$GITHUB_WORKSPACE/InteropDLL/obj.linux-x64/MesenCore.so"
+
+      # Every class named *RenderTests (the ADR-0249 render and wireframe
+      # cases). The RID override is the same as headless-ui-tests' in
+      # checks.yml (UI/UI.csproj hardcodes win-x64).
+      - name: Run the render tests against the built core
+        id: render-tests
+        env:
+          MESEN_CORE_LIB: ${{ github.workspace }}/InteropDLL/obj.linux-x64/MesenCore.so
+          MESEN_PLAYER_RENDERS: ${{ runner.temp }}/player-renders
+        run: >-
+          dotnet test UI.HeadlessTests/UI.HeadlessTests.csproj -p:RuntimeIdentifier=linux-x64 --nologo
+          --filter "FullyQualifiedName~RenderTests"
+          --logger "trx;LogFileName=render.trx"
+          --results-directory "${{ runner.temp }}/render-results"
+
+      # A skipped render case is a red gate, not a green one.
+      - name: Require every render case to have run and rendered
+        if: always() && steps.core.outcome == 'success'
+        run: python3 scripts/checks/verify_render_gate.py verify "${{ runner.temp }}/render-results/render.trx" "${{ runner.temp }}/player-renders"
+
+      # The PNG/report pairs a reviewer compares with docs/media/gui-redesign/.
+      - name: Upload Player renders and wireframe reports
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: player-renders
+          path: ${{ runner.temp }}/player-renders
+          if-no-files-found: error

@@ -27,10 +27,10 @@ public enum PackDepDropTarget
 
 public enum PackDepPrimaryAction
 {
-	//Today: only a ROM reload re-resolves deps (OnGameLoaded returns early on
-	//a power cycle, #156), so adding the file reloads the game.
+	//Where ADR-0244 (P.9) keeps the restart: a ROM reload re-resolves the deps
+	//(OnGameLoaded returns early on a power cycle, #156) and the game restarts.
 	AddAndRestart,
-	//With ADR-0244 (P.9) the pack change applies in place.
+	//ADR-0244 (P.9): the completed pack applies in place, the game keeps going.
 	Add
 }
 
@@ -38,9 +38,6 @@ public static class PlayPackDepPrompt
 {
 	//Rule 2: drop zone, Show Folder, Play Without It, Choose File… = 4.
 	public const int ControlCount = 4;
-
-	//P.9 (ADR-0244) is accepted but not implemented: no in-place apply yet.
-	public const bool AppliesInPlace = false;
 
 	public static PackDepFileCheck Check(string actualSha256, string expectedSha256)
 	{
@@ -53,6 +50,13 @@ public static class PlayPackDepPrompt
 	public static PackDepPrimaryAction PrimaryAction(bool appliesInPlace)
 	{
 		return appliesInPlace ? PackDepPrimaryAction.Add : PackDepPrimaryAction.AddAndRestart;
+	}
+
+	//The pack change policy decides it, as for every other pack change: the
+	//button promises a restart only where the change really restarts.
+	public static PackDepPrimaryAction PrimaryAction(PackChangePlan plan)
+	{
+		return PrimaryAction(plan.Route == PackChangeRoute.InPlace);
 	}
 
 	//The file is copied into the pack's download folder under its own name; the

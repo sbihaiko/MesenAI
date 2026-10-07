@@ -128,10 +128,14 @@ namespace Mesen.ViewModels
 			}
 		}
 
+		//#953: the release page's hand-off to the browser. A seam so a test can
+		//see the URL handed over without launching anything.
+		public Action<string> ReleasePageLauncher { get; set; } = ApplicationHelper.OpenBrowser;
+
 		public void OpenReleasePage()
 		{
 			Close();
-			ApplicationHelper.OpenBrowser(UpdateChannel.ReleasesPageUrl);
+			ReleasePageLauncher(UpdateChannel.ReleasesPageUrl);
 		}
 
 		//Close, Cancel, Esc, or leaving Player mode: nothing more happens.

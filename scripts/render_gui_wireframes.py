@@ -862,9 +862,10 @@ def w_p7():
 def settings_sheet(c, tab, h):
     b = c.sheet(480, h, "Settings")
     x0, y0, x1, y1 = b
-    tabs = ["Display", "Look", "Audio", "Controls"]
-    sw = 4 + 4 * 96
-    c.segmented((x0 + x1) / 2 - sw / 2, y0 + 54, tabs, tab, item_w=96)
+    # System is the fifth pane (ADR-0256 Decision 8).
+    tabs = ["Display", "Look", "Audio", "Controls", "System"]
+    sw = 4 + 5 * 84
+    c.segmented((x0 + x1) / 2 - sw / 2, y0 + 54, tabs, tab, item_w=84)
     return b
 
 
@@ -885,7 +886,7 @@ def w_p8():
             c.popup(g[2] - 136, yy + 11, 120, v)
         if i < 2:
             c.line([(g[0] + 16, yy + 46), (g[2], yy + 46)], SEP)
-    c.text(x0 + 22, g[3] + 26, "Everything else: Tools ••• › Options", 12.5, 400, TEXT2, "lm")
+    c.text(x0 + 22, g[3] + 26, "Everything else: Classic › Settings", 12.5, 400, TEXT2, "lm")
     c.button(x1 - 20, y1 - 50, "Done", "primary", TINT["play"], anchor="r", h=32, w=90)
     c.caption("W-P8", "Play — settings › Display (the window, not the pixels)", 5)
     return c

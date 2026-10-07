@@ -62,6 +62,15 @@ namespace Mesen.ViewModels
 			}
 		}
 
+		//#910: the sheet's Exit fullscreen control. Turning the switch off is the
+		//same single toggle, so the window has one path back to windowed.
+		public void ExitFullscreen()
+		{
+			if(IsFullscreen) {
+				IsFullscreen = false;
+			}
+		}
+
 		partial void OnIsFullscreenChanged(bool value)
 		{
 			if(!_loading) {

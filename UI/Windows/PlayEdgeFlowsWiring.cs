@@ -2,6 +2,7 @@ using Avalonia.Controls;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using Mesen.Interop;
+using Mesen.Services;
 using Mesen.Utilities;
 using Mesen.ViewModels;
 using System;
@@ -33,13 +34,20 @@ namespace Mesen.Windows
 
 			//Play Without It: back to the pause overlay (rule 8).
 			model.PackDepSheet.Closed += model.OpenPauseOverlay;
-			//The file is in the drop folder: a ROM reload (not a power cycle,
-			//#156) re-resolves the pack's dependencies.
+			//The file is in the drop folder. #938 (ADR-0244): where the pack
+			//change policy allows it the install completes the pack and applies
+			//it in place; otherwise a ROM reload (not a power cycle, #156)
+			//re-resolves the pack's dependencies and the game restarts.
 			model.PackDepSheet.FileAdded += () => {
+				bool inPlace = model.PackDepAppliesInPlace;
 				model.OnPackDepFileAdded();
 				model.IsPlayerOverlayVisible = false;
 				EmuApi.Resume();
-				LoadRomHelper.ReloadRom();
+				if(inPlace) {
+					CommunityPackInstallService.InstallWithAddedFile();
+				} else {
+					LoadRomHelper.ReloadRom();
+				}
 			};
 			model.ControllerSetup.Finished += result => {
 				if(!string.IsNullOrEmpty(result)) {

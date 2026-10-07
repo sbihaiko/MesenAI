@@ -621,10 +621,6 @@ namespace Mesen.ViewModels
 			RecentGames.Init(GameScreenMode.RecentGames);
 
 			AddDisposable(RecentGames.ObserveProp(nameof(RecentGamesViewModel.Visible), () => {
-				if(!RecentGames.Visible) {
-					//G.2: a slot grid opened from W-P4 is gone (slot picked or closed).
-					_stateGridFromOverlay = false;
-				}
 				UpdateRendererVisibility();
 			}));
 

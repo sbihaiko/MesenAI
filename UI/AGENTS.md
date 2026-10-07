@@ -336,6 +336,16 @@ can be exercised by real xunit tests without Avalonia or the native
   nearest-neighbour, as `mep_build`'s `_EditedProbe` does, and only for the
   units whose twin is a pre-paint copy (grid, object, element, panorama) -
   pattern pages, scene captures and imported sheets say "cannot tell".
+  A pattern-page thumbnail marks its cells (ADR-0219, #911) only from the
+  page's own sidecar beside the picture (ADR-0172's `<stem>.json`,
+  `kind: chr`, per-cell `state`), read by host-free
+  `UI/Logic/RemasterPageMarks.cs` and sized off the PNG's IHDR: `fill`
+  (filled from the game's data) is dimmed, `empty` gets a red outline, and
+  every seen state (`evidence`/`borrowed`/`donated`/`folded`) stays as
+  drawn. A missing, foreign-kind or unreadable sidecar, an unknown `state`
+  or an unsizeable picture is "cannot tell" and marks nothing - never a
+  count, never the pixels. The row re-reads when the sidecar's stamp
+  changes, not only the picture's.
   A tile opens with the OS default through `UI/Services/RemasterFileOpener.cs`
   (ADR-0209's first user-configured launch). `RemasterHandOff` builds the
   `mep_import.py import` job and the `compose_editor.py <recording>` child;
@@ -580,6 +590,16 @@ can be exercised by real xunit tests without Avalonia or the native
   Cheat ↗* (`CheatShare`, the user's own codes only) open URLs through the
   injected `openUrl`; `MainWindowViewModel.CommunityCheatsSource`/`LastKnown`
   are swapped in headless tests so none reaches the network.
+  **Checked web codes (P.12, ADR-0245 §4, #924).** For a copy not in the
+  bundled list, *Look Online* runs `scripts/cheat_web_lookup.py` through
+  `ICheatWebChecker` (`CheatWebLookupScriptChecker`, the ROM by path; the
+  client calls no model, ADR-0247). `CheatWebLookup.ParseOutput` reads a code
+  as `Passed` only when it carries the script's exact label; `BuildRows` lists
+  only passed codes (`CheatRowSource.WebFound`, marked *found online, checked
+  on your copy*), toggled into the same list. The check rule is the script's
+  (pending #934; it fails closed today). Rules in
+  `UI.Tests/Cheats/CheatWebLookupTests`, the view in
+  `UI.HeadlessTests/PlayerCheatsWebCodesTests` (core-free, fake checker).
 - **Shared replays sheet (`UI/Logic/CommunityReplayCatalog`, `ReplayWatch`,
   R.2 / ADR-0205 §7–§9).** W-P4 › Save states › *Shared replays…* opens
   `UI/Views/PlayerReplaysSheetView` (W-P4 is at its seven controls, so it is
@@ -758,10 +778,11 @@ drawn by `scripts/render_gui_wireframes.py`), not classic Mesen. The theme is
     byline is the game's name plus "Made on this computer from what you
     played", naming the scaler in parentheses when the project's
     `.bootstrap` stamp does ("(xBRZ 4×)"). *Settings* (W-P8) is the
-    Display | Look | Audio | Controls strip: Audio (Sound, Volume, Output
+    Display | Look | Audio | Controls | System strip (System: ADR-0256, the
+    storage and keyboard choices the first-run wizard used to ask): Audio (Sound, Volume, Output
     device) and Controls (pads, Rumble, deadzone) are three-row lists whose
     "More in Options…" opens that tab's classic page, Display carries the
-    "Everything else: Tools ⋯ › Options" hint, Look its own footer.
+    "Everything else: Classic › Settings" hint, Look its own footer.
   - Icons (`StreamGeometry`, 20 x 20 box, use with `PathIcon`):
     `PlayerIconPlay`, `Remaster`, `Pencil`, `Share`, `Pack`, `SaveStates`,
     `Enhancements`, `Cheats`, `Settings`, `Folder`, `ChevronRight`,

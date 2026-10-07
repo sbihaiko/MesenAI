@@ -231,6 +231,16 @@
 					<TextBlock Classes="headline secondary" FontWeight="Medium" Text="{l:Translate lblRemasterProject}" VerticalAlignment="Center" />
 				</StackPanel>
 
+				<!--#969 (W-X2, rule 10): the reason Record and Prepare Figures show,
+				as one sentence with the button that fixes it.-->
+				<Border Name="RemasterWrongGame" Classes="warning" Margin="8 16 8 0" IsVisible="{Binding IsWrongGame}">
+					<DockPanel>
+						<Button Name="RemasterOpenRightGameButton" Classes="secondary" DockPanel.Dock="Right" Margin="16 0 0 0" VerticalAlignment="Center" Content="{l:Translate btnOpenRightGame}" Click="OnOpenRightGame" />
+						<PathIcon Classes="warning" DockPanel.Dock="Left" Data="{StaticResource PlayerIconWarning}" Width="16" Height="16" Margin="0 0 10 0" VerticalAlignment="Center" />
+						<TextBlock Name="RemasterWrongGameText" Classes="paragraph warning" Text="{Binding WrongGameText}" TextWrapping="Wrap" VerticalAlignment="Center" />
+					</DockPanel>
+				</Border>
+
 				<StackPanel Orientation="Horizontal" Spacing="9" Classes="zone-header first">
 					<Border Name="RemasterStepRecord" Classes="step"><TextBlock Text="1" /></Border>
 					<TextBlock Name="RemasterZoneRecordLabel" Classes="section-header" Text="{l:Translate lblZoneRecord}" VerticalAlignment="Center" />
@@ -245,7 +255,7 @@
 										<TextBlock Text="{l:Translate btnRecordWhileIPlay}" />
 									</StackPanel>
 								</Button>
-								<TextBlock Classes="reason secondary" Text="{Binding Record.Reason}" IsVisible="{Binding Record.HasReason}" />
+								<TextBlock Name="RemasterRecordReason" Classes="reason secondary" Text="{Binding Record.Reason}" IsVisible="{Binding Record.HasReason}" />
 							</StackPanel>
 							<StackPanel Spacing="3" Classes="action">
 								<Button Name="RemasterTasButton" Classes="secondary" Content="{l:Translate btnRecordFromTas}" IsEnabled="{Binding RecordFromTas.IsEnabled}" />
@@ -356,6 +366,8 @@
 	</Border>
 	<v:RemasterImportSheet Name="RemasterImportSheet" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0 24 0 0" />
 	<v:RemasterComposeSheet Name="RemasterComposeSheet" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0 24 0 0" />
+	<!--#969: Open the Right Game…'s fallback, Play's in-app ROM picker.-->
+	<v:PlayerRomPickerView Name="RemasterRightGamePicker" DataContext="{Binding RightGamePicker}" IsVisible="{Binding IsVisible}" />
 	</Panel>
 	</Border>
 </UserControl>

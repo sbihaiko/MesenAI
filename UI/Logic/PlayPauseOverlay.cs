@@ -147,9 +147,6 @@ public enum PlaySheet
 	Enhancements,
 	Cheats,
 	SaveStates,
-	//Today's slot grid (GameScreenMode.SaveState/LoadState) opened from the
-	//Save states sheet.
-	SaveStateGrid,
 	//G.4: W-P6, the current pack's detail, opened from W-P4's Pack row.
 	PackDetail,
 	//G.5 W-P16: a pack waits for a file, opened with the overlay.
@@ -213,7 +210,6 @@ public static class PlayEsc
 			case PlaySheet.Enhancements:
 			case PlaySheet.Cheats:
 			case PlaySheet.SaveStates:
-			case PlaySheet.SaveStateGrid:
 			case PlaySheet.PackDetail:
 			case PlaySheet.PackDep:
 			case PlaySheet.Replays:

@@ -123,7 +123,7 @@ public class PlayFocusGlowTests
 		Button button = new() { Content = "?" };
 		Window window = Show(button);
 
-		Assert.Empty(button.GetVisualDescendants().OfType<Border>().Where(b => b.Name == "PART_Background"));
+		Assert.DoesNotContain(button.GetVisualDescendants().OfType<Border>(), b => b.Name == "PART_Background");
 		window.Close();
 	}
 

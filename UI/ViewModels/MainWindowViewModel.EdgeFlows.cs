@@ -98,8 +98,21 @@ namespace Mesen.ViewModels
 				return false;
 			}
 			IsPlayerOverlayVisible = false;
-			PackDepSheet.Open();
+			PackDepSheet.Open(PackDepAppliesInPlace);
 			return PackDepSheet.IsVisible;
+		}
+
+		//#939: W-P6's Add the File… - the same W-P16 sheet and add flow, opened
+		//over the paused game in place of W-P6. Play Without It (or Esc) goes
+		//back to W-P4, as from the overlay.
+		public void AddPendingFileFromDetail()
+		{
+			if(!PackDepSheet.HasPending) {
+				return;
+			}
+			IsPackDetailVisible = false;
+			CancelRestore();
+			PackDepSheet.Open(PackDepAppliesInPlace);
 		}
 
 		//The game is gone (Quit game, power off): its pack's pending file goes
@@ -111,6 +124,11 @@ namespace Mesen.ViewModels
 				Shell.SetPlayNotice("");
 			}
 		}
+
+		//#938 (ADR-0244, P.9): whether adding the pending file keeps the
+		//player's place - the same policy as every other pack change.
+		public bool PackDepAppliesInPlace => RomInfo.Format != RomFormat.Unknown
+			&& PlayPackDepPrompt.PrimaryAction(LoadRomHelper.PlanPackChange(RomInfo.ConsoleType)) == PackDepPrimaryAction.Add;
 
 		//The file landed in the drop folder: the status sentence is gone.
 		public void OnPackDepFileAdded() => Shell.SetPlayNotice("");

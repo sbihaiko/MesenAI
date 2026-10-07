@@ -228,37 +228,93 @@ namespace Mesen.Utilities
 			}
 		}
 
-		private static bool IsPatchFile(string filename)
+		//The leading bytes DropRoute tells a patch by; short or unreadable = none.
+		private static byte[] ReadHeader(string filename)
 		{
 			using(FileStream? stream = FileHelper.OpenRead(filename)) {
-				if(stream != null) {
-					byte[] header = new byte[5];
-					stream.ReadExactly(header, 0, 5);
-					if(header[0] == 'P' && header[1] == 'A' && header[2] == 'T' && header[3] == 'C' && header[4] == 'H') {
-						return true;
-					} else if((header[0] == 'U' || header[0] == 'B') && header[1] == 'P' && header[2] == 'S' && header[3] == '1') {
-						return true;
+				if(stream == null) {
+					return Array.Empty<byte>();
+				}
+				byte[] header = new byte[DropRoute.HeaderLength];
+				int read = stream.ReadAtLeast(header, header.Length, throwOnEndOfStream: false);
+				return header[..read];
+			}
+		}
+
+		//#953: the routing is DropRoute's (pinned in UI.Tests); this reads the
+		//file and runs the answer.
+		public static DropAction Route(string? filename)
+		{
+			bool exists = !string.IsNullOrEmpty(filename) && File.Exists(filename);
+			bool isFolder = !exists && !string.IsNullOrEmpty(filename) && Directory.Exists(filename);
+			return DropRoute.Decide(filename, exists, exists ? ReadHeader(filename!) : Array.Empty<byte>(), EmuApi.IsRunning(),
+				isFolder, ReadPackEntries(filename, exists, isFolder));
+		}
+
+		//#986: what DropRoute looks for a pack manifest in - a .zip's entry
+		//names, or the names directly inside a folder; null otherwise or when
+		//unreadable (then it is not a pack).
+		private static IReadOnlyCollection<string>? ReadPackEntries(string? filename, bool exists, bool isFolder)
+		{
+			try {
+				if(isFolder) {
+					return Directory.EnumerateFileSystemEntries(filename!).Select(entry => Path.GetFileName(entry)).ToList();
+				}
+				if(exists && Path.GetExtension(filename!).Equals(DropRoute.ZipExt, StringComparison.OrdinalIgnoreCase)) {
+					using(ZipArchive zip = ZipFile.OpenRead(filename!)) {
+						return zip.Entries.Select(entry => entry.FullName).ToList();
 					}
 				}
+			} catch(Exception ex) when(ex is IOException or UnauthorizedAccessException or InvalidDataException) {
 			}
-			return false;
+			return null;
 		}
 
 		public static void LoadFile(string filename)
 		{
-			if(File.Exists(filename)) {
-				string ext = Path.GetExtension(filename).ToLowerInvariant();
-				if(IsPatchFile(filename)) {
-					LoadPatchFile(filename);
-				} else if(ext == "." + FileDialogHelper.MesenSaveStateExt) {
-					EmuApi.LoadStateFile(filename);
-				} else if(EmuApi.IsRunning() && (ext == "." + FileDialogHelper.MesenMovieExt || ext == "." + FileDialogHelper.BizHawkMovieExt || ext == "." + FileDialogHelper.GbaHawkMovieExt)) {
-					RecordApi.MoviePlay(filename);
-				} else {
-					LoadRom(filename);
+			Run(Route(filename), filename);
+		}
+
+		public static void Run(DropAction action, string filename)
+		{
+			switch(action) {
+				case DropAction.Ignore: break;
+				case DropAction.FileNotFound: DisplayMessageHelper.DisplayMessage("Error", ResourceHelper.GetMessage("FileNotFound", filename)); break;
+				case DropAction.ApplyPatch: LoadPatchFile(filename); break;
+				case DropAction.LoadState: EmuApi.LoadStateFile(filename); break;
+				case DropAction.PlayMovie: RecordApi.MoviePlay(filename); break;
+				case DropAction.InstallPack: InstallPack(filename); break;
+				default: LoadRom(filename); break;
+			}
+		}
+
+		//#986: a dropped pack goes through the Enhancement Packs window's own
+		//install (MepZipValidator, then a copy into EnhancementPacks/ that the
+		//core scans, ADR-0040); with a game running it offers the same power
+		//cycle that window does, so the pack loads now. LoadFile also serves the
+		//command line, the ROM picker, shortcuts and RemasterWorkspaceView, so a
+		//pack path from any of them installs the same way (#993 review) - on
+		//purpose: a pack is never a ROM.
+		private static async void InstallPack(string path)
+		{
+			try {
+				string error = await EnhancementPacksViewModel.InstallPackFile(path, ConfigManager.EnhancementPackFolder);
+				switch(DropRoute.AfterPackInstall(error, EmuApi.IsRunning())) {
+					case PackInstallOutcome.ShowError:
+						DisplayMessageHelper.DisplayMessage("Error", ResourceHelper.GetMessage(error));
+						break;
+					case PackInstallOutcome.ShowInstalled:
+						DisplayMessageHelper.DisplayMessage("MEP", ResourceHelper.GetMessage("DropPackInstalled", Path.GetFileName(Path.TrimEndingDirectorySeparator(path))));
+						break;
+					case PackInstallOutcome.OfferPowerCycle:
+						if(await MesenMsgBox.Show(ApplicationHelper.GetMainWindow(), "InstallMepPackConfirmReset", MessageBoxButtons.OKCancel, MessageBoxIcon.Question) == DialogResult.OK) {
+							PowerCycle();
+						}
+						break;
 				}
-			} else {
-				DisplayMessageHelper.DisplayMessage("Error", ResourceHelper.GetMessage("FileNotFound", filename));
+			} catch(Exception ex) {
+				//#993: an async void - nothing above may escape onto the UI thread.
+				DisplayMessageHelper.DisplayMessage("Error", ex.Message);
 			}
 		}
 

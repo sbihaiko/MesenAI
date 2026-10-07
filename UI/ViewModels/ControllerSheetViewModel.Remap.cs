@@ -85,17 +85,17 @@ namespace Mesen.ViewModels
 			return ports.Count > 0 ? 0 : -1;
 		}
 
-		//The code the port's slots bind for this control: the first non-zero field
-		//across the four slots (which is also the slot the rebind replaces).
-		private static ushort BoundCode(ControllerConfig config, SetupButton button)
+		//The code the port binds for this control, as the row reads it: the field of
+		//the slot the selected pad holds (`padSlot`, FirstSlotHolding - the slot the
+		//rebind joins), else the first non-zero field across the four slots (#965,
+		//ControllerSheetRemap.BoundCode).
+		private static ushort BoundCode(ControllerConfig config, SetupButton button, int? padSlot)
 		{
+			ushort[] controlPerSlot = new ushort[4];
 			for(int slot = 0; slot < 4; slot++) {
-				ushort code = ControllerSheetSlotWrite.Field(ControllerSheetSlotWrite.Slot(config, slot), button);
-				if(code != 0) {
-					return code;
-				}
+				controlPerSlot[slot] = ControllerSheetSlotWrite.Field(ControllerSheetSlotWrite.Slot(config, slot), button);
 			}
-			return 0;
+			return ControllerSheetRemap.BoundCode(controlPerSlot, padSlot);
 		}
 
 		//ADR-0256 Decision 4 for the capture: a control the pad navigates with may
@@ -178,16 +178,16 @@ namespace Mesen.ViewModels
 						break;
 				}
 			}
-			ApplyRemapRows(config!, pad!, pressed);
+			ApplyRemapRows(config!, pad!, pressed, FirstSlotHolding(ports[portIndex]));
 		}
 
 		//The rows' two lights, from the two real sources: the pad's own buttons
 		//(GamepadTestItem.Buttons, the per-backend order slice 1 reads) and the
 		//console's own view (the port's bound code, held) - never a third table.
-		private void ApplyRemapRows(ControllerConfig config, GamepadTestItem pad, IReadOnlyList<ushort> pressed)
+		private void ApplyRemapRows(ControllerConfig config, GamepadTestItem pad, IReadOnlyList<ushort> pressed, int? padSlot)
 		{
 			foreach(ControllerSheetRemapRow row in _remapRows) {
-				ushort bound = BoundCode(config, row.Button);
+				ushort bound = BoundCode(config, row.Button, padSlot);
 				int? bit = bound != 0 ? ControllerSheetRemap.ButtonBitOfCodeName(KeyName(bound), pad.Backend) : null;
 				bool padHeld = bit is int index && index < pad.Buttons.Count && pad.Buttons[index].IsPressed;
 				RemapLights lights = ControllerSheetRemap.Lights(bound, bit, padHeld, bound != 0 && pressed.Contains(bound));
@@ -271,6 +271,7 @@ namespace Mesen.ViewModels
 		//call the classic Input page uses (ADR-0255 Consequences). It lands in the
 		//slot that already binds the control, else the port's first free slot; with
 		//all four taken the sheet refuses and says so rather than overwriting one.
+		//The same button on any other control of the port is cleared (#941).
 		private void BindCaptured(ushort code, int portIndex, SheetPort port)
 		{
 			ConsoleType console = CurrentConsole();
@@ -287,10 +288,35 @@ namespace Mesen.ViewModels
 				RemapNote = ResourceHelper.GetMessage("ControllerSheetRemapNoSlot");
 				return;
 			}
+			//#941: the button comes off every other control of this port that had
+			//it, in the same write, so one press never fires two controls. Only
+			//this port's own KeyMapping fields are read and cleared - other ports
+			//and other codes (keyboard keys included) are untouched - and only once
+			//the bind is known to land, so a refused bind clears nothing.
+			IReadOnlyList<RemapDisplaced> displaced = ControllerSheetRemap.Displaced(
+				ControllerSheetRemap.Controls(console),
+				(i, control) => ControllerSheetSlotWrite.Field(ControllerSheetSlotWrite.Slot(config, i), control),
+				4, button, code);
+			foreach(RemapDisplaced moved in displaced) {
+				ControllerSheetSlotWrite.SetField(ControllerSheetSlotWrite.Slot(config, moved.Slot), moved.Control, 0);
+			}
 			ControllerSheetSlotWrite.SetField(ControllerSheetSlotWrite.Slot(config, slot), button, code);
 			ConfigManager.Config.ApplyConfig();
 			ConfigManager.Config.Save();
-			RemapNote = ResourceHelper.GetMessage("ControllerSheetRemapBound", ControllerSheetRemap.ControlLabel(console, button), KeyName(code));
+			RemapNote = BoundNote(console, button, code, displaced);
+		}
+
+		//"A is now Button 1." - and, when the bind took the button off another
+		//control, that control is named on the same line, so the player sees
+		//which control lost it instead of finding it dead later (#941).
+		private string BoundNote(ConsoleType console, SetupButton button, ushort code, IReadOnlyList<RemapDisplaced> displaced)
+		{
+			string bound = ResourceHelper.GetMessage("ControllerSheetRemapBound", ControllerSheetRemap.ControlLabel(console, button), KeyName(code));
+			if(displaced.Count == 0) {
+				return bound;
+			}
+			string lost = string.Join(", ", displaced.Select(d => ControllerSheetRemap.ControlLabel(console, d.Control)).Distinct());
+			return bound + " " + string.Format(ResourceHelper.GetViewLabel("PlayerControllerSheetView", "lblControllerSheetRemapMoved"), lost);
 		}
 	}
 }
