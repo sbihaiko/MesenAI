@@ -155,6 +155,7 @@
 			<Control ID="lblZonePaint">PAINT</Control>
 			<Control ID="lblZoneSeeIt">SEE IT</Control>
 			<Control ID="btnRecordWhileIPlay">Record While I Play</Control>
+			<Control ID="btnOpenRightGame">Open the Right Game…</Control>
 			<Control ID="btnRecordFromTas">Record from a TAS Movie…</Control>
 			<Control ID="btnLetTheAiPlay">Let the AI Play…</Control>
 			<Control ID="btnPrepareFigures">Prepare Figures</Control>
