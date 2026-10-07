@@ -649,7 +649,7 @@ namespace Mesen.ViewModels
 			//#1038: the grid is complete and readable NOW - the tiles carry the
 			//cleaned file names the scan gave them - and the canonical titles
 			//arrive from here as the background pass resolves them.
-			StartCanonicalTitles();
+			StartCanonicalTitles(generation);
 		}
 
 		//#1060: the id PlayRomPicker answered, in the player's own words. Nothing to

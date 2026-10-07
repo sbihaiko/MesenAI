@@ -127,6 +127,19 @@ public class PlayerLibraryCanonicalTitlesTests : IDisposable
 		Dispatcher.UIThread.RunJobs();
 	}
 
+	//A bounded settle, for the cases that assert something does NOT happen: the
+	//stale work is given a fixed window to show up in rather than being asserted
+	//on a snapshot taken the instant the current work finished.
+	private static void Settle(int milliseconds)
+	{
+		Stopwatch clock = Stopwatch.StartNew();
+		while(clock.ElapsedMilliseconds < milliseconds) {
+			Pump();
+			Thread.Sleep(20);
+		}
+		Pump();
+	}
+
 	private static void WaitFor(Func<bool> condition, string failure)
 	{
 		Stopwatch clock = Stopwatch.StartNew();
@@ -186,7 +199,7 @@ public class PlayerLibraryCanonicalTitlesTests : IDisposable
 	//seams injected. The pass itself is left real - a background task posting
 	//its batches - so every case below waits for it the way the app does.
 	private (MainWindow Window, MainWindowViewModel Model, PlayerRomPickerViewModel Picker) ShowLibrary(
-		Func<string, RomConsole, Task<string>> hash)
+		Func<string, RomConsole, CancellationToken, Task<string>> hash)
 	{
 		LibraryRoot();
 		(MainWindow window, MainWindowViewModel model) = ShowHome();
@@ -214,7 +227,7 @@ public class PlayerLibraryCanonicalTitlesTests : IDisposable
 	{
 		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
 
-		(MainWindow window, _, PlayerRomPickerViewModel picker) = ShowLibrary((path, _) => ByName(path));
+		(MainWindow window, _, PlayerRomPickerViewModel picker) = ShowLibrary((path, _, _) => ByName(path));
 
 		WaitFor(() => picker.Tiles[0].Title == "Contra",
 			$"the matched ROM never took the database's title (titles=[{Titles(picker)}])");
@@ -236,7 +249,7 @@ public class PlayerLibraryCanonicalTitlesTests : IDisposable
 		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
 
 		TaskCompletionSource<bool> held = new();
-		(MainWindow window, _, PlayerRomPickerViewModel picker) = ShowLibrary(async (path, _) => {
+		(MainWindow window, _, PlayerRomPickerViewModel picker) = ShowLibrary(async (path, _, _) => {
 			await held.Task;
 			return Path.GetFileName(path).StartsWith("Contra", StringComparison.Ordinal) ? KnownSha1 : UnknownSha1;
 		});
@@ -253,6 +266,81 @@ public class PlayerLibraryCanonicalTitlesTests : IDisposable
 			$"the title never arrived once the hash did (titles=[{Titles(picker)}])");
 	}
 
+	//#1038 review finding 2 (ADR-0264 Decisions 7 and 9): one pass per scan, and
+	//the sheet is what decides how long it lives. A second scan REPLACES the
+	//first - the tiles it holds belong to a grid nobody sees - so the pass the
+	//first scan started has to stop, and stop where it stands: at the tile it has
+	//not begun, never a third one.
+	//
+	//Both passes are held inside their first read here, so the stale one is alive
+	//and blocked exactly when the second scan lands on it - the state a library
+	//of 20 000 ROMs is in for seconds at a time.
+	[AvaloniaFact]
+	public void A_pass_the_next_scan_replaced_stops_at_the_tile_it_never_started()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+
+		TaskCompletionSource<bool> held = new();
+		int calls = 0;
+		(MainWindow window, MainWindowViewModel model, PlayerRomPickerViewModel picker) = ShowLibrary(async (path, _, _) => {
+			Interlocked.Increment(ref calls);
+			await held.Task;
+			return Path.GetFileName(path).StartsWith("Contra", StringComparison.Ordinal) ? KnownSha1 : UnknownSha1;
+		});
+		WaitFor(() => Volatile.Read(ref calls) == 1, $"the pass never asked for a hash ({calls} calls)");
+
+		//The player closes the sheet and opens it again. That is a second scan, and
+		//with it a second pass over tiles that replace the first one's.
+		picker.Hide();
+		model.OpenRomPicker();
+		WaitFor(() => Volatile.Read(ref calls) == 2, $"the second scan's pass never asked for a hash ({calls} calls)");
+
+		held.SetResult(true);
+
+		//The pass that is CURRENT finishes its own tiles: the read it was holding,
+		//then the second tile. The replaced one stops at the tile it never started,
+		//so three calls is where the walk ends and where it stays.
+		WaitFor(() => Volatile.Read(ref calls) >= 3, $"the current pass never finished its own tiles ({calls} calls)");
+		Settle(400);
+		Assert.Equal(3, Volatile.Read(ref calls));
+	}
+
+	//The other end of the same rule: the sheet closing stops the pass it started.
+	//A player who leaves the library must not leave a hash walk behind them - the
+	//sheet is gone, and there is no tile left for the walk's answer to name.
+	[AvaloniaFact]
+	public void A_closed_sheet_stops_the_pass_it_started()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+
+		TaskCompletionSource<bool> held = new();
+		int calls = 0;
+		CancellationToken? passToken = null;
+		(MainWindow _, _, PlayerRomPickerViewModel picker) = ShowLibrary(async (path, _, token) => {
+			Interlocked.Increment(ref calls);
+			passToken = token;
+			await held.Task;
+			return Path.GetFileName(path).StartsWith("Contra", StringComparison.Ordinal) ? KnownSha1 : UnknownSha1;
+		});
+		WaitFor(() => Volatile.Read(ref calls) == 1, $"the pass never asked for a hash ({calls} calls)");
+
+		picker.Hide();
+
+		//The token the read was handed is the one that fires: the pass is stopped
+		//at the source, not only around it - a read already inside a file is what
+		//this is for.
+		WaitFor(() => passToken?.IsCancellationRequested == true,
+			"closing the sheet never cancelled the token the pass's read was handed");
+
+		held.SetResult(true);
+
+		//The read the pass was holding answers after the sheet is gone, and the
+		//pass has no second tile to ask for: the count stays where the close left
+		//it.
+		Settle(400);
+		Assert.Equal(1, Volatile.Read(ref calls));
+	}
+
 	//A ROM whose hash cannot be computed - the file went away between the scan
 	//and the pass, a permission, a disk that refused to answer - is a tile the
 	//scan already named, and nothing else. It must not empty the tile, and it
@@ -262,7 +350,7 @@ public class PlayerLibraryCanonicalTitlesTests : IDisposable
 	{
 		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
 
-		(MainWindow window, _, PlayerRomPickerViewModel picker) = ShowLibrary((_, _) => throw new InvalidOperationException("unreadable ROM"));
+		(MainWindow window, _, PlayerRomPickerViewModel picker) = ShowLibrary((_, _, _) => throw new InvalidOperationException("unreadable ROM"));
 
 		WaitFor(() => GridTitles(window).Contains("Metroid"), "the grid never filled");
 		//The pass has run and answered nothing for either tile: both keep the
