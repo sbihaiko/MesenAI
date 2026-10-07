@@ -20,6 +20,9 @@ public enum DropAction
 	LoadRom
 }
 
+//#986: the manifest that makes a dropped item a pack (DropRoute.FindPackManifest).
+public enum PackManifest { None, Mep, HdLegacy }
+
 //#953: what a file dropped on the main window opens (MainWindow.OnDrop) and
 //what LoadRomHelper.LoadFile does with a path - decided here over plain inputs
 //so UI.Tests pins it; reading the file and acting on the answer stay in the
@@ -28,8 +31,6 @@ public enum DropAction
 //hires.txt (legacy HD) at the root of a zip or of its single top-level folder,
 //or at the root of a dropped folder; pack.json wins (ADR-0005). A zip with
 //neither keeps the ROM loader, so a zipped ROM still loads.
-public enum PackManifest { None, Mep, HdLegacy }
-
 public static class DropRoute
 {
 	private const string SaveStateExt = ".mss";
