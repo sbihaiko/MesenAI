@@ -170,11 +170,29 @@ public class PlayerThemeRenderTests : IDisposable
 	{
 		RgbFrame fresh = PlayerRender.Rgb(frame);
 		IReadOnlyList<RegionResult> results = PlayerWireframe.Compare(wId, fresh, RgbFrame.FromPng(PlayerRender.WireframePath(wId)));
-		List<string> violations = PlayerWireframe.Gate(wId, results, PlayerWireframe.KnownDeviationsOf(wId)).ToList();
-		string committed = PlayerRender.CommittedRenderPath(wId);
+		List<string> violations = PlayerWireframe.Gate(wId, results, DeviationsOnThisHost(wId)).ToList();
+		string committed = PlayerRender.DriftBaselinePath(wId);
 		Assert.True(File.Exists(committed), $"{wId} has no committed render at {committed}; commit {Path.Combine(PlayerRender.OutputFolder, wId + ".png")} there");
 		violations.AddRange(PlayerWireframe.Drift(wId, fresh, RgbFrame.FromPng(committed), committed));
 		Assert.True(violations.Count == 0, string.Join(Environment.NewLine, violations));
+	}
+
+	//#968: the wireframes draw the macOS window, where the shell bar extends
+	//under the traffic lights and starts 80 px in (ShellTitleBar.ExtendsIntoTitleBar).
+	//Off macOS - the Linux render-gate runner, ADR-0191 - the bar is not
+	//inset, so its badge sits left of the title-bar region and the ink box
+	//moves (16 px on the runner). Only that kind is tolerated, only there:
+	//the region's colour and text lines stay gated against the wireframe, and
+	//the drift check holds the whole region to the Linux baseline.
+	private const string NoTrafficLightInset = "no traffic-light inset off macOS";
+
+	private static IReadOnlyList<KnownDeviation> DeviationsOnThisHost(string wId)
+	{
+		IReadOnlyList<KnownDeviation> known = PlayerWireframe.KnownDeviationsOf(wId);
+		if(OperatingSystem.IsMacOS() || known.Any(k => k.Region == "title bar" && k.Kind == PlayerWireframe.InkBox)) {
+			return known;
+		}
+		return known.Append(new KnownDeviation("title bar", PlayerWireframe.InkBox, NoTrafficLightInset, false)).ToArray();
 	}
 
 	//W-S1's chrome on W-P1: light bar with the tinted Play badge and the
