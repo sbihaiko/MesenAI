@@ -1,3 +1,4 @@
+using System;
 using System.Linq;
 using System.Reflection;
 using Avalonia.Controls;
@@ -9,7 +10,6 @@ namespace Mesen.HeadlessTests;
 //#1018: InitAppMenu reorders the macOS app menu; About first, Settings… next. Quit is Avalonia's own
 //item, added only when the platform exports the menu; the headless platform
 //never does, so Quit-last is not observable here (see the PR body). Runs the real private InitAppMenu on a real App.
-[NativeCoreFree("InitAppMenu only builds NativeMenuItems; no emulator call is made until a Click handler fires.")]
 public class AppMenuOrderTests
 {
 	[AvaloniaFact]
@@ -22,9 +22,17 @@ public class AppMenuOrderTests
 		Assert.NotNull(menu);
 		//The separator is itself a NativeMenuItem subclass, so the order is read off all items.
 		string?[] headers = menu!.Items.OfType<NativeMenuItem>().Select(i => i.Header).ToArray();
-		Assert.Equal(3, headers.Length);
-		Assert.StartsWith("About", headers[0]);
+		//Relative order only: the platform or Avalonia may append items after these.
+		Assert.True(headers.Length >= 3, "expected at least About, separator and Settings…");
+		Assert.Equal(Message("DoorMenuAbout"), headers[0]);
 		Assert.Equal("-", headers[1]);
-		Assert.StartsWith("Settings", headers[2]);
+		Assert.Equal(Message("DoorMenuSettings"), headers[2]);
+	}
+
+	//ResourceHelper is internal to the UI assembly, so it is reached by reflection, like InitAppMenu above.
+	private static string Message(string id)
+	{
+		Type helper = typeof(App).Assembly.GetType("Mesen.Localization.ResourceHelper")!;
+		return (string)helper.GetMethod("GetMessage", BindingFlags.Public | BindingFlags.Static)!.Invoke(null, new object[] { id, Array.Empty<object>() })!;
 	}
 }
