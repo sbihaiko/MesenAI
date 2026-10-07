@@ -17164,7 +17164,37 @@ static std::string ReadRepoSource(const std::string& path)
 	std::ifstream in(path, std::ios::in | std::ios::binary);
 	std::stringstream text;
 	text << in.rdbuf();
+	if(text.str().empty()) {
+		Check(false, "P.12: could not read " + path, "run from the repo root");
+	}
 	return text.str();
+}
+
+//The body of the function whose signature is 'signature': from its own
+//opening brace to the brace that closes it. Empty when the signature is gone
+//or the braces never balance, so a rename fails the guard instead of widening
+//the window to the rest of the file.
+static std::string FunctionBody(const std::string& source, const std::string& signature)
+{
+	size_t start = source.find(signature);
+	size_t open = start == std::string::npos ? std::string::npos : source.find('{', start + signature.size());
+	if(open == std::string::npos) {
+		return "";
+	}
+	int depth = 0;
+	for(size_t i = open; i < source.size(); i++) {
+		if(source[i] == '{') {
+			depth++;
+		} else if(source[i] == '}' && --depth == 0) {
+			return source.substr(open, i - open + 1);
+		}
+	}
+	return "";
+}
+
+static bool CallsReadOrReadRam(const std::string& body)
+{
+	return body.find("ReadRam") != std::string::npos || body.find("Read(") != std::string::npos || body.find("Read<") != std::string::npos;
 }
 
 static void TestTheReadHitCounterRegistersForReadsOfItsOneAddressOnly()
@@ -17189,8 +17219,19 @@ static void TestACpuReadCountsAHitAndPassesTheRawByteThrough()
 	Check(value == 0x42, "P.12: a CPU read through the counter returns the raw RAM byte", std::to_string(value));
 	Check(counter.Reads == 1 && counter.Hits == 1, "P.12: a CPU read (ReadRam) counts a read and a hit",
 		std::to_string(counter.Reads) + "/" + std::to_string(counter.Hits));
-	value = counter.ReadRam(0x0833);
-	Check(value == 0x42 && counter.Reads == 2, "P.12: a CPU read of a RAM mirror reads the same byte and counts");
+	//Mirrors are not counted: the counter registers $0033 alone, so the bus
+	//routes a CPU read of $0833/$1033/$1833 to the internal RAM handler, not to
+	//the counter. A game that reads the watched byte only through a mirror
+	//shows zero hits.
+	MemoryRanges ranges;
+	counter.GetMemoryRanges(ranges);
+	std::vector<uint16_t>* reads = ranges.GetRAMReadAddresses();
+	bool mirrorRegistered = false;
+	for(uint16_t mirror : { (uint16_t)0x0833, (uint16_t)0x1033, (uint16_t)0x1833 }) {
+		mirrorRegistered |= std::find(reads->begin(), reads->end(), mirror) != reads->end();
+	}
+	Check(reads->size() == 1 && (*reads)[0] == 0x0033 && !mirrorRegistered,
+		"P.12: no RAM mirror of the address is registered, so a CPU read of a mirror is not counted", std::to_string(reads->size()));
 }
 
 static void TestDebuggerProbeAndRawRamReadsNeverCount()
@@ -17199,11 +17240,16 @@ static void TestDebuggerProbeAndRawRamReadsNeverCount()
 	ram[0x033] = 0x42;
 	NesReadHitCounter counter(ram, 0x0033, -1);
 	uint8_t peeked = counter.PeekRam(0x0033);
-	uint8_t copy[0x800];
-	memcpy(copy, ram, sizeof(copy));
-	Check(peeked == 0x42 && copy[0x033] == 0x42, "P.12: debugger and probe reads still see the RAM byte");
-	Check(counter.Reads == 0 && counter.Hits == 0, "P.12: a debugger read (PeekRam) and a raw RAM copy count nothing",
+	Check(peeked == 0x42, "P.12: a debugger read (PeekRam) still sees the RAM byte", std::to_string(peeked));
+	Check(counter.Reads == 0 && counter.Hits == 0, "P.12: a debugger read (PeekRam) counts nothing",
 		std::to_string(counter.Reads) + "/" + std::to_string(counter.Hits));
+
+	//The probe's raw RAM read: HeadlessReadNesRam copies GetInternalRam() and
+	//never goes through the bus, so it cannot reach the counter's ReadRam.
+	std::string headless = ReadRepoSource("InteropDLL/EmuApiWrapperHeadless.cpp");
+	std::string probe = FunctionBody(headless, "DllExport bool __stdcall HeadlessReadNesRam(");
+	Check(probe.find("GetInternalRam()") != std::string::npos && !CallsReadOrReadRam(probe),
+		"P.12: HeadlessReadNesRam copies the internal RAM array and reaches neither Read nor ReadRam");
 }
 
 static void TestAHitIsAReadWhoseRawByteMeetsTheCompareValue()
@@ -17226,18 +17272,20 @@ static void TestAHitIsAReadWhoseRawByteMeetsTheCompareValue()
 	Check(any.Hits == 2, "P.12: compare -1 makes every read a hit", std::to_string(any.Hits));
 }
 
+//A source guard rather than a NesMemoryManager under test: the manager needs
+//an Emulator. Each check reads one function's own body (brace-matched), so it
+//covers direct calls in that body only, not calls made through a helper.
 static void TestTheBusRoutesCpuReadsToReadRamAndDebugReadsToPeekRam()
 {
 	std::string header = ReadRepoSource("Core/NES/NesMemoryManager.h");
 	std::string source = ReadRepoSource("Core/NES/NesMemoryManager.cpp");
 	std::string cheats = ReadRepoSource("Core/Shared/CheatManager.cpp");
-	Check(header.find("value = _ramReadHandlers[addr]->ReadRam(addr);") != std::string::npos,
-		"P.12: NesMemoryManager::Read reaches a registered handler's ReadRam");
-	size_t debugRead = source.find("uint8_t NesMemoryManager::DebugRead(uint16_t addr)");
-	size_t peek = source.find("_ramReadHandlers[addr]->PeekRam(addr)", debugRead);
-	size_t nextFunction = source.find("NesMemoryManager::DebugReadWord", debugRead);
-	Check(debugRead != std::string::npos && peek < nextFunction && source.find("ReadRam", debugRead) > nextFunction,
-		"P.12: NesMemoryManager::DebugRead reaches PeekRam, never ReadRam");
+	std::string read = FunctionBody(header, "__forceinline uint8_t Read(uint16_t addr");
+	Check(read.find("_ramReadHandlers[addr]->ReadRam(addr)") != std::string::npos && read.find("PeekRam") == std::string::npos,
+		"P.12: NesMemoryManager::Read reaches a registered handler's ReadRam, never PeekRam");
+	std::string debugRead = FunctionBody(source, "uint8_t NesMemoryManager::DebugRead(uint16_t addr)");
+	Check(debugRead.find("_ramReadHandlers[addr]->PeekRam(addr)") != std::string::npos && !CallsReadOrReadRam(debugRead),
+		"P.12: NesMemoryManager::DebugRead reaches PeekRam, never Read or ReadRam");
 	Check(cheats.find("if(result->second.Compare == -1 || result->second.Compare == value)") != std::string::npos,
 		"P.12: CheatManager::ApplyCheat still gates on compare -1 or the raw byte, the gate the counter mirrors");
 }
