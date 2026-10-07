@@ -41,6 +41,11 @@ public class PlayerLibraryTests : IDisposable
 	private readonly bool _confirm = ConfigManager.Config.Preferences.ConfirmExitResetPower;
 	private readonly string? _gameFolder = ConfigManager.Config.Preferences.GameFolder;
 	private readonly bool _overrideGameFolder = ConfigManager.Config.Preferences.OverrideGameFolder;
+	//#1036: these cases drive the library through GameFolder, so a LibraryFolders
+	//list left in the real config by anyone who used the feature would win over it
+	//and the tile-count asserts would fail on that machine only. Held here and put
+	//back in Dispose, exactly as PlayerLibraryFoldersTests does.
+	private readonly List<string>? _libraryFolders = ConfigManager.Config.Preferences.LibraryFolders;
 
 	private readonly List<MainWindow> _windows = new();
 	private readonly string _folder = Path.Combine(Path.GetTempPath(), "mesen-1032-" + Guid.NewGuid().ToString("N"));
@@ -81,6 +86,9 @@ public class PlayerLibraryTests : IDisposable
 			WaitUntilStopped();
 		}
 		Directory.CreateDirectory(_folder);
+		//First run for every case: a stored list is the state these cases are not
+		//about, and the seed from GameFolder is what they build their tree on.
+		ConfigManager.Config.Preferences.LibraryFolders = null;
 	}
 
 	private static void WaitUntilStopped()
@@ -107,6 +115,7 @@ public class PlayerLibraryTests : IDisposable
 		prefs.ConfirmExitResetPower = _confirm;
 		prefs.GameFolder = _gameFolder ?? "";
 		prefs.OverrideGameFolder = _overrideGameFolder;
+		prefs.LibraryFolders = _libraryFolders;
 		ConfigManager.Config.Save();
 
 		try {
@@ -502,8 +511,12 @@ public class PlayerLibraryTests : IDisposable
 		Assert.DoesNotContain("[[", model.RomPicker.EmptyText);
 		TextBlock sentence = window.FindNamed<TextBlock>("RomPickerLibraryEmpty");
 		Assert.True(sentence.IsOnScreen(), "the empty state is not on screen");
-		//And it names the next step rather than the problem.
-		Assert.Contains("Browse a file", sentence.Text ?? "");
+		//And it names the next step rather than the problem - and the step is the
+		//one that works now (#1036): the header's *Library folders…*, then that
+		//sheet's *Add a folder…*. The browser's *Make this my games folder* changes
+		//the single games folder, not the list, so it is no longer what is named.
+		Assert.Contains("Library folders", sentence.Text ?? "");
+		Assert.Contains("Add a folder", sentence.Text ?? "");
 	}
 
 	//#1060: a library folder the scan answers with nothing is a BLANK GRID today -

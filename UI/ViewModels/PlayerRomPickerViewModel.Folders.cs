@@ -207,10 +207,15 @@ namespace Mesen.ViewModels
 		{
 			ConfigManager.Config.Preferences.LibraryFolders = new List<string>(folders);
 			ConfigManager.Config.Save();
-			//The seam follows the stored list rather than a copy of it, so the scan
-			//never reads a list the preference has already moved past.
-			LibraryFolderSource = () => ConfigManager.Config.Preferences.LibraryFolders ?? (IReadOnlyList<string>)Array.Empty<string>();
-			_folders = LibraryFolderSource();
+			//LibraryFolderSource is a SEAM - a caller or a test puts its own list
+			//there - so an edit never writes it back; reassigning it here silently
+			//destroyed whatever a caller injected, and the next open read the config
+			//instead of the list it was given.
+			//
+			//What the edit refreshes is the list the sheet is showing, and it comes
+			//from the preference that was just written rather than from a copy, so
+			//the edit and the scan that follows it are the same value.
+			_folders = ConfigManager.Config.Preferences.LibraryFolders;
 		}
 
 		private void FillLibraryFolderRows()

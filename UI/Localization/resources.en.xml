@@ -2683,16 +2683,17 @@ E
 		<!-- Decision 9: a scan that hit LibraryScan.MaxEntries says so rather than
 		     silently dropping games. {0} = the cap. -->
 		<Message ID="RomPickerLibraryTruncated">Showing the first {0} games — the scan stopped at its limit.</Message>
-		<!-- Decision 8: the named empty state, and it names the NEXT STEP. This
-		     slice has no Library folders… control yet, so the step it can point
-		     at is the one that exists: the browser's own action row. -->
-		<Message ID="RomPickerLibraryNoFolders">No library folder yet. Pick a folder with Browse a file…, then choose Make this my games folder.</Message>
+		<!-- Decision 8: the named empty state, and it names the NEXT STEP - the two
+		     steps that now exist, named as the player reads them on screen: the
+		     header's own *Library folders…* control, then that sheet's *Add a
+		     folder…*. The browser's *Make this my games folder* is NOT one of them
+		     any more: it changes the single games folder, not the folder list, so
+		     pointing there left a player who followed it with an empty library. -->
+		<Message ID="RomPickerLibraryNoFolders">No library folder yet. Open Library folders…, then choose Add a folder….</Message>
 		<!-- #1060 (ADR-0264 Decision 8): the OTHER empty state - a library folder the
 		     scan answered nothing for (a library still being copied, a folder of
 		     notes, games on a stick that is not plugged in). It is a different fact
-		     from the one above and it names the same next step, for the same reason:
-		     the *Library folders…* control is slice #1035 and does not exist yet, so
-		     the step this sentence can point at is the one that does. -->
+		     from the one above, and it names the same next step. -->
 		<Message ID="RomPickerLibraryEmpty">No games found in your library folder. Pick another folder with Browse a file…, then choose Make this my games folder.</Message>
 		<!-- Decision 4 (#1033): the named empty RESULT - the other empty state again,
 		     and a different fact from the one above: the library answered, and the

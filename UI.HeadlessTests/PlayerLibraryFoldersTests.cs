@@ -439,4 +439,175 @@ public class PlayerLibraryFoldersTests : IDisposable
 		Press(window, PadNavAction.Back);
 		WaitFor(() => !model.RomPicker.IsVisible, "B did not close the picker");
 	}
+
+	//#1036 (ADR-0264 Decision 8): the pick is a MODE of one open, and a mode that
+	//outlives the open that armed it is a leak. A player deep in the pad's
+	//add-folder walk confirms a game row; the game loads and the sheet closes -
+	//but the pick stays armed, so the NEXT open offers *Add this folder to your
+	//library* where *Make this my games folder* belongs, and a press that means
+	//"name my games folder" pops the folders sheet instead.
+	[AvaloniaFact]
+	public void Confirming_a_game_row_during_a_pick_does_not_arm_the_next_open()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(string games, _, _) = LibraryRoots();
+
+		(MainWindow window, MainWindowViewModel model) = ShowFirstRunHome();
+		OpenFoldersSheetWithPad(window, model);
+
+		//*Add a folder…* arms the pick and opens the browser on the roots.
+		Press(window, PadNavAction.Confirm);
+		WaitFor(() => model.RomPicker.IsPickingLibraryFolder, "the pad's add did not open the folder browser");
+
+		//The configured games folder is one of the roots, and the game under it is
+		//the row this case confirms while the pick is armed.
+		WalkToRow(window, row => row.Path == games, "the configured games folder");
+		Press(window, PadNavAction.Confirm);
+		WalkToRow(window, row => row.Kind == RomPickerRowKind.Game, "the game under the games folder");
+		Press(window, PadNavAction.Confirm);
+
+		//The game loads, which is the close path: the sheet goes, and the pick
+		//goes with it rather than staying armed behind it.
+		WaitFor(() => !model.RomPicker.IsVisible, "confirming a game row did not close the picker");
+		Assert.False(model.RomPicker.IsPickingLibraryFolder,
+			"the pick stayed armed after a game row closed the sheet - the next open offers *Add this folder…*");
+
+		//The next open is the library's own: *Browse a file…* names the games
+		//folder again, which is the affordance the leak got wrong.
+		model.RomPicker.Open();
+		model.RomPicker.BrowseFile();
+		//The configured folder is already the games folder, so the browser offers
+		//no row to name it again - armed, it offered *Add this folder to your
+		//library* here instead.
+		model.RomPicker.Choose(model.RomPicker.Rows.First(r => r.Path == games));
+		Assert.DoesNotContain(model.RomPicker.Rows, r => r.Kind == RomPickerRowKind.Action);
+
+		//And anywhere else the action row is the one that names the games folder,
+		//not the one that adds a library folder.
+		model.RomPicker.BrowseFile();
+		model.RomPicker.Choose(model.RomPicker.Rows.First(r => r.Path == _folder));
+		PlayerRomPickerRow action = model.RomPicker.Rows.First(r => r.Kind == RomPickerRowKind.Action);
+		Assert.Contains("Make this my games folder", action.Label);
+
+		if(EmuApi.IsRunning()) {
+			EmuApi.Stop();
+			WaitUntilStopped();
+		}
+	}
+
+	//#1036 (ADR-0264 Decision 8) with ADR-0256's stop rule: B is a STEP, not a
+	//dismiss. While the browser is up to pick a folder, B walks the same tree
+	//backwards one folder at a time - it does not throw the whole walk away and
+	//drop the player on *Library folders…* to start again. Only at the roots,
+	//where there is nowhere left to ascend to, is B the cancel of the pick.
+	[AvaloniaFact]
+	public void B_while_picking_ascends_one_folder_and_cancels_only_at_the_roots()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(_, string extra, _) = LibraryRoots();
+
+		(MainWindow window, MainWindowViewModel model) = ShowFirstRunHome();
+		OpenFoldersSheetWithPad(window, model);
+		Press(window, PadNavAction.Confirm);
+		WaitFor(() => model.RomPicker.IsPickingLibraryFolder, "the pad's add did not open the folder browser");
+
+		//Two folders deep: the temp volume, then a folder inside it that is nobody's
+		//root. The game under that second folder is what says which of the two
+		//folders is on screen, since a path line is a label and not a path.
+		WalkToRow(window, row => row.Path == _folder, "the volume root");
+		Press(window, PadNavAction.Confirm);
+		WaitFor(() => model.RomPicker.PathText.Length > 0, "Confirm did not descend into the volume root");
+		WalkToRow(window, row => row.Path == extra, "the folder inside the volume");
+		Press(window, PadNavAction.Confirm);
+		WaitFor(() => model.RomPicker.Rows.Any(r => r.Kind == RomPickerRowKind.Game),
+			"Confirm did not descend into the folder inside the volume");
+
+		//B here is one step up the walk, and the pick is still armed.
+		Press(window, PadNavAction.Back);
+		WaitFor(() => !model.RomPicker.Rows.Any(r => r.Kind == RomPickerRowKind.Game),
+			"B did not ascend one folder while picking - the second folder is still on screen");
+		Assert.Equal(_folder, model.RomPicker.Rows.First(r => r.Kind == RomPickerRowKind.Action).Path);
+		Assert.True(model.RomPicker.IsPickingLibraryFolder, "B cancelled the pick instead of ascending one folder");
+		Assert.False(model.RomPicker.IsFoldersSheetVisible, "B out of a folder popped the folders sheet up mid-walk");
+
+		//B at the volume root steps back to the roots list, still picking.
+		Press(window, PadNavAction.Back);
+		WaitFor(() => model.RomPicker.PathText.Length == 0, "B at the volume root did not step back to the roots list");
+		Assert.True(model.RomPicker.IsPickingLibraryFolder, "B at a root cancelled the pick");
+
+		//And only there - nowhere left to ascend to - does B cancel it.
+		Press(window, PadNavAction.Back);
+		WaitFor(() => model.RomPicker.IsFoldersSheetVisible, "B at the roots did not cancel the pick back to the folders sheet");
+		Assert.False(model.RomPicker.IsPickingLibraryFolder);
+		Assert.Equal(RomPickerMode.Library, model.RomPicker.Mode);
+	}
+
+	//#1036 (ADR-0264 Decision 8): the named empty state names the NEXT STEP, and
+	//after this slice the step is the folders sheet's own *Add a folder…* rather
+	//than the browser's *Make this my games folder*. And an emptied library STAYS
+	//emptied: the seed is the single games folder the app already had, put there
+	//once for a player who never had a library - not a folder that comes back
+	//every time the player takes the last one out.
+	[AvaloniaFact]
+	public void Removing_the_last_folder_names_the_add_folder_step_and_does_not_reseed()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		LibraryRoots();
+
+		(MainWindow window, MainWindowViewModel model) = ShowFirstRunHome();
+		OpenFoldersSheetWithPad(window, model);
+		Assert.Single(model.RomPicker.LibraryFolderRows);
+		Assert.Contains("1 folder", model.RomPicker.CountText);
+
+		//Up out of *Add a folder…* reaches the rows, where the press is Remove.
+		Press(window, PadNavAction.Up);
+		WaitFor(() => FocusedName(window) == "RomPickerFolderRemove",
+			$"Up from *Add a folder…* did not reach a row's Remove ({FocusedWhat(window)})");
+		Press(window, PadNavAction.Confirm);
+		WaitFor(() => model.RomPicker.LibraryFolderRows.Count == 0, "the press did not take the last folder out of the list");
+
+		//The grid is the named empty state, and the state names the step that now
+		//exists: the folders sheet's own *Add a folder…*.
+		Assert.Empty(model.RomPicker.Tiles);
+		Assert.Contains("Library folders", model.RomPicker.EmptyText);
+		Assert.Contains("Add a folder", model.RomPicker.EmptyText);
+
+		//The games folder the seed came from is NOT put back on the next open.
+		model.RomPicker.Hide();
+		model.RomPicker.Open();
+		WaitFor(() => model.RomPicker.IsVisible, "the picker did not reopen");
+		Assert.Empty(model.RomPicker.Tiles);
+		Assert.Contains("Add a folder", model.RomPicker.EmptyText);
+	}
+
+	//#1036 (ADR-0264 Decision 8): LibraryFolderSource is a SEAM - a caller or a
+	//test puts its own list there - and an edit must not overwrite it. Every add
+	//and every remove used to reassign it, so whatever a caller injected was gone
+	//after the first edit and the next open read the config instead; the seam
+	//stays where it was put, and what the edit refreshes is the list the sheet is
+	//showing, straight from the preference it just wrote.
+	[AvaloniaFact]
+	public void An_edit_leaves_an_injected_folder_source_alone()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(string games, _, _) = LibraryRoots();
+
+		(MainWindow window, MainWindowViewModel model) = ShowFirstRunHome();
+		OpenFoldersSheetWithPad(window, model);
+
+		//A caller's own source, injected the way another workspace or a test would.
+		Func<IReadOnlyList<string>> injected = () => new List<string> { games };
+		model.RomPicker.LibraryFolderSource = injected;
+
+		Press(window, PadNavAction.Up);
+		WaitFor(() => FocusedName(window) == "RomPickerFolderRemove",
+			$"Up from *Add a folder…* did not reach a row's Remove ({FocusedWhat(window)})");
+		Press(window, PadNavAction.Confirm);
+		WaitFor(() => model.RomPicker.LibraryFolderRows.Count == 0, "the remove did not land");
+
+		//The seam is still the caller's - the edit left it alone - and the list
+		//that landed is the one the preference now holds.
+		Assert.Same(injected, model.RomPicker.LibraryFolderSource);
+		Assert.Empty(ConfigManager.Config.Preferences.LibraryFolders!);
+	}
 }

@@ -322,6 +322,14 @@ namespace Mesen.ViewModels
 		//(and if) it returns.
 		public void Open()
 		{
+			//#1036: the mode belongs to ONE open. A pick that outlived the open it
+			//was armed in would offer *Add this folder to your library* on the next
+			//*Browse a file…* where *Make this my games folder* belongs, and the
+			//press that means "name my games folder" would pop the folders sheet
+			//instead. Whatever closed the last open, this one starts clean.
+			IsPickingLibraryFolder = false;
+			IsFoldersSheetVisible = false;
+			FoldersNoticeText = "";
 			_roots = BuildRoots(GamesFolder);
 			_folder = null;
 			Title = ResourceHelper.GetMessage("RomPickerTitle");
@@ -461,11 +469,15 @@ namespace Mesen.ViewModels
 				IsVisible = false;
 				return;
 			}
-			//#1036 (ADR-0264 Decision 8): the browser is also the pad's door onto
-			//adding a library folder, and B there is the CANCEL of that pick - back
-			//to *Library folders…*, with the list as it was, rather than a step out
-			//of a sheet the player opened to do one thing.
-			if(IsPickingLibraryFolder) {
+			//#1036 (ADR-0264 Decision 8, and ADR-0256's stop rule that B is a STEP
+			//and not a dismiss): the browser is also the pad's door onto adding a
+			//library folder, and B there walks the same tree backwards one folder at
+			//a time. Only at the roots - where there is nowhere left to ascend to -
+			//is it the CANCEL of the pick: back to *Library folders…*, with the list
+			//as it was, rather than a step out of a sheet the player opened to do one
+			//thing. Cancelling one folder deep would throw the whole walk away and
+			//make the player start it again.
+			if(IsPickingLibraryFolder && _folder is null) {
 				CancelFolderPick();
 				return;
 			}
@@ -522,6 +534,10 @@ namespace Mesen.ViewModels
 					ShowFolder(row.Path);
 					return;
 				default:
+					//#1036: a game row ENDS whatever mode the browser was in. The
+					//sheet closes on the load, so the pick dies with it rather than
+					//staying armed behind it (see Open()).
+					IsPickingLibraryFolder = false;
 					IsVisible = false;
 					RomChosen?.Invoke(row.Path);
 					return;
@@ -529,8 +545,15 @@ namespace Mesen.ViewModels
 		}
 
 		//The game changed under it (another ROM opened, the device unplugged):
-		//the sheet goes without loading anything.
-		public void Hide() => IsVisible = false;
+		//the sheet goes without loading anything. Every mode goes with it - the
+		//sheet is not coming back where it was, and a pick left armed behind a
+		//sheet nobody can see is a mode with no surface (#1036).
+		public void Hide()
+		{
+			IsVisible = false;
+			IsPickingLibraryFolder = false;
+			IsFoldersSheetVisible = false;
+		}
 
 		//The action row's press: this folder becomes the games folder. It is the
 		//same two properties the classic Advanced Options row writes, saved the
