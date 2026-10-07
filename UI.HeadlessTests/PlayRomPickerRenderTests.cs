@@ -80,15 +80,21 @@ public class PlayRomPickerRenderTests : IDisposable
 		prefs.UiMode = UiMode.Player;
 		prefs.Workspace = Workspace.Play;
 
+		//#999: the stale recents go BEFORE the window starts. The window's own
+		//startup Init reads them, and a second Init in the same mode with entries
+		//on screen returns early (the anti-flicker guard), so deleting them
+		//afterwards left the recents home up whenever an earlier class had left
+		//an .rgd behind.
+		foreach(string stale in Directory.GetFiles(ConfigManager.RecentGamesFolder, "*.rgd")) {
+			File.Delete(stale);
+		}
+
 		MainWindow window = new() { Width = 1100, Height = 740 };
 		window.ShowStarted();
 		_windows.Add(window);
 		MainWindowViewModel model = Assert.IsType<MainWindowViewModel>(window.DataContext);
 		WaitFor(() => model.MainMenu.HelpMenuItems.Count > 0, "MainWindow never finished building its menus.");
 
-		foreach(string stale in Directory.GetFiles(ConfigManager.RecentGamesFolder, "*.rgd")) {
-			File.Delete(stale);
-		}
 		model.RecentGames.Init(GameScreenMode.RecentGames);
 		Pump();
 		Assert.True(model.RecentGames.ShowFirstRunHome, "the home is not the first-run one, so the render would be of the wrong surface");

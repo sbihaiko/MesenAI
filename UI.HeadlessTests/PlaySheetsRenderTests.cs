@@ -59,6 +59,7 @@ public class PlaySheetsRenderTests : IDisposable
 	private readonly string _saveStateFolder = ConfigManager.Config.Preferences.SaveStateFolder;
 	private readonly bool _pauseInBackground = ConfigManager.Config.Preferences.PauseWhenInBackground;
 	private readonly bool _pauseInMenus = ConfigManager.Config.Preferences.PauseWhenInMenusAndConfig;
+	private const string RomPrefix = "render-slots-";
 	private readonly string _folder = Path.Combine(Path.GetTempPath(), "mesen-play-sheets-" + Guid.NewGuid().ToString("N"));
 
 	public PlaySheetsRenderTests()
@@ -75,6 +76,11 @@ public class PlaySheetsRenderTests : IDisposable
 		prefs.SaveStateFolder = _saveStateFolder;
 		prefs.PauseWhenInBackground = _pauseInBackground;
 		prefs.PauseWhenInMenusAndConfig = _pauseInMenus;
+		//#999: stopping the slot cases' game writes its recent-game entry; left
+		//behind, it turns the next class's first-run home into a recents home.
+		foreach(string recent in Directory.GetFiles(ConfigManager.RecentGamesFolder, RomPrefix + "*.rgd")) {
+			File.Delete(recent);
+		}
 		try {
 			Directory.Delete(_folder, true);
 		} catch(IOException) {
@@ -434,7 +440,7 @@ public class PlaySheetsRenderTests : IDisposable
 		Directory.CreateDirectory(prefs.SaveStateFolder);
 		Assert.Equal(prefs.SaveStateFolder, ConfigManager.SaveStateFolder);
 
-		string rom = Path.Combine(_folder, "render-slots-" + Guid.NewGuid().ToString("N") + ".nes");
+		string rom = Path.Combine(_folder, RomPrefix + Guid.NewGuid().ToString("N") + ".nes");
 		File.WriteAllBytes(rom, SyntheticNrom.Build());
 		Assert.True(EmuApi.LoadRom(rom, string.Empty), $"the core refused to load {rom}");
 		WaitUntil(() => EmuApi.IsRunning() && model.RomInfo.Format != RomFormat.Unknown && !model.RecentGames.Visible, "the ROM never reported as loaded");
