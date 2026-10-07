@@ -137,14 +137,30 @@ namespace Mesen.ViewModels
 			//rescan from leaving the grid empty under a filter the row cannot
 			//show.
 			RomConsole? keep = LibraryConsoleFilter.Resolve(options, SelectedConsole);
+			List<PlayerConsoleFilterOption> desired = options
+				.Select(console => new PlayerConsoleFilterOption(console, ConsoleFilterLabel(console)))
+				.ToList();
 
+			//Everything the row itself does is under the guard: clearing the
+			//collection resets the segmented control's own selection, and that
+			//reset travels back out through the two-way binding as a selection of
+			//null. It is not the player's press, so it must not re-filter the grid
+			//- the assignment below is the only selection this method means.
 			_rebuildingConsoleOptions = true;
 			try {
-				ConsoleOptions.Clear();
-				foreach(RomConsole? console in options) {
-					ConsoleOptions.Add(new PlayerConsoleFilterOption(console, ConsoleFilterLabel(console)));
+				//Rewritten only when it actually changed. A rescan that found the
+				//same consoles should not make the player's segment blink, and an
+				//unchanged row has nothing to re-resolve.
+				if(!ConsoleOptions.SequenceEqual(desired)) {
+					ConsoleOptions.Clear();
+					foreach(PlayerConsoleFilterOption option in desired) {
+						ConsoleOptions.Add(option);
+					}
 				}
-				SelectedConsoleOption = ConsoleOptions.FirstOrDefault(option => option.Console == keep);
+				PlayerConsoleFilterOption? selected = desired.FirstOrDefault(option => option.Console == keep);
+				if(SelectedConsoleOption != selected) {
+					SelectedConsoleOption = selected;
+				}
 			} finally {
 				_rebuildingConsoleOptions = false;
 			}

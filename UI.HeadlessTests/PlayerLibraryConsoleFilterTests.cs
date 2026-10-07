@@ -250,6 +250,7 @@ public class PlayerLibraryConsoleFilterTests : IDisposable
 
 		ListBox row = window.FindNamed<ListBox>("RomPickerConsoleFilter");
 		Assert.True(row.IsOnScreen(), "the console filter row is not on screen");
+		WaitFor(() => Segments(window).Length == 3, "the console filter row never realized its segments");
 		Assert.Equal(new[] { "All", "NES", "Game Boy" }, Segments(window));
 		//Nothing is narrowed while All is up: the sheet opens on the whole
 		//library (Decision 1), and the row's first segment is what says so - it
