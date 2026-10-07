@@ -507,6 +507,18 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   Extra ROM revisions go here so auto-install can match; the catalog
   generator copies them into `rom.sha1`/`rom.sha1s`. Checked by
   `python3 scripts/test_rom_target.py`.
+- `generate_no_intro_sha1_table.py` — builds `no_intro_sha1.tsv.gz`, the
+  versioned `SHA1 -> console + No-Intro name` table the flat game library
+  looks a ROM up in (#1038, spec #1030), from the No-Intro DATs the
+  libretro-database repository mirrors (CC BY-SA 4.0; names and hashes
+  only, no artwork). Keys follow the ADR-0003 / ADR-0039 payload contract,
+  so the iNES header and trainer are excluded — hashing the raw file
+  matches nothing. The artifact is committed and embedded by `UI/UI.csproj`
+  (and by `UI.Tests.csproj`, so `Mesen.Logic.NoIntroNameTable` is tested
+  against the real file); `python3
+  scripts/test_generate_no_intro_sha1_table.py` pins the format on a
+  fixture DAT and the committed table's shape, and `--check` fails when a
+  fresh build differs from the committed one.
 - `validate-specs.py`, `mep_lint.py`, `classify_pack_brief.py`, `mep_recipe.py`, `mep_recipe_assemble.py`,
   `mep_compare.py`, `mep_render_audio.py`,
   `gen_hdpack_test_roms.py`, `gen_mep_test_pack.py`, `gen_mep_fallback_test_pack.py`,
