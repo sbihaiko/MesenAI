@@ -102,9 +102,13 @@ library.
 
 4. **Search matches words in the clean title.** Search is a case- and
    accent-insensitive substring match over the clean titles, so `zel` finds
-   *The Legend of Zelda* and `mario` finds *Super Mario Bros. 3*. Region,
-   revision and dump tags are stripped by the title cleaner (Decision 7) and
-   so cannot match. On a pad, **Y** opens the shared on-screen pad keyboard
+   *The Legend of Zelda* and `mario` finds *Super Mario Bros. 3*. The cleaner
+   (Decision 7) strips the region, revision and dump tags from **both** title
+   sources — the file name and the No-Intro canonical title — and it does so
+   **before display and before search**, so the canonical `Castlevania (USA)`
+   is shown and matched as *Castlevania*, and `usa` matches nothing on its
+   own. It follows that a region, revision or dump tag cannot be matched,
+   whichever of the two sources the title came from. On a pad, **Y** opens the shared on-screen pad keyboard
    ADR-0262 already owns and the grid narrows as the query is typed; on a
    keyboard, typing in the search field does the same thing. An empty result
    is a named state — *No games match* — with the query shown and a way to
@@ -127,12 +131,16 @@ library.
    A ROM that falls to case 4 is not re-queried for art on every visit.
 
 7. **A library entry is a path, a console, a clean title and a cover
-   source.** The title cleaner takes the file name and strips the extension
-   and the region / revision / dump tags carried in parentheses and brackets,
-   so `Castlevania (U) [!].nes` reads as *Castlevania*; a generated
-   SHA1 → No-Intro table supplies the canonical title when it knows the ROM,
-   and the cleaned file name is the fallback. A leading article is moved for
-   sort order, not for display.
+   source.** There are two title sources and **one** cleaner over both. A
+   generated SHA1 → No-Intro table supplies the canonical title when it knows
+   the ROM; the file name is the fallback when it does not. The cleaner strips
+   the extension and the region / revision / dump tags carried in parentheses
+   and brackets, and it runs over **the canonical title as well as the file
+   name**, before either is displayed or searched — so the canonical
+   `Castlevania (USA)` is shown as *Castlevania* and matched by `cast`, not by
+   `usa` (Decision 4). The **raw, uncleaned No-Intro name is kept for exactly
+   one purpose**: the box-art URL of Decision 10. A leading article is moved
+   for sort order, not for display.
 
 8. **Library folders are a list, and the header counts them.** The header
    reads **"Your library · N games in M folders"**. *Library folders…* adds and
@@ -169,8 +177,11 @@ library.
     its art once from the libretro-thumbnails collection under
     `Named_Boxarts`, falling back to `Named_Titles`. **The match is the ROM's
     No-Intro SHA1, resolved to a name** (ADR-0003): the hash — never the ROM's
-    file name — is looked up in the **L.7 SHA1 → No-Intro name table (#1038)**,
-    and the collection's URL path is that name sanitised the way
+    file name — is looked up in the **L.7 SHA1 → No-Intro name table (#1038)**.
+    The name taken from that table is the **raw, uncleaned No-Intro name**,
+    tags and all — the one consumer Decision 7 keeps it for; the displayed and
+    searched title is the cleaned one, the URL path is built from the raw one.
+    The collection's URL path is that raw name sanitised the way
     libretro-thumbnails names its own files, the characters
     `` & * / : ` < > ? \ | " `` each replaced by `_`. A ROM the table does not
     know gets **no fetch at all**: there is no name to ask for, and the tile
