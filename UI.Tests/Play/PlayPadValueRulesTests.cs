@@ -98,4 +98,17 @@ public class PlayPadValueRulesTests
 	{
 		Assert.Equal(expected, PlayPadValueRules.Walk(index, count, delta));
 	}
+
+	//#983: the walk lands only on a row the drop-down could show (realized
+	//after scrolling it into view); otherwise it stays where it was, so the
+	//commit never writes a row the player did not see.
+	[Theory]
+	[InlineData(1, 2, true, 2)]
+	[InlineData(1, 2, false, 1)]
+	[InlineData(-1, 0, false, -1)]
+	[InlineData(-1, 0, true, 0)]
+	public void A_walk_lands_only_on_a_row_that_is_shown(int from, int to, bool shown, int expected)
+	{
+		Assert.Equal(expected, PlayPadValueRules.Land(from, to, shown));
+	}
 }

@@ -26,8 +26,7 @@ public enum PadValueVerb
 	Commit,
 	Cancel,
 	Consume,
-	HoldStart,
-	HoldEnd
+	HoldStart
 }
 
 public readonly record struct PadValueAnswer(PadValueVerb Verb, int Delta = 0);
@@ -98,5 +97,13 @@ public static class PlayPadValueRules
 			return 0;
 		}
 		return Math.Clamp(index + delta, 0, count - 1);
+	}
+
+	//#983: the walk lands on a row only when the drop-down could show it
+	//(realized once scrolled into view); otherwise it stays where it was, so the
+	//commit never writes a row the player did not see.
+	public static int Land(int from, int to, bool shown)
+	{
+		return shown ? to : from;
 	}
 }

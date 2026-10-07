@@ -1225,6 +1225,39 @@ public class PlayPadNavigationTests : IDisposable
 		model.ClosePlayerSettings();
 	}
 
+	//#983: a sheet that hides while its drop-down is still open must not leave
+	//the pad routed into a popup nobody can see - a later Confirm would commit
+	//a row to a hidden control.
+	[AvaloniaFact]
+	public void A_popup_left_open_under_a_hidden_sheet_no_longer_takes_the_pad()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		List<double> written = new();
+		(MainWindow window, MainWindowViewModel model, ConfigViewModel settings) = ShowSettingsTab(ConfigWindowTab.Display,
+			() => new PlayerWindowSettingsViewModel(new VideoConfig(), false, 2, () => { }, written.Add));
+		ComboBox scale = Land<ComboBox>(window, "cboDisplayScale");
+
+		Press(window, PadNavAction.Confirm);
+		Press(window, PadNavAction.Down);
+		Assert.True(scale.IsDropDownOpen);
+
+		//Hidden in place, its view still attached (the harder case: a sheet
+		//that lets go of its view detaches the drop-down outright). The
+		//ComboBox closes itself when it stops being effectively visible, and
+		//the bridge follows a drop-down closed by something else - both are
+		//what keeps the pad out of the invisible rows.
+		Panel layer = window.FindNamed<Panel>("PlayerSettingsLayer");
+		layer.SetCurrentValue(Visual.IsVisibleProperty, false);
+		Pump();
+		Assert.False(scale.IsEffectivelyVisible);
+		Assert.False(scale.IsDropDownOpen, "the hidden sheet's drop-down is still open");
+
+		Press(window, PadNavAction.Confirm);
+		Assert.Empty(written);
+		Assert.Equal(2, settings.Display!.SelectedScale!.Value);
+		model.ClosePlayerSettings();
+	}
+
 	[AvaloniaFact]
 	public void Holding_confirm_on_hold_to_compare_compares_until_release()
 	{
