@@ -344,19 +344,24 @@ theirs.
   move when both are *present*; no VID:PID scheme can disambiguate a lone sibling,
   and inventing one (a serial, a connection order) is the guess this ADR refuses.
 - **Correction, not a second limit: the repair covers all four Four Score
-  players (recorded 2026-10-04).** The P3/P4 are `Port1C`/`Port1D`, not `Port1A`/`Port1B`:
-  `InteropNesConfig` (`UI/Config/NesConfig.cs:275-292`) lays `Port1A`…`Port1D`
+  players (corrected 2026-10-06,
+  [issue #943](https://github.com/sbihaiko/MesenAI/issues/943)).** This
+  supersedes the 2026-10-04 wording, which mis-mapped `Port1A`/`Port1B` as P3/P4
+  and called the walk over P3/P4 decorative. The P3/P4 are `Port1C`/`Port1D`, not `Port1A`/`Port1B`:
+  `InteropNesConfig` (`UI/Config/NesConfig.cs:283-300`) lays `Port1A`…`Port1D`
   onto the Core's `Port1SubPorts[0..3]` (`Core/Shared/SettingTypes.h:715-722`),
   and the Four Score takes those four in order as P1–P4
   (`Core/NES/NesControlManager.cpp:128-130`). So `Port1A`/`Port1B` are P1/P2,
   and `NesConfig.ApplyConfig` fills them with `Port1`'s/`Port2`'s keys under
-  their own type (`UI/Config/NesConfig.cs:142-143`); `Port1C`/`Port1D` go out
-  with their own keys (`UI/Config/NesConfig.cs:144-145`). The repair walks all
+  their own type (`UI/Config/NesConfig.cs:150-151`); `Port1C`/`Port1D` go out
+  with their own keys (`UI/Config/NesConfig.cs:152-153`). The repair walks all
   of them (`UI/Config/ControllerKeyMigration.cs:55-56`), so P1–P4 are covered.
   What `Port1A`/`Port1B` hold as their own keys is redundant storage: only their
   `Type` reaches the Core or the classic Input page
   (`UI/Views/NesInputConfigView.axaml:56,64`), so walking those keys moves
   nothing a player plays with — harmless, and not a gap in the repair.
+  `UI.HeadlessTests/ControllerKeyMigrationTests.cs` pins it: a P3/P4 repair
+  reaches `NesConfig.ToInterop()`, the struct `ApplyConfig` hands the Core.
 - **The pad's own light is the one promise above with no owner, and it is
   recorded here rather than silently dropped (2026-10-04).** No slice carries it,
   and it cannot be built from what exists: `GamepadInfo`
