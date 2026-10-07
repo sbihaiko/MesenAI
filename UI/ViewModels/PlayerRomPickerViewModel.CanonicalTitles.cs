@@ -87,12 +87,17 @@ namespace Mesen.ViewModels
 		}
 
 		private Func<string, RomConsole, CancellationToken, Task<string>>? _romHashSource;
-		private RomHashCache? _romHashes;
+
+		//Lazy and thread-safe: the source runs on thread-pool threads, and a
+		//cancelled pass whose read is still in flight can overlap the next one, so
+		//a plain `??=` could create two caches over the same RomHashes folder
+		//(review finding 4 on #1055).
+		private readonly Lazy<RomHashCache> _romHashes =
+			new(() => new RomHashCache(Path.Combine(ConfigManager.HomeFolder, "RomHashes")));
 
 		private Task<string> DefaultRomHashSource(string path, RomConsole console, CancellationToken cancellationToken)
 		{
-			_romHashes ??= new RomHashCache(Path.Combine(ConfigManager.HomeFolder, "RomHashes"));
-			return _romHashes.GetSha1Async(path, console, cancellationToken);
+			return _romHashes.Value.GetSha1Async(path, console, cancellationToken);
 		}
 
 		//The pass running NOW, and the one thing that can stop it. Kept beside the
@@ -155,56 +160,57 @@ namespace Mesen.ViewModels
 		private void StartCanonicalTitles(int generation)
 		{
 			StopCanonicalTitles();
-			if(NoIntroTable is null || Tiles.Count == 0) {
+			if(NoIntroTable is null || _libraryGames.Count == 0) {
 				return;
 			}
 
-			//The tiles this pass owns, captured once: a later scan clears the
-			//collection, and a pass that walked it live would be reading a grid
-			//somebody else had already replaced.
-			List<PlayerLibraryTile> tiles = Tiles.ToList();
+			//The games this pass owns, captured once: a later scan replaces the
+			//list, and a pass that walked it live would be reading a library
+			//somebody else had already replaced. The pass holds GAMES and never
+			//tiles - a query or a clear rebuilds the tiles under it, so a tile
+			//list captured here would be stale by the first keystroke (review
+			//finding 1 on #1055). What it resolves goes into the view-model's own
+			//titles, and the grid is filled from those.
+			IReadOnlyList<LibraryGame> games = _libraryGames;
 			CancellationTokenSource pass = new();
 			_titlePass = pass;
 			CancellationToken token = pass.Token;
 			_ = Task.Run(async () => {
-				List<(PlayerLibraryTile Tile, string Title)> batch = new(TitleBatch);
-				//Every tile with the title it will read once this walk is over, not
+				List<(string Path, string Title)> batch = new(TitleBatch);
+				//Every game with the title it will read once this walk is over, not
 				//only the ones that changed: the order Decision 1 asks for is over
-				//the WHOLE grid, and a tile whose title the table already agreed
+				//the WHOLE grid, and a game whose title the table already agreed
 				//with still has its place in it.
-				List<(PlayerLibraryTile Tile, string Title)> resolved = new(tiles.Count);
-				foreach(PlayerLibraryTile tile in tiles) {
+				List<(LibraryGame Game, string Title)> resolved = new(games.Count);
+				foreach(LibraryGame game in games) {
 					//Before every read, never after: a stopped pass must not so
 					//much as ask the next file for its hash.
 					if(token.IsCancellationRequested || !_scanGeneration.IsCurrent(generation)) {
 						return;
 					}
-					string title = await ResolveTitle(tile, token).ConfigureAwait(false);
-					resolved.Add((tile, title));
-					if(string.Equals(title, tile.Title, StringComparison.Ordinal)) {
+					string title = await ResolveTitle(game.Entry, token).ConfigureAwait(false);
+					resolved.Add((game, title));
+					if(string.Equals(title, game.Entry.Title, StringComparison.Ordinal)) {
 						continue;
 					}
-					batch.Add((tile, title));
+					batch.Add((game.Entry.Path, title));
 					if(batch.Count >= TitleBatch) {
 						PostTitles(batch, token, generation);
-						batch = new List<(PlayerLibraryTile, string)>(TitleBatch);
+						batch = new List<(string, string)>(TitleBatch);
 					}
 				}
 				if(batch.Count > 0) {
 					PostTitles(batch, token, generation);
 				}
 				//Once, when the walk is over - never per batch. The order is
-				//Decision 1's rule over the titles the tiles now read, and the
+				//Decision 1's rule over the titles the games now read, and the
 				//titles are not final until the walk is: a re-sort per batch would
-				//be up to MaxEntries / TitleBatch sorts of the whole grid, each one
-				//ordering tiles by titles that are still arriving.
+				//be up to MaxEntries / TitleBatch sorts of the whole library.
 				//
 				//Sorted HERE, on this thread and not on the grid's: the ordering is
-				//O(n log n) over up to MaxEntries = 20000 tiles, and there is no
-				//reason the thread that draws the library should be the one to do it
-				//(review finding 2 on #1038). What reaches the UI thread is a list
-				//already in order.
-				PostOrder(Ordered(resolved), token, generation);
+				//O(n log n) over up to MaxEntries = 20000 games (review finding 2
+				//on #1038). What reaches the UI thread is a list already in order.
+				PostOrder(games, Ordered(resolved), token, generation);
 			});
 		}
 
@@ -213,21 +219,21 @@ namespace Mesen.ViewModels
 		//that fails on one file - a volume unplugged mid-scan, a permission the
 		//player's account does not have - leaves that tile exactly as the scan
 		//named it and carries on with the rest.
-		private async Task<string> ResolveTitle(PlayerLibraryTile tile, CancellationToken cancellationToken)
+		private async Task<string> ResolveTitle(LibraryEntry entry, CancellationToken cancellationToken)
 		{
 			//An entry this rule can never name is not read at all (review finding 4
 			//on #1038): a zipped game is one tile on the grid (ADR-0264 Decision 9),
 			//and hashing the archive would read it to the end for a lookup that
 			//cannot match - the tile keeps the scan's own title, which is the same
 			//title the loose ROM beside it gets.
-			if(!CanonicalTitles.IsTitleablePath(tile.Path)) {
-				return tile.Title;
+			if(!CanonicalTitles.IsTitleablePath(entry.Path)) {
+				return entry.Title;
 			}
 			try {
-				string sha1 = await RomHashSource(tile.Path, tile.Console, cancellationToken).ConfigureAwait(false);
-				return CanonicalTitles.Resolve(tile.Title, sha1, NoIntroTable);
+				string sha1 = await RomHashSource(entry.Path, entry.Console, cancellationToken).ConfigureAwait(false);
+				return CanonicalTitles.Resolve(entry.Title, sha1, NoIntroTable);
 			} catch {
-				return tile.Title;
+				return entry.Title;
 			}
 		}
 
@@ -241,7 +247,7 @@ namespace Mesen.ViewModels
 		//pass was stopped is still a batch about tiles the sheet has replaced:
 		//IsVisible and Mode say which surface is up, and neither of them knows
 		//that this batch belongs to an earlier scan of the same surface.
-		private void PostTitles(List<(PlayerLibraryTile Tile, string Title)> batch, CancellationToken token, int generation)
+		private void PostTitles(List<(string Path, string Title)> batch, CancellationToken token, int generation)
 		{
 			//Cheapest answer first: a stopped pass does not even take a turn on
 			//the UI thread.
@@ -255,8 +261,20 @@ namespace Mesen.ViewModels
 				if(!IsVisible || Mode != RomPickerMode.Library) {
 					return;
 				}
-				foreach((PlayerLibraryTile tile, string title) in batch) {
-					tile.Title = title;
+				foreach((string path, string title) in batch) {
+					_titles.Resolve(path, title);
+					//A tile on screen is renamed in place, so its container and the
+					//ring on it survive; a game the query has filtered out has no
+					//tile and simply reads the new title when it comes back.
+					if(_tileByPath.TryGetValue(path, out PlayerLibraryTile? tile)) {
+						tile.Title = title;
+					}
+				}
+				//The query is asked of the title the player reads, and that title
+				//just changed: with a query on, the grid is re-derived from the
+				//view-model's games (ADR-0264 Decisions 4 and 7).
+				if(HasQuery) {
+					FillTiles();
 				}
 			});
 		}
@@ -273,7 +291,7 @@ namespace Mesen.ViewModels
 		//where the issue promises hashing never blocks it. `ReplaceAll` says the same
 		//thing once, and the list it is handed was already ordered on the thread
 		//pool, so nothing here sorts a library.
-		private void PostOrder(IReadOnlyList<PlayerLibraryTile> ordered, CancellationToken token, int generation)
+		private void PostOrder(IReadOnlyList<LibraryGame> captured, IReadOnlyList<LibraryGame> ordered, CancellationToken token, int generation)
 		{
 			if(token.IsCancellationRequested) {
 				return;
@@ -285,35 +303,51 @@ namespace Mesen.ViewModels
 				if(!IsVisible || Mode != RomPickerMode.Library) {
 					return;
 				}
-				//A grid already in this order has nothing to be told. This is the
+				//The games this pass walked must still be the library on the sheet.
+				if(!ReferenceEquals(_libraryGames, captured)) {
+					return;
+				}
+				//A library already in this order has nothing to be told. This is the
 				//common case - a library of file names the table does not know keeps
-				//the order the scan gave it - and it has to stay free: a Reset
-				//rebuilds every container, so signalling one the grid did not need
-				//would drop the ring off the game the player is on for no reason at
-				//all.
+				//the order the scan gave it - and it has to stay free: a rebuild
+				//drops the ring off the game the player is on for no reason at all.
 				if(SameOrder(ordered)) {
 					return;
 				}
-				Tiles.ReplaceAll(ordered);
+				//The order is changed in the view-model's games, and the grid is put
+				//in that order from the tiles ON SCREEN NOW (_tileByPath), never from
+				//a tile list the pass captured earlier: a list captured at the start
+				//would put back tiles the query had dropped and covers the rebuild
+				//had released (review finding 1 on #1055). The tiles are the same
+				//objects, so a container and the ring on it are reordered and not
+				//rebuilt, and a query that is on stays on.
+				_libraryGames = ordered;
+				List<PlayerLibraryTile> shown = new(Tiles.Count);
+				foreach(LibraryGame game in ordered) {
+					if(_tileByPath.TryGetValue(game.Entry.Path, out PlayerLibraryTile? tile)) {
+						shown.Add(tile);
+					}
+				}
+				Tiles.ReplaceAll(shown);
 				//The rebuilt containers took the ring with them; this is the same
-				//bump ApplyLibraryScan makes, for the same reason. The ring then
-				//goes back to the GAME the player selected rather than to the place
-				//it held, which is the trade-off ADR-0264 Decision 1 accepts: see
-				//PlayPadNavigationWiring.RomPickerFocusTarget and FocusTile below.
-				TilesRevision++;
+				//bump ApplyLibraryScan makes, for the same reason - except with a
+				//query on, where the ring is on the box (see FillTiles' closing
+				//comment). The ring then goes back to the GAME the player selected:
+				//see PlayPadNavigationWiring.RomPickerFocusTarget.
+				if(!HasQuery) {
+					TilesRevision++;
+				}
 			});
 		}
 
-		//Whether the grid already reads in this order, by the tiles themselves and
-		//not by what they are called: the collection holds the very objects the scan
-		//made, so the question is one reference comparison per tile.
-		private bool SameOrder(IReadOnlyList<PlayerLibraryTile> ordered)
+		//Whether the library already reads in this order, by the games themselves.
+		private bool SameOrder(IReadOnlyList<LibraryGame> ordered)
 		{
-			if(ordered.Count != Tiles.Count) {
+			if(ordered.Count != _libraryGames.Count) {
 				return false;
 			}
 			for(int place = 0; place < ordered.Count; place++) {
-				if(!ReferenceEquals(ordered[place], Tiles[place])) {
+				if(!ReferenceEquals(ordered[place], _libraryGames[place])) {
 					return false;
 				}
 			}
@@ -331,19 +365,19 @@ namespace Mesen.ViewModels
 		//were posted before this order was, so the dispatcher applies them first -
 		//and ordering by what the walk resolved is what keeps this off the UI
 		//thread's critical path.
-		private static List<PlayerLibraryTile> Ordered(List<(PlayerLibraryTile Tile, string Title)> resolved)
+		private static List<LibraryGame> Ordered(List<(LibraryGame Game, string Title)> resolved)
 		{
 			return resolved
 				.OrderBy(entry => entry, TitleOrder)
-				.Select(entry => entry.Tile)
+				.Select(entry => entry.Game)
 				.ToList();
 		}
 
 		//The comparer the ordering above is: the displayed title of a tile against
 		//the path it holds, through GameLibrary's rule.
-		private static readonly IComparer<(PlayerLibraryTile Tile, string Title)> TitleOrder =
-			Comparer<(PlayerLibraryTile Tile, string Title)>.Create((left, right) =>
-				GameLibrary.Compare(left.Title, left.Tile.Path, right.Title, right.Tile.Path));
+		private static readonly IComparer<(LibraryGame Game, string Title)> TitleOrder =
+			Comparer<(LibraryGame Game, string Title)>.Create((left, right) =>
+				GameLibrary.Compare(left.Title, left.Game.Entry.Path, right.Title, right.Game.Entry.Path));
 
 		//The game the ring is on, as the tile itself and never as a place in the
 		//grid. The view-model cannot see the ring - Avalonia's focus lives in the

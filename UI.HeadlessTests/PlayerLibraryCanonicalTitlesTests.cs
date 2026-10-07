@@ -278,6 +278,64 @@ public class PlayerLibraryCanonicalTitlesTests : IDisposable
 			$"the title never arrived once the hash did (titles=[{Titles(picker)}])");
 	}
 
+	//#1038 review findings 1-3: a query typed while the pass is outstanding must
+	//survive the pass. The hash is held, the player types `contra`, and the hash
+	//is released: the grid stays filtered to the one game, the tile reads the
+	//canonical title the pass resolved, and the tile still has its cover - the
+	//pass never puts back a tile list the filter dropped or a cover the rebuild
+	//released.
+	[AvaloniaFact]
+	public void A_query_typed_while_the_pass_runs_survives_it_with_canonical_titles_and_covers()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+
+		TaskCompletionSource<bool> held = new();
+		(MainWindow window, _, PlayerRomPickerViewModel picker) = ShowLibrary(async (path, _, _) => {
+			await held.Task;
+			return Path.GetFileName(path).StartsWith("Contra", StringComparison.Ordinal) ? KnownSha1 : UnknownSha1;
+		}, KnownSha1 + "\tnes\tContra II - The Alien Wars");
+
+		picker.SearchQuery = "contra";
+		Pump();
+		Assert.Equal(new[] { "Contra" }, picker.Tiles.Select(t => t.Title).ToArray());
+
+		held.SetResult(true);
+
+		WaitFor(() => picker.Tiles.Count == 1 && picker.Tiles[0].Title == "Contra II - The Alien Wars",
+			$"the filtered grid never took the canonical title (titles=[{Titles(picker)}])");
+		Settle(400);
+		Assert.Equal(new[] { "Contra II - The Alien Wars" }, picker.Tiles.Select(t => t.Title).ToArray());
+		Assert.All(picker.Tiles, tile => Assert.NotNull(tile.Cover));
+		WaitFor(() => GridTitles(window).Contains("Contra II - The Alien Wars"),
+			$"the sheet does not show the canonical title ([{string.Join("|", GridTitles(window))}])");
+		Assert.DoesNotContain("Metroid", GridTitles(window));
+
+		//And after the pass, clearing the box brings the whole library back with
+		//the canonical title kept.
+		picker.ClearSearch();
+		Pump();
+		Assert.Equal(2, picker.Tiles.Count);
+		Assert.Contains("Contra II - The Alien Wars", picker.Tiles.Select(t => t.Title));
+	}
+
+	//#1038 review finding 1(a)/(b): the same, with the query typed AFTER the
+	//titles landed and found through the canonical title (finding 2).
+	[AvaloniaFact]
+	public void A_query_after_the_pass_finds_a_game_by_its_canonical_title()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+
+		(_, _, PlayerRomPickerViewModel picker) = ShowLibrary((path, _, _) => ByName(path),
+			KnownSha1 + "\tnes\tZelda II - The Adventure of Link");
+		WaitFor(() => picker.Tiles.Any(t => t.Title == "Zelda II - The Adventure of Link"),
+			$"the canonical title never arrived (titles=[{Titles(picker)}])");
+		Settle(200);
+
+		picker.SearchQuery = "zelda";
+		Pump();
+		Assert.Equal(new[] { "Zelda II - The Adventure of Link" }, picker.Tiles.Select(t => t.Title).ToArray());
+	}
+
 	//#1038 review finding 2 (ADR-0264 Decisions 7 and 9): one pass per scan, and
 	//the sheet is what decides how long it lives. A second scan REPLACES the
 	//first - the tiles it holds belong to a grid nobody sees - so the pass the
