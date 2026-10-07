@@ -65,11 +65,13 @@
 				<StackPanel XYFocus.NavigationModes="Enabled">
 					<TextBlock Name="ControllerSetupTitle" Classes="title2" Text="{Binding Title}" TextTrimming="CharacterEllipsis" />
 					<TextBlock Classes="body secondary" Text="{l:Translate lblControllerSetupIntro}" TextWrapping="Wrap" Margin="0 6 0 0" />
-					<!--The picture: the console's pad, the step's button lit.-->
-					<Border Name="ControllerSetupPad" Background="{StaticResource PlayerPadBrush}" CornerRadius="{StaticResource PlayerRadiusPad}" Width="340" Height="140" HorizontalAlignment="Center" Margin="0 18 0 0">
+					<!--The picture: the loaded console's own pad (#940), the step's button lit.-->
+					<Border Name="ControllerSetupPad" Background="{StaticResource PlayerPadBrush}" CornerRadius="{StaticResource PlayerRadiusPad}" Width="{Binding Pad.Width}" Height="{Binding Pad.Height}" HorizontalAlignment="Center" Margin="0 18 0 0">
 						<Panel>
 							<Canvas>
-								<Border Canvas.Left="58" Canvas.Top="58" Width="24" Height="24" Background="{StaticResource PlayerPadKeyBrush}" />
+								<Border Canvas.Left="{Binding Pad.DPadCentre.Left}" Canvas.Top="{Binding Pad.DPadCentre.Top}" Width="{Binding Pad.DPadCentre.Width}" Height="{Binding Pad.DPadCentre.Height}" Background="{StaticResource PlayerPadKeyBrush}" />
+								<Border Name="ControllerSetupScreen" IsVisible="{Binding HasScreen}" Canvas.Left="{Binding Screen.Left}" Canvas.Top="{Binding Screen.Top}" Width="{Binding Screen.Width}" Height="{Binding Screen.Height}"
+									Background="{StaticResource PlayerPadKeyBrush}" CornerRadius="{StaticResource PlayerRadiusSmall}" />
 							</Canvas>
 							<ItemsControl Name="ControllerSetupChips" ItemsSource="{Binding Chips}">
 								<ItemsControl.ItemsPanel>
