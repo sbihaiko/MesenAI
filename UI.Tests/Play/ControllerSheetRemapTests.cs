@@ -96,6 +96,74 @@ namespace Mesen.Tests.Play
 			Assert.Equal(2, ControllerSheetRemap.TargetSlot(new ushort[] { 0, 0, code, 0 }, new[] { true, true, true, true }, padSlot: 1));
 		}
 
+		//#941: one pad button binds one control of a port. Binding it to a control
+		//takes it off every other control of the same port that had it, in any of
+		//the port's four slots (they are alternatives, not players), so one press
+		//no longer fires two controls. `field` reads [slot][control].
+		private static Func<int, SetupButton, ushort> Fields(params Dictionary<SetupButton, ushort>[] slots)
+		{
+			return (slot, control) => slot < slots.Length && slots[slot].TryGetValue(control, out ushort code) ? code : (ushort)0;
+		}
+
+		private static readonly SetupButton[] NesControls = { SetupButton.A, SetupButton.B, SetupButton.Select, SetupButton.Start, SetupButton.Up, SetupButton.Down, SetupButton.Left, SetupButton.Right };
+
+		[Fact]
+		public void Binding_a_button_another_control_holds_takes_it_off_that_control()
+		{
+			ushort code = PadKey(0, 0);
+			var fields = Fields(new Dictionary<SetupButton, ushort> { [SetupButton.A] = code, [SetupButton.B] = PadKey(0, 1) });
+
+			IReadOnlyList<RemapDisplaced> displaced = ControllerSheetRemap.Displaced(NesControls, fields, 4, SetupButton.B, code);
+
+			Assert.Equal(new[] { new RemapDisplaced(0, SetupButton.A) }, displaced);
+		}
+
+		[Fact]
+		public void The_button_is_taken_off_other_controls_in_every_slot_of_the_port()
+		{
+			ushort code = PadKey(0, 3);
+			var fields = Fields(
+				new Dictionary<SetupButton, ushort> { [SetupButton.Start] = code },
+				new Dictionary<SetupButton, ushort>(),
+				new Dictionary<SetupButton, ushort> { [SetupButton.Select] = code });
+
+			IReadOnlyList<RemapDisplaced> displaced = ControllerSheetRemap.Displaced(NesControls, fields, 4, SetupButton.A, code);
+
+			Assert.Equal(new[] { new RemapDisplaced(0, SetupButton.Start), new RemapDisplaced(2, SetupButton.Select) }, displaced);
+		}
+
+		//The control being bound keeping the same button in another slot is not a
+		//second control firing; TargetSlot already owns where its own binding goes.
+		[Fact]
+		public void The_control_being_bound_is_never_displaced()
+		{
+			ushort code = PadKey(0, 0);
+			var fields = Fields(
+				new Dictionary<SetupButton, ushort> { [SetupButton.A] = code },
+				new Dictionary<SetupButton, ushort> { [SetupButton.A] = code });
+
+			Assert.Empty(ControllerSheetRemap.Displaced(NesControls, fields, 4, SetupButton.A, code));
+		}
+
+		//A keyboard key, or another pad button, on another control is a different
+		//code and stays where it is.
+		[Fact]
+		public void Other_codes_on_other_controls_are_untouched()
+		{
+			const ushort keyboardKey = 0x2C;
+			var fields = Fields(new Dictionary<SetupButton, ushort> { [SetupButton.A] = keyboardKey, [SetupButton.B] = PadKey(1, 0) });
+
+			Assert.Empty(ControllerSheetRemap.Displaced(NesControls, fields, 4, SetupButton.Start, PadKey(0, 0)));
+		}
+
+		[Fact]
+		public void An_unbound_code_displaces_nothing()
+		{
+			var fields = Fields(new Dictionary<SetupButton, ushort> { [SetupButton.A] = 0 });
+
+			Assert.Empty(ControllerSheetRemap.Displaced(NesControls, fields, 4, SetupButton.B, 0));
+		}
+
 		[Fact]
 		public void A_port_with_no_free_slot_refuses()
 		{
