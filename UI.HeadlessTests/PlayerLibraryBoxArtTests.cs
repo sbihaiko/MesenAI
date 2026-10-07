@@ -408,6 +408,38 @@ public class PlayerLibraryBoxArtTests : IDisposable
 		WaitFor(() => TileFor(model, "Game 00 (USA).nes").HasArt, "the search left the on-screen cover generic");
 	}
 
+	//#1039 review finding 3: a rescan or search replaces the grid, and a request
+	//still in flight for an old tile must not draw into it (its bitmap would be
+	//held until the next reset).
+	[AvaloniaFact]
+	public void A_cover_in_flight_when_the_grid_is_rebuilt_is_not_drawn_on_the_old_tile()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		LibraryRoot();
+		string rom = RomPath("Game 00 (USA).nes");
+		string cached = SeedBoxArt(rom);
+
+		using ManualResetEventSlim gate = new(false);
+		using ManualResetEventSlim asked = new(false);
+		(MainWindow window, MainWindowViewModel model) = ShowFirstRunHome();
+		model.RomPicker.BoxArtCoverSource = (entry, token) => Task.Run<BoxArtCover?>(() => {
+			asked.Set();
+			gate.Wait();
+			return new BoxArtCover(cached, BoxArtCoverKind.Boxart);
+		});
+		OpenLibrary(window, model);
+		WaitFor(() => asked.IsSet, "no tile asked for its cover");
+		PlayerLibraryTile old = model.RomPicker.Tiles[0];
+
+		model.RomPicker.SearchQuery = "no such game";
+		Pump();
+		gate.Set();
+		Thread.Sleep(300);
+		Pump();
+
+		Assert.False(old.HasArt, "a cover that was in flight for a replaced tile was drawn on it");
+	}
+
 	//ADR-0265 section 8: with the switch off the cache makes NO request - not a
 	//smaller one, none.
 	[AvaloniaFact]
