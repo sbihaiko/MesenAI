@@ -28,6 +28,8 @@ artist_kit_assemble.py
 artist_map.py
 audio_cleanup_suggest.py
 cdl_tool.py
+cheat_decoder.py
+cheat_web_lookup.py
 compose_editor.py
 compose_editor_layout.py
 compose_engine.py

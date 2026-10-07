@@ -37,6 +37,10 @@ public sealed class CheatWebLookupException : Exception
 	public CheatWebLookupException(string message) : base(message) { }
 }
 
+//Where the web lookup runs from: the script and the headless_record its check
+//launches.
+public sealed record CheatWebTools(string Script, string Recorder);
+
 //One finished run of scripts/cheat_web_lookup.py: its exit code and the JSON
 //object it printed on stdout.
 public sealed record CheatWebRun(int ExitCode, string Stdout);
@@ -63,10 +67,11 @@ public static class CheatWebLookup
 	public const string NeedsToolsLine = "Looking online needs python3 and the MesenCE tools (Remaster › Setup).";
 
 	//The arguments after the script: the ROM by path (read by the script on
-	//this machine, never uploaded) and the name to look up.
-	public static IReadOnlyList<string> Arguments(string romPath, string gameName)
+	//this machine, never uploaded), the name to look up and the headless_record
+	//the check launches (the script's own default exists only in a checkout).
+	public static IReadOnlyList<string> Arguments(string romPath, string gameName, string recorder)
 	{
-		return new[] { "--rom", romPath, "--game", gameName };
+		return new[] { "--rom", romPath, "--game", gameName, "--binary", recorder };
 	}
 
 	//The script's stdout as codes. It prints only codes that passed, each with
@@ -104,6 +109,30 @@ public static class CheatWebLookup
 			: "";
 	}
 
+	public const string Recorder = "headless_record";
+
+	//#949 review: the lookup is offered only when it can run its check. The
+	//script must be in the tools folder (an older tools zip lacks it), and the
+	//check needs a real headless_record: scripts/ in a checkout, beside
+	//Mesen.app in the macOS arm64 release zip (scripts/release_macos.sh), or
+	//beside the executable. Null when either is missing.
+	public static CheatWebTools? Locate(string toolsFolder, string appFolder, Func<string, bool> exists)
+	{
+		if(toolsFolder.Length == 0) {
+			return null;
+		}
+		string script = Path.Combine(toolsFolder, Script);
+		if(!exists(script)) {
+			return null;
+		}
+		string? recorder = new[] {
+			Path.Combine(toolsFolder, Recorder),
+			Path.Combine(appFolder, Recorder),
+			Path.GetFullPath(Path.Combine(appFolder, "..", "..", "..", Recorder)),
+		}.FirstOrDefault(exists);
+		return recorder == null ? null : new CheatWebTools(script, recorder);
+	}
+
 	public static IReadOnlyList<WebFoundCode> Offered(IEnumerable<WebFoundCode> codes)
 	{
 		return codes.Where(c => c.Check == WebCheckState.Passed).ToList();
@@ -118,19 +147,19 @@ public static class CheatWebLookup
 public sealed class CheatWebLookupScriptChecker : ICheatWebChecker
 {
 	private readonly Func<IReadOnlyList<string>, Task<CheatWebRun>> _run;
-	private readonly string _scriptsFolder;
+	private readonly CheatWebTools _tools;
 
 	//run is handed the script's path and its arguments (the host prefixes python3).
-	public CheatWebLookupScriptChecker(Func<IReadOnlyList<string>, Task<CheatWebRun>> run, string scriptsFolder)
+	public CheatWebLookupScriptChecker(Func<IReadOnlyList<string>, Task<CheatWebRun>> run, CheatWebTools tools)
 	{
 		_run = run;
-		_scriptsFolder = scriptsFolder;
+		_tools = tools;
 	}
 
 	public async Task<IReadOnlyList<WebFoundCode>> LookUpAsync(string romPath, string gameName)
 	{
-		List<string> argv = new() { Path.Combine(_scriptsFolder, CheatWebLookup.Script) };
-		argv.AddRange(CheatWebLookup.Arguments(romPath, gameName));
+		List<string> argv = new() { _tools.Script };
+		argv.AddRange(CheatWebLookup.Arguments(romPath, gameName, _tools.Recorder));
 		CheatWebRun run = await _run(argv).ConfigureAwait(false);
 		if(run.ExitCode != 0) {
 			throw new CheatWebLookupException($"{CheatWebLookup.Script} exited with code {run.ExitCode}");

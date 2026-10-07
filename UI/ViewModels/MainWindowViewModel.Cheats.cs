@@ -37,14 +37,16 @@ namespace Mesen.ViewModels
 							: null;
 					});
 					//P.12 (#924): the web lookup is scripts/cheat_web_lookup.py,
-					//run the same way; it reads no key and calls no model.
+					//run the same way; it reads no key and calls no model. It is
+					//offered only when the script and a headless_record are on disk.
 					_cheatsSheet.ConfigureWebLookup(async () => {
 						await Remaster.EnsureFeasibilityMeasured();
 						RemasterFeasibility? found = Remaster.Feasibility;
-						return found is { CanRunJobs: true }
-							? new CheatWebLookupScriptChecker(argv => RunCheatScript(found, argv), found.ToolsFolder)
+						CheatWebTools? tools = LocateCheatWebTools(found);
+						return found != null && tools != null
+							? new CheatWebLookupScriptChecker(argv => RunCheatScript(found, argv), tools)
 							: null;
-					});
+					}, () => LocateCheatWebTools(Remaster.Feasibility) != null);
 				}
 				return _cheatsSheet;
 			}
@@ -101,6 +103,22 @@ namespace Mesen.ViewModels
 				romPath: ((ResourcePath)RomInfo.RomPath).Compressed ? "" : ((ResourcePath)RomInfo.RomPath).Path
 			);
 			_ = RefreshCommunityCheatsAsync(cheatSha1, CheatsSheet.BeginCommunityLoading());
+			_ = RecheckCheatWebLookupAsync();
+		}
+
+		private static CheatWebTools? LocateCheatWebTools(RemasterFeasibility? found)
+		{
+			return found is { CanRunJobs: true }
+				? CheatWebLookup.Locate(found.ToolsFolder, AppContext.BaseDirectory, System.IO.File.Exists)
+				: null;
+		}
+
+		//The tools are measured once, off the UI thread; the sheet's Look
+		//Online follows when that lands.
+		private async Task RecheckCheatWebLookupAsync()
+		{
+			await Remaster.EnsureFeasibilityMeasured();
+			Dispatcher.UIThread.Post(CheatsSheet.RecheckWebLookup);
 		}
 
 		//One run of a cheat script under the python3 Remaster located: its exit

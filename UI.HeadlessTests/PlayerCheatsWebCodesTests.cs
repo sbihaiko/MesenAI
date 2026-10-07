@@ -196,4 +196,31 @@ public class PlayerCheatsWebCodesTests
 			window.Close();
 		}
 	}
+
+	//#949 review: with no cheat_web_lookup.py or no headless_record on disk
+	//(an older tools zip, a build without the recorder) the button is not
+	//offered; it comes back once the tools are found.
+	[AvaloniaFact]
+	public void Look_online_is_offered_only_when_the_lookup_is_installed()
+	{
+		FakeChecker checker = new();
+		bool installed = false;
+		PlayerCheatsSheetViewModel model = new();
+		model.ConfigureWebLookup(() => Task.FromResult<ICheatWebChecker?>(checker), () => installed);
+		model.Open(ConsoleType.Nes, Sha1, Array.Empty<CheatDbGame>(), Array.Empty<StoredCheat>(), false, false, _ => { }, gameName: "Castlevania", romPath: "/roms/Castlevania.nes");
+		Window window = new() { Content = new PlayerCheatsSheetView { DataContext = model } };
+		window.Show();
+		Dispatcher.UIThread.RunJobs();
+		try {
+			Assert.False(Named<Button>(window, "CheatsLookOnline").IsEffectivelyVisible);
+
+			installed = true;
+			model.RecheckWebLookup();
+			Dispatcher.UIThread.RunJobs();
+
+			Assert.True(Named<Button>(window, "CheatsLookOnline").IsEffectivelyVisible);
+		} finally {
+			window.Close();
+		}
+	}
 }

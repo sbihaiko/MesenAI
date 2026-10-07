@@ -314,6 +314,23 @@ def test_excluded_tools_are_not_required():
     ok("excluded tools are not required by the guard")
 
 
+# --- 3. tools the GUI runs ship too ----------------------------------------
+def test_gui_web_lookup_ships_in_the_zip():
+    # #949 review: the Cheats sheet's Look Online runs cheat_web_lookup.py from
+    # the tools folder; no guide names it, so it must be an extra entry point,
+    # and its closure (cheat_decoder, step_emu) must be in the manifest.
+    if "cheat_web_lookup" not in guard.EXTRA_ENTRY_POINTS:
+        fail("cheat_web_lookup is not an EXTRA_ENTRY_POINTS entry, so a packaged player's "
+             "Look Online dies on 'No such file'")
+        return
+    listed = manifest_entries()
+    missing = sorted(t for t in ("cheat_web_lookup.py", "cheat_decoder.py", "step_emu.py") if t not in listed)
+    if missing:
+        fail("the GUI-run web lookup is missing from scripts/tools-zip-manifest.txt: " + ", ".join(missing))
+        return
+    ok("the GUI-run web lookup and its closure ship in the tools zip")
+
+
 def main():
     test_guard_derives_the_same_set()
     test_derivation_is_not_trivial()
@@ -325,6 +342,7 @@ def main():
     test_synthetic_shell_dependency_miss_is_reported()
     test_exclusions_are_documented_and_current()
     test_excluded_tools_are_not_required()
+    test_gui_web_lookup_ships_in_the_zip()
 
     print()
     if FAILURES:

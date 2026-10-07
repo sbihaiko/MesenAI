@@ -125,15 +125,61 @@ namespace Mesen.Tests.Cheats
 			}
 		}
 
+		private static readonly CheatWebTools Tools = new("/tools/cheat_web_lookup.py", "/tools/headless_record");
+
+		//#949 review: Look Online is offered only when the script and a real
+		//headless_record are on disk - a tools folder without the script (an
+		//older tools zip) or a build without the recorder cannot run the check.
+		[Fact]
+		public void The_lookup_needs_the_script_in_the_tools_folder()
+		{
+			HashSet<string> disk = new() { "/tools/headless_record" };
+
+			Assert.Null(CheatWebLookup.Locate("/tools", "/Apps/Mesen.app/Contents/MacOS", p => disk.Contains(p.Replace('\\', '/'))));
+		}
+
+		[Fact]
+		public void The_lookup_needs_a_headless_record_to_run_the_check()
+		{
+			HashSet<string> disk = new() { "/tools/cheat_web_lookup.py" };
+
+			Assert.Null(CheatWebLookup.Locate("/tools", "/Apps/Mesen.app/Contents/MacOS", p => disk.Contains(p.Replace('\\', '/'))));
+		}
+
+		[Fact]
+		public void A_checkout_runs_the_check_with_the_scripts_folder_recorder()
+		{
+			HashSet<string> disk = new() { "/repo/scripts/cheat_web_lookup.py", "/repo/scripts/headless_record" };
+
+			CheatWebTools? tools = CheatWebLookup.Locate("/repo/scripts", "/repo/bin/osx-arm64/Release", p => disk.Contains(p.Replace('\\', '/')));
+
+			Assert.NotNull(tools);
+			Assert.Equal("/repo/scripts/cheat_web_lookup.py", tools!.Script.Replace('\\', '/'));
+			Assert.Equal("/repo/scripts/headless_record", tools.Recorder.Replace('\\', '/'));
+		}
+
+		[Fact]
+		public void A_release_runs_the_check_with_the_recorder_beside_the_app()
+		{
+			//The macOS arm64 zip unpacks to Mesen.app and headless_record side by side.
+			static string Full(string p) => System.IO.Path.GetFullPath(p);
+			HashSet<string> disk = new() { Full("/tools/cheat_web_lookup.py"), Full("/Apps/MesenAI/headless_record") };
+
+			CheatWebTools? tools = CheatWebLookup.Locate("/tools", "/Apps/MesenAI/Mesen.app/Contents/MacOS/", p => disk.Contains(Full(p)));
+
+			Assert.NotNull(tools);
+			Assert.Equal(Full("/Apps/MesenAI/headless_record"), Full(tools!.Recorder));
+		}
+
 		[Fact]
 		public async Task The_script_checker_runs_the_lookup_on_the_rom_path_and_reads_its_answer()
 		{
 			FakeScript script = new() { Stdout = Output(Code("0032:09", "Infinite lives", CheatWebLookup.Label)) };
-			ICheatWebChecker checker = new CheatWebLookupScriptChecker(script.RunAsync, "/tools");
+			ICheatWebChecker checker = new CheatWebLookupScriptChecker(script.RunAsync, new CheatWebTools("/tools/cheat_web_lookup.py", "/app/headless_record"));
 
 			IReadOnlyList<WebFoundCode> codes = await checker.LookUpAsync("/roms/Castlevania.nes", "Castlevania");
 
-			Assert.Equal(new[] { "/tools/cheat_web_lookup.py", "--rom", "/roms/Castlevania.nes", "--game", "Castlevania" },
+			Assert.Equal(new[] { "/tools/cheat_web_lookup.py", "--rom", "/roms/Castlevania.nes", "--game", "Castlevania", "--binary", "/app/headless_record" },
 				script.Arguments!.Select(a => a.Replace('\\', '/')));
 			Assert.Equal(WebCheckState.Passed, Assert.Single(codes).Check);
 		}
@@ -151,7 +197,7 @@ namespace Mesen.Tests.Cheats
 		{
 			FakeScript script = new() { ExitCode = exitCode, Stdout = Output(Code("0032:09", "Infinite lives", CheatWebLookup.Label)) };
 
-			await Assert.ThrowsAsync<CheatWebLookupException>(() => new CheatWebLookupScriptChecker(script.RunAsync, "/tools").LookUpAsync("/roms/c.nes", "Castlevania"));
+			await Assert.ThrowsAsync<CheatWebLookupException>(() => new CheatWebLookupScriptChecker(script.RunAsync, Tools).LookUpAsync("/roms/c.nes", "Castlevania"));
 		}
 
 		[Fact]
@@ -159,7 +205,7 @@ namespace Mesen.Tests.Cheats
 		{
 			FakeScript script = new() { Stdout = Output(Code("0032:09", "Infinite lives", "unchecked")) };
 
-			Assert.Empty(CheatWebLookup.Offered(await new CheatWebLookupScriptChecker(script.RunAsync, "/tools").LookUpAsync("/roms/c.nes", "Castlevania")));
+			Assert.Empty(CheatWebLookup.Offered(await new CheatWebLookupScriptChecker(script.RunAsync, Tools).LookUpAsync("/roms/c.nes", "Castlevania")));
 		}
 	}
 }

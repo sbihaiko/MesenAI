@@ -100,6 +100,7 @@ namespace Mesen.ViewModels
 		private int _intentToken;
 		private string _romPath = "";
 		private Func<Task<ICheatWebChecker?>>? _webChecker;
+		private Func<bool>? _webInstalled;
 		private IReadOnlyList<WebFoundCode> _web = Array.Empty<WebFoundCode>();
 		private int _webToken;
 
@@ -220,10 +221,18 @@ namespace Mesen.ViewModels
 		}
 
 		//The web lookup (null when python3 or the tools are missing); without
-		//it, or for a copy the bundled list has, Look Online stays hidden.
-		public void ConfigureWebLookup(Func<Task<ICheatWebChecker?>> checker)
+		//it, or for a copy the bundled list has, Look Online stays hidden. The
+		//installed gate (#949 review) says whether the script and the recorder
+		//its check launches are on disk; RecheckWebLookup re-reads it.
+		public void ConfigureWebLookup(Func<Task<ICheatWebChecker?>> checker, Func<bool>? installed = null)
 		{
 			_webChecker = checker;
+			_webInstalled = installed;
+			Refresh();
+		}
+
+		public void RecheckWebLookup()
+		{
 			Refresh();
 		}
 
@@ -428,7 +437,7 @@ namespace Mesen.ViewModels
 			IReadOnlyList<CheatSheetRow> rows = CheatSheet.BuildRows(_console, game, anotherCopy, _stored, _recordingArt, rowFilter, _community, web);
 			Rows = rows.Select(r => new PlayerCheatRow(r, CheatShare.CanShare(r, _console, _cheatSha1), CheatIntentSearch.IsMatch(r, _intentMatch))).ToList();
 			IsIntentAvailable = _intentRunner != null && _keyStore?.UnsupportedReason == null && game != null && CheatConsoleScope.HasCheatList(_console);
-			IsWebLookupAvailable = _webChecker != null && _thisCopy == null && CheatConsoleScope.HasCheatList(_console) && _romPath.Length > 0;
+			IsWebLookupAvailable = _webChecker != null && (_webInstalled?.Invoke() ?? true) && _thisCopy == null && CheatConsoleScope.HasCheatList(_console) && _romPath.Length > 0;
 			CountOn = CheatSheet.CountOn(_stored);
 			StatusLine = CheatSheet.StatusLine(_console, game, anotherCopy, CountOn, rows.Count(r => r.Source == CheatRowSource.Community), IsCommunityLoading, rows.Count(r => r.Source == CheatRowSource.WebFound));
 		}
