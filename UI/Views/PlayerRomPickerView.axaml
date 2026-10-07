@@ -90,6 +90,14 @@
 				count - so no count line and no *Browse a file…* there).-->
 				<DockPanel DockPanel.Dock="Top">
 					<Button Name="RomPickerBrowseFile" DockPanel.Dock="Right" Classes="secondary regular" Content="{l:Translate btnRomPickerBrowseFile}" Click="OnBrowseFile" IsVisible="{Binding IsLibraryMode}" />
+					<!--#1033 (ADR-0264 Decision 4): the library's search box, and the
+					way out of an empty result beside it. Docked after *Browse a file…*
+					so the box sits inside the header's own row, and hidden on the
+					browser, which is a folder walk and has nothing to search. Y puts
+					the ring here and opens ADR-0262's pad keyboard; typing here does
+					the same by hand, and the grid narrows either way.-->
+					<Button Name="RomPickerSearchClear" DockPanel.Dock="Right" Classes="secondary regular" Content="{l:Translate btnRomPickerSearchClear}" Click="OnClearSearch" IsVisible="{Binding ShowSearchClear}" />
+					<TextBox Name="RomPickerSearch" DockPanel.Dock="Right" Width="240" Margin="0 0 8 0" VerticalAlignment="Center" Text="{Binding SearchQuery}" PlaceholderText="{l:Translate lblRomPickerSearchPlaceholder}" IsVisible="{Binding IsLibraryMode}" />
 					<StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
 						<TextBlock Name="RomPickerTitle" Classes="sheet-heading" Text="{Binding SheetHeading}" />
 						<TextBlock Name="RomPickerCount" Classes="footnote secondary" Text="{Binding CountText}" VerticalAlignment="Center" IsVisible="{Binding IsLibraryMode}" />

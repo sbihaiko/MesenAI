@@ -178,7 +178,12 @@ namespace Mesen.ViewModels
 		[ObservableProperty]
 		[NotifyPropertyChangedFor(nameof(SheetHeading))]
 		public partial RomPickerMode Mode { get; private set; }
-		[ObservableProperty] public partial bool IsLibraryMode { get; private set; } = true;
+		//ShowSearchClear rides the mode as well as the query (#1033): the Clear action
+		//is the library's, and the step into the browser has to take it off screen
+		//with the box it belongs to.
+		[ObservableProperty]
+		[NotifyPropertyChangedFor(nameof(ShowSearchClear))]
+		public partial bool IsLibraryMode { get; private set; } = true;
 		[ObservableProperty] public partial bool IsBrowseMode { get; private set; }
 
 		//The library's two header lines: "Your library" and "<N> games in <M>
@@ -343,6 +348,9 @@ namespace Mesen.ViewModels
 			HeaderText = ResourceHelper.GetMessage("RomPickerLibraryTitle");
 			PathText = "";
 			NoticeText = "";
+			//#1033 (ADR-0264 Decision 4): fresh visit, empty box and no entries
+			//from the previous scan (PlayerRomPickerViewModel.Search).
+			BeginLibraryVisit();
 			CountText = "";
 			TruncatedText = "";
 			EmptyText = "";
@@ -383,6 +391,12 @@ namespace Mesen.ViewModels
 			IsBrowseMode = true;
 			_folder = null;
 			EmptyText = "";
+			//#1033: the box is not on this surface, so a query left in it would be
+			//one the player cannot see, cannot clear and would still be holding when
+			//they stepped back into the library. The browser is a fresh start, so the
+			//query goes with the rest of the surface's state - after the mode, so the
+			//grid this empties is the one going away.
+			SearchQuery = "";
 			ShowRoots();
 			StartScan();
 		}
@@ -600,15 +614,24 @@ namespace Mesen.ViewModels
 			if(!IsVisible || Mode != RomPickerMode.Library) {
 				return;
 			}
+			//The waiting line goes with the answer, and it goes first (#1050): the
+			//scan this result belongs to is over, so "Looking for your games…" is
+			//not this sheet's to say any more.
 			SearchingText = "";
 			//#1060: a scan that answered no game is a named state that names the next
 			//step, not a blank grid. The rule is PlayRomPicker's; this is the lookup.
-			EmptyText = LibraryEmptyText(PlayRomPicker.LibraryEmptyMessageId(_folders.Count, result.Entries.Count));
-			ClearTiles();
-			for(int i = 0; i < result.Entries.Count; i++) {
-				LibraryEntry entry = result.Entries[i];
-				Tiles.Add(TileFor(entry, payload.Covers[i]));
-			}
+			//It is kept rather than written straight to EmptyText (#1033): the search's
+			//own empty state owns that property once the library has answered, and it
+			//puts this sentence back whenever the box is empty - which is what keeps
+			//#1060's state alive across a search the player typed and then cleared.
+			_scanEmptyText = LibraryEmptyText(PlayRomPicker.LibraryEmptyMessageId(_folders.Count, result.Entries.Count));
+			//#1033 (ADR-0264 Decision 4): the grid is filled through the search's
+			//own path (PlayerRomPickerViewModel.Search), so a scan and a query are
+			//two sources for one grid rather than two ways to build it. The covers
+			//travel with the entries (#1052, merged after this slice): the query
+			//narrows the grid, and a narrowed grid still draws the player's own
+			//screenshot on the tiles that have one.
+			ShowLibraryGames(result.Entries, payload.Covers);
 			CountText = ResourceHelper.GetMessage("RomPickerLibraryCount",
 				CountLabel(result.Entries.Count, "RomPickerGameOne", "RomPickerGameMany"),
 				CountLabel(result.FolderCount, "RomPickerFolderOne", "RomPickerFolderMany"));

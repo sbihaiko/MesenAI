@@ -6,6 +6,7 @@ using System.Linq;
 using System.Threading;
 using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
+using Avalonia.Input;
 using Avalonia.Media.Imaging;
 using Avalonia.Threading;
 using Mesen.Config;
@@ -227,5 +228,107 @@ public class PlayerLibraryRenderTests : IDisposable
 		Bitmap frame = PlayerRender.Capture(window);
 		PlayerRender.Save(frame, "W-P19");
 		AssertMatchesWireframe(frame, "W-P19", W_P19Deviations());
+	}
+
+	//The W-P19 fixture plus the wireframe's own `zel` titles, so the query really
+	//narrows: W-P19b draws three Zelda tiles out of a library of many, and a
+	//library of exactly three would make the query a no-op the picture could not
+	//tell apart from an unfiltered grid.
+	private string ZeldaLibrary()
+	{
+		string root = Library();
+		string nes = Path.Combine(root, "NES");
+		string gbc = Path.Combine(root, "Handheld", "GBC");
+		Directory.CreateDirectory(gbc);
+		File.WriteAllBytes(Path.Combine(nes, "Zelda II - The Adventure of Link (USA).nes"), SyntheticNrom.Build());
+		File.WriteAllBytes(Path.Combine(gbc, "The Legend of Zelda - Oracle of Ages (USA).gbc"), SyntheticNrom.Build());
+		return root;
+	}
+
+	//What this render is known to differ from W-P19b on, each with the cause that
+	//makes it a known one, and each measured rather than asserted. The wireframe
+	//fills the window with 128 games, so its sheet covers the content region and
+	//that region reads as the sheet's own card colour (#FEFEFE); the render's
+	//grid is one row tall after `zel`, so its sheet is short and the region reads
+	//as the dimmed backdrop around it (#9E9EA0, ΔE 34.5). That is the fixture and
+	//not a defect the sheet can be fixed out of, which is exactly why the colour
+	//kind is a ratchet: it has to keep failing, and the day the sheet is tall
+	//enough to dominate, the gate says so instead of the entry sitting quiet.
+	//The other two content kinds are layout, the same shape of entry
+	//W_P19Deviations carries for W-P19: the console filter of #1034 and the
+	//*Library folders…* row of #1036 are not in the header (ink box off 162 px,
+	//the sheet's own top edge), and the two text lines the sheet draws are the
+	//wireframe's seven minus them and the further tile labels. The status line's
+	//ink box is the P1-P4 port chips every render draws and no wireframe does
+	//(#951); off macOS the title bar's ink box moves because the shell bar is not
+	//inset for the traffic lights (#968).
+	private static IReadOnlyList<KnownDeviation> W_P19bDeviations()
+	{
+		List<KnownDeviation> known = new() {
+			new("content", PlayerWireframe.Colour,
+				"the sheet is one grid row tall where the wireframe fills the window, so the region reads as the dimmed backdrop #9E9EA0, not the wireframe's card #FEFEFE (ΔE 34.5)", true),
+			new("content", PlayerWireframe.InkBox,
+				"the same short sheet, and the console filter of #1034 and the folder row of #1036 missing from the header", true),
+			new("content", PlayerWireframe.TextLines,
+				"two lines where the wireframe has seven: the same missing filter and folder row, plus the further tile labels", true),
+			new("status line", PlayerWireframe.InkBox,
+				"the P1-P4 port chips the wireframe does not draw", false),
+		};
+		if(!OperatingSystem.IsMacOS()) {
+			known.Add(new("title bar", PlayerWireframe.InkBox, "no traffic-light inset off macOS", false));
+		}
+		return known;
+	}
+
+	//#1033 (ADR-0264 Decision 12): W-P19b is W-P19's surface with search active -
+	//the grid narrowed, the box holding the query `zel`, and the header still
+	//reading the LIBRARY's own count (Decision 8). The case types the query rather
+	//than posing the grid: a picture of a narrowed library that never asked the box
+	//would stay green with the search wired to nothing. Rendered and compared
+	//beside W-P19, so the render gate holds the sheet to the wireframe PR #1040
+	//draws.
+	[AvaloniaFact]
+	public void W_P19b_the_library_narrowed_by_a_query()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		ZeldaLibrary();
+
+		(MainWindow window, MainWindowViewModel model) = Show();
+		model.OpenRomPicker();
+		Pump();
+		Assert.True(model.RomPicker.IsVisible, "the library is not open, so this render would be of the home");
+
+		//Through the control, which is the path a keyboard takes: the binding is
+		//what carries the query to the grid.
+		TextBox box = window.FindNamed<TextBox>("RomPickerSearch");
+		box.Text = "zel";
+		Pump();
+		box.Focus(NavigationMethod.Directional);
+		Pump();
+
+		//What the picture has to be, asserted before it is saved: a PNG that stops
+		//being a picture of the narrowed library fails here rather than being
+		//noticed by whoever opens it next.
+		Assert.True(window.FindNamed<Border>("PlayerRomPickerSheet").IsOnScreen(), "the sheet is not on screen");
+		Assert.Equal("Your library", model.RomPicker.HeaderText);
+		Assert.Equal("13 games in 1 folder", model.RomPicker.CountText);
+		Assert.Equal("zel", box.Text ?? "");
+		Assert.Equal(
+			new[] { "The Legend of Zelda", "The Legend of Zelda - Oracle of Ages", "Zelda II - The Adventure of Link" },
+			model.RomPicker.Tiles.Select(t => t.Title).OrderBy(t => t, StringComparer.Ordinal).ToArray());
+		Assert.True(window.FindNamed<ItemsControl>("RomPickerGrid").IsOnScreen(), "the grid is not on screen");
+		Assert.True(window.FindNamed<Button>("RomPickerSearchClear").IsOnScreen(), "Clear is not on the sheet");
+
+		string[] texts = VisibleTexts(window);
+		Assert.Contains("The Legend of Zelda", texts);
+		Assert.Contains("Zelda II - The Adventure of Link", texts);
+		//The games the query left out are not drawn: the render is of the narrowed
+		//grid and not of the whole library with a box on top.
+		Assert.DoesNotContain("Metroid", texts);
+		Assert.DoesNotContain("Castlevania", texts);
+
+		Bitmap frame = PlayerRender.Capture(window);
+		PlayerRender.Save(frame, "W-P19b");
+		AssertMatchesWireframe(frame, "W-P19b", W_P19bDeviations());
 	}
 }

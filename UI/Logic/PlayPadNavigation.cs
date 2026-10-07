@@ -111,6 +111,19 @@ public static class PlayPadNavigation
 		return mapping is PadNavMapping nav && pressed.Contains(nav.Back) && !previous.Contains(nav.Back);
 	}
 
+	//ADR-0264 Decision 3: the sheet's own control going down. Written the same
+	//way IsBackEdge is, and for the same reason - it is read out of the caller's
+	//own pressed sets rather than out of Next's answer, because the sheet's
+	//controls are not members of PadNavAction and Next answers one action.
+	//
+	//A code of null or 0 is "this pad has no such control" and answers false: on
+	//a backend that defines the name it is some other button, and acting on it
+	//would be watching a control the player does not have.
+	public static bool IsSheetEdge(ushort? code, IReadOnlyCollection<ushort> pressed, IReadOnlyCollection<ushort> previous)
+	{
+		return code is ushort value && value != 0 && pressed.Contains(value) && !previous.Contains(value);
+	}
+
 	//Decision 4 for the slot grid: what one pad code means while the grid holds the
 	//focus, off the pad's own preset and never off the console mapping the port
 	//carries. The player rebinding or clearing their console D-pad must not change

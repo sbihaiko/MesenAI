@@ -43,6 +43,21 @@ namespace Mesen.Views
 		//surface rather than a second sheet.
 		private void OnBrowseFile(object? sender, RoutedEventArgs e) => Model?.BrowseFile();
 
+		//#1033 (ADR-0264 Decision 4): the empty result's way out - the box empties
+		//and the whole library comes back. The press that clears it also parks the
+		//ring (ADR-0256 Decision 3): Clear hides ITSELF the moment the query empties,
+		//so a pad player who pressed A on it was left with no focus at all - the next
+		//D-pad press had nowhere to move from and the ring was simply gone. The
+		//search box is still on screen and is where the player who just undid a
+		//search is, so the ring goes there through the one focus entry point.
+		private void OnClearSearch(object? sender, RoutedEventArgs e)
+		{
+			Model?.ClearSearch();
+			if(this.FindControl<TextBox>("RomPickerSearch") is TextBox field) {
+				Utilities.PlayFocusOnOpen.Enter(field);
+			}
+		}
+
 		private void OnBack(object? sender, RoutedEventArgs e) => Model?.Back();
 	}
 }

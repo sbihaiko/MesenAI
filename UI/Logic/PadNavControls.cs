@@ -30,6 +30,23 @@ public enum PadFamily
 //The six codes the pad navigates with, already resolved for one device.
 public readonly record struct PadNavMapping(ushort Up, ushort Down, ushort Left, ushort Right, ushort Confirm, ushort Back);
 
+//ADR-0264 Decision 3: the library sheet's own controls, which are NOT the six
+//the pad navigates with. **Y** opens the sheet's search box, and W-P19's footer
+//names it ("Y Search"), so the button is the decision rather than a detail of
+//the bridge that reads it. LB / RB cycle the console filter and join this table
+//with the ticket that builds it (#1034).
+//
+//A SECOND table rather than two more members of PadNavMapping, and the reason is
+//ADR-0255: that ADR's extra-buttons section binds the pad's spare controls, and
+//a control in the navigation set is one no rebinding surface may offer
+//(NonRebindable). A player who binds Y to a console's own button keeps it - Y is
+//the sheet's only while the sheet has the focus, which is what "the sheet's own
+//control" means.
+public enum PadSheetControl
+{
+	Search
+}
+
 public static class PadNavControls
 {
 	//The six, in the order a surface lists them and the order two presses in one
@@ -84,9 +101,27 @@ public static class PadNavControls
 		return new PadNavMapping(u, d, l, r, c, b);
 	}
 
+	//ADR-0264 Decision 3: the code one of the sheet's own controls is bound to on
+	//this pad, or null. Null carries exactly the meaning Resolve's does - a
+	//family the app cannot tell, a device index nobody resolved, a name this
+	//backend does not define - because a caller that acted on a guess would be
+	//watching a button the player does not have.
+	public static ushort? SheetCode(PadFamily? family, int device, PadSheetControl control, Func<string, ushort> keyCode)
+	{
+		if(family is not PadFamily known || device < 0) {
+			return null;
+		}
+		return Code(SheetNamesOf(known, device, control), keyCode);
+	}
+
 	private static ushort? Code(PadFamily family, int device, PadNavAction action, Func<string, ushort> keyCode)
 	{
-		foreach(string name in NamesOf(family, device, action)) {
+		return Code(NamesOf(family, device, action), keyCode);
+	}
+
+	private static ushort? Code(IReadOnlyList<string> names, Func<string, ushort> keyCode)
+	{
+		foreach(string name in names) {
 			ushort code = keyCode(name);
 			if(code != 0) {
 				return code;
@@ -133,6 +168,32 @@ public static class PadNavControls
 		string joy = "Joy" + (device + 1).ToString() + " ";
 		foreach((PadNavAction owned, string xbox, string ps4) in Controls) {
 			if(owned != action) {
+				continue;
+			}
+			return family == PadFamily.Xbox
+				? new[] { pad + xbox, joy + ps4 }
+				: new[] { joy + ps4, pad + xbox };
+		}
+		return Array.Empty<string>();
+	}
+
+	//The sheet's own controls, by the name the pad carries on its plastic. Read
+	//off KeyPresets the same way Controls is, and off the same lines: the Xbox
+	//layout puts the pad's top face button on Y, and the PS4 layout puts the
+	//triangle on But4. A player reading "Y Search" on the sheet presses the
+	//button the pad prints Y on, whichever preset the first run applied.
+	public static readonly (PadSheetControl Control, string Xbox, string Ps4)[] SheetControls = {
+		(PadSheetControl.Search, "Y", "But4")
+	};
+
+	//The names to ask the host for one sheet control, the family's own spelling
+	//first - the same rule, and the same reason, as NamesOf above.
+	public static IReadOnlyList<string> SheetNamesOf(PadFamily family, int device, PadSheetControl control)
+	{
+		string pad = "Pad" + (device + 1).ToString() + " ";
+		string joy = "Joy" + (device + 1).ToString() + " ";
+		foreach((PadSheetControl owned, string xbox, string ps4) in SheetControls) {
+			if(owned != control) {
 				continue;
 			}
 			return family == PadFamily.Xbox
