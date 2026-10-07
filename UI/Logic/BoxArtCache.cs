@@ -159,8 +159,16 @@ namespace Mesen.Logic
 		//past the cap, and the caller moves on to the next collection.
 		private async Task<(byte[]? Body, bool Answered)> TryFetch(Uri url, CancellationToken cancellationToken)
 		{
-			await _inFlight.WaitAsync(cancellationToken).ConfigureAwait(false);
+			//The queue is inside the try, and the release is conditional on having
+			//taken a permit: a tile cancelled while it waits for the ceiling must
+			//leave with a null like every other failure (ADR-0265 section 9), and an
+			//OperationCanceledException thrown by the wait itself would reach the
+			//sheet. Waiting for a turn is part of the call that never throws.
+			bool acquired = false;
 			try {
+				await _inFlight.WaitAsync(cancellationToken).ConfigureAwait(false);
+				acquired = true;
+
 				using CancellationTokenSource timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
 				timeout.CancelAfter(_options.RequestTimeout);
 
@@ -170,13 +178,15 @@ namespace Mesen.Logic
 				}
 				return (response.Body, true);
 			} catch(Exception) {
-				//Offline, DNS, TLS, a timeout, a proxy that answered with nonsense:
-				//from the sheet's point of view these are one thing - this picture is
-				//not available now - and the caller answers null while recording
-				//nothing.
+				//Offline, DNS, TLS, a timeout, a proxy that answered with nonsense, a
+				//cancellation while queued: from the sheet's point of view these are
+				//one thing - this picture is not available now - and the caller
+				//answers null while recording nothing.
 				return (null, false);
 			} finally {
-				_inFlight.Release();
+				if(acquired) {
+					_inFlight.Release();
+				}
 			}
 		}
 

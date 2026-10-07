@@ -152,6 +152,39 @@ namespace Mesen.Tests.BoxArt
 		}
 
 		[Fact]
+		public async Task A_request_cancelled_while_it_waits_for_the_ceiling_returns_null_and_does_not_throw()
+		{
+			TaskCompletionSource gate = new(TaskCreationOptions.RunContinuationsAsynchronously);
+			TaskCompletionSource started = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+			FakeBoxArtSender sender = new(async (_, _) => {
+				started.TrySetResult();
+				await gate.Task;
+				return BoxArtHttpResponse.Ok(FakeImages.Png());
+			});
+
+			BoxArtCache cache = Cache(sender, new BoxArtCacheOptions { MaxConcurrentRequests = 1 });
+			Task<BoxArtCover?> first = cache.GetCover(BoxArtConsole.Nes, Sha1, Name);
+			await started.Task;
+
+			//A second tile is queued behind the first, and the caller walks away
+			//before its turn comes - what the sheet does when it closes mid-scroll.
+			using CancellationTokenSource cancellation = new();
+			Task<BoxArtCover?> second = cache.GetCover(BoxArtConsole.Nes, OtherSha1, Name, cancellation.Token);
+			cancellation.Cancel();
+
+			//ADR-0265 section 9: the call never throws, so awaiting this must answer
+			//null rather than raise OperationCanceledException from a queue it never
+			//left.
+			Assert.Null(await second);
+
+			gate.SetResult();
+			Assert.NotNull(await first);
+			//A tile that gave up before sending asked nothing.
+			Assert.Equal(1, sender.RequestCount);
+		}
+
+		[Fact]
 		public async Task A_body_that_is_not_an_image_is_rejected()
 		{
 			FakeBoxArtSender sender = FakeBoxArtSender.Images(FakeImages.NotAnImage());
