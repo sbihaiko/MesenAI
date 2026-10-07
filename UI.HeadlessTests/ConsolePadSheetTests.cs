@@ -20,6 +20,7 @@ namespace Mesen.HeadlessTests;
 //
 //Core-free: the sheet is opened through injected key names and console, and
 //cancelled before it could write a mapping, so no native call is made.
+[NativeCoreFree("Key and device names, console and pause are injected; the constructor only binds the default InputApi.GetKeyName delegate, which the initializer replaces before any call.")]
 public class ConsolePadSheetTests
 {
 	private static readonly Color PlayTint = Color.Parse("#007AFF");
