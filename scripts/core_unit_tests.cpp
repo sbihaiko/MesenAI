@@ -89,6 +89,7 @@
 #include "Shared/MemoryOperationType.h"
 #include "NES/NesTypes.h"
 #include "NES/HdPacks/HdData.h"
+#include "NES/NesReadHitCounter.h"
 #include "NES/HdPacks/HdBehindBgSpriteRule.h"
 #include "NES/HdPacks/OamFetchLatch.h"
 #include "NES/HdPacks/SpriteFetchLog.h"
@@ -17153,6 +17154,142 @@ static void TestToastTextWrapsAtWords()
 	Check(lines.size() == 1 && lines[0].empty(), "toast: an empty message is one empty line");
 }
 
+//ADR-0245 Decision 4, condition (3) (P.12, #998): the read-hit counter the
+//cheat check arms over one internal-RAM address. NesMemoryManager needs an
+//Emulator, so the bus itself is not built here: the counter is driven through
+//the INesMemoryHandler calls the bus makes, and the source guard below pins
+//which call each path makes and the compare gate the counter mirrors.
+static std::string ReadRepoSource(const std::string& path)
+{
+	std::ifstream in(path, std::ios::in | std::ios::binary);
+	std::stringstream text;
+	text << in.rdbuf();
+	if(text.str().empty()) {
+		Check(false, "P.12: could not read " + path, "run from the repo root");
+	}
+	return text.str();
+}
+
+//The body of the function whose signature is 'signature': from its own
+//opening brace to the brace that closes it. Empty when the signature is gone
+//or the braces never balance, so a rename fails the guard instead of widening
+//the window to the rest of the file.
+static std::string FunctionBody(const std::string& source, const std::string& signature)
+{
+	size_t start = source.find(signature);
+	size_t open = start == std::string::npos ? std::string::npos : source.find('{', start + signature.size());
+	if(open == std::string::npos) {
+		return "";
+	}
+	int depth = 0;
+	for(size_t i = open; i < source.size(); i++) {
+		if(source[i] == '{') {
+			depth++;
+		} else if(source[i] == '}' && --depth == 0) {
+			return source.substr(open, i - open + 1);
+		}
+	}
+	return "";
+}
+
+static bool CallsReadOrReadRam(const std::string& body)
+{
+	return body.find("ReadRam") != std::string::npos || body.find("Read(") != std::string::npos || body.find("Read<") != std::string::npos;
+}
+
+static void TestTheReadHitCounterRegistersForReadsOfItsOneAddressOnly()
+{
+	uint8_t ram[0x800] = {};
+	NesReadHitCounter counter(ram, 0x0033, -1);
+	MemoryRanges ranges;
+	counter.GetMemoryRanges(ranges);
+	std::vector<uint16_t>* reads = ranges.GetRAMReadAddresses();
+	Check(reads->size() == 1 && (*reads)[0] == 0x0033, "P.12: the read-hit counter is registered for reads of its one address",
+		std::to_string(reads->size()));
+	Check(ranges.GetRAMWriteAddresses()->empty(), "P.12: the read-hit counter takes no writes");
+	Check(ranges.GetAllowOverride(), "P.12: the read-hit counter overrides the internal RAM's own read handler");
+}
+
+static void TestACpuReadCountsAHitAndPassesTheRawByteThrough()
+{
+	uint8_t ram[0x800] = {};
+	ram[0x033] = 0x42;
+	NesReadHitCounter counter(ram, 0x0033, -1);
+	uint8_t value = counter.ReadRam(0x0033);
+	Check(value == 0x42, "P.12: a CPU read through the counter returns the raw RAM byte", std::to_string(value));
+	Check(counter.Reads == 1 && counter.Hits == 1, "P.12: a CPU read (ReadRam) counts a read and a hit",
+		std::to_string(counter.Reads) + "/" + std::to_string(counter.Hits));
+	//Mirrors are not counted: the counter registers $0033 alone, so the bus
+	//routes a CPU read of $0833/$1033/$1833 to the internal RAM handler, not to
+	//the counter. A game that reads the watched byte only through a mirror
+	//shows zero hits.
+	MemoryRanges ranges;
+	counter.GetMemoryRanges(ranges);
+	std::vector<uint16_t>* reads = ranges.GetRAMReadAddresses();
+	bool mirrorRegistered = false;
+	for(uint16_t mirror : { (uint16_t)0x0833, (uint16_t)0x1033, (uint16_t)0x1833 }) {
+		mirrorRegistered |= std::find(reads->begin(), reads->end(), mirror) != reads->end();
+	}
+	Check(reads->size() == 1 && (*reads)[0] == 0x0033 && !mirrorRegistered,
+		"P.12: no RAM mirror of the address is registered, so a CPU read of a mirror is not counted", std::to_string(reads->size()));
+}
+
+static void TestDebuggerProbeAndRawRamReadsNeverCount()
+{
+	uint8_t ram[0x800] = {};
+	ram[0x033] = 0x42;
+	NesReadHitCounter counter(ram, 0x0033, -1);
+	uint8_t peeked = counter.PeekRam(0x0033);
+	Check(peeked == 0x42, "P.12: a debugger read (PeekRam) still sees the RAM byte", std::to_string(peeked));
+	Check(counter.Reads == 0 && counter.Hits == 0, "P.12: a debugger read (PeekRam) counts nothing",
+		std::to_string(counter.Reads) + "/" + std::to_string(counter.Hits));
+
+	//The probe's raw RAM read: HeadlessReadNesRam copies GetInternalRam() and
+	//never goes through the bus, so it cannot reach the counter's ReadRam.
+	std::string headless = ReadRepoSource("InteropDLL/EmuApiWrapperHeadless.cpp");
+	std::string probe = FunctionBody(headless, "DllExport bool __stdcall HeadlessReadNesRam(");
+	Check(probe.find("GetInternalRam()") != std::string::npos && !CallsReadOrReadRam(probe),
+		"P.12: HeadlessReadNesRam copies the internal RAM array and reaches neither Read nor ReadRam");
+}
+
+static void TestAHitIsAReadWhoseRawByteMeetsTheCompareValue()
+{
+	uint8_t ram[0x800] = {};
+	ram[0x033] = 0x05;
+	NesReadHitCounter counter(ram, 0x0033, 0x05);
+	counter.ReadRam(0x0033);
+	Check(counter.Reads == 1 && counter.Hits == 1, "P.12: a read whose byte equals compare is a hit");
+	ram[0x033] = 0x06;
+	counter.ReadRam(0x0033);
+	Check(counter.Reads == 2 && counter.Hits == 1, "P.12: a read whose byte differs from compare counts as a read, not a hit",
+		std::to_string(counter.Reads) + "/" + std::to_string(counter.Hits));
+
+	NesReadHitCounter any(ram, 0x0033, -1);
+	ram[0x033] = 0x00;
+	any.ReadRam(0x0033);
+	ram[0x033] = 0xFF;
+	any.ReadRam(0x0033);
+	Check(any.Hits == 2, "P.12: compare -1 makes every read a hit", std::to_string(any.Hits));
+}
+
+//A source guard rather than a NesMemoryManager under test: the manager needs
+//an Emulator. Each check reads one function's own body (brace-matched), so it
+//covers direct calls in that body only, not calls made through a helper.
+static void TestTheBusRoutesCpuReadsToReadRamAndDebugReadsToPeekRam()
+{
+	std::string header = ReadRepoSource("Core/NES/NesMemoryManager.h");
+	std::string source = ReadRepoSource("Core/NES/NesMemoryManager.cpp");
+	std::string cheats = ReadRepoSource("Core/Shared/CheatManager.cpp");
+	std::string read = FunctionBody(header, "__forceinline uint8_t Read(uint16_t addr");
+	Check(read.find("_ramReadHandlers[addr]->ReadRam(addr)") != std::string::npos && read.find("PeekRam") == std::string::npos,
+		"P.12: NesMemoryManager::Read reaches a registered handler's ReadRam, never PeekRam");
+	std::string debugRead = FunctionBody(source, "uint8_t NesMemoryManager::DebugRead(uint16_t addr)");
+	Check(debugRead.find("_ramReadHandlers[addr]->PeekRam(addr)") != std::string::npos && !CallsReadOrReadRam(debugRead),
+		"P.12: NesMemoryManager::DebugRead reaches PeekRam, never Read or ReadRam");
+	Check(cheats.find("if(result->second.Compare == -1 || result->second.Compare == value)") != std::string::npos,
+		"P.12: CheatManager::ApplyCheat still gates on compare -1 or the raw byte, the gate the counter mirrors");
+}
+
 int main()
 {
 	TestTheForcedPatchOverrideFollowsTheSettingUntilTheRomIsSuppressed();
@@ -17687,6 +17824,12 @@ TestW6TheFiltersAcceptTheExtendedFrame();
 	TestToastColoursFadeThroughTheHudsInvertedAlpha();
 	TestToastTextIsMappedOntoTheBitmapFont();
 	TestToastTextWrapsAtWords();
+
+	TestTheReadHitCounterRegistersForReadsOfItsOneAddressOnly();
+	TestACpuReadCountsAHitAndPassesTheRawByteThrough();
+	TestDebuggerProbeAndRawRamReadsNeverCount();
+	TestAHitIsAReadWhoseRawByteMeetsTheCompareValue();
+	TestTheBusRoutesCpuReadsToReadRamAndDebugReadsToPeekRam();
 
 	printf("\n%d/%d cases passed\n", gCases - gFailures, gCases);
 	return gFailures == 0 ? 0 : 1;

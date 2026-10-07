@@ -323,6 +323,9 @@
     <ClInclude Include="NES\NesMemoryManager.h">
       <Filter>NES</Filter>
     </ClInclude>
+    <ClInclude Include="NES\NesReadHitCounter.h">
+      <Filter>NES</Filter>
+    </ClInclude>
     <ClCompile Include="NES\NesNtscFilter.cpp">
       <Filter>NES</Filter>
     </ClCompile>
