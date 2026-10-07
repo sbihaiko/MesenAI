@@ -590,6 +590,16 @@ can be exercised by real xunit tests without Avalonia or the native
   Cheat ↗* (`CheatShare`, the user's own codes only) open URLs through the
   injected `openUrl`; `MainWindowViewModel.CommunityCheatsSource`/`LastKnown`
   are swapped in headless tests so none reaches the network.
+  **Checked web codes (P.12, ADR-0245 §4, #924).** For a copy not in the
+  bundled list, *Look Online* runs `scripts/cheat_web_lookup.py` through
+  `ICheatWebChecker` (`CheatWebLookupScriptChecker`, the ROM by path; the
+  client calls no model, ADR-0247). `CheatWebLookup.ParseOutput` reads a code
+  as `Passed` only when it carries the script's exact label; `BuildRows` lists
+  only passed codes (`CheatRowSource.WebFound`, marked *found online, checked
+  on your copy*), toggled into the same list. The check rule is the script's
+  (pending #934; it fails closed today). Rules in
+  `UI.Tests/Cheats/CheatWebLookupTests`, the view in
+  `UI.HeadlessTests/PlayerCheatsWebCodesTests` (core-free, fake checker).
 - **Shared replays sheet (`UI/Logic/CommunityReplayCatalog`, `ReplayWatch`,
   R.2 / ADR-0205 §7–§9).** W-P4 › Save states › *Shared replays…* opens
   `UI/Views/PlayerReplaysSheetView` (W-P4 is at its seven controls, so it is

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
@@ -158,6 +159,23 @@ public class PlayerThemeRenderTests : IDisposable
 		Assert.Equal(background, PlayerRender.SolidColor(button.Background));
 	}
 
+	//#951: the regions that match the wireframe today must keep matching. Each
+	//known deviation is named with why it differs and must still differ, so the
+	//fix that closes it also promotes it to a gated region.
+	private static void AssertWireframeRegions(Bitmap frame, string wId, params string[] knownDeviations)
+	{
+		IReadOnlyList<RegionResult> results = PlayerWireframe.Compare(wId, RgbFrame.From(frame));
+		Assert.All(knownDeviations, known => Assert.Contains(results, r => r.Region == known));
+		foreach(RegionResult r in results) {
+			string measured = $"{wId} {r.Region}: ΔE {r.DeltaE:0.0}, box {r.BoxOffset:0.0} px, lines {r.RenderLines}/{r.WireframeLines} off {r.LineOffset:0.0} px";
+			if(knownDeviations.Contains(r.Region)) {
+				Assert.False(r.Pass, measured + " now matches the wireframe; remove it from the known deviations");
+			} else {
+				Assert.True(r.Pass, measured + " fails " + string.Join(", ", r.Failures));
+			}
+		}
+	}
+
 	//W-S1's chrome on W-P1: light bar with the tinted Play badge and the
 	//15 px semibold name, the 11.5 px status line, and the first-run home on
 	//the light window background with its one 44 px primary button.
@@ -194,6 +212,11 @@ public class PlayerThemeRenderTests : IDisposable
 		PlayerRender.AssertPixel(WindowBackground, frame, 1070, 600);
 		//The bar is the light chrome.
 		PlayerRender.AssertPixel(Color.Parse("#FAFAFB"), frame, 600, 10);
+		//The drop block (badge, title, subtitle, button) sits ~20 px below the
+		//wireframe's, the primary button carries a focus outline, the hint is
+		//one line where the wireframe has two, and the status line ends in the
+		//P1-P4 port chips the wireframe does not draw.
+		AssertWireframeRegions(frame, "W-P1", "content", "status line", "drop block", "primary button");
 	}
 
 	//W-P2: the Continue card (white, radius 16) with its 36 px primary
@@ -244,6 +267,10 @@ public class PlayerThemeRenderTests : IDisposable
 		PlayerRender.AssertPixel(WindowBackground, frame, 12, 300);
 		Point art = preview.TranslatePoint(new Point(preview.Bounds.Width / 2, preview.Bounds.Height / 2), window)!.Value;
 		PlayerRender.AssertPixel(shot, frame, (int)art.X, (int)art.Y, 6);
+		//The seeded data, not the layout, differs: three tiles where the
+		//wireframe draws five and a subtitle without the wireframe's pack name.
+		//The status line ends in the P1-P4 port chips.
+		AssertWireframeRegions(frame, "W-P2", "content", "status line", "continue card", "recent tiles");
 	}
 
 	//W-P4: the light overlay card (radius 18) with the 44 px tinted Resume,
@@ -307,6 +334,10 @@ public class PlayerThemeRenderTests : IDisposable
 
 		Bitmap frame = PlayerRender.Capture(window);
 		PlayerRender.Save(frame, "W-P4");
+		//The card sits ~38 px below the wireframe's (so its Resume button and
+		//rows are off too) over a flat dimmed home rather than the blurred game
+		//frame, and the status line carries the P1-P4 port chips.
+		AssertWireframeRegions(frame, "W-P4", "content", "status line", "overlay card", "resume button", "grouped rows");
 		PlayerRender.AssertPixel(Color.Parse("#FAFAFC"), frame, 550, (int)(overlay.TranslatePoint(new Point(0, 0), window)!.Value.Y + 70));
 
 		window.FindNamed<Button>("OverlaySaveStatesButton").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));

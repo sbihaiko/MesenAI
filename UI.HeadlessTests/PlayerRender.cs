@@ -44,6 +44,11 @@ internal static class PlayerRender
 		frame.Save(path);
 		Xunit.TestContext.Current.TestOutputHelper?.WriteLine("render: " + path);
 		Console.WriteLine("render: " + path);
+		//#951: a W-P render also gets its region report against the wireframe
+		//(report only here; PlayerThemeRenderTests asserts its own screens).
+		if(PlayerWireframe.IsPlayerWireframe(name)) {
+			PlayerWireframe.CompareAndReport(name, frame);
+		}
 		return path;
 	}
 
