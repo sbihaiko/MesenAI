@@ -68,13 +68,42 @@ public static class PlayerWireframe
 	//held to the failure kind its layout cause produces (Gate). Shared by the
 	//headless gate on fresh renders and UI.Tests' gate on the committed ones.
 	private static readonly Dictionary<string, KnownDeviation[]> Known = new() {
+		//The drop block (badge, title, subtitle, button) sits ~20 px below the
+		//wireframe's, the primary button carries a focus outline and the hint
+		//is one line where the wireframe has two.
 		["W-P1"] = new KnownDeviation[] {
+			new("content", TextLines, "drop block ~20 px low, one-line hint", true),
+			new("content", InkBox, "drop block ~20 px low", false),
+			new("status line", InkBox, Chips, false),
+			new("drop block", TextLines, "drop block ~20 px low", true),
+			new("drop block", InkBox, "drop block ~20 px low", false),
+			new("primary button", InkBox, "focus outline", true),
+			new("primary button", TextLines, "button rides the low drop block", false),
 		},
+		//The seeded data, not the layout, differs: three tiles where the
+		//wireframe draws five and a subtitle without the wireframe's pack name.
 		["W-P2"] = new KnownDeviation[] {
+			new("content", TextLines, "three seeded tiles, five drawn", false),
+			new("status line", InkBox, Chips, false),
+			new("continue card", InkBox, "seeded subtitle has no pack name", false),
+			new("recent tiles", InkBox, "three seeded tiles, five drawn", false),
 		},
+		//The card sits ~38 px below the wireframe's (so its Resume button and
+		//rows are off too) over a flat dimmed home rather than the blurred game frame.
 		["W-P4"] = new KnownDeviation[] {
+			new("content", Colour, "flat dimmed home, not the blurred game frame", true),
+			new("content", InkBox, "flat dimmed home, not the blurred game frame", false),
+			new("status line", InkBox, Chips, false),
+			new("overlay card", TextLines, "card ~38 px low", true),
+			new("overlay card", InkBox, "card ~38 px low", false),
+			new("resume button", Colour, "card ~38 px low puts the box on the card", true),
+			new("resume button", InkBox, "card ~38 px low", false),
+			new("grouped rows", TextLines, "card ~38 px low", true),
+			new("grouped rows", InkBox, "card ~38 px low", false),
 		},
 	};
+
+	private const string Chips = "the P1-P4 port chips the wireframe does not draw";
 
 	public static IReadOnlyList<KnownDeviation> KnownDeviationsOf(string wId) => Known.TryGetValue(wId, out KnownDeviation[]? own) ? own : Array.Empty<KnownDeviation>();
 
@@ -227,10 +256,12 @@ public static class PlayerWireframe
 	public static string NoWireframeReport(string renderName) =>
 		$"# {renderName}: no wireframe\n\nNo docs/media/gui-redesign/W-P*.png matches this render's name or its W-id prefix, so no region was compared.\n";
 
-	//The render gate's ratchet: every region passes, except a named known
-	//deviation, which must still fail on its named kind. Other failure kinds on
-	//a known-deviation region are not gated, because they come from fixture
-	//data (seeded tiles, port chips) rather than layout. Returns the violations.
+	//The render gate: every region passes, except on the failure kinds a known
+	//deviation names for it. A kind whose cause is layout (Ratchet) must still
+	//fail, so the fix that closes it has to promote the region; a kind whose
+	//cause is fixture data (seeded tiles, the P1-P4 port chips) is tolerated
+	//but not required, so changing the data never fails the gate. Every kind a
+	//region's deviations do not name stays gated. Returns the violations.
 	public static IReadOnlyList<string> Gate(string wId, IReadOnlyList<RegionResult> results, IReadOnlyList<KnownDeviation> known)
 	{
 		List<string> violations = new();
@@ -240,13 +271,11 @@ public static class PlayerWireframe
 		foreach(RegionResult r in results) {
 			string measured = string.Create(CultureInfo.InvariantCulture, $"{wId} {r.Region}: ΔE {r.DeltaE:0.0}, box {r.BoxOffset:0.0} px, lines {r.RenderLines}/{r.WireframeLines} off {r.LineOffset:0.0} px");
 			KnownDeviation[] own = known.Where(k => k.Region == r.Region).ToArray();
-			if(own.Length == 0) {
-				if(!r.Pass) {
-					violations.Add(measured + " fails " + string.Join(", ", r.Failures));
-				}
-				continue;
+			string[] unexpected = r.Failures.Where(f => own.All(k => k.Kind != f)).ToArray();
+			if(unexpected.Length > 0) {
+				violations.Add(measured + " fails " + string.Join(", ", unexpected));
 			}
-			foreach(KnownDeviation k in own.Where(k => !r.Failures.Contains(k.Kind))) {
+			foreach(KnownDeviation k in own.Where(k => k.Ratchet && !r.Failures.Contains(k.Kind))) {
 				violations.Add($"{measured} no longer fails {k.Kind} ({k.Why}); remove it from the known deviations");
 			}
 		}
@@ -257,7 +286,8 @@ public static class PlayerWireframe
 public sealed record WireframeRegion(string Name, LogicalBox Box);
 
 //A region known to differ from the wireframe on one failure kind, and why.
-public sealed record KnownDeviation(string Region, string Kind, string Why);
+//Ratchet: the cause is layout, so the kind must keep failing until it is fixed.
+public sealed record KnownDeviation(string Region, string Kind, string Why, bool Ratchet);
 
 public sealed record RegionResult(string Region, Rgb RenderColor, Rgb WireframeColor, double DeltaE, double BoxOffset, int RenderLines, int WireframeLines, double LineOffset, bool IsOutside = false)
 {

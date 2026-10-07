@@ -166,19 +166,34 @@ namespace Mesen.Tests.Theme
 			Assert.DoesNotContain("Size mismatch", report);
 		}
 
-		//The ratchet gates a known deviation on its named kind only: a fixture
-		//change that fixes the region's other failures (more seeded tiles, a chip
-		//fix) is not a violation; the named kind passing is.
+		//A data-caused deviation (W-P2's three seeded tiles where the wireframe
+		//draws five) is tolerated on its kind but not required: seeding five
+		//tiles makes the region pass, and that is not a violation.
 		[Fact]
-		public void The_gate_holds_a_known_deviation_to_its_named_kind_only()
+		public void The_gate_tolerates_a_data_deviation_without_requiring_it()
 		{
-			KnownDeviation[] known = { new("recent tiles", PlayerWireframe.TextLines, "three seeded tiles") };
-			RegionResult linesAndBox = new("recent tiles", Rgb.Parse("#FFFFFF"), Rgb.Parse("#FFFFFF"), 1, 30, 3, 5, double.PositiveInfinity);
-			RegionResult linesOnly = linesAndBox with { BoxOffset = 1 };
-			RegionResult nowMatches = linesOnly with { RenderLines = 5, LineOffset = 1 };
-			Assert.Empty(PlayerWireframe.Gate("W-P2", new[] { linesAndBox }, known));
-			Assert.Empty(PlayerWireframe.Gate("W-P2", new[] { linesOnly }, known));
-			string violation = Assert.Single(PlayerWireframe.Gate("W-P2", new[] { nowMatches }, known));
+			KnownDeviation[] known = { new("recent tiles", PlayerWireframe.InkBox, "three seeded tiles, five drawn", Ratchet: false) };
+			RegionResult threeTiles = new("recent tiles", Rgb.Parse("#F5F5F7"), Rgb.Parse("#F4F4F6"), 0.3, 395, 2, 2, 6.5);
+			Assert.Empty(PlayerWireframe.Gate("W-P2", new[] { threeTiles }, known));
+			Assert.Empty(PlayerWireframe.Gate("W-P2", new[] { threeTiles with { BoxOffset = 2 } }, known));
+			//The kinds the deviation does not name stay gated.
+			Assert.Contains(PlayerWireframe.Gate("W-P2", new[] { threeTiles with { LineOffset = 30 } }, known), v => v.Contains("fails text lines"));
+		}
+
+		//A layout-caused deviation is a ratchet on its named kind only: the fix
+		//that closes it must promote the region; its other tolerated kinds may
+		//come and go.
+		[Fact]
+		public void The_gate_holds_a_layout_deviation_to_its_named_kind()
+		{
+			KnownDeviation[] known = {
+				new("drop block", PlayerWireframe.TextLines, "block ~20 px low", Ratchet: true),
+				new("drop block", PlayerWireframe.InkBox, "block ~20 px low", Ratchet: false),
+			};
+			RegionResult low = new("drop block", Rgb.Parse("#F5F5F7"), Rgb.Parse("#F5F5F7"), 0, 21, 4, 4, 20.5);
+			Assert.Empty(PlayerWireframe.Gate("W-P1", new[] { low }, known));
+			Assert.Empty(PlayerWireframe.Gate("W-P1", new[] { low with { BoxOffset = 1 } }, known));
+			string violation = Assert.Single(PlayerWireframe.Gate("W-P1", new[] { low with { LineOffset = 1 } }, known));
 			Assert.Contains("no longer fails text lines", violation);
 		}
 
@@ -187,7 +202,7 @@ namespace Mesen.Tests.Theme
 		{
 			RegionResult failing = new("title bar", Rgb.Parse("#000000"), Rgb.Parse("#FFFFFF"), 100, 0, 1, 1, 0);
 			Assert.Contains(PlayerWireframe.Gate("W-P1", new[] { failing }, Array.Empty<KnownDeviation>()), v => v.Contains("fails colour"));
-			Assert.Contains(PlayerWireframe.Gate("W-P1", new[] { failing with { DeltaE = 0 } }, new[] { new KnownDeviation("nope", PlayerWireframe.Colour, "") }), v => v.Contains("no such region"));
+			Assert.Contains(PlayerWireframe.Gate("W-P1", new[] { failing with { DeltaE = 0 } }, new[] { new KnownDeviation("nope", PlayerWireframe.Colour, "", false) }), v => v.Contains("no such region"));
 		}
 
 		//#951 item 3: CI has no core (ADR-0131), so it cannot render. The

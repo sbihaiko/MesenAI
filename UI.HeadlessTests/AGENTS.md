@@ -118,10 +118,21 @@ survive (restore the probe in `Dispose`).
   test can find a control are acceptable here; a change that alters layout
   or behaviour to satisfy a test is not.
 
-**Wireframe regions (#951).** `PlayerRender.Save` of a `W-P*` render also writes
-`<W-id>.wireframe.md`: `PlayerWireframe` crops the wireframe's window box,
-scales it to the render and compares named regions — dominant colour (CIE76
-ΔE ≤ 10), ink-box edges (≤ 8 logical px) and text-line bands (same count,
-centres ≤ 8 px). Never a pixel diff. `PlayerThemeRenderTests` gates its
-screens: a region passes, or it is a named known deviation with its reason,
-which must still fail — closing the gap means promoting the region.
+**Wireframe regions (#951).** The comparator is host-free in
+`UI/Logic/PlayerWireframe.cs` (with `RgbFrame` and a BCL-only PNG reader) and
+its rules are asserted in `UI.Tests/Theme/PlayerWireframeTests.cs`: it crops
+the wireframe's window box, scales it to the render and compares named
+regions — dominant colour (CIE76 ΔE ≤ 10), ink-box edges (≤ 8 logical px) and
+text-line bands (same count, centres ≤ 8 px). Never a pixel diff. Boxes are
+clamped to the render, so a smaller window reports instead of throwing. This
+project only feeds it real renders: `PlayerRender.Save` of a `W-P*` render
+writes `<name>.wireframe.md` against the wireframe its name resolves to by
+W-id prefix (`W-P4-save-states` → `W-P4`), or a "no wireframe" line, and
+never fails the test over the report. `PlayerThemeRenderTests` gates its
+screens through `PlayerWireframe.Gate`: a region passes, or it is a known
+deviation (`PlayerWireframe.KnownDeviationsOf`) that must still fail on its
+named failure kind — closing the gap means promoting the region; failures of
+other kinds on that region (seeded data, port chips) are not gated. CI has no
+core, so `UI.Tests` gates the committed renders in
+`UI.Tests/Theme/PlayerRenders/` instead; re-commit a render there when its
+screen changes.
