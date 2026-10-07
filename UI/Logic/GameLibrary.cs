@@ -174,6 +174,27 @@ public static class GameLibrary
 		return cleaned.Length > 0 ? cleaned : bare.Trim();
 	}
 
+	//The same cleaner over the OTHER title source: the canonical No-Intro name.
+	//ADR-0264 Decision 7 asks for two title sources and **one** cleaner over both,
+	//so a matched game and an unmatched one are cleaned to the same shape - and
+	//the tag rule above is the one that does it, brackets included, because a
+	//No-Intro name carries bracketed dump tags of its own (`Castlevania (USA)
+	//[b]`) exactly as a scene file name does.
+	//
+	//The ONE step CleanTitle takes that this does not is the extension one, and it
+	//is left out on purpose: a No-Intro name is a game's name and not a file name,
+	//and StripExtensions answers a name it does not recognise by splitting at the
+	//last dot - "Dr. Mario" would read as "Dr". The tags and the spacing are the
+	//whole of the cleaning a second source needs.
+	//
+	//A name that is nothing but tags keeps its own spelling, for CleanTitle's own
+	//reason: an empty title is not a title.
+	public static string CleanCanonicalTitle(string noIntroName)
+	{
+		string cleaned = Collapse(RemoveTags(noIntroName));
+		return cleaned.Length > 0 ? cleaned : noIntroName.Trim();
+	}
+
 	//The title as the grid orders it. A leading article moves to the end - "The
 	//Legend of Zelda" files under L, where a player looks for it - and it moves
 	//for SORT ORDER only, never for display (Decision 7).

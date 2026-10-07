@@ -65,6 +65,7 @@ namespace Mesen.ViewModels
 		private void BeginLibraryVisit()
 		{
 			_libraryGames = Array.Empty<LibraryGame>();
+			_titles = new LibraryTitleBook();
 			_hasLibrary = false;
 			_scanEmptyText = "";
 			SearchQuery = "";
@@ -81,6 +82,9 @@ namespace Mesen.ViewModels
 		//list rather than over the tiles, so clearing the box and typing the next
 		//query both cost nothing but a walk of the list.
 		private IReadOnlyList<LibraryGame> _libraryGames = Array.Empty<LibraryGame>();
+		//The title each of them is shown and searched by (see LibraryTitleBook):
+		//the canonical-title pass writes here, and FillTiles reads from here.
+		private LibraryTitleBook _titles = new();
 		//Whether those entries came from a scan of THIS library. False while the
 		//sheet has no library folder at all, where the empty state belongs to
 		//ShowLibrary's own sentence and not to this box.
@@ -96,6 +100,8 @@ namespace Mesen.ViewModels
 				games.Add(new LibraryGame(entries[i], covers[i]));
 			}
 			_libraryGames = games;
+			//Titles resolved for the previous scan belong to that scan's games.
+			_titles = new LibraryTitleBook();
 			_hasLibrary = true;
 			FillTiles();
 		}
@@ -113,12 +119,10 @@ namespace Mesen.ViewModels
 				//asked once per entry through the one rule that owns the question.
 				//A blank query keeps everything, which is what "no search yet"
 				//means (the rule's own Decision 4 case).
-				List<LibrarySearchItem<LibraryGame>> items = new(_libraryGames.Count);
-				foreach(LibraryGame game in _libraryGames) {
-					items.Add(new LibrarySearchItem<LibraryGame>(game.Entry.Title, game));
-				}
-				foreach(LibrarySearchItem<LibraryGame> kept in LibrarySearch.Filter(items, SearchQuery)) {
-					Tiles.Add(TileFor(kept.Payload.Entry, kept.Payload.Cover));
+				//Searched by the title the tile shows (ADR-0264 Decisions 4 and
+				//7): the canonical one once the pass has resolved it.
+				foreach(LibraryGame game in _titles.Search(_libraryGames, g => g.Entry, SearchQuery)) {
+					Tiles.Add(TileFor(game.Entry, game.Cover));
 				}
 				UpdateEmptyResult();
 			}

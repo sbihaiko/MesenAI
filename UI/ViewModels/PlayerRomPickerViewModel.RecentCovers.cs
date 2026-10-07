@@ -45,10 +45,17 @@ namespace Mesen.ViewModels
 		//the grid's, not the tile's: a tile does not know when it stops being
 		//drawn, and the rebuild does. A tile with no picture of its own hands over
 		//null, which the ledger ignores.
+		//The tiles ON SCREEN by path, so a resolved title reaches the tile that shows
+		//it without a walk of the grid. Rebuilt with the grid: it never holds a tile
+		//ClearTiles has released.
+		private readonly Dictionary<string, PlayerLibraryTile> _tileByPath = new(StringComparer.Ordinal);
+
 		private PlayerLibraryTile TileFor(LibraryEntry entry, LibraryCoverPick cover)
 		{
 			PlayerLibraryTile tile = new(entry, ConsoleName(entry.Console), cover);
+			tile.Title = _titles.TitleOf(entry);
 			_coverArt.Track(tile.CoverArt);
+			_tileByPath[tile.Path] = tile;
 			return tile;
 		}
 
@@ -61,6 +68,7 @@ namespace Mesen.ViewModels
 		private void ClearTiles()
 		{
 			Tiles.Clear();
+			_tileByPath.Clear();
 			_coverArt.Clear();
 		}
 
