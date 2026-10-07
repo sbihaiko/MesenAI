@@ -43,6 +43,10 @@ namespace Mesen.Views
 		//surface rather than a second sheet.
 		private void OnBrowseFile(object? sender, RoutedEventArgs e) => Model?.BrowseFile();
 
+		//#1033 (ADR-0264 Decision 4): the empty result's way out - the box empties
+		//and the whole library comes back.
+		private void OnClearSearch(object? sender, RoutedEventArgs e) => Model?.ClearSearch();
+
 		private void OnBack(object? sender, RoutedEventArgs e) => Model?.Back();
 	}
 }

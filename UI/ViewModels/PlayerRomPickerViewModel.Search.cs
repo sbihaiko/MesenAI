@@ -1,0 +1,154 @@
+using System;
+using System.Collections.Generic;
+using CommunityToolkit.Mvvm.ComponentModel;
+using Mesen.Localization;
+using Mesen.Logic;
+
+namespace Mesen.ViewModels
+{
+	//#1033 (ADR-0264 Decision 4): the library's search box.
+	//
+	//The sheet opens on the whole library, and the box is how a title in a few
+	//hundred of them is reached without walking. The query narrows the grid AS IT
+	//IS TYPED - on a keyboard straight into the box, on a pad through the shared
+	//on-screen keyboard ADR-0262 owns, which opens on Confirm over the focused
+	//field (and which Y puts the ring on, see PlayPadNavigationWiring) - and an
+	//empty result is a NAMED state rather than an empty grid.
+	//
+	//The match rule itself is NOT here: it is LibrarySearch's, and this half only
+	//asks it. `zel` finding *The Legend of Zelda*, an accent-less keyboard finding
+	//*Pokémon*, and a dump tag matching nothing are that module's decisions, pinned
+	//by UI.Tests/Play/LibrarySearchTests, and a second copy of any of them here is
+	//how the two would drift apart.
+	//
+	//This is a partial of PlayerRomPickerViewModel on purpose: the sheet has one
+	//view-model, and the search is a property of it rather than a surface of its
+	//own. The scan and the box are two sources for ONE grid, so the tiles are
+	//filled on one path (FillTiles) whatever changed.
+	public partial class PlayerRomPickerViewModel
+	{
+		//The query, exactly as the box holds it. Read-only to everything but the
+		//box and ClearSearch: the grid follows it, and nothing else writes it.
+		[ObservableProperty]
+		[NotifyPropertyChangedFor(nameof(HasQuery))]
+		public partial string SearchQuery { get; set; } = "";
+
+		//Whether the box holds anything, which is what shows the Clear action: a
+		//search the player cannot see is a search they cannot undo.
+		public bool HasQuery => SearchQuery.Length > 0;
+
+		//The whole of "the grid narrows live". The generator answers this hook on
+		//every change, including the property's own initial value, so there is no
+		//second place where a query could reach the tiles.
+		partial void OnSearchQueryChanged(string value) => FillTiles();
+
+		//The Clear action, which is also the way out of the empty result: the box
+		//empties and the whole library comes back. Nothing is rescanned - the
+		//entries the scan answered are still in hand.
+		public void ClearSearch() => SearchQuery = "";
+
+		//A fresh visit to the library (#1032's ShowLibrary). The box empties - the
+		//sheet opens on the whole library, so a filter left over from the previous
+		//visit is not one the player asked for now - and the entries go with it:
+		//they belong to the scan of a library this visit has not read yet, and
+		//narrowing a grid over them would show games from a folder the player may
+		//since have changed.
+		private void BeginLibraryVisit()
+		{
+			_libraryGames = Array.Empty<LibraryGame>();
+			_hasLibrary = false;
+			_scanEmptyText = "";
+			SearchQuery = "";
+		}
+
+		//One scanned game and the cover the same scan chose for it (#1052). They
+		//travel as one value because the query narrows the grid by dropping games,
+		//and a dropped game must take its cover with it - a parallel list indexed
+		//by position would hand the survivor of a filter the cover of the game
+		//that was filtered out.
+		private sealed record LibraryGame(LibraryEntry Entry, LibraryCoverPick Cover);
+
+		//What the scan answered, kept whole. The query narrows the grid OVER this
+		//list rather than over the tiles, so clearing the box and typing the next
+		//query both cost nothing but a walk of the list.
+		private IReadOnlyList<LibraryGame> _libraryGames = Array.Empty<LibraryGame>();
+		//Whether those entries came from a scan of THIS library. False while the
+		//sheet has no library folder at all, where the empty state belongs to
+		//ShowLibrary's own sentence and not to this box.
+		private bool _hasLibrary;
+
+		//One scan's answer into the grid (#1032, ADR-0264 Decisions 1 and 9). The
+		//entries and their order are the module's; this half keeps them and lets
+		//the query decide which of them are on screen.
+		private void ShowLibraryGames(IReadOnlyList<LibraryEntry> entries, IReadOnlyList<LibraryCoverPick> covers)
+		{
+			List<LibraryGame> games = new(entries.Count);
+			for(int i = 0; i < entries.Count; i++) {
+				games.Add(new LibraryGame(entries[i], covers[i]));
+			}
+			_libraryGames = games;
+			_hasLibrary = true;
+			FillTiles();
+		}
+
+		//The library's own state, re-derived from the entries in hand after the
+		//query changes or a scan lands. The header's COUNT is deliberately not
+		//here: it reads the library, not the grid (Decision 8, and W-P19b draws it
+		//unchanged with the query `zel` on screen) - a search narrows which games
+		//are shown, never how many the player owns.
+		private void FillTiles()
+		{
+			ClearTiles();
+			if(Mode == RomPickerMode.Library && _hasLibrary) {
+				//The library in the order the scan answered it, with the query
+				//asked once per entry through the one rule that owns the question.
+				//A blank query keeps everything, which is what "no search yet"
+				//means (the rule's own Decision 4 case).
+				List<LibrarySearchItem<LibraryGame>> items = new(_libraryGames.Count);
+				foreach(LibraryGame game in _libraryGames) {
+					items.Add(new LibrarySearchItem<LibraryGame>(game.Entry.Title, game));
+				}
+				foreach(LibrarySearchItem<LibraryGame> kept in LibrarySearch.Filter(items, SearchQuery)) {
+					Tiles.Add(TileFor(kept.Payload.Entry, kept.Payload.Cover));
+				}
+				UpdateEmptyResult();
+			}
+			//TilesRevision is deliberately NOT bumped here, and the difference from
+			//the scan path is the whole point: a scan replaces the tiles under a
+			//ring that has nowhere else to go, while a query changes with the ring
+			//on the BOX - the player is typing in it. Re-claiming there would take
+			//the focus off the field on the first keystroke and leave the keyboard
+			//(or the pad keyboard) with nowhere to put the next one. The pad
+			//returns to the grid with Down, which RomPickerHeaderStep answers.
+		}
+
+		//The named empty RESULT (Decision 4): a query that kept nothing says so,
+		//with the query shown, and the Clear action beside the box undoes it. Never
+		//an empty grid.
+		//
+		//It writes EmptyText only when the library itself answered: a sheet with no
+		//library folder has its own sentence there (Decision 8), and this box must
+		//not overwrite the next step the player is being told to take.
+		//
+		//The two empty states are different facts and both are kept: with a query on,
+		//a grid the query emptied says so with the query in it; with the box empty,
+		//the sentence is the LIBRARY's own - the scan that answered no game (#1060) -
+		//which is why it is remembered rather than written straight to EmptyText. A
+		//player who searches an empty library and clears the box gets the library's
+		//sentence back, not a blank grid.
+		private void UpdateEmptyResult()
+		{
+			if(!_hasLibrary) {
+				return;
+			}
+			EmptyText = HasQuery
+				? (Tiles.Count == 0 ? ResourceHelper.GetMessage("RomPickerLibraryNoMatch", SearchQuery) : "")
+				: _scanEmptyText;
+		}
+
+		//The library's own empty state as the last scan answered it, kept for the
+		//reason above: the query's path is the one that owns EmptyText once the
+		//library has answered, so the scan's sentence has to be here to be put back.
+		private string _scanEmptyText = "";
+	}
+}

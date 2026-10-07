@@ -382,7 +382,14 @@ namespace Mesen.Windows
 			if(action == PadNavAction.Up && focused.DataContext is PlayerLibraryTile && IsInFirstGridRow(grid, focused)) {
 				return Named(window, "RomPickerBrowseFile") ?? Named(window, "RomPickerBack");
 			}
-			if(action == PadNavAction.Down && focused.Name is "RomPickerBrowseFile" or "RomPickerBack") {
+			//#1033: the search box is a header control too, so Down out of it comes
+			//back to the grid exactly as Down out of the buttons does - one step
+			//out, one step back, whichever control the ring was on.
+			if(action == PadNavAction.Down && focused.Name is "RomPickerBrowseFile" or "RomPickerBack" or "RomPickerSearch") {
+				//#1050 review finding 4: the grid is only a place to come back to
+				//while it is the surface that is UP. In the browser the sheet hides
+				//the grid rather than removing it, and Enter cannot focus what is
+				//hidden - so Down on Back there lands on the browser's own first row.
 				if(!libraryIsUp) {
 					return RomPickerFirstRow(window) ?? Named(window, "RomPickerBack");
 				}
@@ -561,6 +568,21 @@ namespace Mesen.Windows
 					action = PadNavAction.Back;
 				}
 
+				//#1033 (ADR-0264 Decision 3): the library sheet's own control, Y.
+				//It opens search, which means it puts the ring on the sheet's search
+				//box - the one control the sheet has that a pad would otherwise
+				//reach only by walking the header - and Confirm on that box then
+				//opens the shared on-screen keyboard ADR-0262 owns, so the query is
+				//typed with the pad. It is read off the pressed sets rather than off
+				//Next's answer because Y is not one of the six the pad navigates
+				//with (PadNavControls.SheetControls, and the reason it is a second
+				//table is there). Gated on this sheet so every other Play surface
+				//keeps the button the player may have bound to a console's own.
+				if(authority && InPlayDoor && LibrarySheetIsUp
+					&& PlayPadNavigation.IsSheetEdge(PadNavControls.SheetCode(pad?.Family, pad?.Device ?? -1, PadSheetControl.Search, keyCode), pressed, _previous)) {
+					FocusLibrarySearch();
+				}
+
 				//#964: a hold ends on Confirm's release, which is not an action the
 				//edge rule produces - so it is read off the pressed set here, every
 				//tick and authority or not, or compare would outlive the press.
@@ -629,6 +651,27 @@ namespace Mesen.Windows
 			//own pad branch asks the same door (StateGrid.TimerInput_Tick) and the
 			//two must never answer differently.
 			private bool InPlayDoor => PlayPadNavigation.InPlayDoor(_model.IsPlayerMode, _model.IsPlayWorkspace);
+
+		//#1033 (ADR-0264 Decision 3): the sheet that owns the pad's Y. Asked of the
+		//view-model's own surface state - the same expressions the sheet renders
+		//from - so the button means search exactly while the library is what the
+		//player is looking at, and the folder browser inside it keeps the button
+		//the player may have bound to a console's own.
+		private bool LibrarySheetIsUp => _model.RomPicker.IsVisible && _model.RomPicker.Mode == RomPickerMode.Library;
+
+		//Y's whole effect: the ring goes to the search box, and the shared
+		//on-screen keyboard ADR-0262 owns opens with it - one press, and the player
+		//is typing, which is what "Y opens search" has to mean on a cabinet with no
+		//keyboard behind the pad. PlayFocusOnOpen.Enter is the one focus entry point
+		//(ADR-0256 Decision 3), so the ring is drawn; a keyboard already open is
+		//left alone rather than drawn twice, and Confirm over the box still opens
+		//it for a player who reached the field by walking the header.
+		private void FocusLibrarySearch()
+		{
+			if(Named(_window, "RomPickerSearch") is TextBox field && PlayFocusOnOpen.Enter(field) && _keyboard is null) {
+				OpenKeyboard(field);
+			}
+		}
 
 			//A slot grid the pad can leave: the classic grid the Save/Load screens
 			//and Advanced use, which draws a close box. The Play home's row of tiles

@@ -36,6 +36,11 @@
 			<!--#1032 (ADR-0264 Decision 11): the library sheet's second entry point,
 			    the one that opens the folder browser the sheet no longer starts on.-->
 			<Control ID="btnRomPickerBrowseFile">Browse a file…</Control>
+			<!--#1033 (ADR-0264 Decision 4): the library's search box, its placeholder
+			    and the Clear action that is the way out of an empty result. The
+			    placeholder is the wireframe's own words (W-P19).-->
+			<Control ID="lblRomPickerSearchPlaceholder">Search games</Control>
+			<Control ID="btnRomPickerSearchClear">Clear</Control>
 		</Form>
 		<Form ID="PlayerPackPickerSheetView">
 			<Control ID="lblPackPickerRemembered">Remembered for this game. Change it any time from the pause menu.</Control>
@@ -2668,6 +2673,12 @@ E
 		     the *Library folders…* control is slice #1035 and does not exist yet, so
 		     the step this sentence can point at is the one that does. -->
 		<Message ID="RomPickerLibraryEmpty">No games found in your library folder. Pick another folder with Browse a file…, then choose Make this my games folder.</Message>
+		<!-- Decision 4 (#1033): the named empty RESULT - the other empty state again,
+		     and a different fact from the one above: the library answered, and the
+		     QUERY kept nothing. A query that finds nothing says so with the query in
+		     it, beside the box that holds it and the Clear action that undoes it -
+		     never an empty grid. {0} = what the player typed. -->
+		<Message ID="RomPickerLibraryNoMatch">No games match “{0}”.</Message>
 		<Message ID="RomPickerEmpty">No games in this folder.</Message>
 		<Message ID="RomPickerThisComputer">This computer</Message>
 		<Message ID="RomPickerSearching">Looking for your games…</Message>

@@ -343,6 +343,9 @@ namespace Mesen.ViewModels
 			HeaderText = ResourceHelper.GetMessage("RomPickerLibraryTitle");
 			PathText = "";
 			NoticeText = "";
+			//#1033 (ADR-0264 Decision 4): fresh visit, empty box and no entries
+			//from the previous scan (PlayerRomPickerViewModel.Search).
+			BeginLibraryVisit();
 			CountText = "";
 			TruncatedText = "";
 			EmptyText = "";
@@ -600,15 +603,24 @@ namespace Mesen.ViewModels
 			if(!IsVisible || Mode != RomPickerMode.Library) {
 				return;
 			}
+			//The waiting line goes with the answer, and it goes first (#1050): the
+			//scan this result belongs to is over, so "Looking for your games…" is
+			//not this sheet's to say any more.
 			SearchingText = "";
 			//#1060: a scan that answered no game is a named state that names the next
 			//step, not a blank grid. The rule is PlayRomPicker's; this is the lookup.
-			EmptyText = LibraryEmptyText(PlayRomPicker.LibraryEmptyMessageId(_folders.Count, result.Entries.Count));
-			ClearTiles();
-			for(int i = 0; i < result.Entries.Count; i++) {
-				LibraryEntry entry = result.Entries[i];
-				Tiles.Add(TileFor(entry, payload.Covers[i]));
-			}
+			//It is kept rather than written straight to EmptyText (#1033): the search's
+			//own empty state owns that property once the library has answered, and it
+			//puts this sentence back whenever the box is empty - which is what keeps
+			//#1060's state alive across a search the player typed and then cleared.
+			_scanEmptyText = LibraryEmptyText(PlayRomPicker.LibraryEmptyMessageId(_folders.Count, result.Entries.Count));
+			//#1033 (ADR-0264 Decision 4): the grid is filled through the search's
+			//own path (PlayerRomPickerViewModel.Search), so a scan and a query are
+			//two sources for one grid rather than two ways to build it. The covers
+			//travel with the entries (#1052, merged after this slice): the query
+			//narrows the grid, and a narrowed grid still draws the player's own
+			//screenshot on the tiles that have one.
+			ShowLibraryGames(result.Entries, payload.Covers);
 			CountText = ResourceHelper.GetMessage("RomPickerLibraryCount",
 				CountLabel(result.Entries.Count, "RomPickerGameOne", "RomPickerGameMany"),
 				CountLabel(result.FolderCount, "RomPickerFolderOne", "RomPickerFolderMany"));
