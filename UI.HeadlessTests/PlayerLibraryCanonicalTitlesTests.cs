@@ -198,14 +198,19 @@ public class PlayerLibraryCanonicalTitlesTests : IDisposable
 	//The sheet, open on a library of two ROMs, with the scan inline and both
 	//seams injected. The pass itself is left real - a background task posting
 	//its batches - so every case below waits for it the way the app does.
+	//The table is a parameter because one case needs a SECOND row: a ROM the table
+	//knows *behind* the one whose hash throws, which is what turns "it survived"
+	//into something the grid can be waited on.
 	private (MainWindow Window, MainWindowViewModel Model, PlayerRomPickerViewModel Picker) ShowLibrary(
-		Func<string, RomConsole, CancellationToken, Task<string>> hash)
+		Func<string, RomConsole, CancellationToken, Task<string>> hash, params string[] tableRows)
 	{
 		LibraryRoot();
 		(MainWindow window, MainWindowViewModel model) = ShowHome();
 		PlayerRomPickerViewModel picker = model.RomPicker;
 		picker.RunLibraryScanInline = true;
-		picker.NoIntroTable = TableOf(KnownSha1 + "\tnes\tContra (USA)");
+		picker.NoIntroTable = TableOf(tableRows.Length > 0
+			? tableRows
+			: new[] { KnownSha1 + "\tnes\tContra (USA)" });
 		picker.RomHashSource = hash;
 		model.OpenRomPicker();
 		WaitFor(() => picker.Tiles.Count == 2, $"the grid never filled ({picker.Tiles.Count} tiles)");
@@ -345,18 +350,43 @@ public class PlayerLibraryCanonicalTitlesTests : IDisposable
 	//and the pass, a permission, a disk that refused to answer - is a tile the
 	//scan already named, and nothing else. It must not empty the tile, and it
 	//must not take the pass down with it: the library keeps working.
+	//
+	//#1038 review finding 3: this case used to wait for "Metroid", which is on the
+	//grid before the pass runs at all, so it passed whether the pass started,
+	//crashed, or never asked for a hash. The ROM that throws is asked first and
+	//its call is counted, and the ROM BEHIND it in the walk is one the table knows
+	//under another name - so the wait below is the pass surviving the throw and
+	//carrying on to the next tile, which is the claim the case is named for.
 	[AvaloniaFact]
 	public void A_rom_whose_hash_cannot_be_computed_keeps_its_file_name()
 	{
 		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
 
-		(MainWindow window, _, PlayerRomPickerViewModel picker) = ShowLibrary((_, _, _) => throw new InvalidOperationException("unreadable ROM"));
+		const string MetroidSha1 = "3333333333333333333333333333333333333333";
+		int thrown = 0;
+		(MainWindow window, _, PlayerRomPickerViewModel picker) = ShowLibrary((path, _, _) => {
+			//The scan orders the grid by title, so "Contra" is walked first.
+			if(Path.GetFileName(path).StartsWith("Contra", StringComparison.Ordinal)) {
+				Interlocked.Increment(ref thrown);
+				throw new InvalidOperationException("unreadable ROM");
+			}
+			return Task.FromResult(MetroidSha1);
+		},
+		KnownSha1 + "\tnes\tContra (USA)",
+		MetroidSha1 + "\tnes\tMetroid II - Return of Samus (USA)");
 
-		WaitFor(() => GridTitles(window).Contains("Metroid"), "the grid never filled");
-		//The pass has run and answered nothing for either tile: both keep the
-		//names the scan gave them, and neither is blank.
-		Assert.Equal(new[] { "Contra", "Metroid" }, picker.Tiles.Select(t => t.Title).ToArray());
+		//The title of the ROM behind the throwing one, which the pass can only
+		//reach by having survived it.
+		WaitFor(() => picker.Tiles.Any(t => t.Title == "Metroid II - Return of Samus"),
+			$"the pass did not survive the throwing ROM (titles=[{Titles(picker)}])");
+
+		Assert.Equal(1, Volatile.Read(ref thrown));
+		//The tile the pass could not name keeps exactly what the scan gave it, and
+		//neither tile is blank.
+		Assert.Contains(picker.Tiles, t => t.Title == "Contra");
 		Assert.True(picker.IsVisible, "a failed hash took the sheet down");
 		Assert.DoesNotContain("", picker.Tiles.Select(t => t.Title));
+		//And it reached the sheet, not only the view-model.
+		Assert.Contains("Metroid II - Return of Samus", GridTitles(window));
 	}
 }
