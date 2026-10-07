@@ -22,6 +22,13 @@ namespace Mesen.Views
 
 		private PlayerCheatsSheetViewModel? Model => DataContext as PlayerCheatsSheetViewModel;
 
+		private async void OnLookOnline(object? sender, RoutedEventArgs e)
+		{
+			if(Model != null) {
+				await Model.LookOnline();
+			}
+		}
+
 		private async void OnFindIntent(object? sender, RoutedEventArgs e)
 		{
 			if(Model != null) {

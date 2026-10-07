@@ -36,6 +36,15 @@ namespace Mesen.ViewModels
 							? new CheatIntentScriptRunner(keyStore, found.PythonExecutable, found.PythonPrefixArgs, found.ToolsFolder)
 							: null;
 					});
+					//P.12 (#924): the web lookup is scripts/cheat_web_lookup.py,
+					//run the same way; it reads no key and calls no model.
+					_cheatsSheet.ConfigureWebLookup(async () => {
+						await Remaster.EnsureFeasibilityMeasured();
+						RemasterFeasibility? found = Remaster.Feasibility;
+						return found is { CanRunJobs: true }
+							? new CheatWebLookupScriptChecker(argv => RunCheatScript(found, argv), found.ToolsFolder)
+							: null;
+					});
 				}
 				return _cheatsSheet;
 			}
@@ -87,9 +96,39 @@ namespace Mesen.ViewModels
 				community: CommunityCheatsLastKnown(),
 				//#639: CheatCodes saves to the running game's file; the sheet
 				//checks it is still the copy it opened for.
-				runningCheatSha1: CheatRomSha1
+				runningCheatSha1: CheatRomSha1,
+				//P.12: the lookup reads the ROM by path; an archived ROM has none.
+				romPath: ((ResourcePath)RomInfo.RomPath).Compressed ? "" : ((ResourcePath)RomInfo.RomPath).Path
 			);
 			_ = RefreshCommunityCheatsAsync(cheatSha1, CheatsSheet.BeginCommunityLoading());
+		}
+
+		//One run of a cheat script under the python3 Remaster located: its exit
+		//code and the one JSON object line it printed (progress goes to stderr).
+		private static Task<CheatWebRun> RunCheatScript(RemasterFeasibility found, IReadOnlyList<string> script)
+		{
+			TaskCompletionSource<CheatWebRun> done = new(TaskCreationOptions.RunContinuationsAsynchronously);
+			System.Text.StringBuilder stdout = new();
+			object gate = new();
+			List<string> argv = new() { found.PythonExecutable };
+			argv.AddRange(found.PythonPrefixArgs);
+			argv.AddRange(script);
+			try {
+				new JobProcessLauncher().Start(argv, found.ToolsFolder, (line, isError) => {
+					if(!isError && line.StartsWith('{')) {
+						lock(gate) {
+							stdout.AppendLine(line);
+						}
+					}
+				}, code => {
+					lock(gate) {
+						done.TrySetResult(new CheatWebRun(code, stdout.ToString()));
+					}
+				});
+			} catch(Exception ex) when(ex is System.ComponentModel.Win32Exception || ex is InvalidOperationException) {
+				done.TrySetResult(new CheatWebRun(-1, ""));
+			}
+			return done.Task;
 		}
 
 		//The sheet opens on the last known catalog; the fetched one replaces it
