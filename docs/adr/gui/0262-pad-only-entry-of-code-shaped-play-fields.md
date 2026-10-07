@@ -1,90 +1,105 @@
-# ADR-0262: A pad fills Play's code-shaped fields through a bounded code wheel; free-text fields stay keyboard-only
+# ADR-0262: A pad fills every Play text field through one shared on-screen keyboard owned by the pad bridge
 
-- Status: proposed (2026-10-06) — **awaiting owner ratification (issues
-  #966/#968, label needs-ratification)**. The Decision below is a
-  **recommendation, not a decision**: the autonomy panel is not the owner, and
-  issue #966 requires a recorded pick with the owner's words quoted. Panel
-  recommendation on issue #966: **AGREED 2–1 — option (c)**. Composition,
-  quoted from the ruling: *"adversarial fallback (Codex out of usage until
-  23:42); lenses: Anthropic panel lens B, agy/Gemini 3.8 Flash sitting in;
-  split → blind third lens Grok 4.6."* Majority reasons, quoted from the
-  ruling: *"a wheel per code shape is small and testable host-free; free text
-  already has pad routes (toggle list, name-search list); ADR-0256 took the
-  same line for the ROM picker ('no path typing'); pure (b) would leave Add a
-  Code (the only cheat path on GB/SMS per ADR-0245 §5) unreachable from a
-  pad."* Dissent (agy), verbatim: **"(b) Declare text entry keyboard-only
-  with a one-line reason per PRD §13.3 Rule 10 and amend ADR-0256's stop rule
-  to exclude typing; bundled cheats remain fully browsable and toggleable via
-  pad alone, honoring ADR-0256's non-goal forbidding per-view navigation code
-  and avoiding virtual keyboard bloat in the pad bridge."** Until the owner
-  picks and their words are quoted here, this ADR binds nothing and amends
-  nothing. Accepting it will be a request for work: the implementation is a
-  **separate slice** and is **not implemented in this PR**, which is docs
-  only.
-- Date: 2026-10-06
+- Status: accepted (2026-10-07) — **option (a), ratified on issue #966** by
+  the owner's designated human proxy, GPT Astra fast. The owner's own
+  sentence (2026-10-07): *"se precisar de ajuda para decidir use o gpt astra
+  fast como proxy humano"*. The proxy's ruling, verbatim: **"#966 | PICK:
+  (a), a shared on-screen pad keyboard owned by the bridge | The owner
+  explicitly requires operation on an arcade cabinet without a keyboard or
+  mouse. A code wheel leaves intent search, descriptions and key entry
+  inaccessible; browsing a list does not replace those functions. A shared
+  keyboard costs more initially but preserves ADR-0256 and serves subsequent
+  fields. | Conditions/limits: no per-view navigation logic;
+  field-appropriate alphabets, including Game Genie letters; edit/delete,
+  commit and cancel entirely by pad; cancel preserves the original value and
+  restores focus; secrets remain masked. Require synthetic-pad coverage and
+  couch testing with a real pad; revise proposed ADR-0262 accordingly."**
+  Implemented in the same turn under CLAUDE.md's same-turn rule: the change
+  ships with unit tests covering the decision (`UI.Tests/Play/PadKeyboardTests`)
+  and synthetic-pad headless coverage (`UI.HeadlessTests/PlayPadKeyboardTests`).
+  The real-pad couch check joins issue #926.
+- Date: 2026-10-06 (proposed), 2026-10-07 (accepted, rewritten to option (a))
 - Related: ADR-0256 (the Play GUI is fully operable from a controller alone —
   its stop rule, and the bridge that owns pad focus), ADR-0245 (W-P11 Cheats:
   search, intent search, *Add a Code…*; §5, the only cheat path on GB/SMS),
   ADR-0249 (the rendered wireframes), ADR-0122 (the host-free firewall), PRD Part B
-  §13.3 rules 9 and 10, issue #966.
-- Supersedes / amends: none while `proposed`. If the owner accepts it, it
-  would narrowly amend ADR-0256's stop rule and PRD §13.3 rule 9 — committing
-  a shaped code inside the stop rule, free-text typing outside it — with no
-  section of either renumbered.
+  §13.3 rules 9 and 10, issues #966 and #926.
+- Supersedes / amends: nothing. This revises its own `proposed` text, which
+  recommended option (c), a bounded code wheel, with free-text fields left
+  keyboard-only. The ratified pick keeps every text field inside ADR-0256's
+  stop rule and PRD §13.3 rule 9, so neither is amended.
 
 ## Context
 
 ADR-0256 requires every Play path to be reachable and reversible from a pad
 alone, and PRD §13.3 rule 9 says keyboard and gamepad reach everything in Play.
-The pad bridge records its own limit in place
-(`UI/Windows/PlayPadNavigationWiring.cs`): a `TextBox` falls through to the
-raise, because a pad cannot type. W-P11 Cheats (ADR-0245) has five text fields
-in `UI/Views/PlayerCheatsSheetView.axaml`: the cheat search box, the intent
-search box, the API key box, the new-code box of *Add a Code…* and its
-description box. ADR-0256 decided nothing about them; its only text-entry
-ruling is the ROM picker's refusal of path typing (Decision 9).
+The pad bridge (`UI/Windows/PlayPadNavigationWiring.cs`) recorded its own
+limit: a `TextBox` fell through to the raise, because a pad cannot type. W-P11
+Cheats (ADR-0245) has five text fields in `UI/Views/PlayerCheatsSheetView.axaml`:
+the cheat search box, the intent search box, the API key box, the new-code box
+of *Add a Code…* and its description box. ADR-0256 decided nothing about them;
+its only text-entry ruling is the ROM picker's refusal of path typing
+(Decision 9).
 
-Issue #966 offered three options: (a) an on-screen pad keyboard sheet owned by
-the bridge; (b) declare code entry keyboard-only and say so on the sheet, per
-rule 10; (c) pad-only entry limited to the shapes a code takes.
+Issue #966 offered three options: (a) an on-screen pad keyboard owned by the
+bridge; (b) declare code entry keyboard-only and say so on the sheet, per
+rule 10; (c) pad-only entry limited to the shapes a code takes. The autonomy
+panel recommended (c) by 2–1; the ratification picked (a), because the owner
+requires operation on an arcade cabinet with no keyboard or mouse, and a code
+wheel leaves intent search, descriptions and key entry out of reach.
 
 ## Decision
 
-1. **A bounded code wheel, owned by the one pad bridge, fills the code-shaped
-   fields.** Its alphabet is the code's shape and nothing more: Game Genie
-   letters and Pro Action Replay hex digits, on the Cheats sheet's new-code
-   box. Its scope is the Cheats sheet that issue #966 asked about; other
-   sheets' fields are out of scope here. There is no per-view navigation code — the wheel is the
-   bridge's, and a field opts in by declaring its shape.
-2. **The free-text fields stay keyboard-only**: cheat search, intent search,
-   the API key and the code description. Each says on screen, in one line per
-   PRD §13.3 rule 10, both why it needs a keyboard and what to do next — for
-   the API key box (`CheatsKeyBox`, masked with `PasswordChar`), e.g. "Needs a
-   keyboard: use a keyboard or paste the key from Settings" — so a pad-only
-   player is never left at a dead field. Their pad routes already exist without typing: the
-   bundled list is browsed and toggled by pad, and the name-search list is a
-   list.
-3. **The stop rule would be amended narrowly, on acceptance.** Committing a shaped code (*Add a
-   Code…* from wheel entry to the committed cheat) is inside ADR-0256's stop
-   rule and PRD §13.3 rule 9. Free-text typing is not. No general on-screen
-   keyboard is added (option (a) is not taken).
+1. **One shared on-screen keyboard, owned by the one pad bridge, fills every
+   Play text field.** A pad's Confirm on a focused, enabled, editable
+   `TextBox` opens it. There is no per-view navigation logic: no view
+   handles a pad press, and no view knows the keyboard exists. The keyboard's
+   rules are host-free (`UI/Logic/PadKeyboard.cs`, ADR-0122); the bridge only
+   feeds it the pad's actions and applies its outcomes.
+2. **The field declares its alphabet; the keyboard does not ask the view.**
+   A masked box (`PasswordChar` set) is a *secret*; a box carrying the
+   `padCode` style class is *code-shaped*; every other box is *free text*.
+   - Code: the sixteen NES Game Genie letters first (`APZLGITYEOXUKSVN`), then
+     the hex digits they do not already cover, then the `-`, `:` and `+`
+     separators the Game Genie and Pro Action Replay shapes use. No space and
+     no case key: code letters are capitals.
+   - Free text: lower-case letters, digits, `. , ' - ! ? & :`, a space and a
+     case key.
+   - Secret: lower-case letters, digits, `- _ .`, a space and a case key.
+   - A field's `MaxLength` caps the draft.
+3. **Edit, delete, commit and cancel are all by pad.** While the keyboard is
+   open every press is the keyboard's: the D-pad walks its keys (left and
+   right wrap, up and down move a row), Confirm presses the key under the
+   cursor — a character, space, case, delete (`⌫`, the last character) or
+   commit (`OK`). The draft is written into the field as it changes, so a
+   search filters while it is typed. The focus never leaves the field, and
+   the pad's Back cannot close the sheet under the keyboard.
+4. **Cancel gives back the original value and the focus.** The pad's Back
+   cancels: the field gets back the text it had when the keyboard opened, and
+   the focus returns to that field with its ring drawn. Commit keeps the draft
+   and returns the focus the same way. A field that goes away under the
+   keyboard (its sheet closed by something else) takes the keyboard with it,
+   as a cancel.
+5. **Secrets stay masked.** The keyboard draws a secret's draft as `•` per
+   character, never its characters; the field keeps its own mask.
 
 ## Consequences
 
-- *Add a Code…* — the only cheat path on GB/SMS (ADR-0245 §5) — becomes
-  reachable from a pad, which pure option (b) would have left unreachable.
-- The wheel is a small, host-free rule per code shape (ADR-0122), testable
-  without a window; the headless acceptance is that a synthetic pad alone
-  fills and commits a code on the Cheats sheet, or the sheet shows its
-  one-line reason and next step for a keyboard-only field.
-- The bridge grows one input surface, bounded by the code shapes it lists. A
-  new code-shaped field joins by declaring its shape; a new free-text field
-  must carry the rule-10 line instead.
-- While this ADR is `proposed`, ADR-0256 and PRD §13.3 rule 9 stay
-  unamended and carry no note. On acceptance, each gets an *Amended by
-  ADR-0262* note; their section numbers stay unchanged because they are cited
-  elsewhere.
-- The Tool sheet's barcode box (`UI/Views/PlayerToolSheetView.axaml`) is not
-  covered; a pad route for it, if wanted, needs its own decision.
-- Implementation is a separate slice, tracked from #966; nothing in `UI/`
-  changes with this ADR.
+- *Add a Code…* — the only cheat path on GB/SMS (ADR-0245 §5) — and every
+  free-text field (search, intent search, the description, the API key) are
+  reachable from a pad, which keeps ADR-0256's stop rule whole instead of
+  narrowing it.
+- A new text field joins with no code: it gets the free-text alphabet, or
+  declares `padCode` or a mask. A new alphabet is a change to
+  `PadKeyboard` and its unit tests, never to a view.
+- The bridge grows one input surface, drawn in the window's overlay layer
+  below the field (above it when there is no room). Nothing in it is
+  focusable, so the focus model is unchanged.
+- Coverage: the rule is pinned host-free in `UI.Tests/Play/PadKeyboardTests`;
+  `UI.HeadlessTests/PlayPadKeyboardTests` fills, commits and cancels the
+  Cheats search field and fills and commits the *Add a Code…* form with a
+  synthetic pad only. The real-pad couch check is a human check on issue
+  #926.
+- Any other Play `TextBox` the pad can focus, such as the Tool sheet's barcode
+  box, gets the free-text keyboard; a digits-only alphabet for it, if wanted,
+  is a `PadKeyboard` change.

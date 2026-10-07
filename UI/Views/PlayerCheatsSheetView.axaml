@@ -113,7 +113,7 @@
 
 			<!--*Add a Code…*: a code typed by hand; the full editor stays in Classic › Tools › Cheats.-->
 			<StackPanel Name="CheatsAddCodePanel" Spacing="8" Margin="0 14 0 0" IsVisible="{Binding IsAddCodeOpen}">
-				<TextBox Name="CheatsNewCodeBox" Text="{Binding NewCode}" PlaceholderText="{l:Translate lblCheatsCodePlaceholder}" />
+				<TextBox Name="CheatsNewCodeBox" Classes="padCode" Text="{Binding NewCode}" PlaceholderText="{l:Translate lblCheatsCodePlaceholder}" />
 				<TextBox Text="{Binding NewDescription}" PlaceholderText="{l:Translate lblCheatsDescriptionPlaceholder}" />
 				<Border Classes="warning notice" IsVisible="{Binding AddCodeError.Length}">
 					<TextBlock Name="CheatsAddCodeError" TextWrapping="Wrap" Text="{Binding AddCodeError}" />
