@@ -1,8 +1,8 @@
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
-using Mesen.Config;
 using Mesen.Logic;
 using System;
+using System.Collections.Generic;
 using System.IO;
 
 namespace Mesen.ViewModels
@@ -22,28 +22,40 @@ namespace Mesen.ViewModels
 	//a tile is built.
 	public partial class PlayerRomPickerViewModel
 	{
-		private RecentCoverIndex? _recentCovers;
+		//One scan's two halves, together: the entries the walk found, and the cover
+		//the library module chose for each of them, in the same order (#1035).
+		//
+		//They travel as one value because they are produced as one: the cover of a
+		//played game comes out of the `.rgd` - a zip the sheet has to open and a
+		//screenshot it has to decompress - and that is disk work, so it happens on
+		//the thread that is already walking the library folders and never on the
+		//thread that draws. What the UI thread still owns is the decode: turning
+		//the bytes into a bitmap is an Avalonia object and nothing else.
+		private sealed record LibraryScanPayload(LibraryScanResult Result, IReadOnlyList<LibraryCoverPick> Covers);
 
-		//The Recent folder the tiles read their covers from - the Core's own, the
-		//one the Play home's Continue card already reads, so a game the player has
-		//run is the same list on both surfaces.
+		//The library walk and the cover of every entry it found, off the UI thread.
+		//
+		//`recentGamesFolder` is passed in rather than read here: it comes off
+		//ConfigManager, which is the UI thread's to read, and the scan should not
+		//be a second reader of a setting the player can change mid-scan.
 		//
 		//The index is built at every scan rather than held for the session: it is a
 		//snapshot of the folder (RecentCoverIndex says so), so a game played while
 		//the app is open gets its screenshot the next time the library is opened
-		//instead of never.
-		private void RefreshRecentCovers()
+		//instead of never. It is built here, on this thread, because building it
+		//reads and unzips every Recent record.
+		private LibraryScanPayload ScanLibraryWithCovers(IReadOnlyList<string> folders, string? recentGamesFolder)
 		{
-			_recentCovers = RecentCoverIndex.Open(ConfigManager.RecentGamesFolder);
-		}
-
-		//Which cover this entry's tile draws (ADR-0264 Decision 6) - the module's
-		//answer, not this file's: GameLibraryCover.Resolve owns the priority, and
-		//what is handed to it is the one lookup it needs, the Recent index built
-		//for this scan. The sheet only turns the answer into a brush.
-		private LibraryCoverPick CoverOf(LibraryEntry entry)
-		{
-			return GameLibraryCover.Resolve(entry, path => _recentCovers?.FindCover(path));
+			LibraryScanResult result = ScanLibrary(folders);
+			RecentCoverIndex index = RecentCoverIndex.Open(recentGamesFolder);
+			List<LibraryCoverPick> covers = new(result.Entries.Count);
+			//The priority is the module's (ADR-0264 Decision 6); what this side
+			//hands it is the one lookup it needs, and the entry whose cover the
+			//lookup is NOT asked about costs no read at all.
+			foreach(LibraryEntry entry in result.Entries) {
+				covers.Add(GameLibraryCover.Resolve(entry, path => index.FindCover(path)));
+			}
+			return new LibraryScanPayload(result, covers);
 		}
 	}
 
