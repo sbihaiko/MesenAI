@@ -202,6 +202,18 @@ namespace Mesen.ViewModels
 		//own name, so its root becomes the zip's single top-level folder, which
 		//the validator's ADR-0120 fallback reads) and installed like a .zip.
 		//Returns "" on success, a message ID otherwise.
+		private static void DeleteTempZip(string? tempZip)
+		{
+			if(tempZip == null) {
+				return;
+			}
+			try {
+				File.Delete(tempZip);
+			} catch(Exception ex) when(ex is IOException or UnauthorizedAccessException) {
+				//A temp file left behind is not worth failing the install.
+			}
+		}
+
 		public static async Task<string> InstallPackFile(string path, string packsFolder)
 		{
 			string? tempZip = null;
@@ -228,12 +240,14 @@ namespace Mesen.ViewModels
 				}
 
 				await Task.Run(() => File.Copy(source, target, true));
-			} catch(Exception ex) when(ex is IOException or UnauthorizedAccessException or InvalidDataException) {
+			} catch(Exception) {
+				//#993: a dropped pack reaches here from an async void, so any
+				//failure (an odd file name ZipFile/File.Copy refuse with
+				//ArgumentException/NotSupportedException, too) is a message,
+				//never an exception that takes the app down.
 				return "InstallMepPackInvalidZipFile";
 			} finally {
-				if(tempZip != null) {
-					File.Delete(tempZip);
-				}
+				DeleteTempZip(tempZip);
 			}
 
 			return "";
