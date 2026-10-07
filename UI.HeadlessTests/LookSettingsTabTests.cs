@@ -298,7 +298,7 @@ public class LookSettingsTabTests : IDisposable
 		//synth and the renderer/overclock switches.
 		Assert.Equal(new[] { "Modern instruments", "Border", "Widescreen", "Overclock" }, boxes);
 		//...and the sheet points at the place for the look of the picture (W-P7).
-		Assert.Contains(panel.FindAll<TextBlock>(), t => t.Text == "How the picture looks: Settings › Video");
+		Assert.Contains(panel.FindAll<TextBlock>(), t => t.Text == "How the picture looks: Settings › Look");
 	}
 
 	//The window used to bind the tab id as the TabControl index; ids have holes
