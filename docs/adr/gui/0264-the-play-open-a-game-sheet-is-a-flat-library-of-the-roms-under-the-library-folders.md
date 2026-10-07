@@ -84,10 +84,16 @@ library.
    tile carries the focus ring, and nothing else on the sheet competes with it.
 
 3. **The pad map is fixed, and every control on it is reversible.**
-   - **D-pad / left stick** moves focus across the grid, row-major, and does
-     not leave the grid except by B.
+   - **D-pad / left stick** moves focus across the grid, row-major. **Up** from
+     the top grid row moves focus into the header row — the search field,
+     *Library folders…*, *Browse a file…* and Back — **left / right** moves
+     between those controls there, and **down** returns to the grid. That is
+     how a pad reaches *Library folders…* (Decision 8's pad-reachable folder
+     list) and *Browse a file…* (Decision 11), so no control on the sheet is
+     mouse-only.
    - **A** plays the focused game.
-   - **B** leaves the sheet (ADR-0256's stop rule: a sheet is reversible).
+   - **B** leaves the sheet from anywhere (ADR-0256's stop rule: a sheet is
+     reversible).
    - **Y** opens search.
    - **LB / RB** cycle the console filter.
    - Focus is drawn on exactly one tile at a time (ADR-0256 Decision 3), and

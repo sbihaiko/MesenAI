@@ -1300,8 +1300,11 @@ def library_sheet(c, subtitle, tiles, focus=None, query=None):
         ty = y0 + 124 + (i // cols) * (th_ + 46)
         library_tile(c, tx, ty, tw_, th_, title, console, i + 1, kind, focus == i)
     c.button(x0 + 24, y1 - 56, "Back", "secondary", h=32, w=92)
+    # The pad reaches the header row too (ADR-0264 Decision 3): up from the top
+    # grid row focuses the search field, Library folders…, Browse a file… and
+    # Back, left/right moves between them and down returns to the grid.
     c.text(x0 + 132, y1 - 40, "A  Play      B  Back      Y  Search      LB / RB  Console      "
-           "D-pad  Move", 12, 500, TEXT2, "lm")
+           "D-pad  Move, Up  Header", 12, 500, TEXT2, "lm")
     return b
 
 
