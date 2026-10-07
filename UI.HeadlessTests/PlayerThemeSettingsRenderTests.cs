@@ -141,7 +141,7 @@ public class PlayerThemeSettingsRenderTests : IDisposable
 	}
 
 	//W-P8 / W-P10's chrome: a white sheet (radius 14, 480 wide) in the Player
-	//scope titled Settings, the segmented Window | Video | Audio | Controls |
+	//scope titled Settings, the segmented Display | Look | Audio | Controls |
 	//System strip, and the 32 px Done, 90 wide.
 	private static void AssertSettingsChrome(Border sheet)
 	{
