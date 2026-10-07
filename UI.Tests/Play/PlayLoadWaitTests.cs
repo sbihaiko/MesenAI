@@ -195,5 +195,42 @@ namespace Mesen.Tests.Play
 			Assert.Equal(1, ended);
 			Assert.False(wait.IsActive);
 		}
+
+		//ADR-0254: frames racing a new open while a cut-short wait counts them
+		//never reach the new wait early - it still needs its own
+		//FramesUntilShown frames after GameLoaded, and ends exactly once.
+		[Fact]
+		public void Frames_racing_a_new_open_do_not_count_toward_it()
+		{
+			for(int round = 0; round < 200; round++) {
+				PlayLoadWait wait = new();
+				wait.Begin("Contra", 1);
+				wait.OnGameLoaded(false);
+				Assert.True(wait.EndPictureWait());
+
+				using var go = new System.Threading.Barrier(2);
+				bool shown = false;
+				var frames = new System.Threading.Thread(() => {
+					go.SignalAndWait();
+					for(int i = 0; i < PlayLoadWait.FramesUntilShown; i++) {
+						shown |= wait.OnFrameDone();
+					}
+				});
+				frames.Start();
+				go.SignalAndWait();
+				wait.Begin("Castlevania", 2);
+				frames.Join();
+
+				Assert.False(shown);
+
+				Assert.False(wait.PictureCutShort);
+				wait.OnGameLoaded(false);
+				for(int i = 1; i < PlayLoadWait.FramesUntilShown; i++) {
+					Assert.False(wait.OnFrameDone());
+				}
+				Assert.True(wait.OnFrameDone());
+				Assert.False(wait.IsActive);
+			}
+		}
 	}
 }

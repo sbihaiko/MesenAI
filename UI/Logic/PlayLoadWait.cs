@@ -168,19 +168,29 @@ public sealed class PlayLoadWait
 	}
 
 	//PpuFrameDone. True exactly once: the picture is out, show the game.
+	//The idle path stays lock-free; any counting runs under _lock, so a
+	//Start/OnGameLoaded reset or an EndPictureWait cannot land between the
+	//check and the increment (a frame counted twice, or toward the wrong wait).
 	public bool OnFrameDone()
 	{
-		if(Volatile.Read(ref _phase) != (int)PlayLoadWaitPhase.WaitingForPicture) {
-			//A wait cut short still counts toward its picture once resumed.
-			if(Volatile.Read(ref _cutShort) && Volatile.Read(ref _frames) < FramesUntilShown) {
-				Interlocked.Increment(ref _frames);
+		if(Volatile.Read(ref _phase) != (int)PlayLoadWaitPhase.WaitingForPicture && !PictureCutShort) {
+			return false;
+		}
+		lock(_lock) {
+			if(Phase != PlayLoadWaitPhase.WaitingForPicture) {
+				//A wait cut short still counts toward its picture once resumed.
+				if(PictureCutShort) {
+					Volatile.Write(ref _frames, _frames + 1);
+				}
+				return false;
 			}
-			return false;
+			Volatile.Write(ref _frames, _frames + 1);
+			if(_frames != FramesUntilShown) {
+				return false;
+			}
+			SetPhase(PlayLoadWaitPhase.Idle);
+			return true;
 		}
-		if(Interlocked.Increment(ref _frames) != FramesUntilShown) {
-			return false;
-		}
-		return Interlocked.CompareExchange(ref _phase, (int)PlayLoadWaitPhase.Idle, (int)PlayLoadWaitPhase.WaitingForPicture) == (int)PlayLoadWaitPhase.WaitingForPicture;
 	}
 
 	//The load call returned. Still opening means it never reached GameLoaded:
