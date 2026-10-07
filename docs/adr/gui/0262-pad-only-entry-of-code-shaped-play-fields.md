@@ -55,7 +55,10 @@ wheel leaves intent search, descriptions and key entry out of reach.
    `TextBox` opens it. There is no per-view navigation logic: no view
    handles a pad press, and no view knows the keyboard exists. The keyboard's
    rules are host-free (`UI/Logic/PadKeyboard.cs`, ADR-0122); the bridge only
-   feeds it the pad's actions and applies its outcomes.
+   feeds it the pad's actions and applies its outcomes. The keyboard is drawn
+   in the window's overlay layer; where a window has no overlay layer, no
+   keyboard opens and the Confirm press falls through to the bridge's ordinary
+   navigation, since an invisible keyboard would swallow every press.
 2. **The field declares its alphabet; the keyboard does not ask the view.**
    A masked box (`PasswordChar` set) is a *secret*; a box carrying the
    `padCode` style class is *code-shaped*; every other box is *free text*.
@@ -63,8 +66,9 @@ wheel leaves intent search, descriptions and key entry out of reach.
      the hex digits they do not already cover, then the `-`, `:` and `+`
      separators the Game Genie and Pro Action Replay shapes use. No space and
      no case key: code letters are capitals.
-   - Free text: lower-case letters, digits, `. , ' - ! ? & :`, a space and a
-     case key.
+   - Free text: lower-case letters, digits, `. , ' - ! ? & : ( ) / _ + # @`,
+     a space and a case key — the punctuation game titles and cheat
+     descriptions carry ("Bubble Bobble (Part 2)", "Kid Icarus / Of Myths").
    - Secret: lower-case letters, digits, `- _ .`, a space and a case key.
    - A field's `MaxLength` caps the draft.
 3. **Edit, delete, commit and cancel are all by pad.** While the keyboard is
@@ -79,7 +83,13 @@ wheel leaves intent search, descriptions and key entry out of reach.
    the focus returns to that field with its ring drawn. Commit keeps the draft
    and returns the focus the same way. A field that goes away under the
    keyboard (its sheet closed by something else) takes the keyboard with it,
-   as a cancel.
+   as a cancel. The focus moving off the field (a mouse click elsewhere) also
+   closes it as a cancel. The pad losing authority mid-entry (a stray key or
+   mouse event, the load card) closes it **committing** the draft, so a
+   player never silently loses typed text. In these three outside closes the
+   focus is left where it went: the field is not refocused, so the pad never
+   comes back editing a field it no longer holds. The rule is host-free
+   (`PadKeyboard.TextOnLeave`).
 5. **Secrets stay masked.** The keyboard draws a secret's draft as `•` per
    character, never its characters; the field keeps its own mask.
 

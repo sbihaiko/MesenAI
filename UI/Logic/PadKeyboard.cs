@@ -37,6 +37,15 @@ public enum PadKeyboardOutcome
 	Cancelled
 }
 
+//Why the keyboard closed without the pad pressing OK or B: the field went
+//away under it, the focus moved off the field, or the pad lost authority.
+public enum PadKeyboardLeave
+{
+	FieldGone,
+	FocusMoved,
+	AuthorityLost
+}
+
 //ADR-0262 (#966, pick (a)): the one on-screen pad keyboard, a grid of keys the
 //D-pad walks and A presses, owned by the one pad bridge
 //(PlayPadNavigationWiring) - per-view pad code is ADR-0256's non-goal.
@@ -51,7 +60,7 @@ public sealed class PadKeyboard
 	//then the hex digits the letters do not already cover (Pro Action Replay,
 	//the GB/SMS Game Genie), then the separators those shapes use.
 	private const string CodeChars = "APZLGITYEOXUKSVN" + "0123456789" + "BCDF" + "-:+";
-	private const string TextChars = "abcdefghijklmnopqrstuvwxyz0123456789" + ".,'-!?&:";
+	private const string TextChars = "abcdefghijklmnopqrstuvwxyz0123456789" + ".,'-!?&:()/_+#@";
 	private const string SecretChars = "abcdefghijklmnopqrstuvwxyz0123456789" + "-_.";
 
 	private readonly int _maxLength;
@@ -100,6 +109,15 @@ public sealed class PadKeyboard
 			PadKeyKind.Delete => "⌫",
 			_ => "OK"
 		};
+	}
+
+	//The text the field keeps when the keyboard is closed from outside
+	//(ADR-0262 Decision 4): losing pad authority commits the draft, so a
+	//stray key or mouse event never silently drops a half-typed code; the
+	//field going away or the focus moving elsewhere is a cancel.
+	public string TextOnLeave(PadKeyboardLeave why)
+	{
+		return why == PadKeyboardLeave.AuthorityLost ? Draft : Original;
 	}
 
 	public PadKeyboardOutcome Press(PadNavAction action)

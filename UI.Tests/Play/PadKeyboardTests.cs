@@ -45,6 +45,27 @@ public class PadKeyboardTests
 		Assert.Equal(-1, keyboard.IndexOf(' '));
 	}
 
+	//#994 review 1: a game title or a cheat description carries brackets,
+	//slashes and the like ("Bubble Bobble (Part 2)", "Kid Icarus / Of Myths").
+	[Fact]
+	public void A_text_field_offers_the_title_punctuation_a_game_name_uses()
+	{
+		PadKeyboard keyboard = new(PadKeyboardShape.Text, "");
+
+		string chars = new(keyboard.Keys.Where(k => k.Kind == PadKeyKind.Char).Select(k => k.Char).ToArray());
+		Assert.Equal("abcdefghijklmnopqrstuvwxyz0123456789.,'-!?&:()/_+#@", chars);
+	}
+
+	[Fact]
+	public void A_text_field_types_a_title_with_brackets_and_a_slash()
+	{
+		PadKeyboard keyboard = new(PadKeyboardShape.Text, "");
+
+		Type(keyboard, "bubble bobble (part 2) / #1 @_+");
+
+		Assert.Equal("bubble bobble (part 2) / #1 @_+", keyboard.Draft);
+	}
+
 	[Fact]
 	public void A_text_field_offers_letters_digits_punctuation_space_and_a_case_key()
 	{
@@ -167,5 +188,27 @@ public class PadKeyboardTests
 	public void A_field_declares_its_shape_by_its_mask_or_its_code_class(bool masked, bool codeClass, PadKeyboardShape shape)
 	{
 		Assert.Equal(shape, PadKeyboard.ShapeOf(masked, codeClass));
+	}
+
+	//#1001 review 4: the pad losing authority mid-entry (a stray key or mouse
+	//event) keeps what the player typed - a code is never silently reverted.
+	[Fact]
+	public void Losing_pad_authority_keeps_the_typed_draft()
+	{
+		PadKeyboard keyboard = new(PadKeyboardShape.Code, "SX");
+		Type(keyboard, "AP");
+
+		Assert.Equal("SXAP", keyboard.TextOnLeave(PadKeyboardLeave.AuthorityLost));
+	}
+
+	//The field going away or the focus moving elsewhere is still a cancel.
+	[Fact]
+	public void The_field_going_away_or_the_focus_moving_gives_back_the_original_value()
+	{
+		PadKeyboard keyboard = new(PadKeyboardShape.Code, "SX");
+		Type(keyboard, "AP");
+
+		Assert.Equal("SX", keyboard.TextOnLeave(PadKeyboardLeave.FieldGone));
+		Assert.Equal("SX", keyboard.TextOnLeave(PadKeyboardLeave.FocusMoved));
 	}
 }

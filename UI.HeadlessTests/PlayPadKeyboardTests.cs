@@ -62,13 +62,14 @@ public class PlayPadKeyboardTests : IDisposable
 		}
 		Pump();
 		_windows.Clear();
+		PlayPadNavigationWiring.SetOverlayLookupForTest(null);
 		PreferencesConfig prefs = ConfigManager.Config.Preferences;
 		prefs.UiMode = _uiMode;
 		prefs.PauseWhenInBackground = _pauseInBackground;
 		prefs.PauseWhenInMenusAndConfig = _pauseInMenus;
 	}
 
-	private (MainWindow Window, MainWindowViewModel Model) ShowCheats(List<IReadOnlyList<StoredCheat>> saved)
+	private (MainWindow Window, MainWindowViewModel Model) ShowCheats(List<IReadOnlyList<StoredCheat>> saved, bool withIntent = false)
 	{
 		PreferencesConfig prefs = ConfigManager.Config.Preferences;
 		prefs.UiMode = UiMode.Player;
@@ -84,6 +85,11 @@ public class PlayPadKeyboardTests : IDisposable
 		model.CommunityCheatsSource = () => Task.FromResult<IReadOnlyList<CommunityCheatGame>?>(Array.Empty<CommunityCheatGame>());
 		CheatDbGame contra = new("Contra (USA)", "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", new[] { new CheatDbCode("Infinite lives - 1P game", "SZKGPAVG") });
 		model.CheatsSheet.Open(ConsoleType.Nes, contra.Sha1, new[] { contra }, Array.Empty<StoredCheat>(), recordingArt: false, disableAll: false, saved.Add);
+		if(withIntent) {
+			//The key box lives in the intent panel, shown only with a key store
+			//and a runner factory (the runner itself is never asked for here).
+			model.CheatsSheet.ConfigureIntentSearch(new InMemoryByokKeyStore(), () => Task.FromResult<ICheatIntentRunner?>(null));
+		}
 		Pump();
 		Assert.True(window.FindNamed<TextBox>("CheatsSearchBox").IsOnScreen(), "the Cheats sheet did not open");
 		return (window, model);
@@ -236,5 +242,127 @@ public class PlayPadKeyboardTests : IDisposable
 		StoredCheat added = Assert.Single(Assert.Single(saved));
 		Assert.Equal("SZKGPAVG", added.Codes);
 		Assert.Equal("lives", added.Description);
+	}
+
+	//#994 review 2: the masked secret is checked on the real CheatsKeyBox, so a
+	//wiring that stops reading PasswordChar, or a panel that stops drawing
+	//Display, fails here instead of drawing the API key in clear.
+	[AvaloniaFact]
+	public void The_key_box_opens_a_secret_keyboard_whose_panel_never_shows_the_key()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model) = ShowCheats(new(), withIntent: true);
+		TextBox key = window.FindNamed<TextBox>("CheatsKeyBox");
+		Assert.True(key.IsOnScreen(), "the key box is not shown");
+		key.Focus(NavigationMethod.Directional);
+		Pump();
+
+		Press(window, PadNavAction.Confirm);
+		Assert.Equal(PadKeyboardShape.Secret, OpenKeyboard(window).Shape);
+		Type(window, "sk-or");
+
+		Assert.Equal("sk-or", model.CheatsSheet.KeyText);
+		Assert.Equal("•••••", DraftShown(window));
+	}
+
+	//#994 review 2: cancel restores the original value on the secret field too.
+	[AvaloniaFact]
+	public void Back_on_the_key_box_keyboard_restores_the_key_it_held()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model) = ShowCheats(new(), withIntent: true);
+		TextBox key = window.FindNamed<TextBox>("CheatsKeyBox");
+		key.Text = "sk-old";
+		key.Focus(NavigationMethod.Directional);
+		Pump();
+
+		Press(window, PadNavAction.Confirm);
+		PressKey(window, PadKeyKind.Delete);
+		Type(window, "x");
+		Assert.Equal("sk-olx", model.CheatsSheet.KeyText);
+
+		Press(window, PadNavAction.Back);
+		Assert.Null(PlayPadNavigationWiring.KeyboardForTest(window));
+		Assert.Equal("sk-old", model.CheatsSheet.KeyText);
+		Assert.Equal("CheatsKeyBox", FocusedName(window));
+	}
+
+	//#994 review 3: with no overlay layer to draw in, an open keyboard would be
+	//invisible and swallow every press, Back included. The press is not taken.
+	[AvaloniaFact]
+	public void Without_an_overlay_layer_the_keyboard_does_not_open_and_back_still_works()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model) = ShowCheats(new());
+		PlayPadNavigationWiring.SetOverlayLookupForTest(_ => null);
+		TextBox search = window.FindNamed<TextBox>("CheatsSearchBox");
+		search.Focus(NavigationMethod.Directional);
+		Pump();
+
+		Press(window, PadNavAction.Confirm);
+		Assert.Null(PlayPadNavigationWiring.KeyboardForTest(window));
+
+		Press(window, PadNavAction.Back);
+		Assert.False(search.IsOnScreen(), "Back was swallowed: the sheet is still open");
+	}
+
+	//#994 review 4: a click that moves the focus elsewhere cancels the keyboard;
+	//the focus stays where the click put it.
+	[AvaloniaFact]
+	public void Focus_leaving_the_field_cancels_the_keyboard_and_leaves_the_focus_where_it_went()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model) = ShowCheats(new());
+		TextBox search = window.FindNamed<TextBox>("CheatsSearchBox");
+		search.Text = "contra";
+		search.Focus(NavigationMethod.Directional);
+		Pump();
+		Press(window, PadNavAction.Confirm);
+		Type(window, "x");
+		Assert.Equal("contrax", search.Text);
+
+		window.FindNamed<Button>("CheatsAddCodeButton").Focus(NavigationMethod.Pointer);
+		Pump();
+		PlayPadNavigationWiring.TickForTest(window, Array.Empty<ushort>(), TimeSpan.FromMilliseconds(50), BackendName, BackendCode);
+		Pump();
+
+		Assert.Null(PlayPadNavigationWiring.KeyboardForTest(window));
+		Assert.False(PanelShown(window), "the keyboard stayed on screen after the focus left its field");
+		Assert.Equal("contra", search.Text);
+		Assert.Equal("CheatsAddCodeButton", FocusedName(window));
+	}
+
+	//#994 review 4: the pad losing authority (here, to the load card)
+	//closes the keyboard, so the pad never comes back editing a stale field;
+	//#1001 review 4: what was typed is kept, not reverted.
+	[AvaloniaFact]
+	public void Losing_pad_authority_closes_the_keyboard_keeping_the_draft()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model) = ShowCheats(new());
+		TextBox search = window.FindNamed<TextBox>("CheatsSearchBox");
+		search.Text = "contra";
+		search.Focus(NavigationMethod.Directional);
+		Pump();
+		Press(window, PadNavAction.Confirm);
+		Type(window, "x");
+
+		//The load card refuses the pad authority (ADR-0256) while the sheet,
+		//and so the field, stays drawn - so only the authority loss can close it.
+		model.BeginLoadWait("Contra (USA)", keepsHome: true);
+		Pump();
+		Assert.True(model.IsLoadCardVisible, "the load card did not come up");
+		Assert.True(search.IsEffectivelyVisible, "the load card hid the field, so this would not test authority");
+		PlayPadNavigationWiring.TickForTest(window, Array.Empty<ushort>(), TimeSpan.FromMilliseconds(50), BackendName, BackendCode);
+		Pump();
+
+		Assert.Null(PlayPadNavigationWiring.KeyboardForTest(window));
+		Assert.False(PanelShown(window), "the keyboard stayed on screen after the pad lost authority");
+		Assert.Equal("contrax", search.Text);
+	}
+
+	private static string? DraftShown(MainWindow window)
+	{
+		return window.GetVisualDescendants().OfType<TextBlock>().FirstOrDefault(t => t.Name == "PadKeyboardDraft")?.Text;
 	}
 }
