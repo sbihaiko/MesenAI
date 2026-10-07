@@ -8,6 +8,7 @@ using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
 using Avalonia.Interactivity;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using Mesen.Config;
 using Mesen.Interop;
 using Mesen.Logic;
@@ -159,6 +160,32 @@ public class RemasterOpenRightGameTests : IDisposable
 		Assert.Equal(Workspace.Remaster, ConfigManager.Config.Preferences.Workspace);
 		Assert.True(window.FindNamed<StackPanel>("RemasterProjectScreen").IsOnScreen(), "loading the right game left W-R1 (rule 5)");
 		Assert.False(window.FindNamed<Border>("RemasterWrongGame").IsOnScreen(), "the wrong-game row stayed after the right game loaded");
+	}
+
+	//#984 (rule 10): the wrong game is said once, in the row with its button;
+	//the five controls stay disabled without repeating it under each.
+	[AvaloniaFact]
+	public void The_wrong_game_sentence_is_shown_once_and_the_per_control_reasons_are_hidden()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model) = ShowShell();
+		string folder = TempFolder();
+		string romB = Path.Combine(folder, "game-b.nes");
+		File.WriteAllBytes(romB, BuildSyntheticNrom(0x00));
+		string projectA = MakeProject(TempFolder(), "game-a");
+		model.Remaster.RecentRoms = () => new[] { romB };
+		model.Remaster.GamesFolder = () => null;
+
+		OpenForeignProject(model, romB, projectA);
+
+		const string sentence = "This is not the game the project was recorded from.";
+		TextBlock said = Assert.Single(window.GetVisualDescendants().OfType<TextBlock>(), t => t.IsOnScreen() && t.Text == sentence);
+		Assert.Equal("RemasterWrongGameText", said.Name);
+		foreach(string name in new[] { "RemasterRecordReason", "RemasterTasReason", "RemasterAiReason", "RemasterPrepareReason", "RemasterBuildReason" }) {
+			Assert.False(window.FindNamed<TextBlock>(name).IsOnScreen(), $"{name} repeats a reason under the wrong-game row");
+		}
+		Assert.False(window.FindNamed<Button>("RemasterRecordButton").IsEffectivelyEnabled);
+		Assert.False(window.FindNamed<Button>("RemasterPrepareButton").IsEffectivelyEnabled);
 	}
 
 	[AvaloniaFact]
