@@ -246,26 +246,31 @@ public class PlayerLibraryRenderTests : IDisposable
 	}
 
 	//What this render is known to differ from W-P19b on, each with the cause that
-	//makes it a known one. The wireframe fills the window with 128 games over three
-	//tiles and a near-full-window sheet, so its content region is dominated by the
-	//sheet's own card colour; the render's library is short after the query (one
-	//grid row), so the sheet is short and the region is dominated by what is behind
-	//it. The two content kinds that are layout ratchet - the console filter of
-	//#1034 and the *Library folders…* row of #1036 are not in the header, and the
-	//text lines the sheet draws are the wireframe's minus them and the further tile
-	//labels - which is the same shape of entry W_P19Deviations carries. The status
-	//line's ink box is the P1-P4 port chips every render draws and no wireframe does
+	//makes it a known one, and each measured rather than asserted. The wireframe
+	//fills the window with 128 games, so its sheet covers the content region and
+	//that region reads as the sheet's own card colour (#FEFEFE); the render's
+	//grid is one row tall after `zel`, so its sheet is short and the region reads
+	//as the dimmed backdrop around it (#9E9EA0, ΔE 34.5). That is the fixture and
+	//not a defect the sheet can be fixed out of, which is exactly why the colour
+	//kind is a ratchet: it has to keep failing, and the day the sheet is tall
+	//enough to dominate, the gate says so instead of the entry sitting quiet.
+	//The other two content kinds are layout, the same shape of entry
+	//W_P19Deviations carries for W-P19: the console filter of #1034 and the
+	//*Library folders…* row of #1036 are not in the header (ink box off 162 px,
+	//the sheet's own top edge), and the two text lines the sheet draws are the
+	//wireframe's seven minus them and the further tile labels. The status line's
+	//ink box is the P1-P4 port chips every render draws and no wireframe does
 	//(#951); off macOS the title bar's ink box moves because the shell bar is not
 	//inset for the traffic lights (#968).
 	private static IReadOnlyList<KnownDeviation> W_P19bDeviations()
 	{
 		List<KnownDeviation> known = new() {
 			new("content", PlayerWireframe.Colour,
-				"the render's sheet is one grid row tall where the wireframe's fills the window with 128 games, so the region's dominant colour is the backdrop, not the card", true),
+				"the sheet is one grid row tall where the wireframe fills the window, so the region reads as the dimmed backdrop #9E9EA0, not the wireframe's card #FEFEFE (ΔE 34.5)", true),
 			new("content", PlayerWireframe.InkBox,
 				"the same short sheet, and the console filter of #1034 and the folder row of #1036 missing from the header", true),
 			new("content", PlayerWireframe.TextLines,
-				"the same missing filter and folder row, plus the further tile labels", true),
+				"two lines where the wireframe has seven: the same missing filter and folder row, plus the further tile labels", true),
 			new("status line", PlayerWireframe.InkBox,
 				"the P1-P4 port chips the wireframe does not draw", false),
 		};
