@@ -29,6 +29,14 @@ public interface ICheatWebChecker
 	Task<IReadOnlyList<WebFoundCode>> LookUpAsync(string romPath, string gameName);
 }
 
+//A run of the web lookup that did not get to check anything: the script was
+//missing, refused the request, could not read the page or could not run the
+//check. The sheet says so (FailedLine) rather than "nothing passed".
+public sealed class CheatWebLookupException : Exception
+{
+	public CheatWebLookupException(string message) : base(message) { }
+}
+
 //One finished run of scripts/cheat_web_lookup.py: its exit code and the JSON
 //object it printed on stdout.
 public sealed record CheatWebRun(int ExitCode, string Stdout);
@@ -48,6 +56,10 @@ public static class CheatWebLookup
 	public const string LookOnlineLabel = "Look Online";
 	public const string SearchingLine = "Looking online and checking each code on your copy…";
 	public const string NoneLine = "No code found online passed the check on your copy.";
+	//The run itself failed (the script was missing, refused the ROM, could not
+	//read the page or could not run the check): nothing was checked, so this is
+	//never NoneLine.
+	public const string FailedLine = "The online lookup could not check codes on your copy this time.";
 	public const string NeedsToolsLine = "Looking online needs python3 and the MesenCE tools (Remaster › Setup).";
 
 	//The arguments after the script: the ROM by path (read by the script on

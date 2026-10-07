@@ -125,7 +125,7 @@ namespace Mesen.ViewModels
 						done.TrySetResult(new CheatWebRun(code, stdout.ToString()));
 					}
 				});
-			} catch(Exception ex) when(ex is System.ComponentModel.Win32Exception || ex is InvalidOperationException) {
+			} catch(Exception ex) when(ex is System.ComponentModel.Win32Exception || ex is InvalidOperationException || ex is System.IO.IOException) {
 				done.TrySetResult(new CheatWebRun(-1, ""));
 			}
 			return done.Task;

@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
@@ -45,7 +47,29 @@ public class PlayerCheatsWebCodesTests
 		}
 	}
 
+	//The real checker's run can fail to start (JobProcessLauncher throws) or
+	//finish on the child's Exited thread; this one does either on demand.
+	private sealed class ScriptedChecker : ICheatWebChecker
+	{
+		private readonly Func<Task<IReadOnlyList<WebFoundCode>>> _answer;
+
+		public ScriptedChecker(Func<Task<IReadOnlyList<WebFoundCode>>> answer)
+		{
+			_answer = answer;
+		}
+
+		public Task<IReadOnlyList<WebFoundCode>> LookUpAsync(string romPath, string gameName)
+		{
+			return _answer();
+		}
+	}
+
 	private static (Window Window, PlayerCheatsSheetViewModel Model, List<IReadOnlyList<StoredCheat>> Saves) Show(FakeChecker checker, IReadOnlyList<CheatDbGame> db)
+	{
+		return Show((ICheatWebChecker)checker, db);
+	}
+
+	private static (Window Window, PlayerCheatsSheetViewModel Model, List<IReadOnlyList<StoredCheat>> Saves) Show(ICheatWebChecker checker, IReadOnlyList<CheatDbGame> db)
 	{
 		PlayerCheatsSheetViewModel model = new();
 		List<IReadOnlyList<StoredCheat>> saves = new();
@@ -110,6 +134,64 @@ public class PlayerCheatsWebCodesTests
 		try {
 			Assert.False(Named<Button>(window, "CheatsLookOnline").IsEffectivelyVisible);
 			Assert.Equal(0, checker.Runs);
+		} finally {
+			window.Close();
+		}
+	}
+
+	//#949 review: a run that throws (the launcher's IOException) must not leave
+	//the button disabled and the bar moving forever.
+	[AvaloniaFact]
+	public async Task A_lookup_that_throws_ends_the_wait_and_says_the_check_did_not_run()
+	{
+		ScriptedChecker checker = new(() => throw new IOException("No such file"));
+		(Window window, PlayerCheatsSheetViewModel model, _) = Show(checker, Array.Empty<CheatDbGame>());
+		try {
+			Button lookOnline = Named<Button>(window, "CheatsLookOnline");
+
+			await Click(lookOnline);
+
+			Assert.False(model.IsWebSearching);
+			Assert.True(lookOnline.IsEffectivelyEnabled);
+			Assert.False(Named<ProgressBar>(window, "CheatsWebBar").IsEffectivelyVisible);
+			Assert.Equal(CheatWebLookup.FailedLine, Named<TextBlock>(window, "CheatsWebLine").Text);
+		} finally {
+			window.Close();
+		}
+	}
+
+	//#949 review: the answer can come back on a thread-pool thread with no
+	//synchronization context; the sheet's state still changes on the UI thread.
+	[AvaloniaFact]
+	public async Task A_lookup_finishing_off_the_ui_thread_changes_the_sheet_on_the_ui_thread()
+	{
+		ScriptedChecker checker = new(async () => {
+			await Task.Delay(10).ConfigureAwait(false);
+			return new[] { new WebFoundCode("Infinite lives", "0032:09", WebCheckState.Passed) };
+		});
+		(Window window, PlayerCheatsSheetViewModel model, _) = Show(checker, Array.Empty<CheatDbGame>());
+		try {
+			List<(string Name, bool Searching, bool OnUi)> changes = new();
+			model.PropertyChanged += (_, e) => {
+				lock(changes) {
+					changes.Add((e.PropertyName ?? "", model.IsWebSearching, Dispatcher.UIThread.CheckAccess()));
+				}
+			};
+
+			//Started off the UI thread too, so no context brings the await back.
+			await Task.Run(() => model.LookOnline()).WaitAsync(TimeSpan.FromSeconds(10));
+			for(int i = 0; i < 50 && model.IsWebSearching; i++) {
+				Dispatcher.UIThread.RunJobs();
+				await Task.Delay(10);
+			}
+
+			Assert.False(model.IsWebSearching);
+			lock(changes) {
+				//Everything from the end of the wait on is the completion.
+				int done = changes.FindIndex(c => c.Name == nameof(model.IsWebSearching) && !c.Searching);
+				Assert.True(done >= 0);
+				Assert.All(changes.Skip(done), c => Assert.True(c.OnUi, $"{c.Name} changed off the UI thread"));
+			}
 		} finally {
 			window.Close();
 		}

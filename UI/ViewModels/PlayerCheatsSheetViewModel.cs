@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Mesen.Interop;
 using Mesen.Logic;
@@ -233,16 +235,30 @@ namespace Mesen.ViewModels
 			int token = ++_webToken;
 			IsWebSearching = true;
 			WebLine = CheatWebLookup.SearchingLine;
-			IReadOnlyList<WebFoundCode> found;
-			string line;
-			ICheatWebChecker? checker = await _webChecker();
-			if(checker == null) {
+			IReadOnlyList<WebFoundCode> found = Array.Empty<WebFoundCode>();
+			string line = CheatWebLookup.FailedLine;
+			try {
+				ICheatWebChecker? checker = await _webChecker();
+				if(checker == null) {
+					line = CheatWebLookup.NeedsToolsLine;
+				} else {
+					found = await checker.LookUpAsync(_romPath, _gameName);
+					line = CheatWebLookup.Offered(found).Count == 0 ? CheatWebLookup.NoneLine : "";
+				}
+			} catch(Exception ex) when(ex is IOException || ex is CheatWebLookupException || ex is System.ComponentModel.Win32Exception || ex is InvalidOperationException) {
 				found = Array.Empty<WebFoundCode>();
-				line = CheatWebLookup.NeedsToolsLine;
-			} else {
-				found = await checker.LookUpAsync(_romPath, _gameName);
-				line = CheatWebLookup.Offered(found).Count == 0 ? CheatWebLookup.NoneLine : "";
+				line = CheatWebLookup.FailedLine;
+			} finally {
+				//#949 review: the wait always ends, and on the UI thread - the
+				//answer can come back on the child's Exited thread.
+				IReadOnlyList<WebFoundCode> result = found;
+				string shown = line;
+				OnUiThread(() => FinishLookOnline(token, result, shown));
 			}
+		}
+
+		private void FinishLookOnline(int token, IReadOnlyList<WebFoundCode> found, string line)
+		{
 			if(token != _webToken) {
 				return;
 			}
@@ -250,6 +266,15 @@ namespace Mesen.ViewModels
 			IsWebSearching = false;
 			WebLine = line;
 			Refresh();
+		}
+
+		private static void OnUiThread(Action action)
+		{
+			if(Dispatcher.UIThread.CheckAccess()) {
+				action();
+			} else {
+				Dispatcher.UIThread.Post(action);
+			}
 		}
 
 		private void ClearWebLookup()
