@@ -114,6 +114,13 @@ namespace Mesen.Windows
 			return Installed.TryGetValue(window, out Bridge? bridge) ? bridge.Keyboard : null;
 		}
 
+		//The field the open keyboard types into, or null - #1062: the claim that
+		//keeps the ring on the search box asks for a keyboard bound to THAT box.
+		public static TextBox? KeyboardFieldForTest(MainWindow window)
+		{
+			return Installed.TryGetValue(window, out Bridge? bridge) ? bridge.KeyboardField : null;
+		}
+
 		//ADR-0256 Decision 3: ONE path decides who holds the focus when a Play
 		//surface opens or closes. The surfaces are registered in the order the Esc
 		//router itself walks them - TogglePlayerOverlay's QuitGameConfirm first,
@@ -332,7 +339,7 @@ namespace Mesen.Windows
 				//over it. The claim keeps the ring where it is rather than taking the
 				//query away mid-word.
 				Control? search = Named(window, "RomPickerSearch");
-				if(search is not null && (search.IsFocused || KeyboardForTest(window) is not null)) {
+				if(search is not null && (search.IsFocused || ReferenceEquals(KeyboardFieldForTest(window), search))) {
 					return search;
 				}
 				return RomPickerFirstTile(window) ?? Named(window, "RomPickerBrowseFile") ?? Named(window, "RomPickerBack");
@@ -512,6 +519,7 @@ namespace Mesen.Windows
 			private Border? _keyboardPanel;
 
 			public PadKeyboard? Keyboard => _keyboard;
+			public TextBox? KeyboardField => _keyboardField;
 
 			public Bridge(MainWindow window, MainWindowViewModel model)
 			{

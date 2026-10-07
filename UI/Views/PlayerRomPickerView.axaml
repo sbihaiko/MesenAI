@@ -28,12 +28,17 @@
 			<Setter Property="IsVisible" Value="False" />
 		</Style>
 		<!--#1062 (ADR-0264, W-P19/W-P19b): the library is a fixed 1100x620 sheet in
-		the wireframes, so in library mode the sheet holds that height instead of
-		shrinking to the rows it has - a one-row library or a narrowed search is
-		still the same sheet. The folder browser keeps sizing to its rows.-->
+		the wireframes, so in library mode the sheet stretches to its MaxHeight
+		instead of shrinking to the rows it has - a one-row library or a narrowed
+		search is still the same sheet - and still gives way in a window shorter
+		than that, so Back and the header controls are never pushed off screen.
+		The folder browser keeps sizing to its rows.-->
+		<Style Selector="Border#PlayerRomPickerSheet">
+			<Setter Property="VerticalAlignment" Value="Center" />
+		</Style>
 		<Style Selector="Border#PlayerRomPickerSheet.library">
-			<Setter Property="Height" Value="620" />
-			<Setter Property="MinHeight" Value="620" />
+			<Setter Property="VerticalAlignment" Value="Stretch" />
+			<Setter Property="MaxHeight" Value="620" />
 		</Style>
 		<Style Selector=".player Button.row">
 			<Setter Property="Height" Value="44" />
@@ -90,7 +95,7 @@
 	<Panel Name="RomPickerBackdrop" Classes="scrim">
 		<!--W-P19 is a near-full-window sheet: the grid is the point, and eight
 		columns of vertical tiles need the width a 480 px column does not have.-->
-		<Border Name="PlayerRomPickerSheet" Classes="sheet" Classes.library="{Binding IsLibraryMode}" Width="1000" MaxHeight="620" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0 24">
+		<Border Name="PlayerRomPickerSheet" Classes="sheet" Classes.library="{Binding IsLibraryMode}" Width="1000" MaxHeight="620" HorizontalAlignment="Center" Margin="0 24">
 			<DockPanel>
 				<!--The header: the sheet's one heading, which reads as the library's
 				own when the library is up (Decision 8: what it is, then how much it

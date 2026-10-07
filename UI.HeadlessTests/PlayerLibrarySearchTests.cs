@@ -450,18 +450,51 @@ public class PlayerLibrarySearchTests : IDisposable
 		//take it.
 		Assert.Equal("RomPickerSearch", FocusedName(window));
 
-		//And the way back, in the same chain (ADR-0264 AC 2): the pad walks to
-		//Clear, presses A on it, and the whole library is back.
+		//And the way back, in the same chain (ADR-0264 AC 2), on the pad alone
+		//(#1062 review): the keyboard's own commit key leaves it with the query
+		//kept (B would cancel it back to the empty box), Right walks from the box
+		//to Clear, A presses it, and the whole library is back.
 		Button clear = window.FindNamed<Button>("RomPickerSearchClear");
 		Assert.True(clear.IsOnScreen(), "Clear is not offered while the query is on");
-		clear.Focus(NavigationMethod.Directional);
-		Pump();
-		Assert.Equal("RomPickerSearchClear", FocusedName(window));
+		Assert.NotNull(PlayPadNavigationWiring.KeyboardForTest(window));
+
+		int commit = OpenKeyboard(window).Keys.ToList().FindIndex(k => k.Kind == PadKeyKind.Commit);
+		Assert.True(commit >= 0, "the pad keyboard has no commit key");
+		for(int steps = 0; OpenKeyboard(window).Cursor != commit; steps++) {
+			Assert.True(steps < 100, "the D-pad never reached the commit key");
+			Press(window, PadNavAction.Right);
+		}
 		Press(window, PadNavAction.Confirm);
-		Pump();
+		Assert.Null(PlayPadNavigationWiring.KeyboardForTest(window));
+		Assert.Equal("RomPickerSearch", FocusedName(window));
+		Assert.Equal("zel", model.RomPicker.SearchQuery);
+
+		for(int steps = 0; FocusedName(window) != "RomPickerSearchClear"; steps++) {
+			Assert.True(steps < 4, "the pad's Right never reached Clear from the box");
+			Press(window, PadNavAction.Right);
+			Assert.Null(PlayPadNavigationWiring.KeyboardForTest(window));
+		}
+
+		Press(window, PadNavAction.Confirm);
+		Assert.Null(PlayPadNavigationWiring.KeyboardForTest(window));
 
 		Assert.Equal("", model.RomPicker.SearchQuery);
 		Assert.Equal(WholeLibrary, TileTitles(model));
+	}
+
+	//#1062 review (finding 4): the claim that keeps the ring on the box is for a
+	//keyboard bound to the box, not for any pad keyboard on the window.
+	[AvaloniaFact]
+	public void The_pad_keyboard_opened_from_the_box_is_bound_to_the_box()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		LibraryRoot();
+
+		(MainWindow window, MainWindowViewModel _) = ShowOpenLibrary();
+		PressSearch(window);
+
+		OpenKeyboard(window);
+		Assert.Same(window.FindNamed<TextBox>("RomPickerSearch"), PlayPadNavigationWiring.KeyboardFieldForTest(window));
 	}
 
 	//#1033 round 4 (finding 2): a scan that lands while the player is already in
