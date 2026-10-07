@@ -1271,13 +1271,27 @@ def library_tile(c, x, y, w, h, title, console, seed, kind="art", focus=False):
     c.text(x, y + h + 31, console, 11, 400, TEXT2, "lm")
 
 
-def library_sheet(c, subtitle, tiles, focus=None, query=None):
-    """The Play Open a game sheet as a flat library (ADR-0264 Decision 1, W-P19)."""
+# The consoles present in the drawn library (ADR-0264 Decision 5). Every sheet that
+# shows the library draws its segments from this set, not from the tiles currently on
+# screen, so a search narrows the tiles without shrinking the filter.
+LIBRARY_CONSOLES = ("NES", "Game Boy", "Game Boy Color", "Game Boy Advance", "Master System")
+
+
+def library_sheet(c, subtitle, tiles, consoles, focus=None, query=None):
+    """The Play Open a game sheet as a flat library (ADR-0264 Decision 1, W-P19).
+
+    ``consoles`` is the console set of the *library*, passed separately from ``tiles``
+    so search and filter compose (ADR-0264 Decision 5) instead of the query deciding
+    which segments the filter is allowed to list.
+    """
     b = c.sheet(1100, 620, dim=False)
     x0, y0, x1, y1 = b
     c.text(x0 + 24, y0 + 36, "Your library", 20, 700, TEXT, "lm")
     c.text(x0 + 24 + c.tw("Your library", 20, 700) + 12, y0 + 37, subtitle, 13, 400, TEXT2, "lm")
-    bb = c.button(x1 - 24, y0 + 20, "Browse a file…", "secondary", h=30, anchor="r", icon="folder")
+    # Header row (ADR-0264 Decision 3): Back lives here with the search field,
+    # Library folders… and Browse a file…, all reached by up from the top grid row.
+    bk = c.button(x1 - 24, y0 + 20, "Back", "secondary", h=30, anchor="r", w=92)
+    bb = c.button(bk[0] - 10, y0 + 20, "Browse a file…", "secondary", h=30, anchor="r", icon="folder")
     c.button(bb[0] - 10, y0 + 20, "Library folders…", "secondary", h=30, anchor="r", icon="folder")
     # search field (Y on a pad opens ADR-0262's on-screen keyboard over it)
     c.field(x0 + 24, y0 + 68, 400, query or "Search games", placeholder=query is None,
@@ -1286,10 +1300,9 @@ def library_sheet(c, subtitle, tiles, focus=None, query=None):
         qx = x0 + 24 + 10 + c.tw(query, 13, 400) + 1
         c.line([(qx, y0 + 76), (qx, y0 + 92)], TEXT, 1.5)
         c.text(x0 + 392, y0 + 84, "×", 15, 500, TEXT3, "mm")
-    # console filter: only the consoles actually present (ADR-0264 Decision 5),
-    # in CONSOLE_TINT's order so the same library always draws the same segments.
-    drawn_consoles = {console for _, console, _ in tiles}
-    segments = [name for name in CONSOLE_TINT if name in drawn_consoles]
+    # console filter: the consoles the library holds (ADR-0264 Decision 5), in
+    # CONSOLE_TINT's order so the same library always draws the same segments.
+    segments = [name for name in CONSOLE_TINT if name in consoles]
     c.segmented(x0 + 444, y0 + 71, ["All", *segments], 0)
     # the grid: vertical ~3:4 cover tiles, row-major, one focus ring
     cols, gap = 8, 14
@@ -1299,11 +1312,10 @@ def library_sheet(c, subtitle, tiles, focus=None, query=None):
         tx = x0 + 24 + (i % cols) * (tw_ + gap)
         ty = y0 + 124 + (i // cols) * (th_ + 46)
         library_tile(c, tx, ty, tw_, th_, title, console, i + 1, kind, focus == i)
-    c.button(x0 + 24, y1 - 56, "Back", "secondary", h=32, w=92)
     # The pad reaches the header row too (ADR-0264 Decision 3): up from the top
     # grid row focuses the search field, Library folders…, Browse a file… and
     # Back, left/right moves between them and down returns to the grid.
-    c.text(x0 + 132, y1 - 40, "A  Play      B  Back      Y  Search      LB / RB  Console      "
+    c.text(x0 + 24, y1 - 40, "A  Play      B  Back      Y  Search      LB / RB  Console      "
            "D-pad  Move, Up  Header", 12, 500, TEXT2, "lm")
     return b
 
@@ -1320,7 +1332,7 @@ def w_p19():
              ("Sonic the Hedgehog", "Master System", "generic"),
              ("Alex Kidd in Miracle World", "Master System", "shot")]
     c = base("play", "No game loaded")
-    library_sheet(c, "· 128 games in 4 folders", tiles, focus=1)
+    library_sheet(c, "· 128 games in 4 folders", tiles, LIBRARY_CONSOLES, focus=1)
     c.caption("W-P19", "Play — your library: every game under the library folders, at once", 6)
     return c
 
@@ -1330,7 +1342,9 @@ def w_p19b():
              ("Zelda II: The Adventure of Link", "NES", "shot"),
              ("The Legend of Zelda: Oracle of Ages", "Game Boy Color", "generic")]
     c = base("play", "No game loaded")
-    library_sheet(c, "· 3 games match “zel”", tiles, focus=0, query="zel")
+    # The header stays the library's own count (ADR-0264 Decision 8); only the grid
+    # narrows, and the console filter keeps all six segments (Decision 5).
+    library_sheet(c, "· 128 games in 4 folders", tiles, LIBRARY_CONSOLES, focus=0, query="zel")
     c.caption("W-P19b", "Play — search typing narrows the library live (Y on a pad)", 6)
     return c
 
