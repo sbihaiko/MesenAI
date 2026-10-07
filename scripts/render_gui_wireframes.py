@@ -1223,6 +1223,100 @@ def w_p16():
     return c
 
 
+# ---- the flat game library (ADR-0264) ---------------------------------------
+CONSOLE_TINT = {"NES": (84, 88, 96), "Game Boy": (104, 116, 84),
+                "Game Boy Color": (128, 104, 44), "Game Boy Advance": (74, 62, 132),
+                "Master System": (44, 92, 122), "Game Gear": (52, 70, 112)}
+
+
+def library_tile(c, x, y, w, h, title, console, seed, kind="art", focus=False):
+    """One library tile: a vertical ~3:4 cover, its clean title and console tag (ADR-0264)."""
+    b = (x, y, x + w, y + h)
+    if kind == "generic":
+        # no database knows this ROM: a console-coloured cover carrying the title.
+        c.rrect(b, 8, fill=CONSOLE_TINT[console])
+        c.text(x + w / 2, y + h / 2 - 8, console, 13, 700, CARD, "mm")
+        c.text(x + w / 2, y + h / 2 + 12, "no cover", 11, 400, (222, 226, 232), "mm")
+    else:
+        c.shadow(b, 8, blur=4, dy=2, alpha=34)
+        c.d.rounded_rectangle(scb(b), radius=sc(8), fill=(0, 0, 0))
+        c.scene(b, seed)
+    c.rrect(b, 8, outline=(224, 224, 228))
+    if kind == "shot":
+        # the player's own screenshot from Recent, until downloaded art arrives.
+        pw = c.tw("Recent", 9.5, 700) + 14
+        c.rrect((x + 6, y + 6, x + 6 + pw, y + 22), 5, fill=CARD)
+        c.text(x + 6 + pw / 2, y + 14, "Recent", 9.5, 700, TEXT2, "mm")
+    if focus:
+        c.rrect((x - 4, y - 4, x + w + 4, y + h + 4), 11, outline=TINT["play"], width=3)
+        c.rrect((x + w - 26, y + 8, x + w - 8, y + 26), 5, fill=CARD)
+        c.icon("play", x + w - 17, y + 17, 11, TINT["play"])
+    label = title
+    while c.tw(label, 12.5, 590) > w and len(label) > 4:
+        label = label[:-2]
+    c.text(x, y + h + 15, label if label == title else label + "…", 12.5, 590,
+           TEXT if focus else TEXT, "lm")
+    c.text(x, y + h + 31, console, 11, 400, TEXT2, "lm")
+
+
+def library_sheet(c, subtitle, tiles, focus=None, query=None):
+    """The Play Open a game sheet as a flat library (ADR-0264 Decision 1, W-P19)."""
+    b = c.sheet(1100, 620, dim=False)
+    x0, y0, x1, y1 = b
+    c.text(x0 + 24, y0 + 36, "Your library", 20, 700, TEXT, "lm")
+    c.text(x0 + 24 + c.tw("Your library", 20, 700) + 12, y0 + 37, subtitle, 13, 400, TEXT2, "lm")
+    bb = c.button(x1 - 24, y0 + 20, "Browse a file…", "secondary", h=30, anchor="r", icon="folder")
+    c.button(bb[0] - 10, y0 + 20, "Library folders…", "secondary", h=30, anchor="r", icon="folder")
+    # search field (Y on a pad opens ADR-0262's on-screen keyboard over it)
+    c.field(x0 + 24, y0 + 68, 400, query or "Search games", placeholder=query is None,
+            h=32, focused=query is not None)
+    if query:
+        qx = x0 + 24 + 10 + c.tw(query, 13, 400) + 1
+        c.line([(qx, y0 + 76), (qx, y0 + 92)], TEXT, 1.5)
+        c.text(x0 + 392, y0 + 84, "×", 15, 500, TEXT3, "mm")
+    # console filter: only the consoles actually present (ADR-0264 Decision 5)
+    c.segmented(x0 + 444, y0 + 71, ["All", "NES", "Game Boy", "Game Boy Advance"], 0)
+    # the grid: vertical ~3:4 cover tiles, row-major, one focus ring
+    cols, gap = 8, 14
+    tw_ = (x1 - 24 - (x0 + 24) - (cols - 1) * gap) / cols
+    th_ = tw_ * 4 / 3
+    for i, (title, console, kind) in enumerate(tiles):
+        tx = x0 + 24 + (i % cols) * (tw_ + gap)
+        ty = y0 + 124 + (i // cols) * (th_ + 46)
+        library_tile(c, tx, ty, tw_, th_, title, console, i + 1, kind, focus == i)
+    c.button(x0 + 24, y1 - 56, "Back", "secondary", h=32, w=92)
+    c.text(x0 + 132, y1 - 40, "A  Play      B  Back      Y  Search      LB / RB  Console      "
+           "D-pad  Move", 12, 500, TEXT2, "lm")
+    return b
+
+
+def w_p19():
+    tiles = [("Castlevania", "NES", "art"), ("The Legend of Zelda", "NES", "art"),
+             ("Super Mario Bros. 3", "NES", "art"), ("Metroid", "NES", "shot"),
+             ("Mega Man 2", "NES", "art"), ("Contra", "NES", "shot"),
+             ("Kirby's Adventure", "NES", "art"), ("Excitebike", "NES", "art"),
+             ("Tetris", "Game Boy", "art"), ("Super Mario Land", "Game Boy", "shot"),
+             ("Pokémon Red", "Game Boy", "art"), ("Donkey Kong", "Game Boy", "shot"),
+             ("Metroid Fusion", "Game Boy Advance", "art"),
+             ("The Legend of Zelda: Oracle of Ages", "Game Boy Color", "generic"),
+             ("Sonic the Hedgehog", "Master System", "generic"),
+             ("Alex Kidd in Miracle World", "Master System", "shot")]
+    c = base("play", "No game loaded")
+    library_sheet(c, "· 128 games in 4 folders", tiles, focus=1)
+    c.caption("W-P19", "Play — your library: every game under the library folders, at once", 6)
+    return c
+
+
+def w_p19b():
+    tiles = [("The Legend of Zelda", "NES", "art"),
+             ("Zelda II: The Adventure of Link", "NES", "shot"),
+             ("The Legend of Zelda: Oracle of Ages", "Game Boy Color", "generic")]
+    c = base("play", "No game loaded")
+    library_sheet(c, "· 3 games match “zel”", tiles, focus=0, query="zel")
+    c.caption("W-P19b", "Play — search typing narrows the library live (Y on a pad)", 6)
+    return c
+
+
 def w_r0():
     c = base("remaster", "Contra (USA) · pack Contra 80s 1.2", (52, 199, 89))
     remaster_start(c)
@@ -1590,6 +1684,7 @@ SCREENS = [
     ("W-P1", w_p1), ("W-P2", w_p2), ("W-P3", w_p3), ("W-P4", w_p4), ("W-P5", w_p5), ("W-P6", w_p6),
     ("W-P7", w_p7), ("W-P8", w_p8), ("W-P8b", w_p8b), ("W-P8c", w_p8c), ("W-P9", w_p9), ("W-P10", w_p10), ("W-P11", w_p11),
     ("W-P12", w_p12), ("W-P13", w_p13), ("W-P14", w_p14), ("W-P15", w_p15), ("W-P16", w_p16),
+    ("W-P19", w_p19), ("W-P19b", w_p19b),
     ("W-R0", w_r0), ("W-R0b", w_r0b), ("W-R1", w_r1), ("W-R2", w_r2), ("W-R3", w_r3), ("W-R4", w_r4),
     ("W-R5", w_r5), ("W-R6", w_r6), ("W-R7", w_r7), ("W-R8", w_r8),
     ("W-H1", w_h1), ("W-H2", w_h2), ("W-H3", w_h3), ("W-H4", w_h4),
