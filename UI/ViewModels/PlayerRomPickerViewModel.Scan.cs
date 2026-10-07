@@ -1,9 +1,11 @@
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
+using Mesen.Config;
 using Mesen.Localization;
 using Mesen.Logic;
 using System;
 using System.Collections.Generic;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace Mesen.ViewModels
@@ -25,7 +27,10 @@ namespace Mesen.ViewModels
 	//
 	//The focused game is remembered here too, because "the entry the player
 	//focused last time is focused again when the sheet reopens" (Decision 1) is
-	//a fact about the sheet's life, and this is the object that has one.
+	//a fact about the sheet's life, and this is the object that has one. So is
+	//the cover of every tile (#1035) and the empty sentence one scan earns
+	//(#1060): both belonged to the one-shot walk this replaced, and both travel
+	//through the streamed one rather than being left behind by it.
 	//
 	//Split out of PlayerRomPickerViewModel.cs so the tracer's file keeps its own
 	//subject (which surface is up, which row does what): everything here is one
@@ -54,17 +59,33 @@ namespace Mesen.ViewModels
 		//The entries behind Tiles, in the module's own order and in the same
 		//positions: a batch is merged here as it arrives, so the grid reads in
 		//title order at every instant rather than only once the scan ends.
-		private readonly List<LibraryEntry> _ordered = new();
-		//What the walk answered. Written on the scan's thread and read on the UI
-		//thread at the finish, which the dispatcher post orders.
 		//
 		//Which scan a batch belongs to is the sheet's own ScanGeneration (see
 		//PlayerRomPickerViewModel.cs): a batch from a scan the player has already
 		//left - a B press, a step into *Browse a file…* and back - must not land
 		//in the grid of the scan that replaced it.
-		private LibraryScanResult _scanResult = NoEntries;
+		private readonly List<LibraryEntry> _ordered = new();
+		//The walk of the scan that is running, so the next one can stop it: a
+		//superseded scan that keeps reading the disk is exactly what Decision 9's
+		//"bounded" forbids once the player has left the sheet.
+		private CancellationTokenSource? _scanCancellation;
+		//The game this scan is putting the ring back on, by path, while the grid
+		//does not hold it yet. Non-empty means a restore is IN FLIGHT: the focus
+		//arbiter must not fall back to the first tile meanwhile, because that
+		//tile's GotFocus is read as "the player is on it" and would overwrite the
+		//very path being restored.
+		private string _restoreTargetPath = "";
+		//Whether a tile took the ring at all during this scan. A scan that ends
+		//without a restore ever landing may move the ring onto the grid's first
+		//game - but only when the ring was never in the grid to begin with, or
+		//the move is the sheet taking the ring out of the player's hands.
+		private bool _tileTookRing;
 
-		private static readonly LibraryScanResult NoEntries = new(Array.Empty<LibraryEntry>(), 0, false);
+		//A batch is merged into the grid in chunks this large, the rest posted at
+		//Background priority: one folder holding thousands of ROMs is one batch,
+		//and one collection change - and one container - per entry in a single UI
+		//turn stalls the sheet, which is what "stays responsive" forbids.
+		private const int BatchChunkSize = 512;
 
 		//The grid emptied, in one place: the tiles, the entries behind them and
 		//the revision the focus arbiter watches all move together, so the two
@@ -81,11 +102,23 @@ namespace Mesen.ViewModels
 			TilesRevision++;
 		}
 
+		//A restore is in flight: the scan has not reached the game the player left
+		//on yet, so the grid's first tile is not where the ring may land. The
+		//focus arbiter asks this before it decides (PlayPadNavigationWiring).
+		public bool IsRestorePending => _restoreTargetPath.Length > 0;
+
 		//The game the player is on. Called by the view when a tile takes the ring,
 		//including when the arbiter puts it there - so this is where the ring was,
 		//not only where the player moved it by hand.
+		//
+		//A tile that takes the ring while a restore is in flight is either the
+		//remembered game arriving (the bump below) or the player moving there
+		//themselves - the arbiter never hands a tile the ring mid-restore. Either
+		//way the restore is over: its path must not pull the ring away later.
 		public void RememberFocus(PlayerLibraryTile tile)
 		{
+			_tileTookRing = true;
+			_restoreTargetPath = "";
 			LastFocusedTilePath = tile.Path;
 		}
 
@@ -104,8 +137,25 @@ namespace Mesen.ViewModels
 			//scan: ConfigManager is not a background thread's to read, and the
 			//`*.rgd` files it names are (#1035).
 			string? recentGamesFolder = ConfigManager.RecentGamesFolder;
+
+			//The scan the player just superseded - a reopen, a B press that came
+			//back in - stops reading the disk here rather than running to the end
+			//of a tree nobody is looking at any more (Decision 9: bounded).
+			CancellationTokenSource cancellation = new();
+			CancellationTokenSource? superseded = _scanCancellation;
+			_scanCancellation = cancellation;
+			//Not disposed: the walk it belongs to may still be asking its token
+			//whether to go on, and a token whose source is gone throws on the ask.
+			superseded?.Cancel();
+
+			//The game the sheet is putting the ring back on (Decision 1). It is
+			//held here, apart from LastFocusedTilePath, because the grid is about
+			//to be emptied and the arbiter must not read the first tile that
+			//arrives as the player's choice (see IsRestorePending).
+			_restoreTargetPath = LastFocusedTilePath;
+			_tileTookRing = false;
+
 			ResetLibraryGrid();
-			_scanResult = NoEntries;
 			IsScanning = true;
 			SearchingText = ResourceHelper.GetMessage("RomPickerSearching");
 
@@ -113,23 +163,31 @@ namespace Mesen.ViewModels
 			//the grid is then complete before the call returns, which is what
 			//makes a case about the grid's contents readable.
 			if(RunLibraryScanInline || RunScanInline) {
-				RunLibraryStream(generation, folders, recentGamesFolder, null);
-				FinishLibraryStream(generation);
+				FinishLibraryStream(generation, RunLibraryStream(generation, folders, recentGamesFolder, null, cancellation.Token));
 				return;
 			}
 
+			Action<Action> post = action => Dispatcher.UIThread.Post(action);
 			Task.Run(() => {
-				RunLibraryStream(generation, folders, recentGamesFolder, action => Dispatcher.UIThread.Post(action));
-				Dispatcher.UIThread.Post(() => FinishLibraryStream(generation));
+				//The answer travels back inside the same posted closure as the
+				//finish: a field written on the walk's thread and read on the UI
+				//thread is a race an older scan can lose into a newer one's header.
+				LibraryScanResult? result = RunLibraryStream(generation, folders, recentGamesFolder, post, cancellation.Token);
+				post(() => FinishLibraryStream(generation, result));
 			});
 		}
 
 		//The walk, on whatever thread called this. `post` is how one folder's
 		//finds reach the grid: null means this IS the UI thread (the inline open),
 		//and the dispatcher otherwise.
-		private void RunLibraryStream(int generation, IReadOnlyList<string> folders, string? recentGamesFolder, Action<Action>? post)
+		//
+		//The answer comes back through the return value and reaches the header
+		//through the caller's posted closure, never through a field: an older scan
+		//that finishes late must be unable to describe a sheet it no longer owns.
+		//Null means the walk produced no answer at all - it threw, or it was
+		//cancelled because the player had already left it behind.
+		private LibraryScanResult? RunLibraryStream(int generation, IReadOnlyList<string> folders, string? recentGamesFolder, Action<Action>? post, CancellationToken cancellation)
 		{
-			LibraryScanResult result;
 			try {
 				//The Recent index is built here, once per scan and on this thread:
 				//it reads and unzips every record the folder names, which is the
@@ -137,19 +195,21 @@ namespace Mesen.ViewModels
 				//for the whole walk is what keeps a library of two hundred folders
 				//from unzipping each record once per folder.
 				RecentCoverIndex index = RecentCoverIndex.Open(recentGamesFolder);
-				result = LibraryScanStreamSource(folders, new FolderLister(FolderSource),
-					batch => Deliver(generation, batch, CoversFor(batch, index), post));
+				return LibraryScanStreamSource(folders, new FolderLister(folder => {
+					//Checked before every listing, which is every read the walk
+					//makes: a cancelled scan stops touching the disk at the next
+					//folder instead of walking a tree nobody is showing.
+					cancellation.ThrowIfCancellationRequested();
+					return FolderSource(folder);
+				}), batch => Deliver(generation, batch, CoversFor(batch, index), post));
 			} catch {
-				//A walk that threw answers nothing to show - an unreadable disk is
-				//not a reason to keep a wait on screen - and leaves whatever the
-				//batches before it already put in the grid.
-				result = NoEntries;
-			}
-			//A scan the player has already left keeps its answer to itself: its
-			//batches are dropped by the same check, and a header built from its
-			//count would belong to a sheet that is no longer up.
-			if(_scanGeneration.IsCurrent(generation)) {
-				_scanResult = result;
+				//A walk that threw, or one the player superseded, answers nothing
+				//to show: the wait goes (an unreadable disk is not a reason to
+				//leave the player on a moving bar that never stops) and the grid
+				//keeps whatever the batches before it already put there. The
+				//header is left unsaid rather than told "0 games" over games
+				//already on screen (see FinishLibraryStream).
+				return null;
 			}
 		}
 
@@ -169,6 +229,28 @@ namespace Mesen.ViewModels
 		//while the rest of the library arrives.
 		private void ApplyLibraryBatch(int generation, IReadOnlyList<LibraryEntry> batch, IReadOnlyList<LibraryCoverPick> covers)
 		{
+			//A batch that is too big to insert in one turn is inserted in chunks,
+			//the rest behind the frame the sheet can repaint in. The grid itself
+			//is filled by the same code either way.
+			if(batch.Count <= BatchChunkSize) {
+				InsertEntries(generation, batch, covers, 0, batch.Count);
+				return;
+			}
+			InsertEntries(generation, batch, covers, 0, BatchChunkSize);
+			for(int start = BatchChunkSize; start < batch.Count; start += BatchChunkSize) {
+				int from = start;
+				int count = Math.Min(BatchChunkSize, batch.Count - from);
+				Dispatcher.UIThread.Post(() => InsertEntries(generation, batch, covers, from, count), DispatcherPriority.Background);
+			}
+		}
+
+		//One chunk of one folder's finds, merged into the grid. Each entry goes in
+		//at its ordered position rather than at the end, so the grid is in title
+		//order while it fills (Decision 1) and a tile that is already on screen
+		//keeps its container - which is how the ring stays where the player put it
+		//while the rest of the library arrives.
+		private void InsertEntries(int generation, IReadOnlyList<LibraryEntry> batch, IReadOnlyList<LibraryCoverPick> covers, int from, int count)
+		{
 			//A batch that landed after the player left the library - a B press, a
 			//step into *Browse a file…* - belongs to no surface, and a batch from
 			//the scan before this one belongs to a grid that no longer exists.
@@ -176,21 +258,28 @@ namespace Mesen.ViewModels
 				return;
 			}
 			bool wasEmpty = _ordered.Count == 0;
-			for(int i = 0; i < batch.Count; i++) {
-				LibraryEntry entry = batch[i];
+			bool restoreLanded = false;
+			for(int index = from; index < from + count; index++) {
+				LibraryEntry entry = batch[index];
 				int at = InsertIndex(entry);
 				_ordered.Insert(at, entry);
 				//The cover travels with its entry, in the same order (#1035): a
 				//tile inserted mid-grid draws the picture the scan resolved for
 				//THAT game and never its neighbour's.
-				Tiles.Insert(at, TileFor(entry, covers[i]));
+				Tiles.Insert(at, TileFor(entry, covers[index]));
+				restoreLanded |= _restoreTargetPath.Length > 0 && entry.Path == _restoreTargetPath;
 			}
 			//The first games to arrive are the ones the ring has been waiting for:
 			//the sheet opened with nothing to play, so it is holding Back, and this
 			//is the revision that moves it onto a game. Later batches do not bump
 			//it - the player may already be walking the grid, and a claim per
 			//folder would pull the ring back out of their hands.
-			if(wasEmpty && _ordered.Count > 0) {
+			//
+			//The one later bump is the game the sheet is restoring, the moment it
+			//lands: until then the arbiter has kept the ring off the grid
+			//(IsRestorePending), so this is the sheet finishing what it promised
+			//rather than a claim over the player's ring.
+			if((wasEmpty && _ordered.Count > 0) || restoreLanded) {
 				TilesRevision++;
 			}
 		}
@@ -217,7 +306,20 @@ namespace Mesen.ViewModels
 		//including that it stopped at the count cap, which the player is owed
 		//(Decision 9: the header says so rather than the grid silently ending) and
 		//the empty sentence when it found nothing at all (#1060).
-		private void FinishLibraryStream(int generation)
+		//
+		//`result` is null when the walk answered nothing at all - it threw, or the
+		//player superseded it. That is not "0 games in 0 folders": the grid keeps
+		//the tiles the batches before it put there, so the header stays unsaid
+		//rather than counting nothing over games on screen.
+		//
+		//No revision bump for the grid's final shape. The tiles are already in it,
+		//and a bump re-arbitrates - which pulls the ring back into the grid from
+		//wherever the player put it, header included. The one exception is a
+		//restore that never landed: the ring has been kept off the grid for it, so
+		//it has nowhere to be but the sheet's Back, and the sheet still owes the
+		//player a game under the ring (Decision 3). Only when no tile took the
+		//ring at all this scan is that a bump and not a hand taken off the ring.
+		private void FinishLibraryStream(int generation, LibraryScanResult? result)
 		{
 			if(!_scanGeneration.IsCurrent(generation)) {
 				return;
@@ -225,6 +327,12 @@ namespace Mesen.ViewModels
 			//The wait is this object's and goes whatever happens next, even if the
 			//scan threw: a moving bar that never stops is worse than no bar.
 			IsScanning = false;
+			if(_restoreTargetPath.Length > 0) {
+				_restoreTargetPath = "";
+				if(!_tileTookRing && _ordered.Count > 0) {
+					TilesRevision++;
+				}
+			}
 			//A scan that landed after the player left the library - a B press, a
 			//step into *Browse a file…* - belongs to no surface: the browser's own
 			//rows must not be replaced by a grid nobody is looking at, and its
@@ -233,19 +341,18 @@ namespace Mesen.ViewModels
 				return;
 			}
 			SearchingText = "";
-			//The final shape of the grid. It does not move the ring: the arbiter's
-			//target is the tile the player focused last, which on a scan that just
-			//ended is the one under the ring already.
-			TilesRevision++;
+			if(result is null) {
+				return;
+			}
 			//#1060: a scan that answered no game is a named state that names the next
 			//step, not a blank grid. The rule is PlayRomPicker's; this is the lookup -
 			//and it is taken here, at the finish, because until the walk returns "no
 			//games" is a claim the scan has not made.
-			EmptyText = LibraryEmptyText(PlayRomPicker.LibraryEmptyMessageId(_folders.Count, _scanResult.Entries.Count));
+			EmptyText = LibraryEmptyText(PlayRomPicker.LibraryEmptyMessageId(_folders.Count, result.Entries.Count));
 			CountText = ResourceHelper.GetMessage("RomPickerLibraryCount",
-				CountLabel(_scanResult.Entries.Count, "RomPickerGameOne", "RomPickerGameMany"),
-				CountLabel(_scanResult.FolderCount, "RomPickerFolderOne", "RomPickerFolderMany"));
-			TruncatedText = _scanResult.Truncated
+				CountLabel(result.Entries.Count, "RomPickerGameOne", "RomPickerGameMany"),
+				CountLabel(result.FolderCount, "RomPickerFolderOne", "RomPickerFolderMany"));
+			TruncatedText = result.Truncated
 				? ResourceHelper.GetMessage("RomPickerLibraryTruncated", GameLibrary.MaxEntries)
 				: "";
 		}

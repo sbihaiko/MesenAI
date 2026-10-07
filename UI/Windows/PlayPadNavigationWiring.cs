@@ -348,7 +348,7 @@ namespace Mesen.Windows
 				//library folder yet, or folders the scan answered nothing for -
 				//lands on the control its empty sentence names, and Back stays
 				//the last resort, being the one control the sheet always has.
-				return RomPickerTile(window, model.RomPicker.LastFocusedTilePath)
+				return RomPickerTile(window, model.RomPicker.LastFocusedTilePath, model.RomPicker.IsRestorePending)
 					?? Named(window, "RomPickerBrowseFile") ?? Named(window, "RomPickerBack");
 			}
 			return RomPickerFirstRow(window) ?? Named(window, "RomPickerBack");
@@ -362,13 +362,25 @@ namespace Mesen.Windows
 		//sheet REOPENS on it rather than on whatever the scan happened to list
 		//first. A path the grid no longer holds - the file was moved, the folder
 		//left the library - falls back to the first tile, which is also where a
-		//sheet that has never been opened lands.
-		private static Control? RomPickerTile(MainWindow window, string? path = null)
+		//sheet that has never been opened lands; while the scan is still bringing
+		//that path the ring waits on the sheet's Back instead (see below).
+		//`restorePending` says the scan is still bringing the game the player left
+		//on and the grid does not hold it yet. The first-tile fallback is what the
+		//ring lands on in every other case - a sheet that has never been opened, a
+		//file that was moved - but mid-restore it is exactly the wrong answer: the
+		//tile that takes the ring reports "the player is on it" (Decision 1), and
+		//that report would overwrite the path the scan is still looking for. The
+		//sheet's Back is where the ring waits instead, which the caller's fallback
+		//supplies, so the sheet is never left with nothing to press.
+		private static Control? RomPickerTile(MainWindow window, string? path = null, bool restorePending = false)
 		{
 			IEnumerable<Button> tiles = (Named(window, "RomPickerGrid") as ItemsControl)?.GetVisualDescendants().OfType<Button>()
 				?? Enumerable.Empty<Button>();
-			return tiles.FirstOrDefault(b => b.DataContext is PlayerLibraryTile tile && tile.Path.Length > 0 && tile.Path == path)
-				?? tiles.FirstOrDefault(b => b.DataContext is PlayerLibraryTile);
+			Control? remembered = tiles.FirstOrDefault(b => b.DataContext is PlayerLibraryTile tile && tile.Path.Length > 0 && tile.Path == path);
+			if(remembered is not null || restorePending) {
+				return remembered;
+			}
+			return tiles.FirstOrDefault(b => b.DataContext is PlayerLibraryTile);
 		}
 
 		private static Control? RomPickerFirstRow(MainWindow window)
