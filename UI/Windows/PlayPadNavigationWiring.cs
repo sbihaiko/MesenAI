@@ -1,7 +1,9 @@
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.Media;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using Mesen.Config.Shortcuts;
@@ -95,6 +97,13 @@ namespace Mesen.Windows
 			if(Installed.TryGetValue(window, out Bridge? bridge)) {
 				bridge.Tick(pressed, delta, keyName, keyCode);
 			}
+		}
+
+		//ADR-0262: the keyboard the pad has open, or null - so a headless case can
+		//walk its keys the way a player does instead of guessing the layout.
+		public static PadKeyboard? KeyboardForTest(MainWindow window)
+		{
+			return Installed.TryGetValue(window, out Bridge? bridge) ? bridge.Keyboard : null;
 		}
 
 		//ADR-0256 Decision 3: ONE path decides who holds the focus when a Play
@@ -364,6 +373,13 @@ namespace Mesen.Windows
 			private ComboBox? _openPopup;
 			private int _walk = -1;
 			private Button? _holding;
+			//ADR-0262: the one on-screen keyboard, the field it fills and the
+			//panel it is drawn in (the window's overlay layer, below the field).
+			private PadKeyboard? _keyboard;
+			private TextBox? _keyboardField;
+			private Border? _keyboardPanel;
+
+			public PadKeyboard? Keyboard => _keyboard;
 
 			public Bridge(MainWindow window, MainWindowViewModel model)
 			{
@@ -442,6 +458,12 @@ namespace Mesen.Windows
 				//press and step the menu the instant it appeared.
 				_previous = new HashSet<ushort>(pressed);
 
+				//ADR-0262: a field that went away under its keyboard (the sheet
+				//closed by something else) takes the keyboard with it, as a cancel.
+				if(_keyboardField is not null && !_keyboardField.IsEffectivelyVisible) {
+					CloseKeyboard(cancel: true);
+				}
+
 				if(action != PadNavAction.None) {
 					Apply(action);
 				}
@@ -496,6 +518,9 @@ namespace Mesen.Windows
 			//the pad; Confirm activates what the focus is on; Back is Esc.
 			private void Apply(PadNavAction action)
 			{
+				if(ApplyKeyboard(action)) {
+					return;
+				}
 				if(ApplyValue(action)) {
 					return;
 				}
@@ -559,6 +584,10 @@ namespace Mesen.Windows
 					return;
 				}
 
+				if(action == PadNavAction.Confirm && focused is TextBox field && field.IsEffectivelyEnabled && !field.IsReadOnly) {
+					OpenKeyboard(field);
+					return;
+				}
 				if(action == PadNavAction.Confirm) {
 					Activate(focused);
 					return;
@@ -663,6 +692,118 @@ namespace Mesen.Windows
 				combo.IsDropDownOpen = false;
 			}
 
+			//ADR-0262: while the keyboard is open every press is the keyboard's -
+			//the D-pad walks its keys, A presses one, B cancels - so the focus
+			//cannot walk off the field it is filling and Back cannot close the
+			//sheet under it. What a press means is PadKeyboard's; this writes the
+			//draft into the field as it changes, so a search filters while typed.
+			private bool ApplyKeyboard(PadNavAction action)
+			{
+				if(_keyboard is null || _keyboardField is null) {
+					return false;
+				}
+				switch(_keyboard.Press(action)) {
+					case PadKeyboardOutcome.Edited:
+						_keyboardField.Text = _keyboard.Draft;
+						_keyboardField.CaretIndex = _keyboard.Draft.Length;
+						PaintKeyboard();
+						break;
+					case PadKeyboardOutcome.Moved:
+						PaintKeyboard();
+						break;
+					case PadKeyboardOutcome.Committed:
+						CloseKeyboard(cancel: false);
+						break;
+					case PadKeyboardOutcome.Cancelled:
+						CloseKeyboard(cancel: true);
+						break;
+				}
+				return true;
+			}
+
+			//The field declares its own shape (ADR-0262 Decision 2): its mask, or
+			//the padCode style class a code-shaped box carries in its view.
+			private void OpenKeyboard(TextBox field)
+			{
+				PadKeyboardShape shape = PadKeyboard.ShapeOf(field.PasswordChar != default(char), field.Classes.Contains(PadCodeClass));
+				_keyboard = new PadKeyboard(shape, field.Text ?? "", field.MaxLength);
+				_keyboardField = field;
+				if(OverlayLayer.GetOverlayLayer(field) is OverlayLayer layer) {
+					_keyboardPanel = BuildKeyboardPanel(_keyboard);
+					layer.Children.Add(_keyboardPanel);
+					PaintKeyboard();
+					PlaceKeyboard(field, layer, _keyboardPanel);
+				}
+			}
+
+			//Cancel gives the field back its original value; both ways the focus
+			//comes back to the field the keyboard was opened on, ring drawn.
+			private void CloseKeyboard(bool cancel)
+			{
+				TextBox? field = _keyboardField;
+				if(cancel && field is not null && _keyboard is not null) {
+					field.Text = _keyboard.Original;
+				}
+				if(_keyboardPanel?.Parent is OverlayLayer layer) {
+					layer.Children.Remove(_keyboardPanel);
+				}
+				_keyboard = null;
+				_keyboardField = null;
+				_keyboardPanel = null;
+				if(field is not null && field.IsEffectivelyVisible) {
+					field.Focus(NavigationMethod.Directional);
+				}
+			}
+
+			private const string PadCodeClass = "padCode";
+
+			//Nothing in the panel is focusable: the focus stays on the field, and
+			//the cursor is drawn by PaintKeyboard instead.
+			private static Border BuildKeyboardPanel(PadKeyboard keyboard)
+			{
+				UniformGrid keys = new() { Columns = PadKeyboard.Columns };
+				foreach(PadKeyboardKey _ in keyboard.Keys) {
+					keys.Children.Add(new Border() {
+						MinWidth = 36, MinHeight = 32, Margin = new Thickness(2), CornerRadius = new CornerRadius(4),
+						Child = new TextBlock() { HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center, VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center, Foreground = Brushes.White }
+					});
+				}
+				StackPanel content = new() { Spacing = 6 };
+				content.Children.Add(new TextBlock() { Name = "PadKeyboardDraft", Foreground = Brushes.White, FontSize = 18 });
+				content.Children.Add(keys);
+				return new Border() {
+					Name = "PadKeyboardPanel", Background = new SolidColorBrush(Color.FromArgb(0xF0, 0x20, 0x20, 0x24)),
+					CornerRadius = new CornerRadius(8), Padding = new Thickness(10), Focusable = false, Child = content
+				};
+			}
+
+			private void PaintKeyboard()
+			{
+				if(_keyboard is null || _keyboardPanel?.Child is not StackPanel content
+					|| content.Children[0] is not TextBlock draft || content.Children[1] is not UniformGrid keys) {
+					return;
+				}
+				draft.Text = _keyboard.Display;
+				for(int i = 0; i < keys.Children.Count; i++) {
+					if(keys.Children[i] is Border key && key.Child is TextBlock label) {
+						label.Text = _keyboard.Label(_keyboard.Keys[i]);
+						key.Background = i == _keyboard.Cursor ? Brushes.DodgerBlue : Brushes.Transparent;
+					}
+				}
+			}
+
+			//Below the field, or above it when the window has no room below.
+			private static void PlaceKeyboard(TextBox field, OverlayLayer layer, Border panel)
+			{
+				panel.Measure(Size.Infinity);
+				Point below = field.TranslatePoint(new Point(0, field.Bounds.Height + 4), layer) ?? default;
+				double top = below.Y + panel.DesiredSize.Height <= layer.Bounds.Height || layer.Bounds.Height <= 0
+					? below.Y
+					: Math.Max(0, below.Y - field.Bounds.Height - 8 - panel.DesiredSize.Height);
+				Canvas.SetLeft(panel, Math.Max(0, Math.Min(below.X, layer.Bounds.Width - panel.DesiredSize.Width)));
+				Canvas.SetTop(panel, top);
+			}
+
 			//The view model's own SetCompare, the call the view's pointer and Space
 			//handlers make - not a synthetic Space, which MainWindow's tunnel key
 			//handler would hand to the console as a key press.
@@ -718,10 +859,9 @@ namespace Mesen.Windows
 			//listen to, and the state is what a surface binds to, so a surface
 			//that uses either one works.
 			//
-			//A TextBox falls through to the raise, which its surface may ignore:
-			//a pad cannot type, and the Play sheets that lead with a search box
-			//are the ones an arcade cabinet has no keyboard for. That is a real
-			//limit, not a TODO silently swallowed here.
+			//A TextBox never reaches here: Apply opens the on-screen keyboard on
+			//it instead (ADR-0262), because a pad cannot type and an arcade
+			//cabinet has no keyboard.
 			private static void Activate(Control focused)
 			{
 				switch(focused) {
