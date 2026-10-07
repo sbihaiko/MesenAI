@@ -1107,4 +1107,159 @@ public class PlayPadNavigationTests : IDisposable
 			File.Delete(file);
 		}
 	}
+
+	//#964 (ADR-0256's stop rule): the Play settings' value controls are operable
+	//from the pad, through the one bridge. Each case lands the focus on the
+	//control the way the bridge does (Directional, so the ring is drawn) and then
+	//drives it with TickForTest only - no keyboard, no pointer.
+	private (MainWindow Window, MainWindowViewModel Model, ConfigViewModel Settings) ShowSettingsTab(ConfigWindowTab tab, Func<PlayerWindowSettingsViewModel>? createDisplay = null)
+	{
+		(MainWindow window, MainWindowViewModel model) = ShowPlay();
+		ConfigViewModel settings = new(tab, playerMode: true, createDisplay: createDisplay, audioDevices: () => new[] { "Speakers" }, connectedPads: () => 0);
+		model.OpenPlayerSettings(settings);
+		WaitFor(() => model.IsPlayerSettingsVisible && FocusedName(window) is not null, $"the Settings sheet never took the focus ({Focused(window, model)})");
+		window.FindNamed<TabControl>("PlayerSettingsTabs").SelectedIndex = PlayerSettingsEssentials.IndexOf(tab);
+		Pump();
+		return (window, model, settings);
+	}
+
+	private static T Land<T>(MainWindow window, string name) where T : Control
+	{
+		T control = window.FindNamed<T>(name);
+		WaitFor(() => control.IsEffectivelyVisible && control.Focus(NavigationMethod.Directional), $"{name} never took the focus");
+		Pump();
+		AssertRing(control);
+		return control;
+	}
+
+	//The focus ring is :focus-visible (PlayerTheme paints it from that), and it
+	//has to stay on the control while the pad drives it.
+	private static void AssertRing(Control control)
+	{
+		Assert.True(control.IsFocused, $"{control.Name} lost the focus while the pad drove it");
+		Assert.True(control.Classes.Contains(":focus-visible"), $"{control.Name} has the focus without the ring");
+	}
+
+	private void Press(MainWindow window, PadNavAction action)
+	{
+		Release(window);
+		Feed(window, action);
+		Pump();
+	}
+
+	[AvaloniaFact]
+	public void Left_and_right_step_a_focused_slider_and_keep_the_focus()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		AudioConfig audio = ConfigManager.Config.Audio;
+		uint volume = audio.MasterVolume;
+		audio.MasterVolume = 37;
+		try {
+			(MainWindow window, MainWindowViewModel model, _) = ShowSettingsTab(ConfigWindowTab.Audio);
+			Slider slider = Land<Slider>(window, "sldAudioVolume");
+			Assert.Equal(37, slider.Value);
+
+			Press(window, PadNavAction.Right);
+			Assert.Equal(38, slider.Value);
+			Assert.Equal(38u, audio.MasterVolume);
+			AssertRing(slider);
+
+			Press(window, PadNavAction.Left);
+			Assert.Equal(37, slider.Value);
+			Assert.Equal(37u, audio.MasterVolume);
+			AssertRing(slider);
+			model.ClosePlayerSettings();
+		} finally {
+			audio.MasterVolume = volume;
+		}
+	}
+
+	[AvaloniaFact]
+	public void The_pad_opens_walks_and_commits_the_display_scale()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		List<double> written = new();
+		(MainWindow window, MainWindowViewModel model, ConfigViewModel settings) = ShowSettingsTab(ConfigWindowTab.Display,
+			() => new PlayerWindowSettingsViewModel(new VideoConfig(), false, 2, () => { }, written.Add));
+		ComboBox scale = Land<ComboBox>(window, "cboDisplayScale");
+		Assert.Equal(2, settings.Display!.SelectedScale!.Value);
+
+		Press(window, PadNavAction.Confirm);
+		Assert.True(scale.IsDropDownOpen, "Confirm did not open the drop-down");
+
+		//Walking writes nothing: only the commit is a pick.
+		Press(window, PadNavAction.Down);
+		Assert.True(scale.IsDropDownOpen);
+		Assert.Empty(written);
+
+		Press(window, PadNavAction.Confirm);
+		Assert.False(scale.IsDropDownOpen, "Confirm did not close the drop-down");
+		//The pointer's path: SelectedScale → the view-model's setScale, once.
+		Assert.Equal(new[] { 3.0 }, written);
+		Assert.Equal(3, settings.Display.SelectedScale!.Value);
+		WaitFor(() => scale.IsFocused, "the focus did not come back to the drop-down after the commit");
+		AssertRing(scale);
+		model.ClosePlayerSettings();
+	}
+
+	[AvaloniaFact]
+	public void Back_on_an_open_popup_closes_it_without_changing_the_value()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		List<double> written = new();
+		(MainWindow window, MainWindowViewModel model, ConfigViewModel settings) = ShowSettingsTab(ConfigWindowTab.Display,
+			() => new PlayerWindowSettingsViewModel(new VideoConfig(), false, 2, () => { }, written.Add));
+		ComboBox scale = Land<ComboBox>(window, "cboDisplayScale");
+
+		Press(window, PadNavAction.Confirm);
+		Press(window, PadNavAction.Down);
+		Press(window, PadNavAction.Back);
+
+		Assert.False(scale.IsDropDownOpen, "Back did not close the drop-down");
+		Assert.Empty(written);
+		Assert.Equal(2, settings.Display!.SelectedScale!.Value);
+		//Back belonged to the popup, not to the Esc router: the sheet is still up.
+		Assert.True(model.IsPlayerSettingsVisible, "Back on an open popup also closed the Settings sheet");
+		WaitFor(() => scale.IsFocused, "the focus did not come back to the drop-down after Back");
+		AssertRing(scale);
+		model.ClosePlayerSettings();
+	}
+
+	[AvaloniaFact]
+	public void Holding_confirm_on_hold_to_compare_compares_until_release()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		VideoConfig video = ConfigManager.Config.Video;
+		(VideoFilterType filter, string shader) = (video.VideoFilter, video.ShaderFile);
+		video.VideoFilter = VideoFilterType.HQ4x;
+		video.ShaderFile = "";
+		try {
+			(MainWindow window, MainWindowViewModel model) = ShowPlay();
+			model.RomInfo = new RomInfo() { ConsoleType = ConsoleType.Nes, Format = RomFormat.iNes };
+			ConfigViewModel settings = new(ConfigWindowTab.Look, playerMode: true, audioDevices: () => new[] { "Speakers" }, connectedPads: () => 0);
+			model.OpenPlayerSettings(settings);
+			WaitFor(() => model.IsPlayerSettingsVisible && FocusedName(window) is not null, $"the Settings sheet never took the focus ({Focused(window, model)})");
+			window.FindNamed<TabControl>("PlayerSettingsTabs").SelectedIndex = PlayerSettingsEssentials.IndexOf(ConfigWindowTab.Look);
+			Pump();
+			Button compare = Land<Button>(window, "btnLookHoldToCompare");
+			Assert.True(compare.IsEnabled);
+
+			Release(window);
+			Feed(window, PadNavAction.Confirm);
+			Pump();
+			Assert.True(settings.Look?.IsComparing == true, $"Confirm held on Hold to Compare did not turn compare on ({Describe(window.FocusManager?.GetFocusedElement() as Visual)}, canCompare={settings.Look?.CanCompare}, lookContext={compare.DataContext?.GetType().Name}, surfaceOverGame={model.IsPlaySurfaceOverGame}, running={EmuApi.IsRunning()})");
+			//Still held: a second tick with Confirm down keeps it on.
+			Feed(window, PadNavAction.Confirm);
+			Pump();
+			Assert.True(settings.Look?.IsComparing);
+
+			Release(window);
+			Pump();
+			Assert.False(settings.Look?.IsComparing, "releasing Confirm did not turn compare off");
+			AssertRing(compare);
+			model.ClosePlayerSettings();
+		} finally {
+			(video.VideoFilter, video.ShaderFile) = (filter, shader);
+		}
+	}
 }
