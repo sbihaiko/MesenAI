@@ -201,6 +201,27 @@ public class PadKeyboardTests
 		Assert.Equal("SXAP", keyboard.TextOnLeave(PadKeyboardLeave.AuthorityLost));
 	}
 
+	//#1004: a secret (the Cheats sheet API key) is never stored unconfirmed -
+	//losing pad authority mid-entry gives back the key the field had.
+	[Fact]
+	public void Losing_pad_authority_on_a_secret_field_gives_back_the_original_value()
+	{
+		PadKeyboard keyboard = new(PadKeyboardShape.Secret, "key1");
+		Type(keyboard, "ab");
+
+		Assert.Equal("key1", keyboard.TextOnLeave(PadKeyboardLeave.AuthorityLost));
+	}
+
+	//A free-text field keeps the draft on authority loss, like a code field.
+	[Fact]
+	public void Losing_pad_authority_on_a_free_text_field_keeps_the_typed_draft()
+	{
+		PadKeyboard keyboard = new(PadKeyboardShape.Text, "mario");
+		Type(keyboard, " 3");
+
+		Assert.Equal("mario 3", keyboard.TextOnLeave(PadKeyboardLeave.AuthorityLost));
+	}
+
 	//The field going away or the focus moving elsewhere is still a cancel.
 	[Fact]
 	public void The_field_going_away_or_the_focus_moving_gives_back_the_original_value()
