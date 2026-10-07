@@ -5,9 +5,9 @@ using System.IO;
 namespace Mesen.Logic;
 
 //#1036 (host-free half), ADR-0264 Decision 8: the LIST of folders the Play
-//"Open a game" sheet scans, and the header that counts what they hold. The sheet
-//itself is #1032's; this file is only the list, so the rules about which folders
-//are in it are pinned here in UI.Tests without a window.
+//"Open a game" sheet scans, and the header that names it. The sheet itself is
+//#1032's; this file is only the list, so the rules about which folders are in it
+//are pinned here in UI.Tests without a window.
 //
 //It is a pure list over paths. It reads no disk (ADR-0123: BCL only, no Avalonia,
 //no EmuApi), so "removing a folder never deletes a file" is not a promise the
@@ -70,9 +70,11 @@ public static class LibraryFolders
 	//  is a folder the player chose in a picker, so it is absolute anyway;
 	//- **symlinks are NOT resolved.** `Path.GetFullPath` is lexical, and resolving
 	//  a link is a disk read - the thing this file does not do. So a folder reached
-	//  through a symlink and the same folder reached directly are two rows if the
-	//  two paths differ. That is accepted: the game under them is one game, and
-	//  `Union` below is what keeps it from being drawn twice.
+	//  through a symlink and the same folder reached directly are two rows here, and
+	//  a game under them is two entries in `Union`, because the two paths differ.
+	//  That is the lexical rule, stated plainly; nothing in this file de-duplicates
+	//  a link against its target. Resolving one is the scan's job (#1032), which is
+	//  the first place with a disk to look at and the only place that can.
 	//
 	//Null when the path cannot be one: blank, or a string the platform refuses.
 	public static string? Normalize(string? folder)
@@ -107,17 +109,28 @@ public static class LibraryFolders
 
 	//Decision 8's seeding, and it is a first-run act only: the single
 	//`Preferences.GameFolder` the app already had becomes the list's first folder,
-	//so no player loses the folder they had set - and a list that already names
-	//folders is never touched again. `OverrideGameFolder` is read the way every
-	//other call site reads it (`OverrideGameFolder ? GameFolder : null`): a folder
-	//the player never designated is not their library, so it does not seed one.
-	public static IReadOnlyList<string> Seed(IReadOnlyList<string> folders, bool overrideGameFolder, string? gameFolder)
+	//so no player loses the folder they had set. `OverrideGameFolder` is read the way
+	//every other call site reads it (`OverrideGameFolder ? GameFolder : null`): a
+	//folder the player never designated is not their library, so it does not seed one.
+	//
+	//"First run" is the stored value being ABSENT, and absent is `null` - never an
+	//empty list. `[]` is a list the player emptied: it goes back out as it came in,
+	//because re-seeding it would put a folder they took out back into their library
+	//on every start. The two states are kept apart on purpose, so the preference is
+	//`null` until seeding writes it and `[]` only after the player has emptied it.
+	//
+	//A `null` list with nothing to seed returns `[]` rather than `null`: from here on
+	//the caller holds a list, and "seeded nothing" is an empty one.
+	public static IReadOnlyList<string> Seed(IReadOnlyList<string>? folders, bool overrideGameFolder, string? gameFolder)
 	{
-		if(folders.Count > 0 || !overrideGameFolder) {
+		if(folders != null) {
 			return Copy(folders);
 		}
+		if(!overrideGameFolder) {
+			return new List<string>();
+		}
 		string? seeded = Normalize(gameFolder);
-		return seeded != null ? new List<string> { seeded } : Copy(folders);
+		return seeded != null ? new List<string> { seeded } : new List<string>();
 	}
 
 	//The nested case, decided: **absorb, do not reject.** A folder inside one that
@@ -183,10 +196,13 @@ public static class LibraryFolders
 		return kept;
 	}
 
-	//The union of what several folders answered, each path once: two library
-	//folders that overlap - or a symlink and its target - are one game in the grid,
-	//not two. The order is first-seen, so the caller's folder order is what decides
-	//the scan's order.
+	//The union of what several folders answered, each PATH once: two library folders
+	//that overlap are one game in the grid, not two. "Path" is meant literally - this
+	//is a string set, so the same game spelled two ways is two entries, and a game
+	//reached through a symlink and through its target is two entries as well, because
+	//nothing here resolves a link (see `Normalize`; #1032's scan owns that). The
+	//order is first-seen, so the caller's folder order is what decides the scan's
+	//order.
 	public static IReadOnlyList<string> Union(IEnumerable<IEnumerable<string>> perFolder)
 	{
 		List<string> union = new();
@@ -206,10 +222,11 @@ public static class LibraryFolders
 	//games in M folders", with the one-count reading `1 game` / `1 folder` rather
 	//than a plural that says the player has two of something.
 	//
-	//M counts the folders that ANSWERED with games, not every row in the list: the
-	//header is the line that tells the player the scan found their collection, and
-	//a folder holding no ROM would make it claim one that gave the grid nothing
-	//(ADR-0260's rule for the older single games folder, read the same way).
+	//M is the LIST's row count - pass `folders.Count` of the list the player owns.
+	//It is not the folders that answered with games: the count describes their
+	//library, so a listed folder that holds no ROM is still a row the header names,
+	//and a scan that has not run yet cannot make the header under-report the
+	//library it is describing. Only N comes from the scan (ADR-0264 Decision 8).
 	public static string Header(int games, int folders)
 	{
 		return "Your library · " + games + (games == 1 ? " game" : " games")

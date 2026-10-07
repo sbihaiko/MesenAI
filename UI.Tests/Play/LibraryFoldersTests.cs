@@ -36,7 +36,7 @@ namespace Mesen.Tests.Play
 		{
 			string games = NewTempDir();
 			try {
-				IReadOnlyList<string> seeded = LibraryFolders.Seed(new List<string>(), true, games);
+				IReadOnlyList<string> seeded = LibraryFolders.Seed(null, true, games);
 				Assert.Equal(new[] { Path.GetFullPath(games) }, seeded);
 			} finally {
 				Directory.Delete(games, true);
@@ -51,7 +51,7 @@ namespace Mesen.Tests.Play
 		{
 			string games = NewTempDir();
 			try {
-				Assert.Empty(LibraryFolders.Seed(new List<string>(), false, games));
+				Assert.Empty(LibraryFolders.Seed(null, false, games));
 			} finally {
 				Directory.Delete(games, true);
 			}
@@ -60,8 +60,8 @@ namespace Mesen.Tests.Play
 		[Fact]
 		public void A_blank_games_folder_seeds_nothing()
 		{
-			Assert.Empty(LibraryFolders.Seed(new List<string>(), true, "   "));
-			Assert.Empty(LibraryFolders.Seed(new List<string>(), true, ""));
+			Assert.Empty(LibraryFolders.Seed(null, true, "   "));
+			Assert.Empty(LibraryFolders.Seed(null, true, ""));
 		}
 
 		//Seeding is a first-run act only: a list the player has already curated is
@@ -77,6 +77,27 @@ namespace Mesen.Tests.Play
 			} finally {
 				Directory.Delete(chosen, true);
 				Directory.Delete(old, true);
+			}
+		}
+
+		//Seeding happens once, and "once" is the stored value being ABSENT: the
+		//preference is null until the first run seeds it, and [] once the player has
+		//taken every folder out. An emptied list is the player's decision, not an
+		//unseeded one, so the old games folder must not come back on the next start.
+		[Fact]
+		public void An_emptied_list_is_never_reseeded()
+		{
+			string games = NewTempDir();
+			try {
+				IReadOnlyList<string> seeded = LibraryFolders.Seed(null, true, games);
+				Assert.Equal(new[] { Path.GetFullPath(games) }, seeded);
+
+				IReadOnlyList<string> emptied = LibraryFolders.Remove(seeded, games);
+				Assert.Empty(emptied);
+
+				Assert.Empty(LibraryFolders.Seed(emptied, true, games));
+			} finally {
+				Directory.Delete(games, true);
 			}
 		}
 
@@ -176,9 +197,9 @@ namespace Mesen.Tests.Play
 		}
 
 		//Decision 8's header, and the plural every count of one has to get right.
-		//M counts the folders that answered with games - the ones the grid is
-		//actually drawn from - so the header never claims a folder that gave
-		//nothing (ADR-0260 is the same rule for the older games folder).
+		//M is the LIST's row count - the folders the player put in their library -
+		//and nothing else: the header is a statement about their library, so a row
+		//that gave the grid nothing is still a row it names (ADR-0264 Decision 8).
 		[Theory]
 		[InlineData(0, 0, "Your library · 0 games in 0 folders")]
 		[InlineData(1, 1, "Your library · 1 game in 1 folder")]
@@ -190,8 +211,72 @@ namespace Mesen.Tests.Play
 			Assert.Equal(expected, LibraryFolders.Header(games, folders));
 		}
 
+		//Where the two counts come from, which is the part the formatter cannot say
+		//itself: the game count is the scan's answer, the folder count is the list's
+		//own row count - not the folders that answered with games. A listed folder
+		//holding no ROM is still a row the player put there, so it is still named.
+		[Fact]
+		public void The_header_counts_the_lists_rows_not_the_folders_that_answered()
+		{
+			string withGames = NewTempDir();
+			string withoutGames = NewTempDir();
+			try {
+				string rom = Path.Combine(withGames, "contra.nes");
+				File.WriteAllText(rom, "");
+
+				IReadOnlyList<string> list = LibraryFolders.Add(
+					LibraryFolders.Add(new List<string>(), withGames).Folders, withoutGames).Folders;
+				IReadOnlyList<string> grid = LibraryFolders.Union(new[] {
+					new[] { rom },
+					Array.Empty<string>()
+				});
+
+				//Two rows, one of which gave the grid a game: the library is two
+				//folders, so that is what the header says.
+				Assert.Equal(2, list.Count);
+				Assert.Single(grid);
+				Assert.Equal("Your library · 1 game in 2 folders", LibraryFolders.Header(grid.Count, list.Count));
+			} finally {
+				Directory.Delete(withGames, true);
+				Directory.Delete(withoutGames, true);
+			}
+		}
+
 		//Overlapping folders are two scans over the same files, and the player
 		//sees one grid: a ROM found under both appears once.
+		//What "each path once" means, pinned rather than claimed: the list and the
+		//union compare SPELLINGS, not files. `Normalize` is lexical (`Path.GetFullPath`
+		//does not resolve a link), so a game reached through a symlink and the same
+		//game reached through its target are two rows here, not one. Resolving links
+		//is a disk read and belongs to the scan (#1032), which is where the grid's
+		//de-duplication will happen - this module must not claim it does it.
+		[Fact]
+		public void A_game_reached_through_a_symlink_is_a_second_row()
+		{
+			string games = NewTempDir();
+			string rom = Path.Combine(games, "contra.nes");
+			string link = Path.Combine(games, "contra-linked.nes");
+			File.WriteAllText(rom, "");
+			File.CreateSymbolicLink(link, rom);
+			try {
+				Assert.True(File.Exists(link), "the fixture needs a real link");
+
+				//The list too: the link is its own row, because the path is its own path.
+				LibraryFolderEdit edit = LibraryFolders.Add(
+					LibraryFolders.Add(new List<string>(), rom).Folders, link);
+				Assert.Equal(LibraryFolderChange.Added, edit.Change);
+				Assert.Equal(2, edit.Folders.Count);
+
+				IReadOnlyList<string> union = LibraryFolders.Union(new[] {
+					new[] { rom },
+					new[] { link }
+				});
+				Assert.Equal(new[] { Path.GetFullPath(rom), Path.GetFullPath(link) }, union);
+			} finally {
+				Directory.Delete(games, true);
+			}
+		}
+
 		[Fact]
 		public void Overlapping_folders_list_each_rom_once()
 		{
