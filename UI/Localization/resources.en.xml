@@ -2214,6 +2214,17 @@
 		<Message ID="PlayHomeLastPlayedOn">Last played {0}</Message>
 		<Message ID="PlayHomePackBadgeInstalled">Enhancement pack installed</Message>
 		<Message ID="PlayHomePackBadgeCommunity">Community pack available — installs when you play</Message>
+		<!--#1036 (ADR-0264 Decision 8): the Library sheet's header. The sentence is
+		here rather than in LibraryFolders because it is player-facing text and that
+		module is host-free (ADR-0123) and owns no resource; the module owns the
+		plural RULE and answers with one of these four ids
+		(LibraryFolders.HeaderResourceId). All four format with the SAME two
+		arguments, (games, folders), so a caller that has the two counts passes both
+		whatever form it gets and the unused one is ignored.-->
+		<Message ID="LibraryHeaderGamesInFolders">Your library · {0} games in {1} folders</Message>
+		<Message ID="LibraryHeaderOneGameInFolders">Your library · 1 game in {1} folders</Message>
+		<Message ID="LibraryHeaderGamesInOneFolder">Your library · {0} games in 1 folder</Message>
+		<Message ID="LibraryHeaderOneGameInOneFolder">Your library · 1 game in 1 folder</Message>
 		<Message ID="OverlayRowNone">none</Message>
 		<Message ID="OverlayPackCommunityAvailable">Community pack available</Message>
 		<Message ID="OverlayRowCountOn">{0} on</Message>

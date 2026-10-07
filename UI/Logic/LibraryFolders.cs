@@ -16,8 +16,11 @@ namespace Mesen.Logic;
 //later without learning a type from this file: entry paths stay strings.
 
 //What an add did, so the caller can say something honest about it rather than
-//guess from a list it has to diff. `Added` and `MergedWithListed` changed the
-//list; the other three left it exactly as it was.
+//guess from a list it has to diff. Every member here is an answer `Add` really
+//gives: `Added` changed the list, `AlreadyListed` and `Invalid` left it exactly
+//as it was. A member for an outcome `Add` cannot produce would be a branch #1032
+//writes in the view for something that never happens, so there is none - the
+//nested cases are not answers but rows, and `Add`'s own comment says why.
 public enum LibraryFolderChange
 {
 	//The folder was not there and is now the list's last row.
@@ -25,19 +28,6 @@ public enum LibraryFolderChange
 
 	//The same folder is already listed, under another spelling of the same path.
 	AlreadyListed,
-
-	//The folder is inside one that is already listed. `Add` does NOT answer this:
-	//a nested root is added on its own row, because the scan under the parent is
-	//depth-bounded (ADR-0264 Decision 9) and the nested root is one level further
-	//down when it is reached through the parent - see `Add`. The member stays for
-	//the callers that already name every answer a folder add can give.
-	CoveredByListed,
-
-	//The folder CONTAINS folders that are listed. `Add` does NOT answer this
-	//either, and for the same reason: replacing those rows with their ancestor
-	//re-roots their subtrees one level higher, past the scan's budget for the
-	//games that sat at its edge.
-	MergedWithListed,
 
 	//Nothing to add: a blank path, or one the platform's path rules refuse.
 	Invalid
@@ -238,18 +228,32 @@ public static class LibraryFolders
 		return union;
 	}
 
-	//Decision 8's header, and the exact literal is the ADR's: "Your library · N
-	//games in M folders", with the one-count reading `1 game` / `1 folder` rather
-	//than a plural that says the player has two of something.
+	//Decision 8's header. The SENTENCE is not here: it is player-facing text, so it
+	//lives in the localization resources (`UI/Localization/resources.en.xml`,
+	//`<Messages>`) and is what a pt-BR player reads translated. This module is
+	//host-free (ADR-0123: BCL only, dual-compiled into UI.Tests) and owns no
+	//resource file, so it cannot resolve one; what it owns is the RULE - which of
+	//the four forms the two counts select - because the view that resolves the
+	//resource would otherwise have to re-derive the plurals and could get them
+	//wrong. The words belong to the resource; the rule belongs here.
+	//
+	//The four ids carry the ADR's literal, "Your library · N games in M folders",
+	//with the one-count reading `1 game` / `1 folder` rather than a plural that says
+	//the player has two of something. Every one of them formats with the SAME two
+	//arguments, `(games, folders)`, so a caller passes both counts whatever form it
+	//gets back and `string.Format` ignores the one a form does not use. A caller
+	//resolves it with `ResourceHelper.GetMessage(id, games, folders)`.
 	//
 	//M is the LIST's row count - pass `folders.Count` of the list the player owns.
 	//It is not the folders that answered with games: the count describes their
 	//library, so a listed folder that holds no ROM is still a row the header names,
 	//and a scan that has not run yet cannot make the header under-report the
 	//library it is describing. Only N comes from the scan (ADR-0264 Decision 8).
-	public static string Header(int games, int folders)
+	public static string HeaderResourceId(int games, int folders)
 	{
-		return "Your library · " + games + (games == 1 ? " game" : " games")
-			+ " in " + folders + (folders == 1 ? " folder" : " folders");
+		if(games == 1) {
+			return folders == 1 ? "LibraryHeaderOneGameInOneFolder" : "LibraryHeaderOneGameInFolders";
+		}
+		return folders == 1 ? "LibraryHeaderGamesInOneFolder" : "LibraryHeaderGamesInFolders";
 	}
 }

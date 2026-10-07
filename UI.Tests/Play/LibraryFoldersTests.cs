@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Xml.Linq;
 using Mesen.Logic;
 using Xunit;
 
@@ -29,6 +31,34 @@ namespace Mesen.Tests.Play
 		private static (string Plain, string Trailing, string Dotted) Spellings(string dir)
 		{
 			return (dir, dir + Path.DirectorySeparatorChar, Path.Combine(dir, "."));
+		}
+
+		//The player-facing strings, read from the file the app reads rather than
+		//restated here: the header's sentence is the resource's, so a test that typed
+		//its own copy would pass while the shipped one said something else. This
+		//project has no `<ProjectReference>` to UI.csproj (UI.Tests/AGENTS.md), so the
+		//XML is the only way to the same text - the same route
+		//`GamesFolderNoticeTests`, `PlayResumeHintTests` and `MenuPathHintTests` take.
+		private static Dictionary<string, string> ResourceTexts()
+		{
+			XDocument doc = XDocument.Load(Path.Combine(FindRepoRoot(), "UI", "Localization", "resources.en.xml"));
+			Dictionary<string, string> texts = new();
+			foreach(XElement node in doc.Descendants().Where(n => n.Name.LocalName == "Message")) {
+				string? id = node.Attribute("ID")?.Value;
+				if(id != null) {
+					texts.TryAdd(id, node.Value);
+				}
+			}
+			return texts;
+		}
+
+		private static string FindRepoRoot()
+		{
+			DirectoryInfo? dir = new(AppContext.BaseDirectory);
+			while(dir != null && !File.Exists(Path.Combine(dir.FullName, "Mesen.sln"))) {
+				dir = dir.Parent;
+			}
+			return dir?.FullName ?? throw new InvalidOperationException("Could not locate repo root (Mesen.sln) from " + AppContext.BaseDirectory);
 		}
 
 		//How many folder levels below `parent` the folder `child` sits, read off the
@@ -137,6 +167,18 @@ namespace Mesen.Tests.Play
 			LibraryFolderEdit edit = LibraryFolders.Add(new List<string>(), "  ");
 			Assert.Equal(LibraryFolderChange.Invalid, edit.Change);
 			Assert.Empty(edit.Folders);
+		}
+
+		//The enum names every answer an add gives, and nothing it cannot. A value no
+		//caller can ever receive is a branch #1032 would have to write in the view for
+		//an outcome that cannot happen, and the answer to "did the list change?" would
+		//then be spread over values that never arrive.
+		[Fact]
+		public void Add_only_answers_the_answers_it_can_give()
+		{
+			Assert.Equal(
+				new[] { LibraryFolderChange.Added, LibraryFolderChange.AlreadyListed, LibraryFolderChange.Invalid },
+				Enum.GetValues<LibraryFolderChange>());
 		}
 
 		//A folder name may END in a space, and `/roms/NES ` is then a different
@@ -406,15 +448,27 @@ namespace Mesen.Tests.Play
 		//M is the LIST's row count - the folders the player put in their library -
 		//and nothing else: the header is a statement about their library, so a row
 		//that gave the grid nothing is still a row it names (ADR-0264 Decision 8).
+		//
+		//The sentence is the RESOURCE's, not this module's: it is player-facing text,
+		//so it is read out of `resources.en.xml` the way the view reads it, and the
+		//expected strings below are the ADR's literal typed out independently. That is
+		//what keeps the resource and the ADR from drifting apart unnoticed, and it is
+		//why the module answers with an id rather than the sentence - the module is
+		//host-free (ADR-0123) and cannot reach a resource file.
 		[Theory]
-		[InlineData(0, 0, "Your library · 0 games in 0 folders")]
-		[InlineData(1, 1, "Your library · 1 game in 1 folder")]
-		[InlineData(2, 1, "Your library · 2 games in 1 folder")]
-		[InlineData(2, 3, "Your library · 2 games in 3 folders")]
-		[InlineData(1150, 4, "Your library · 1150 games in 4 folders")]
-		public void The_header_names_the_games_and_the_folders(int games, int folders, string expected)
+		[InlineData(0, 0, "LibraryHeaderGamesInFolders", "Your library · 0 games in 0 folders")]
+		[InlineData(1, 1, "LibraryHeaderOneGameInOneFolder", "Your library · 1 game in 1 folder")]
+		[InlineData(2, 1, "LibraryHeaderGamesInOneFolder", "Your library · 2 games in 1 folder")]
+		[InlineData(2, 3, "LibraryHeaderGamesInFolders", "Your library · 2 games in 3 folders")]
+		[InlineData(1150, 4, "LibraryHeaderGamesInFolders", "Your library · 1150 games in 4 folders")]
+		public void The_header_is_a_localized_sentence_the_module_only_selects(int games, int folders, string id, string expected)
 		{
-			Assert.Equal(expected, LibraryFolders.Header(games, folders));
+			Assert.Equal(id, LibraryFolders.HeaderResourceId(games, folders));
+
+			//Read exactly as the view resolves it, with the same two arguments.
+			Dictionary<string, string> texts = ResourceTexts();
+			Assert.True(texts.TryGetValue(id, out string? text), "resources.en.xml has no <Message ID=\"" + id + "\">");
+			Assert.Equal(expected, string.Format(CultureInfo.InvariantCulture, text, games, folders));
 		}
 
 		//Where the two counts come from, which is the part the formatter cannot say
@@ -441,42 +495,78 @@ namespace Mesen.Tests.Play
 				//folders, so that is what the header says.
 				Assert.Equal(2, list.Count);
 				Assert.Single(grid);
-				Assert.Equal("Your library · 1 game in 2 folders", LibraryFolders.Header(grid.Count, list.Count));
+
+				Dictionary<string, string> texts = ResourceTexts();
+				string id = LibraryFolders.HeaderResourceId(grid.Count, list.Count);
+				Assert.Equal("Your library · 1 game in 2 folders", string.Format(CultureInfo.InvariantCulture, texts[id], grid.Count, list.Count));
 			} finally {
 				Directory.Delete(withGames, true);
 				Directory.Delete(withoutGames, true);
 			}
 		}
 
-		//Overlapping folders are two scans over the same files, and the player
-		//sees one grid: a ROM found under both appears once.
-		//What "each path once" means, pinned rather than claimed: the list and the
-		//union compare SPELLINGS, not files. `Normalize` is lexical (`Path.GetFullPath`
-		//does not resolve a link), so a game reached through a symlink and the same
-		//game reached through its target are two rows here, not one. Resolving links
-		//is a disk read and belongs to the scan (#1032), which is where the grid's
-		//de-duplication will happen - this module must not claim it does it.
-		//Two spellings, no link: the rule under test is lexical, so it reads the same
-		//whether a link exists or not - and creating one needs a privilege Windows
-		//test hosts do not have by default.
+		//The list and the union compare SPELLINGS, not files. `Normalize` is lexical
+		//(`Path.GetFullPath` does not resolve a link), so a folder reached through a
+		//symlink and the same folder reached directly are two ROWS, and a game under
+		//them is two ENTRIES in the grid. Resolving a link is a disk read and belongs
+		//to the scan (#1032), which is where the grid's de-duplication happens; this
+		//module must not claim it does it.
+		//
+		//The link is real, so the name is earned rather than asserted: the test makes
+		//one on disk and adds BOTH the target and the link, as folders, which is what
+		//`Add` takes. Where the platform refuses a link to a test host - Windows needs
+		//Developer Mode or an elevated process - the test says so out loud and falls
+		//back to two plain folders, because the rule under test reads the same either
+		//way. On a platform that allows a link, failing to make one is a test-host
+		//failure and must not pass as "the fallback was tested".
 		[Fact]
 		public void A_game_reached_through_a_symlink_is_a_second_row()
 		{
-			string games = Path.Combine(Path.GetTempPath(), "mesence-library-symlink-spelling");
-			string rom = Path.Combine(games, "contra.nes");
-			string link = Path.Combine(games, "contra-linked.nes");
+			string games = NewTempDir();
+			string link = Path.Combine(Path.GetTempPath(), "mesence-library-link-" + Guid.NewGuid().ToString("N"));
+			try {
+				string rom = Path.Combine(games, "contra.nes");
+				File.WriteAllText(rom, "");
 
-			//The list too: the link is its own row, because the path is its own path.
-			LibraryFolderEdit edit = LibraryFolders.Add(
-				LibraryFolders.Add(new List<string>(), rom).Folders, link);
-			Assert.Equal(LibraryFolderChange.Added, edit.Change);
-			Assert.Equal(2, edit.Folders.Count);
+				bool linked = TryCreateLink(link, games);
+				if(!linked) {
+					Assert.True(OperatingSystem.IsWindows(), "a directory link could not be created on a platform that allows one");
+					Directory.CreateDirectory(link);
+				}
 
-			IReadOnlyList<string> union = LibraryFolders.Union(new[] {
-				new[] { rom },
-				new[] { link }
-			});
-			Assert.Equal(new[] { Path.GetFullPath(rom), Path.GetFullPath(link) }, union);
+				//Two rows, one per spelling - the link is not folded into its target.
+				LibraryFolderEdit edit = LibraryFolders.Add(
+					LibraryFolders.Add(new List<string>(), games).Folders, link);
+				Assert.Equal(LibraryFolderChange.Added, edit.Change);
+				Assert.Equal(new[] { Path.GetFullPath(games), Path.GetFullPath(link) }, edit.Folders);
+
+				//And the same game under both spellings is two entries, not one.
+				IReadOnlyList<string> union = LibraryFolders.Union(new[] {
+					new[] { rom },
+					new[] { Path.Combine(link, "contra.nes") }
+				});
+				Assert.Equal(2, union.Count);
+				Assert.Equal(Path.GetFullPath(rom), union[0]);
+			} finally {
+				//`Directory.Delete` removes the LINK, never the folder it points at.
+				if(Directory.Exists(link)) {
+					Directory.Delete(link);
+				}
+				Directory.Delete(games, true);
+			}
+		}
+
+		//A directory link, where the platform allows one. The answer is reported
+		//rather than assumed: Windows test hosts need a privilege this suite does not
+		//require, and the caller decides what to do about that.
+		private static bool TryCreateLink(string link, string target)
+		{
+			try {
+				Directory.CreateSymbolicLink(link, target);
+				return true;
+			} catch(Exception) {
+				return false;
+			}
 		}
 
 		[Fact]
