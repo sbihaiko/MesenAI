@@ -29,6 +29,20 @@ namespace Mesen.Views
 			}
 		}
 
+		//#1032 (ADR-0264 Decision 3): A plays the focused game. The tile IS the
+		//choice, so this is the whole of the press.
+		private void OnPlayTile(object? sender, RoutedEventArgs e)
+		{
+			if(sender is Control { DataContext: PlayerLibraryTile tile }) {
+				Model?.Play(tile);
+			}
+		}
+
+		//#1032 (ADR-0264 Decision 11): *Browse a file…* steps into the folder
+		//browser ADR-0256 Decision 9 built, which is the same sheet's second
+		//surface rather than a second sheet.
+		private void OnBrowseFile(object? sender, RoutedEventArgs e) => Model?.BrowseFile();
+
 		private void OnBack(object? sender, RoutedEventArgs e) => Model?.Back();
 	}
 }

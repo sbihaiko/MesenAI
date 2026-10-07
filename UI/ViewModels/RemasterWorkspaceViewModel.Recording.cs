@@ -215,6 +215,11 @@ namespace Mesen.ViewModels
 		private PlayerRomPickerViewModel NewRightGamePicker()
 		{
 			PlayerRomPickerViewModel picker = new();
+			//#1032 (ADR-0264): the Play sheet opens on the flat library now. This
+			//one is not that sheet - it picks the single *right game* for a
+			//remaster project - so it opens on the folder browser, which is the
+			//surface it has always been and the one a one-file choice wants.
+			picker.OpenMode = RomPickerMode.BrowseFile;
 			picker.RomChosen += path => LoadRom(path);
 			return picker;
 		}

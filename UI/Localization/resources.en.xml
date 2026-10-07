@@ -2638,6 +2638,27 @@ E
 		<Message ID="BiosShortNameOther">the BIOS file</Message>
 		<Message ID="BiosNeededStatus">{0} needs {1}</Message>
 		<Message ID="RomPickerTitle">Open a ROM</Message>
+		<!-- #1032 (ADR-0264): the Play sheet's own surface is the flat library,
+		     so it has its own header, its own count and its own empty state. The
+		     browser's strings below are unchanged: the browser is unchanged. -->
+		<Message ID="RomPickerLibraryTitle">Your library</Message>
+		<!-- The header's count (Decision 8), assembled from counted words rather
+		     than from a plural form: "1 games" and "11 games in 1 folders" are
+		     both what a single template gets wrong, and a player reads this line
+		     on every visit. {0} = the games, {1} = the folders that answered. -->
+		<Message ID="RomPickerLibraryCount">{0} in {1}</Message>
+		<Message ID="RomPickerGameOne">1 game</Message>
+		<Message ID="RomPickerGameMany">{0} games</Message>
+		<Message ID="RomPickerFolderOne">1 folder</Message>
+		<Message ID="RomPickerFolderMany">{0} folders</Message>
+		<!-- Decision 9: a scan that hit LibraryScan.MaxEntries says so rather than
+		     silently dropping games. {0} = the cap. -->
+		<Message ID="RomPickerLibraryTruncated">Showing the first {0} games — the scan stopped at its limit.</Message>
+		<!-- Decision 8: the named empty state, and it names the NEXT STEP. This
+		     slice has no Library folders… control yet, so the step it can point
+		     at is the one that exists: the browser's own action row. -->
+		<Message ID="RomPickerLibraryNoFolders">No library folder yet. Pick a folder with Browse a file…, then choose Make this my games folder.</Message>
+		<Message ID="btnRomPickerBrowseFile">Browse a file…</Message>
 		<Message ID="RomPickerEmpty">No games in this folder.</Message>
 		<Message ID="RomPickerThisComputer">This computer</Message>
 		<Message ID="RomPickerSearching">Looking for your games…</Message>

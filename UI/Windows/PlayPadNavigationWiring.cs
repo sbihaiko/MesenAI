@@ -250,10 +250,18 @@ namespace Mesen.Windows
 			//lands). A replaced row takes its container - and the ring on it - with
 			//it, and without this the pad would be left with nothing focused to
 			//press Confirm on.
+			//
+			//#1032 (ADR-0264): the sheet has TWO surfaces now - the library and,
+			//inside it, the folder browser *Browse a file…* opens - so the claim
+			//watches the mode and the grid's own revision beside the browser's,
+			//and the target is whichever surface's first control the mode names.
+			//Without the mode in the list, the press that steps into the browser
+			//would leave the ring on a tile the player can no longer see.
 			focus.When(model.RomPicker,
 				[nameof(PlayerRomPickerViewModel.IsVisible), nameof(PlayerRomPickerViewModel.PathText),
-				 nameof(PlayerRomPickerViewModel.SuggestionRevision)],
-				() => model.RomPicker.IsVisible, () => RomPickerFirstRow(window) ?? Named(window, "RomPickerBack"),
+				 nameof(PlayerRomPickerViewModel.SuggestionRevision), nameof(PlayerRomPickerViewModel.Mode),
+				 nameof(PlayerRomPickerViewModel.TilesRevision)],
+				() => model.RomPicker.IsVisible, () => RomPickerFocusTarget(window, model),
 				() => Named(window, "PlayerRomPickerSheet"));
 
 			//The content area under all of them: the home's primary action, the
@@ -303,11 +311,87 @@ namespace Mesen.Windows
 		//silently repoint the games folder. So the first non-Action row wins; a
 		//folder with no content rows at all answers null, which the caller turns
 		//into the Back button rather than the action row.
+		//#1032 (ADR-0264): which surface's first control the ring lands on. The
+		//library's way in is its first TILE (Decision 3: A plays the focused
+		//game, so the sheet must open with a game focused); the browser's is its
+		//first row, as it always was. Both fall back to Back, so a state with
+		//nothing to pick still has something to press - the ring is never left
+		//with nothing at all.
+		private static Control? RomPickerFocusTarget(MainWindow window, MainWindowViewModel model)
+		{
+			if(model.RomPicker.Mode == RomPickerMode.Library) {
+				return RomPickerFirstTile(window) ?? Named(window, "RomPickerBack");
+			}
+			return RomPickerFirstRow(window) ?? Named(window, "RomPickerBack");
+		}
+
+		//The grid's first tile. The items are found by their own data context -
+		//the same way the rows are - so a rebuild that reorders the grid moves
+		//the ring to whatever leads it now.
+		private static Control? RomPickerFirstTile(MainWindow window)
+		{
+			IEnumerable<Button> tiles = (Named(window, "RomPickerGrid") as ItemsControl)?.GetVisualDescendants().OfType<Button>()
+				?? Enumerable.Empty<Button>();
+			return tiles.FirstOrDefault(b => b.DataContext is PlayerLibraryTile);
+		}
+
 		private static Control? RomPickerFirstRow(MainWindow window)
 		{
 			IEnumerable<Button> rows = (Named(window, "RomPickerList") as ItemsControl)?.GetVisualDescendants().OfType<Button>()
 				?? Enumerable.Empty<Button>();
 			return rows.FirstOrDefault(b => b.DataContext is not PlayerRomPickerRow row || row.Kind != RomPickerRowKind.Action);
+		}
+
+		//#1032 (ADR-0264 Decision 3, as AMENDED on #1040): the library grid is not
+		//a trap. Up from the grid's TOP row steps into the sheet's header
+		//controls, and Down steps back to the tile it left. Those header controls
+		//are otherwise unreachable from a pad - the grid's own XY navigation holds
+		//the ring inside itself - and ADR-0256's rule that the whole Play GUI
+		//works from a controller alone is not a clause ADR-0264 supersedes: a
+		//pad-only player still has to reach *Browse a file…*, and therefore *Make
+		//this my games folder* inside it.
+		//
+		//The search field and *Library folders…* the amendment also names are
+		//later slices (#1034, #1035); this answers for the header the sheet has
+		//today and keeps answering as they arrive, because it asks the sheet for
+		//its controls by name rather than counting them.
+		//
+		//Nothing outside this sheet is touched in either direction: every other
+		//surface keeps the engine's own traversal, and this closes only the one
+		//case the engine cannot - a grid whose XY scope has nothing above it.
+		private static Control? RomPickerHeaderStep(MainWindow window, Control focused, Control? lastTile, PadNavAction action)
+		{
+			if(Named(window, "RomPickerGrid") is not ItemsControl grid) {
+				return null;
+			}
+			if(action == PadNavAction.Up && focused.DataContext is PlayerLibraryTile && IsInFirstGridRow(grid, focused)) {
+				return Named(window, "RomPickerBrowseFile") ?? Named(window, "RomPickerBack");
+			}
+			if(action == PadNavAction.Down && focused.Name is "RomPickerBrowseFile" or "RomPickerBack") {
+				//The tile the player left, not the first one: Down undoes Up.
+				return lastTile ?? RomPickerFirstTile(window) ?? Named(window, "RomPickerBack");
+			}
+			return null;
+		}
+
+		//The grid's first visual row. The WrapPanel owns the layout, so the row is
+		//read off the positions rather than counted: the tiles that share the
+		//smallest Y are the ones with nothing above them, whatever the tile width
+		//or the sheet's width happens to be.
+		private static bool IsInFirstGridRow(ItemsControl grid, Control focused)
+		{
+			double top = double.MaxValue;
+			double? mine = null;
+			foreach(Button tile in grid.GetVisualDescendants().OfType<Button>()) {
+				if(tile.DataContext is not PlayerLibraryTile || tile.TranslatePoint(new Point(0, 0), grid) is not Point point) {
+					continue;
+				}
+				top = Math.Min(top, point.Y);
+				if(ReferenceEquals(tile, focused)) {
+					mine = point.Y;
+				}
+			}
+			return mine is not null && mine.Value <= top + 1;
 		}
 
 		//W-P5: the stored choice, else the first row.
@@ -379,6 +463,9 @@ namespace Mesen.Windows
 			//#964: the drop-down the pad opened and the row it is on (committed
 			//only by Confirm), and the hold button Confirm is holding down.
 			private ComboBox? _openPopup;
+			//#1032 (ADR-0264 Decision 3, as amended): the library tile the ring
+			//last sat on, so Down out of the header comes back to it.
+			private Control? _libraryTile;
 			private int _walk = -1;
 			private Button? _holding;
 			//ADR-0262: the one on-screen keyboard, the field it fills and the
@@ -565,6 +652,13 @@ namespace Mesen.Windows
 					return;
 				}
 				if(_window.FocusManager?.GetFocusedElement() is not Control focused) {
+					return;
+				}
+				if(focused.DataContext is PlayerLibraryTile) {
+					_libraryTile = focused;
+				}
+				if(RomPickerHeaderStep(_window, focused, _libraryTile, action) is Control header) {
+					PlayFocusOnOpen.Enter(header);
 					return;
 				}
 

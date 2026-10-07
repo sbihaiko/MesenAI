@@ -158,6 +158,9 @@ public class PlayRomPickerRenderTests : IDisposable
 		model.RomPicker.SuggestionSource = _ => new[] { new RomPickerHit(lib, 30) };
 		model.RomPicker.RunScanInline = true;
 		model.OpenRomPicker();
+		//#1032 (ADR-0264 Decision 11): these renders are of the BROWSER, which
+		//now lives inside the library sheet behind *Browse a file…*.
+		model.RomPicker.BrowseFile();
 		Pump();
 
 		AssertSheetIsUp(window, model);
@@ -186,6 +189,9 @@ public class PlayRomPickerRenderTests : IDisposable
 		};
 		try {
 			model.OpenRomPicker();
+		//#1032 (ADR-0264 Decision 11): these renders are of the BROWSER, which
+		//now lives inside the library sheet behind *Browse a file…*.
+		model.RomPicker.BrowseFile();
 			Pump();
 
 			WaitFor(() => model.RomPicker.SearchingText.Length > 0, "the scan never announced itself");
@@ -216,6 +222,9 @@ public class PlayRomPickerRenderTests : IDisposable
 		model.RomPicker.SuggestionSource = _ => Array.Empty<RomPickerHit>();
 		model.RomPicker.RunScanInline = true;
 		model.OpenRomPicker();
+		//#1032 (ADR-0264 Decision 11): these renders are of the BROWSER, which
+		//now lives inside the library sheet behind *Browse a file…*.
+		model.RomPicker.BrowseFile();
 		Pump();
 		model.RomPicker.Choose(model.RomPicker.Rows.First(r => r.Label == "Your games"));
 		Pump();
@@ -244,6 +253,9 @@ public class PlayRomPickerRenderTests : IDisposable
 		model.RomPicker.SuggestionSource = _ => Array.Empty<RomPickerHit>();
 		model.RomPicker.RunScanInline = true;
 		model.OpenRomPicker();
+		//#1032 (ADR-0264 Decision 11): these renders are of the BROWSER, which
+		//now lives inside the library sheet behind *Browse a file…*.
+		model.RomPicker.BrowseFile();
 		Pump();
 		model.RomPicker.Choose(model.RomPicker.Rows.First(r => r.Label == "Your games"));
 		Pump();
@@ -278,6 +290,9 @@ public class PlayRomPickerRenderTests : IDisposable
 		model.RomPicker.SuggestionSource = _ => Array.Empty<RomPickerHit>();
 		model.RomPicker.RunScanInline = true;
 		model.OpenRomPicker();
+		//#1032 (ADR-0264 Decision 11): these renders are of the BROWSER, which
+		//now lives inside the library sheet behind *Browse a file…*.
+		model.RomPicker.BrowseFile();
 		Pump();
 		model.RomPicker.Choose(model.RomPicker.Rows.First(r => r.Label == "Your games"));
 		Pump();
