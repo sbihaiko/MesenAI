@@ -77,10 +77,12 @@
   the pad's own and leaves the pad split across two - the PLAYERS move then has to
   move both slots and refuses with NoFreeSlot where one would have fit. It now
   joins the pad's slot (`ControllerSheetRemap.TargetSlot`'s `padSlot`).
-  Three limits are carried rather than solved: a rebind does not clear the same
-  pad button from another control, the port light reads the first non-zero field
-  across the port's four slots, and the section was never visually evaluated with
-  the pad, PLAYERS and REMAP all on screen at once.
+  Two limits are carried rather than solved: a rebind does not clear the same
+  pad button from another control, and the section was never visually evaluated
+  with the pad, PLAYERS and REMAP all on screen at once. (A third, the port light
+  reading the first non-zero field across the port's four slots, is closed by
+  #965: the light reads the slot the selected pad holds,
+  `ControllerSheetRemap.BoundCode`.)
   Slice 4's surface (the extra buttons) is implemented: the sheet's EXTRA
   BUTTONS section, `UI/ViewModels/ControllerSheetViewModel.Extra.cs`
   (2026-10-04, #844, above).
@@ -336,17 +338,32 @@ theirs.
   light where it has one (DualShock 4/DualSense via `GCController.light`; `nil` on
   an Xbox pad, which is not an error state), and nowhere else. Colour that appears
   once is decoration, not language.
-- **The reconnect repair has two limits that survive it, and they are limits of
+- **The reconnect repair has one limit that survives it, and it is a limit of
   the identity, not of the implementation (recorded 2026-10-04 with slice 5).** A
   **single** pad of a model that appeared twice cannot be told from its sibling:
   with only one of two identical pads present after a disconnect, nothing
   distinguishes it, so a reconnect can still move its keys. Point 4 only drops the
   move when both are *present*; no VID:PID scheme can disambiguate a lone sibling,
   and inventing one (a serial, a connection order) is the guess this ADR refuses.
-  Second, the repair walks `Port1A`/`Port1B` (the Four Score's P3/P4) but
-  `NesConfig.ApplyConfig` pushes those two from `Port1`/`Port2`, so that part of
-  the walk is decorative until the Four Score's own push path is fixed —
-  pre-existing, named here so it is not mistaken for coverage.
+- **Correction, not a second limit: the repair covers all four Four Score
+  players (corrected 2026-10-06,
+  [issue #943](https://github.com/sbihaiko/MesenAI/issues/943)).** This
+  supersedes the 2026-10-04 wording, which mis-mapped `Port1A`/`Port1B` as P3/P4
+  and called the walk over P3/P4 decorative. The P3/P4 are `Port1C`/`Port1D`, not `Port1A`/`Port1B`:
+  `InteropNesConfig` (`UI/Config/NesConfig.cs:283-300`) lays `Port1A`…`Port1D`
+  onto the Core's `Port1SubPorts[0..3]` (`Core/Shared/SettingTypes.h:715-722`),
+  and the Four Score takes those four in order as P1–P4
+  (`Core/NES/NesControlManager.cpp:128-130`). So `Port1A`/`Port1B` are P1/P2,
+  and `NesConfig.ApplyConfig` fills them with `Port1`'s/`Port2`'s keys under
+  their own type (`UI/Config/NesConfig.cs:150-151`); `Port1C`/`Port1D` go out
+  with their own keys (`UI/Config/NesConfig.cs:152-153`). The repair walks all
+  of them (`UI/Config/ControllerKeyMigration.cs:55-56`), so P1–P4 are covered.
+  What `Port1A`/`Port1B` hold as their own keys is redundant storage: only their
+  `Type` reaches the Core or the classic Input page
+  (`UI/Views/NesInputConfigView.axaml:56,64`), so walking those keys moves
+  nothing a player plays with — harmless, and not a gap in the repair.
+  `UI.HeadlessTests/ControllerKeyMigrationTests.cs` pins it: a P3/P4 repair
+  reaches `NesConfig.ToInterop()`, the struct `ApplyConfig` hands the Core.
 - **The pad's own light is the one promise above with no owner, and it is
   recorded here rather than silently dropped (2026-10-04).** No slice carries it,
   and it cannot be built from what exists: `GamepadInfo`

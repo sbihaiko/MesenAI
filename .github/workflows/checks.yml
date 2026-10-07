@@ -277,8 +277,24 @@ jobs:
         # the dual-compile below is still the authoritative gate.
         run: ./scripts/verify-ui-logic-firewall.sh
 
+      # #951: PlayerWireframeTests feeds the committed W-P renders
+      # (UI.Tests/Theme/PlayerRenders/) through the host-free wireframe
+      # comparator and gate, and writes each <W-id>.wireframe.md here. This is
+      # the CI-side comparison: this job has no core (ADR-0131), so it compares
+      # the committed renders, not fresh ones - a layout change reaches CI only
+      # once its render is re-committed (the headless gate catches it locally).
       - name: Run unit tests
+        env:
+          MESEN_PLAYER_RENDERS: ${{ runner.temp }}/wireframe-reports
         run: dotnet test UI.Tests/UI.Tests.csproj --nologo
+
+      - name: Upload wireframe reports of the committed Player renders
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: wireframe-reports
+          path: ${{ runner.temp }}/wireframe-reports
+          if-no-files-found: error
 
   # ADR-0150 (accepted 2026-09-03): headless Avalonia XAML-wiring tests in a
   # separate project that references UI/UI.csproj. Kept as its own job - NOT a
@@ -313,7 +329,8 @@ jobs:
 
       # ADR-0249 Decision 5 / #951: the Player renders and their per-region
       # wireframe reports (<W-id>.wireframe.md). Without a built core the render
-      # tests self-skip, so the folder may be empty; that is not an error.
+      # tests self-skip, so this folder is empty on CI; the reports CI does
+      # produce come from the committed renders (ui-tests' wireframe-reports).
       - name: Upload Player renders and wireframe reports
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

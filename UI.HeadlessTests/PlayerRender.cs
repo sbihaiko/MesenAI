@@ -7,6 +7,7 @@ using Avalonia.Controls;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Threading;
+using Mesen.Logic;
 using Xunit;
 
 namespace Mesen.HeadlessTests;
@@ -46,10 +47,73 @@ internal static class PlayerRender
 		Console.WriteLine("render: " + path);
 		//#951: a W-P render also gets its region report against the wireframe
 		//(report only here; PlayerThemeRenderTests asserts its own screens).
-		if(PlayerWireframe.IsPlayerWireframe(name)) {
-			PlayerWireframe.CompareAndReport(name, frame);
+		//A report failure is logged, never thrown: this test wanted the PNG.
+		if(PlayerWireframe.IsPlayerRenderName(name)) {
+			try {
+				WriteWireframeReport(name, frame);
+			} catch(Exception ex) {
+				Log($"wireframe report for {name} failed: {ex.GetType().Name}: {ex.Message}");
+			}
 		}
 		return path;
+	}
+
+	private static void Log(string line)
+	{
+		Xunit.TestContext.Current.TestOutputHelper?.WriteLine(line);
+		Console.WriteLine(line);
+	}
+
+	//Writes <name>.wireframe.md next to the PNG: the region table against the
+	//wireframe its name resolves to, or a "no wireframe" line.
+	private static void WriteWireframeReport(string name, Bitmap frame)
+	{
+		string? wId = PlayerWireframe.ResolveWireframeId(name, id => File.Exists(WireframePath(id)));
+		string report;
+		if(wId == null) {
+			report = PlayerWireframe.NoWireframeReport(name);
+		} else {
+			RgbFrame render = Rgb(frame);
+			report = PlayerWireframe.Report(name, wId, PlayerWireframe.Compare(wId, render, RgbFrame.FromPng(WireframePath(wId))), render.Width, render.Height);
+		}
+		string path = Path.Combine(OutputFolder, name + ".wireframe.md");
+		File.WriteAllText(path, report);
+		Log("wireframe report: " + path);
+	}
+
+	public static string WireframePath(string wId) => Path.Combine(GuiRedesignFolder, wId + ".png");
+
+	private static string GuiRedesignFolder {
+		get {
+			for(DirectoryInfo? dir = new(AppContext.BaseDirectory); dir != null; dir = dir.Parent) {
+				string candidate = Path.Combine(dir.FullName, "docs", "media", "gui-redesign");
+				if(Directory.Exists(candidate)) {
+					return candidate;
+				}
+			}
+			throw new DirectoryNotFoundException("docs/media/gui-redesign not found above " + AppContext.BaseDirectory);
+		}
+	}
+
+	//The frame as the comparator's opaque RGB copy (same format rule as Pixel).
+	public static RgbFrame Rgb(Bitmap bitmap)
+	{
+		int width = bitmap.PixelSize.Width, height = bitmap.PixelSize.Height;
+		byte[] raw = new byte[width * height * 4];
+		GCHandle pin = GCHandle.Alloc(raw, GCHandleType.Pinned);
+		try {
+			bitmap.CopyPixels(new PixelRect(0, 0, width, height), pin.AddrOfPinnedObject(), raw.Length, width * 4);
+		} finally {
+			pin.Free();
+		}
+		bool rgba = bitmap.Format == Avalonia.Platform.PixelFormat.Rgba8888;
+		byte[] rgb = new byte[width * height * 3];
+		for(int p = 0; p < width * height; p++) {
+			rgb[p * 3] = raw[p * 4 + (rgba ? 0 : 2)];
+			rgb[p * 3 + 1] = raw[p * 4 + 1];
+			rgb[p * 3 + 2] = raw[p * 4 + (rgba ? 2 : 0)];
+		}
+		return new RgbFrame(width, height, rgb);
 	}
 
 	//One pixel of the frame, in device pixels (the headless scale is 1).
