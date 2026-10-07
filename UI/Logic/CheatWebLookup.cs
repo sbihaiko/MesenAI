@@ -113,7 +113,8 @@ public static class CheatWebLookup
 //The real checker: the user's python3 runs scripts/cheat_web_lookup.py from
 //the tools folder (ADR-0247: the script reads the pages and runs the check;
 //the client calls no model). The script reads no key, so no key is handed to
-//it. A run that exits with an error offers nothing.
+//it. A run that exits with an error throws CheatWebLookupException: it checked
+//nothing, which is not the same as nothing passing.
 public sealed class CheatWebLookupScriptChecker : ICheatWebChecker
 {
 	private readonly Func<IReadOnlyList<string>, Task<CheatWebRun>> _run;
@@ -131,6 +132,9 @@ public sealed class CheatWebLookupScriptChecker : ICheatWebChecker
 		List<string> argv = new() { Path.Combine(_scriptsFolder, CheatWebLookup.Script) };
 		argv.AddRange(CheatWebLookup.Arguments(romPath, gameName));
 		CheatWebRun run = await _run(argv).ConfigureAwait(false);
-		return run.ExitCode == 0 ? CheatWebLookup.ParseOutput(run.Stdout) : Array.Empty<WebFoundCode>();
+		if(run.ExitCode != 0) {
+			throw new CheatWebLookupException($"{CheatWebLookup.Script} exited with code {run.ExitCode}");
+		}
+		return CheatWebLookup.ParseOutput(run.Stdout);
 	}
 }

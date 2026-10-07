@@ -138,12 +138,28 @@ namespace Mesen.Tests.Cheats
 			Assert.Equal(WebCheckState.Passed, Assert.Single(codes).Check);
 		}
 
-		[Fact]
-		public async Task A_lookup_that_exits_with_an_error_offers_nothing()
+		//#949 review: a run that never got to check (no script, a refused ROM,
+		//exit 3 page unreadable, exit 4 check could not run, a launch failure)
+		//is a failed run, never "nothing passed".
+		[Theory]
+		[InlineData(-1)]
+		[InlineData(1)]
+		[InlineData(2)]
+		[InlineData(3)]
+		[InlineData(4)]
+		public async Task A_lookup_that_exits_with_an_error_is_a_failed_run_not_an_empty_answer(int exitCode)
 		{
-			FakeScript script = new() { ExitCode = 1, Stdout = Output(Code("0032:09", "Infinite lives", CheatWebLookup.Label)) };
+			FakeScript script = new() { ExitCode = exitCode, Stdout = Output(Code("0032:09", "Infinite lives", CheatWebLookup.Label)) };
 
-			Assert.Empty(await new CheatWebLookupScriptChecker(script.RunAsync, "/tools").LookUpAsync("/roms/c.nes", "Castlevania"));
+			await Assert.ThrowsAsync<CheatWebLookupException>(() => new CheatWebLookupScriptChecker(script.RunAsync, "/tools").LookUpAsync("/roms/c.nes", "Castlevania"));
+		}
+
+		[Fact]
+		public async Task A_lookup_that_ran_and_found_nothing_passing_answers_empty()
+		{
+			FakeScript script = new() { Stdout = Output(Code("0032:09", "Infinite lives", "unchecked")) };
+
+			Assert.Empty(CheatWebLookup.Offered(await new CheatWebLookupScriptChecker(script.RunAsync, "/tools").LookUpAsync("/roms/c.nes", "Castlevania")));
 		}
 	}
 }
