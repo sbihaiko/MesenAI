@@ -236,6 +236,33 @@ public class PlayerLibraryConsoleFilterTests : IDisposable
 
 	private static string[] TileTitles(MainWindowViewModel model) => model.RomPicker.Tiles.Select(t => t.Title).ToArray();
 
+	//The titles the grid actually DRAWS, in the order a player reads them: the
+	//visible `library-title` text of the tile buttons the grid realized. Read off
+	//the visual tree rather than off the view-model on purpose - the acceptance
+	//criterion of #1034 is about what the narrow grid shows, and a `Tiles` list
+	//that narrowed while `RomPickerGrid` kept drawing the old tiles would answer
+	//a view-model read identically. The row is read the same way, for the same
+	//reason (see Segments above).
+	private static string[] DrawnTileTitles(MainWindow window)
+	{
+		return window.FindNamed<ItemsControl>("RomPickerGrid")
+			.FindAll<Button>()
+			.Where(b => b.IsOnScreen())
+			.SelectMany(b => b.FindAll<TextBlock>())
+			.Where(t => t.Classes.Contains("library-title") && t.IsOnScreen() && !string.IsNullOrEmpty(t.Text))
+			.Select(t => t.Text!)
+			.ToArray();
+	}
+
+	//The grid narrows a frame after the press that asked for it, so the wait is
+	//on the realized titles themselves and the assertion then re-reads them: a
+	//half-drawn grid is a failure here, not a timing accident.
+	private static void AssertDrawnTiles(MainWindow window, string[] expected, string failure)
+	{
+		WaitFor(() => DrawnTileTitles(window).SequenceEqual(expected), failure);
+		Assert.Equal(expected, DrawnTileTitles(window));
+	}
+
 	//#1034 (ADR-0264 Decision 5): the row lists All first and then only the
 	//consoles the library actually holds, in the product's order - two here, so
 	//the player reads All | NES | Game Boy and cannot cycle onto a console the
@@ -306,15 +333,19 @@ public class PlayerLibraryConsoleFilterTests : IDisposable
 		LibraryRoot();
 
 		(MainWindow window, MainWindowViewModel model) = OpenLibrary();
+		AssertDrawnTiles(window, new[] { NesContra, NesMario, GameBoyMario }, "the grid never drew the whole library");
 		Assert.Equal(new[] { NesContra, NesMario, GameBoyMario }, TileTitles(model));
 
 		PressShoulder(window, "Pad1 R1");
+		AssertDrawnTiles(window, new[] { NesContra, NesMario }, "the grid still draws the Game Boy tile under the NES segment");
 		Assert.Equal(new[] { NesContra, NesMario }, TileTitles(model));
 
 		PressShoulder(window, "Pad1 R1");
+		AssertDrawnTiles(window, new[] { GameBoyMario }, "the grid still draws the NES tiles under the Game Boy segment");
 		Assert.Equal(new[] { GameBoyMario }, TileTitles(model));
 
 		PressShoulder(window, "Pad1 R1");
+		AssertDrawnTiles(window, new[] { NesContra, NesMario, GameBoyMario }, "the grid did not return to the whole library with All");
 		Assert.Equal(new[] { NesContra, NesMario, GameBoyMario }, TileTitles(model));
 	}
 
@@ -335,12 +366,17 @@ public class PlayerLibraryConsoleFilterTests : IDisposable
 		//regression in how the grid composes it with the filter shows here.
 		model.RomPicker.SearchQuery = "mario";
 		Pump();
+		AssertDrawnTiles(window, new[] { NesMario, GameBoyMario }, "the grid did not draw the search's two Marios");
 		Assert.Equal(new[] { NesMario, GameBoyMario }, TileTitles(model));
 
+		//Decision 5's own example, on screen: `mario` under the NES segment draws
+		//Super Mario Bros. 3 and NOT the Game Boy's Super Mario Land.
 		PressShoulder(window, "Pad1 R1");
+		AssertDrawnTiles(window, new[] { NesMario }, "the grid still draws the Game Boy Mario under the NES segment");
 		Assert.Equal(new[] { NesMario }, TileTitles(model));
 
 		PressShoulder(window, "Pad1 L1");
+		AssertDrawnTiles(window, new[] { NesMario, GameBoyMario }, "the grid did not give the Game Boy Mario back with the search still up");
 		Assert.Equal(new[] { NesMario, GameBoyMario }, TileTitles(model));
 	}
 
@@ -359,6 +395,7 @@ public class PlayerLibraryConsoleFilterTests : IDisposable
 		PressShoulder(window, "Pad1 R1");
 		Pump();
 
+		AssertDrawnTiles(window, Array.Empty<string>(), "the grid still draws tiles for a query that matches nothing");
 		Assert.Empty(TileTitles(model));
 	}
 
