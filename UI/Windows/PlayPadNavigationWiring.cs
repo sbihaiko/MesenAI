@@ -610,7 +610,7 @@ namespace Mesen.Windows
 				//
 				//The edge is taken from the same `_previous` the action above was,
 				//before it is recorded below, so a held shoulder cycles once.
-				if(authority && _model.RomPicker.IsVisible && _model.RomPicker.IsLibraryMode) {
+				if(authority && InPlayDoor && LibrarySheetIsUp) {
 					int shoulder = ShoulderStep(pressed, _previous, pad, keyCode);
 					if(shoulder != 0) {
 						_model.RomPicker.CycleConsole(shoulder);

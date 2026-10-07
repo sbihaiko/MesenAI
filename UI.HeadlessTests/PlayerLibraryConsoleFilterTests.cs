@@ -401,9 +401,9 @@ public class PlayerLibraryConsoleFilterTests : IDisposable
 
 	private static string? FocusedName(MainWindow window) => (window.FocusManager?.GetFocusedElement() as Control)?.Name;
 
-	//#1034 review finding 2: a console change rebuilds the grid but is not a
-	//scan, so it must not bump TilesRevision - the arbiter answers that bump by
-	//reclaiming focus, which pulled the ring off the search box on LB/RB.
+	//#1034 review finding 2: a console change rebuilds the grid, and the
+	//arbiter answers a TilesRevision bump by reclaiming focus - which must keep
+	//the ring on the search box when the box holds it.
 	[AvaloniaFact]
 	public void Cycling_the_filter_while_the_search_box_has_focus_keeps_the_focus_there()
 	{
@@ -413,13 +413,34 @@ public class PlayerLibraryConsoleFilterTests : IDisposable
 		(MainWindow window, MainWindowViewModel model) = OpenLibrary();
 		PressCode(window, PadNavControls.SheetCode(PadFamily.Xbox, 0, PadSheetControl.Search, BackendCode) ?? 0);
 		Assert.Equal("RomPickerSearch", FocusedName(window));
-		int revision = model.RomPicker.TilesRevision;
 
 		PressShoulder(window, "Pad1 R1");
 
 		Assert.Equal(RomConsole.Nes, model.RomPicker.SelectedConsole);
-		Assert.Equal(revision, model.RomPicker.TilesRevision);
 		Assert.Equal("RomPickerSearch", FocusedName(window));
+	}
+
+	//#1034 review finding 1: the sheet opens with the first tile focused, and a
+	//cycle rebuilds the grid under it. The ring must land on a tile of the
+	//narrowed grid rather than on nothing.
+	[AvaloniaFact]
+	public void Cycling_the_filter_from_the_grid_leaves_the_focus_on_a_tile()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		LibraryRoot();
+
+		(MainWindow window, MainWindowViewModel model) = OpenLibrary();
+		Pump();
+		Assert.IsType<Button>(window.FocusManager?.GetFocusedElement());
+
+		PressShoulder(window, "Pad1 R1");
+		Pump();
+
+		Assert.Equal(RomConsole.Nes, model.RomPicker.SelectedConsole);
+		Button? focused = window.FocusManager?.GetFocusedElement() as Button;
+		Assert.NotNull(focused);
+		PlayerLibraryTile tile = Assert.IsType<PlayerLibraryTile>(focused!.DataContext);
+		Assert.Contains(tile, model.RomPicker.Tiles);
 	}
 
 	//A fresh visit is one rebuild of the grid, so one bump: ShowLibrary's own,

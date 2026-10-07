@@ -82,6 +82,13 @@ namespace Mesen.ViewModels
 				return;
 			}
 			RebuildLibraryTiles();
+			//The rebuild destroys the focused tile's container, and the arbiter
+			//only re-claims focus on a TilesRevision bump, so a selection change
+			//from the grid would leave the ring on nothing. The bump is safe for
+			//the box: RomPickerFocusTarget answers with the search box while it
+			//holds the ring or the pad keyboard. Only a selection change bumps -
+			//the scan and reset paths rebuild the row with their own bump.
+			TilesRevision++;
 		}
 
 		//#1034 (ADR-0264 Decision 3): LB/RB, one option per press, wrapping at
@@ -173,9 +180,6 @@ namespace Mesen.ViewModels
 			if(!IsVisible || Mode != RomPickerMode.Library) {
 				return;
 			}
-			//TilesRevision is not bumped here: the arbiter answers a bump by
-			//reclaiming focus, which a cycle, a click or a query must not do (the
-			//search box keeps the ring). The scan path bumps its own.
 			FillTiles();
 		}
 
