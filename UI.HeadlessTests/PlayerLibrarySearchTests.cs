@@ -8,7 +8,6 @@ using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
 using Avalonia.Input;
 using Avalonia.Interactivity;
-using Avalonia.Media.Imaging;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using Mesen.Config;
@@ -452,91 +451,10 @@ public class PlayerLibrarySearchTests : IDisposable
 		Assert.Equal("RomPickerSearch", FocusedName(window));
 	}
 
-	//#1033 (ADR-0264 Decision 12): W-P19b is the same surface with search active -
-	//the grid narrowed, the box holding the query, and the header still reading
-	//the LIBRARY's own count (Decision 8; the wireframe draws 128 games over three
-	//tiles). Rendered as a Skia PNG beside the W-P* renders so the render gate
-	//holds the sheet to the wireframe PR #1040 draws.
-	[AvaloniaFact]
-	public void W_P19b_the_library_narrowed_by_a_query()
-	{
-		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
-		LibraryRoot();
-
-		(MainWindow window, MainWindowViewModel model) = ShowOpenLibrary();
-		window.FindNamed<TextBox>("RomPickerSearch").Text = "mario";
-		Pump();
-		window.FindNamed<TextBox>("RomPickerSearch").Focus(NavigationMethod.Directional);
-		Pump();
-
-		//What the picture has to be, asserted before it is saved: a PNG that stops
-		//being a picture of the narrowed library fails here rather than being
-		//noticed by whoever opens it next.
-		Assert.True(window.FindNamed<Border>("PlayerRomPickerSheet").IsOnScreen(), "the sheet is not on screen");
-		Assert.Equal("Your library", model.RomPicker.HeaderText);
-		Assert.Equal("4 games in 1 folder", model.RomPicker.CountText);
-		Assert.Equal("mario", window.FindNamed<TextBox>("RomPickerSearch").Text ?? "");
-		Assert.Equal(new[] { "Super Mario Bros. 3", "Super Mario Land" }, TileTitles(model));
-		Assert.True(window.FindNamed<ItemsControl>("RomPickerGrid").IsOnScreen(), "the grid is not on screen");
-		Assert.True(window.FindNamed<Button>("RomPickerSearchClear").IsOnScreen(), "Clear is not on the sheet");
-
-		string[] texts = window.GetVisualDescendants().OfType<TextBlock>().Where(t => t.IsOnScreen()).Select(t => t.Text ?? "").ToArray();
-		Assert.Contains("Super Mario Bros. 3", texts);
-		Assert.Contains("Super Mario Land", texts);
-		//The game the query left out is not drawn: the render is of the narrowed
-		//grid and not of the whole library with a box on top.
-		Assert.DoesNotContain("Metroid", texts);
-
-		Bitmap frame = PlayerRender.Capture(window);
-		PlayerRender.Save(frame, "W-P19b");
-		AssertMatchesWireframe(frame, "W-P19b", W_P19bDeviations());
-	}
-
-	//#1033 (ADR-0264 Decision 12): the same gate W-P19 got in L.1 (#1032).
-	//PlayerRender.Save only *writes* the wireframe report and a failure inside it
-	//is logged rather than thrown, so a frame captured and saved without this is a
-	//picture nothing compares: the render gate would still find the PNG and its
-	//report, and a sheet that stopped matching W-P19b would keep the suite green.
-	//Compare the regions against the wireframe, gate the deviations this render is
-	//known to carry, and fail on what is left.
-	private static void AssertMatchesWireframe(Bitmap frame, string wId, IReadOnlyList<KnownDeviation> known)
-	{
-		string wireframe = PlayerRender.WireframePath(wId);
-		Assert.True(File.Exists(wireframe), $"{wId} has no wireframe at {wireframe}, so there is nothing to compare the render against");
-		RgbFrame fresh = PlayerRender.Rgb(frame);
-		IReadOnlyList<RegionResult> results = PlayerWireframe.Compare(wId, fresh, RgbFrame.FromPng(wireframe));
-		List<string> violations = PlayerWireframe.Gate(wId, results, known).ToList();
-		Assert.True(violations.Count == 0, string.Join(Environment.NewLine, violations));
-	}
-
-	//What this render is known to differ from W-P19b on, each with the cause that
-	//makes it a known one. The wireframe fills the window with 128 games over three
-	//tiles and near-full-window sheet; the tracer's library holds four, two of them
-	//after the query, so its sheet is short and the region's own dominant colour is
-	//the backdrop around it rather than the sheet. That is the fixture, which is why
-	//the colour kind is tolerated rather than required to fail. The kinds that are
-	//left are layout: the console filter of #1034 and the *Library folders…* row of
-	//#1036 are not in the header, and the two text lines the sheet does draw are the
-	//wireframe's seven minus them and the five further tile labels - the same shape
-	//of entry W_P19Deviations carries for the sheet W-P19 pictures. The status line's
-	//ink box is the P1-P4 port chips every render draws and no wireframe does (#951);
-	//off macOS the title bar's ink box moves because the shell bar is not inset for
-	//the traffic lights (#968).
-	private static IReadOnlyList<KnownDeviation> W_P19bDeviations()
-	{
-		List<KnownDeviation> known = new() {
-			new("content", PlayerWireframe.Colour,
-				"the tracer's four games (two under `mario`) draw a short sheet where the wireframe fills the window with 128, so the backdrop is the region's dominant colour", false),
-			new("content", PlayerWireframe.InkBox,
-				"the same short sheet, and the console filter of #1034 and the folder row of #1036 missing from the header", true),
-			new("content", PlayerWireframe.TextLines,
-				"two lines where the wireframe has seven: the same missing filter and folder row, plus the five further tile labels", true),
-			new("status line", PlayerWireframe.InkBox,
-				"the P1-P4 port chips the wireframe does not draw", false),
-		};
-		if(!OperatingSystem.IsMacOS()) {
-			known.Add(new("title bar", PlayerWireframe.InkBox, "no traffic-light inset off macOS", false));
-		}
-		return known;
-	}
+	//The W-P19b render case lives in PlayerLibraryRenderTests, beside W-P19.
+	//#1033 (ADR-0264 Decision 12): the render gate runs only the cases in a
+	//`*RenderTests` class (.github/workflows/render-gate.yml filters on
+	//`FullyQualifiedName~RenderTests`), so a render case in this file would be
+	//filtered out of the job that verifies the PNGs and the gate would fail on a
+	//PNG nobody wrote. The search's own behaviour is what this class pins.
 }

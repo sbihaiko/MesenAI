@@ -214,11 +214,15 @@ def main() -> int:
         failures += 1
     else:
         print("ok   [W-P19b is in EXPECTED_WIREFRAME_RENDERS (#1033)]")
-    if awaiting:
-        print(f"FAIL [awaiting set emptied]: {sorted(awaiting)} still waits for a render case, but every drawn Player wireframe has one")
+    # #1033 promotes W-P19b and nothing else: the exemption is a general
+    # mechanism, and a wireframe the next ticket draws before its surface exists
+    # belongs in it without turning this case red. So the assertion is about
+    # W-P19b, not about the set being empty.
+    if "W-P19b" in awaiting:
+        print("FAIL [W-P19b promoted]: W-P19b still waits in WIREFRAMES_AWAITING_RENDER_CASE while #1033 landed its render case")
         failures += 1
     else:
-        print("ok   [WIREFRAMES_AWAITING_RENDER_CASE is empty (#1033)]")
+        print("ok   [W-P19b is not in WIREFRAMES_AWAITING_RENDER_CASE (#1033)]")
     got = run_case(check, PASSED, FRESH_PAIR, pinned)
     if not any("W-P2.png was not rendered" in line for line in got):
         print(f"FAIL [default expected set]: a run with only W-P1 must miss W-P2, got {got}")
