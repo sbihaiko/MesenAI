@@ -456,107 +456,13 @@ public class PlayerLibraryCanonicalTitlesTests : IDisposable
 		Assert.Equal(1, Volatile.Read(ref calls));
 	}
 
-	//The grid's tile for one game, by data context - the same way the focus
-	//arbiter finds them, so this reads the container the player's ring would be on.
-	private static Button? TileButton(MainWindow window, PlayerLibraryTile tile)
-	{
-		return window.FindNamed<ItemsControl>("RomPickerGrid")
-			.GetVisualDescendants()
-			.OfType<Button>()
-			.FirstOrDefault(button => ReferenceEquals(button.DataContext, tile));
-	}
-
-	//#1038 review finding 5 (ADR-0264 Decisions 1 and 7): the grid is ordered by
-	//TITLE, and the displayed title IS the canonical one - so an order kept on the
-	//cleaned file name diverges from the ADR exactly when a canonical title lands.
-	//The table here names the ROM a title that sorts on the other side of the other
-	//tile, so the order has to change when the hash answers.
-	//
-	//And it changes under the player's finger: the ring stays on the SAME GAME -
-	//the tile the player selected travels with the reorder - never on whatever ends
-	//up in the place it held.
+	//The ring on *Browse a file…* stays there while the title pass lands. The table
+	//here names the first ROM a title that sorts after the second, which is the case
+	//where the pass used to re-sort the grid and re-claim the ring for a tile; the
+	//pass now renames in place and leaves the order to the next build, so a player
+	//who stepped down to the button is never moved.
 	[AvaloniaFact]
-	public void A_canonical_title_that_changes_the_order_carries_the_ring_with_its_game()
-	{
-		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
-
-		const string ZeldaSha1 = "4444444444444444444444444444444444444444";
-		TaskCompletionSource<bool> held = new();
-		(MainWindow window, MainWindowViewModel model, PlayerRomPickerViewModel picker) = ShowLibrary(async (path, _, _) => {
-			await held.Task;
-			return Path.GetFileName(path).StartsWith("Contra", StringComparison.Ordinal) ? ZeldaSha1 : UnknownSha1;
-		}, ZeldaSha1 + "\tnes\tZelda II - The Adventure of Link (USA)");
-
-		//The scan's order: by the titles the tiles carry before any hash answers.
-		Assert.Equal(new[] { "Contra", "Metroid" }, picker.Tiles.Select(t => t.Title).ToArray());
-
-		//The player is on the FIRST tile - the one whose game is about to be renamed
-		//and to change place, so the place it held is a different game afterwards.
-		//That is what makes the ring assertion below mean something: a re-claim that
-		//simply keeps the ring on the leading tile would answer the wrong game.
-		PlayerLibraryTile selected = picker.Tiles[0];
-		Button? selectedButton = TileButton(window, selected);
-		Assert.NotNull(selectedButton);
-		selectedButton!.Focus();
-		Pump();
-		Assert.True(selectedButton.IsFocused, $"the case never got the ring onto a tile (focusTile={picker.FocusTile?.Title})");
-
-		held.SetResult(true);
-
-		//The canonical title sorts after "Metroid", so the grid now leads with the
-		//game the player was on.
-		WaitFor(() => picker.Tiles.Select(t => t.Title).SequenceEqual(new[] { "Metroid", "Zelda II - The Adventure of Link" }),
-			$"the grid never re-sorted by the canonical titles (titles=[{Titles(picker)}])");
-
-		Pump();
-		//The game moved - it is the second tile now - and it is still the player's.
-		Assert.Same(selected, picker.Tiles[1]);
-		//The ring is read off the focus manager rather than off the button the case
-		//focused: a re-sort rebuilds the container, so the control that holds the
-		//ring may legitimately be a new one - what must not change is the GAME under
-		//it.
-		Assert.Same(selected, (window.FocusManager?.GetFocusedElement() as Control)?.DataContext);
-	}
-
-	//#1055 review finding 1: with a query on, a batch of renames must not rebuild
-	//the filtered grid. Both games still match "o" after the rename and keep their
-	//place, so the only honest number of collection notifications is none - a
-	//Clear/Add per batch drops every container, and the cover under it, for
-	//nothing. The tiles on screen stay the same objects.
-	[AvaloniaFact]
-	public void A_query_on_does_not_rebuild_the_filtered_grid_when_a_rename_changes_nothing_it_shows()
-	{
-		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
-
-		TaskCompletionSource<bool> held = new();
-		(_, _, PlayerRomPickerViewModel picker) = ShowLibrary(async (path, _, _) => {
-			await held.Task;
-			return Path.GetFileName(path).StartsWith("Contra", StringComparison.Ordinal) ? KnownSha1 : UnknownSha1;
-		}, KnownSha1 + "\tnes\tContra II - The Alien Wars");
-
-		picker.SearchQuery = "o";
-		Pump();
-		PlayerLibraryTile[] before = picker.Tiles.ToArray();
-		Assert.Equal(2, before.Length);
-
-		int notifications = 0;
-		picker.Tiles.CollectionChanged += (_, _) => notifications++;
-		held.SetResult(true);
-
-		WaitFor(() => picker.Tiles.Any(t => t.Title == "Contra II - The Alien Wars"),
-			$"the filtered grid never took the canonical title (titles=[{Titles(picker)}])");
-		Settle(400);
-
-		Assert.Equal(0, notifications);
-		Assert.True(before.SequenceEqual(picker.Tiles), "the filtered grid replaced tiles it had no reason to replace");
-	}
-
-	//#1055 review finding 2: with a query on the ring is NOT always on the box -
-	//the player can have stepped down into the filtered grid. A canonical title
-	//that re-sorts that grid rebuilds its containers, and the ring has to go back
-	//to the GAME the player was on.
-	[AvaloniaFact]
-	public void A_canonical_title_that_reorders_a_filtered_grid_carries_the_ring_with_its_game()
+	public void The_ring_on_browse_a_file_stays_put_while_the_titles_land()
 	{
 		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
 
@@ -567,25 +473,18 @@ public class PlayerLibraryCanonicalTitlesTests : IDisposable
 			return Path.GetFileName(path).StartsWith("Contra", StringComparison.Ordinal) ? ZeldaSha1 : UnknownSha1;
 		}, ZeldaSha1 + "\tnes\tZelda II - The Adventure of Link (USA)");
 
-		picker.SearchQuery = "o";
+		Button browse = window.FindNamed<Button>("RomPickerBrowseFile");
+		browse.Focus();
 		Pump();
-		Assert.Equal(new[] { "Contra", "Metroid" }, picker.Tiles.Select(t => t.Title).ToArray());
-
-		PlayerLibraryTile selected = picker.Tiles[0];
-		Button? selectedButton = TileButton(window, selected);
-		Assert.NotNull(selectedButton);
-		selectedButton!.Focus();
-		Pump();
-		Assert.True(selectedButton.IsFocused, $"the case never got the ring onto a tile (focusTile={picker.FocusTile?.Title})");
+		Assert.True(browse.IsFocused, "the case never got the ring onto Browse a file…");
 
 		held.SetResult(true);
 
-		WaitFor(() => picker.Tiles.Select(t => t.Title).SequenceEqual(new[] { "Metroid", "Zelda II - The Adventure of Link" }),
-			$"the filtered grid never re-sorted by the canonical titles (titles=[{Titles(picker)}])");
-		Pump();
+		WaitFor(() => picker.Tiles.Any(t => t.Title == "Zelda II - The Adventure of Link"),
+			$"the canonical title never landed (titles=[{Titles(picker)}])");
+		Settle(400);
 
-		Assert.Same(selected, picker.Tiles[1]);
-		Assert.Same(selected, (window.FocusManager?.GetFocusedElement() as Control)?.DataContext);
+		Assert.Equal("RomPickerBrowseFile", (window.FocusManager?.GetFocusedElement() as Control)?.Name);
 	}
 
 	//#1038 review finding 4 (ADR-0264 Decision 9): a zipped game is an entry of the

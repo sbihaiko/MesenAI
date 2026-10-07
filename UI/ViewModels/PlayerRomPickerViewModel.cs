@@ -217,13 +217,7 @@ namespace Mesen.ViewModels
 		//The grid itself: one instance for the life of the view-model, mutated in
 		//place so a scan that lands while the sheet is up does not rebuild the
 		//list under the player - and so the focus ring survives it.
-		//
-		//`BulkObservableCollection` and not the plain one because the canonical-title
-		//pass REORDERS this list (#1038 review finding 2): the panel under it is a
-		//non-virtualized WrapPanel, so a notification per tile moved would be up to
-		//MaxEntries of them in one turn and would freeze the grid. A reorder is one
-		//Reset instead, and the collection TYPES are the one instance either way.
-		public BulkObservableCollection<PlayerLibraryTile> Tiles { get; } = new();
+		public ObservableCollection<PlayerLibraryTile> Tiles { get; } = new();
 
 		//The list itself: one instance for the life of the view-model, mutated in
 		//place. Suggestions arrive asynchronously, and appending to the same
@@ -643,11 +637,6 @@ namespace Mesen.ViewModels
 			//travel with the entries (#1052, merged after this slice): the query
 			//narrows the grid, and a narrowed grid still draws the player's own
 			//screenshot on the tiles that have one.
-			//#1038 review finding 5: the ring's tile goes with the tiles this scan
-			//replaced - it belonged to the previous grid, and the arbiter would
-			//otherwise be asked to keep the ring on a control that is no longer
-			//there.
-			ForgetFocusedTile();
 			ShowLibraryGames(result.Entries, payload.Covers);
 			CountText = ResourceHelper.GetMessage("RomPickerLibraryCount",
 				CountLabel(result.Entries.Count, "RomPickerGameOne", "RomPickerGameMany"),
