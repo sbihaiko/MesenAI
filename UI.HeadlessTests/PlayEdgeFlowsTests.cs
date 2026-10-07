@@ -263,7 +263,9 @@ public partial class PlayEdgeFlowsTests : IDisposable
 			Assert.Equal(PlayPackDepPrompt.ControlCount, ControlsOnScreen(sheet));
 			Assert.Equal("Contra Remastered needs one file", window.FindNamed<TextBlock>("PackDepSheetTitle").Text);
 			Assert.Equal("License: not declared", window.FindNamed<TextBlock>("PackDepSheetLicense").Text);
-			Assert.Equal("Add and Restart…", window.FindNamed<Button>("PackDepSheetChooseFile").Content);
+			//#938: a NES game, no movie, no netplay - ADR-0244 applies the
+			//completed pack in place, so the button promises no restart.
+			Assert.Equal("Choose File…", window.FindNamed<Button>("PackDepSheetChooseFile").Content);
 			Assert.True(window.FindNamed<Button>("PackDepSheetChooseFile").IsFocused);
 
 			string wrong = Path.Combine(_folder, "wrong.nes");
@@ -304,6 +306,37 @@ public partial class PlayEdgeFlowsTests : IDisposable
 			Assert.DoesNotContain("a pack waits", model.Shell.StatusText);
 			Assert.False(model.PackDepSheet.Notice.HasPending);
 		} finally {
+			EmuApi.Stop();
+			Dispatcher.UIThread.RunJobs();
+		}
+	}
+
+	//#938 (ADR-0244, P.9): the pack completed by an added file applies in
+	//place - the game keeps its place, no power cycle - against the real core.
+	[AvaloniaFact]
+	public void A_pack_completed_by_an_added_file_applies_in_place_without_a_power_cycle()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(_, MainWindowViewModel model) = ShowPlay();
+		Action savedPowerCycle = CommunityPackInstallService.PowerCycleGame;
+		int powerCycles = 0;
+		CommunityPackInstallService.PowerCycleGame = () => powerCycles++;
+		try {
+			RunSyntheticGame(model);
+			WaitFor(() => EmuApi.GetTimingInfo(CpuType.Nes).FrameCount > 120, "the game never reached frame 120");
+			uint before = EmuApi.GetTimingInfo(CpuType.Nes).FrameCount;
+			Task previous = CommunityPackInstallService.KeepingPlaceApplied;
+
+			CommunityPackInstallService.ApplyInstalledPack(CommunityPackInstallCoordinator.CaptureLoad(), keepPlace: true);
+			WaitFor(() => CommunityPackInstallService.KeepingPlaceApplied != previous && CommunityPackInstallService.KeepingPlaceApplied.IsCompleted, "the in-place apply never finished");
+			WaitFor(() => EmuApi.IsRunning() && !EmuApi.IsPaused(), "the game did not keep running after the apply");
+
+			Assert.Equal(0, powerCycles);
+			//A power cycle or a plain reload starts over from frame 0; the swap
+			//restores the frame the player was on.
+			Assert.True(EmuApi.GetTimingInfo(CpuType.Nes).FrameCount >= before, "the game restarted instead of keeping its place");
+		} finally {
+			CommunityPackInstallService.PowerCycleGame = savedPowerCycle;
 			EmuApi.Stop();
 			Dispatcher.UIThread.RunJobs();
 		}

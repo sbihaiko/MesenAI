@@ -98,7 +98,7 @@ namespace Mesen.ViewModels
 				return false;
 			}
 			IsPlayerOverlayVisible = false;
-			PackDepSheet.Open();
+			PackDepSheet.Open(PackDepAppliesInPlace);
 			return PackDepSheet.IsVisible;
 		}
 
@@ -111,6 +111,11 @@ namespace Mesen.ViewModels
 				Shell.SetPlayNotice("");
 			}
 		}
+
+		//#938 (ADR-0244, P.9): whether adding the pending file keeps the
+		//player's place - the same policy as every other pack change.
+		public bool PackDepAppliesInPlace => RomInfo.Format != RomFormat.Unknown
+			&& PlayPackDepPrompt.PrimaryAction(LoadRomHelper.PlanPackChange(RomInfo.ConsoleType)) == PackDepPrimaryAction.Add;
 
 		//The file landed in the drop folder: the status sentence is gone.
 		public void OnPackDepFileAdded() => Shell.SetPlayNotice("");
