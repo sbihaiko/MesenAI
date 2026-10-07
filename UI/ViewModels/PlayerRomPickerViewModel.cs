@@ -249,11 +249,9 @@ namespace Mesen.ViewModels
 		//list *Library folders…* edits is its own slice, and it arrives by
 		//replacing this seam rather than by changing the scan.
 		public Func<IReadOnlyList<string>> LibraryFolderSource { get; set; } = ConfiguredLibraryFolders;
-		//The library scan, behind a seam for the same reason the walk is: a test
-		//drives the grid deterministically without depending on the disk this
-		//suite happens to run on. The default is the real module, and it is the
-		//module's own Caps that bound it, never this file.
-		public Func<IReadOnlyList<string>, FolderLister, LibraryScanResult> LibraryScanSource { get; set; } = GameLibrary.Scan;
+		//The library scan and its own seams live in PlayerRomPickerViewModel.Scan.cs:
+		//#1037 made it a stream, and a stream is a lifetime of its own.
+		//
 		//A test runs the library scan in the Open() turn too.
 		public bool RunLibraryScanInline { get; set; }
 
@@ -355,9 +353,11 @@ namespace Mesen.ViewModels
 			TruncatedText = "";
 			EmptyText = "";
 			//The grid is going: the pictures the previous visit decoded go back
-			//with it (#1035).
-			ClearTiles();
-			TilesRevision++;
+			//with it (#1035). ResetLibraryGrid is what does that here - it is
+			//ClearTiles plus the entries behind the tiles, and the two must move
+			//together or a batch arriving for the new scan would be merged into
+			//the old scan's order.
+			ResetLibraryGrid();
 			//Nothing to browse, so the searching line belongs to no state: it is
 			//set below, by the scan that is actually about to run.
 			SearchingText = "";
@@ -369,12 +369,12 @@ namespace Mesen.ViewModels
 			//sentence without a scan's count, so the wait cannot read as a verdict
 			//(review finding 1 on #1060: passing zero here showed "No games found in
 			//your library folder." next to "Looking for your games…" for the whole
-			//scan). ApplyLibraryScan is the only caller that has an answer to give.
+			//scan). FinishLibraryStream is the only caller that has an answer to give.
 			EmptyText = LibraryEmptyText(PlayRomPicker.LibraryEmptyMessageId(_folders.Count, null));
 			if(_folders.Count == 0) {
 				return;
 			}
-			StartLibraryScan();
+			StartLibraryStream();
 		}
 
 		//#1032 (ADR-0264 Decision 11): *Browse a file…*. The folder browser is
@@ -548,100 +548,15 @@ namespace Mesen.ViewModels
 			NoticeText = ResourceHelper.GetMessage(usable is null ? "RomPickerGamesFolderEmpty" : "RomPickerGamesFolderSaved");
 		}
 
-		//#1032 (ADR-0264 Decision 9): the library's one bounded scan. It runs off
-		//the UI thread and posts its answer back, so the sheet is usable while it
-		//works - and the searching line is the visible wait, because every
-		//visible wait has an animation (or, here, a sentence that says what is
-		//happening rather than a frozen grid).
-		private void StartLibraryScan()
-		{
-			SearchingText = ResourceHelper.GetMessage("RomPickerSearching");
-			//The generation is taken BEFORE the work is handed out, so the answer
-			//carries the surface it was read for - and the check that drops a
-			//stale one happens where the answer lands (ApplyLibraryScan), never
-			//here: the posting thread cannot know what the UI thread did while
-			//the scan ran.
-			int generation = _scanGeneration.Next();
-			//The Recent folder is read here, on the UI thread, and carried into
-			//the scan: ConfigManager is not a background thread's to read, and the
-			//`*.rgd` files it names are.
-			string? recentGamesFolder = ConfigManager.RecentGamesFolder;
-			if(RunLibraryScanInline || RunScanInline) {
-				ApplyLibraryScan(ScanLibraryWithCovers(_folders, recentGamesFolder), generation);
-				return;
-			}
-			IReadOnlyList<string> folders = _folders;
-			Task.Run(() => {
-				LibraryScanPayload payload = ScanLibraryWithCovers(folders, recentGamesFolder);
-				Dispatcher.UIThread.Post(() => ApplyLibraryScan(payload, generation));
-			});
-		}
-
-		//A scan that threw answers nothing to say: an unreadable disk is not a
-		//reason to leave the sheet waiting on a line that will never go.
-		private LibraryScanResult ScanLibrary(IReadOnlyList<string> folders)
-		{
-			try {
-				return LibraryScanSource(folders, new FolderLister(FolderSource));
-			} catch {
-				return new LibraryScanResult(Array.Empty<LibraryEntry>(), 0, false);
-			}
-		}
-
-		//One scan's answer into the grid. The entries are the module's, in the
-		//module's order (by title, Decision 1), and the covers came off the same
-		//scan in the same order; this carries both across and says what the header
-		//reads. The only work left here is the tile's own - decoding a screenshot
-		//into a bitmap, which is an Avalonia object and belongs to this thread.
-		private void ApplyLibraryScan(LibraryScanPayload payload, int generation)
-		{
-			//First, before anything is written - not even the searching line. A
-			//scan the player has already left behind answers about a folder the
-			//sheet no longer shows, however slowly it got there: the grid, the
-			//counts and the waiting line all belong to the scan that is current
-			//NOW, and letting the older one through would hand them all to the
-			//folder the player walked away from.
-			if(!_scanGeneration.IsCurrent(generation)) {
-				return;
-			}
-			LibraryScanResult result = payload.Result;
-			//A scan that landed after the player left the library - a B press, a
-			//step into *Browse a file…* - belongs to no surface: the browser's
-			//own rows must not be replaced by a grid nobody is looking at, and
-			//its waiting line is not this scan's to clear (review finding 5 on
-			//#1032: the browser says "Looking for your games…" while its own walk
-			//runs, and a library answer landing in the meantime used to wipe it).
-			if(!IsVisible || Mode != RomPickerMode.Library) {
-				return;
-			}
-			//The waiting line goes with the answer, and it goes first (#1050): the
-			//scan this result belongs to is over, so "Looking for your games…" is
-			//not this sheet's to say any more.
-			SearchingText = "";
-			//#1060: a scan that answered no game is a named state that names the next
-			//step, not a blank grid. The rule is PlayRomPicker's; this is the lookup.
-			//It is kept rather than written straight to EmptyText (#1033): the search's
-			//own empty state owns that property once the library has answered, and it
-			//puts this sentence back whenever the box is empty - which is what keeps
-			//#1060's state alive across a search the player typed and then cleared.
-			_scanEmptyText = LibraryEmptyText(PlayRomPicker.LibraryEmptyMessageId(_folders.Count, result.Entries.Count));
-			//#1033 (ADR-0264 Decision 4): the grid is filled through the search's
-			//own path (PlayerRomPickerViewModel.Search), so a scan and a query are
-			//two sources for one grid rather than two ways to build it. The covers
-			//travel with the entries (#1052, merged after this slice): the query
-			//narrows the grid, and a narrowed grid still draws the player's own
-			//screenshot on the tiles that have one.
-			ShowLibraryGames(result.Entries, payload.Covers);
-			CountText = ResourceHelper.GetMessage("RomPickerLibraryCount",
-				CountLabel(result.Entries.Count, "RomPickerGameOne", "RomPickerGameMany"),
-				CountLabel(result.FolderCount, "RomPickerFolderOne", "RomPickerFolderMany"));
-			TruncatedText = result.Truncated
-				? ResourceHelper.GetMessage("RomPickerLibraryTruncated", GameLibrary.MaxEntries)
-				: "";
-			//The rebuilt tiles are new containers, so whatever the arbiter had
-			//the ring on went with the old ones.
-			TilesRevision++;
-		}
+		//#1032 (ADR-0264 Decision 9), streamed since #1037: the library's one
+		//bounded scan lives in PlayerRomPickerViewModel.Scan.cs - it runs off the
+		//UI thread, fills the grid as it finds games and shows the wait - and
+		//StartLibraryStream is the whole of how this file calls into it.
+		//
+		//It carries the two things this file's one-shot version had grown since:
+		//the cover of a played game, resolved on the scanning thread (#1035), and
+		//the empty state a scan that found nothing earns (#1060). Both are the
+		//streamed scan's now, applied per batch and at the finish respectively.
 
 		//#1060: the id PlayRomPicker answered, in the player's own words. Nothing to
 		//say is an empty line, which is the length the sentence's own visibility

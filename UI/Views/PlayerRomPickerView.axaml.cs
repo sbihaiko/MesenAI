@@ -1,4 +1,5 @@
 using Avalonia.Controls;
+using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
 using Mesen.ViewModels;
@@ -35,6 +36,17 @@ namespace Mesen.Views
 		{
 			if(sender is Control { DataContext: PlayerLibraryTile tile }) {
 				Model?.Play(tile);
+			}
+		}
+
+		//#1037 (ADR-0264 Decision 1): the game the player is on, so the sheet can
+		//reopen on it. The event, not the click: the arbiter putting the ring on a
+		//tile is the player being on it too, and the tile the ring left when the
+		//sheet closed is exactly the one this has to remember.
+		private void OnTileFocused(object? sender, FocusChangedEventArgs e)
+		{
+			if(sender is Control { DataContext: PlayerLibraryTile tile }) {
+				Model?.RememberFocus(tile);
 			}
 		}
 

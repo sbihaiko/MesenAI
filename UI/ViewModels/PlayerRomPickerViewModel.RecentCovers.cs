@@ -22,17 +22,6 @@ namespace Mesen.ViewModels
 	//a tile is built.
 	public partial class PlayerRomPickerViewModel
 	{
-		//One scan's two halves, together: the entries the walk found, and the cover
-		//the library module chose for each of them, in the same order (#1035).
-		//
-		//They travel as one value because they are produced as one: the cover of a
-		//played game comes out of the `.rgd` - a zip the sheet has to open and a
-		//screenshot it has to decompress - and that is disk work, so it happens on
-		//the thread that is already walking the library folders and never on the
-		//thread that draws. What the UI thread still owns is the decode: turning
-		//the bytes into a bitmap is an Avalonia object and nothing else.
-		private sealed record LibraryScanPayload(LibraryScanResult Result, IReadOnlyList<LibraryCoverPick> Covers);
-
 		//The decoded covers of the grid on screen, so the grid that replaces it
 		//can hand them back (#1035). One per tile that drew the player's own
 		//screenshot; the console-coloured covers are SolidColorBrushes and need
@@ -64,29 +53,30 @@ namespace Mesen.ViewModels
 			_coverArt.Clear();
 		}
 
-		//The library walk and the cover of every entry it found, off the UI thread.
+		//The cover of every entry a batch brought back, in the same order (#1035).
 		//
-		//`recentGamesFolder` is passed in rather than read here: it comes off
-		//ConfigManager, which is the UI thread's to read, and the scan should not
-		//be a second reader of a setting the player can change mid-scan.
+		//The entries and their covers are produced as one and travel as one: the
+		//cover of a played game comes out of the `.rgd` - a zip the sheet has to
+		//open and a screenshot it has to decompress - and that is disk work, so it
+		//happens on the thread that is already walking the library folders and
+		//never on the thread that draws. What the UI thread still owns is the
+		//decode: turning the bytes into a bitmap is an Avalonia object and nothing
+		//else.
 		//
-		//The index is built at every scan rather than held for the session: it is a
-		//snapshot of the folder (RecentCoverIndex says so), so a game played while
-		//the app is open gets its screenshot the next time the library is opened
-		//instead of never. It is built here, on this thread, because building it
-		//reads and unzips every Recent record.
-		private LibraryScanPayload ScanLibraryWithCovers(IReadOnlyList<string> folders, string? recentGamesFolder)
+		//`index` is opened by the caller and held for the whole scan rather than
+		//per batch: the index is a snapshot of the Recent folder (RecentCoverIndex
+		//says so), so one per scan is both the correct lifetime and the only one
+		//that does not unzip every record once per folder listed.
+		private static IReadOnlyList<LibraryCoverPick> CoversFor(IReadOnlyList<LibraryEntry> entries, RecentCoverIndex index)
 		{
-			LibraryScanResult result = ScanLibrary(folders);
-			RecentCoverIndex index = RecentCoverIndex.Open(recentGamesFolder);
-			List<LibraryCoverPick> covers = new(result.Entries.Count);
+			List<LibraryCoverPick> covers = new(entries.Count);
 			//The priority is the module's (ADR-0264 Decision 6); what this side
 			//hands it is the one lookup it needs, and the entry whose cover the
 			//lookup is NOT asked about costs no read at all.
-			foreach(LibraryEntry entry in result.Entries) {
+			foreach(LibraryEntry entry in entries) {
 				covers.Add(GameLibraryCover.Resolve(entry, path => index.FindCover(path)));
 			}
-			return new LibraryScanPayload(result, covers);
+			return covers;
 		}
 	}
 
