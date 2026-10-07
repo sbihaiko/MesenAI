@@ -377,8 +377,12 @@ public class PlaySheetsRenderTests : IDisposable
 		AssertFooterButton(window.FindNamed<Button>("CheatsAddCodeButton"), Card);
 		AssertFooterButton(window.FindNamed<Button>("CheatsDoneButton"), PlayTint);
 		Assert.Equal(Text2, PlayerRender.SolidColor(window.FindNamed<TextBlock>("CheatsStatusLine").Foreground));
-		//search + Add a Code… + Done (the TextBox is not a Button/CheckBox).
-		Assert.Equal(2 + rows.Length, ControlsOnScreen(sheet));
+		//P.11 (ADR-0245, #922): the search by intent - Find, Save key, Remove
+		//key - is offered wherever the OS has a credential store this build uses.
+		bool intent = OperatingSystem.IsMacOS() || OperatingSystem.IsWindows();
+		Assert.Equal(intent, window.FindNamed<StackPanel>("CheatsIntentPanel").IsOnScreen());
+		//search + Add a Code… + Done (the TextBoxes are not Buttons/CheckBoxes).
+		Assert.Equal(2 + (intent ? 3 : 0) + rows.Length, ControlsOnScreen(sheet));
 
 		Render(window, "W-P11", sheet);
 	}
