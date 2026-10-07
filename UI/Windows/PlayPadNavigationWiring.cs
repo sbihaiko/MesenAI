@@ -359,6 +359,11 @@ namespace Mesen.Windows
 			private readonly Stopwatch _clock = Stopwatch.StartNew();
 			private HashSet<ushort> _previous = new();
 			private TimeSpan _lastTick;
+			//#964: the drop-down the pad opened and the row it is on (committed
+			//only by Confirm), and the hold button Confirm is holding down.
+			private ComboBox? _openPopup;
+			private int _walk = -1;
+			private Button? _holding;
 
 			public Bridge(MainWindow window, MainWindowViewModel model)
 			{
@@ -424,6 +429,14 @@ namespace Mesen.Windows
 					action = PadNavAction.Back;
 				}
 
+				//#964: a hold ends on Confirm's release, which is not an action the
+				//edge rule produces - so it is read off the pressed set here, every
+				//tick and authority or not, or compare would outlive the press.
+				if(PlayPadValueRules.EndsHold(_holding is not null, pressed, mapping)) {
+					SetHold(_holding!, false);
+					_holding = null;
+				}
+
 				//Recorded on EVERY tick, authority or not: a button held across
 				//the moment the overlay opens would otherwise look like a new
 				//press and step the menu the instant it appeared.
@@ -483,6 +496,9 @@ namespace Mesen.Windows
 			//the pad; Confirm activates what the focus is on; Back is Esc.
 			private void Apply(PadNavAction action)
 			{
+				if(ApplyValue(action)) {
+					return;
+				}
 				if(action == PadNavAction.Back) {
 					//The grid's Back closes the grid through the grid's own path,
 					//never the Esc router: for a grid opened from W-P4 the two agree
@@ -568,6 +584,91 @@ namespace Mesen.Windows
 						PlayFocusOnOpen.Enter(next);
 					}
 				}
+			}
+
+			//#964: the focused control's own value semantics first (a slider's
+			//step, a drop-down's open/walk/commit/cancel, Hold to Compare's hold),
+			//as PlayPadValueRules answers them; false hands the press on to focus
+			//movement and Activate, as before. An open drop-down is asked even when
+			//the focus sits on one of its rows, because Avalonia focuses the rows
+			//when the popup opens.
+			private bool ApplyValue(PadNavAction action)
+			{
+				if(_openPopup is not null && !_openPopup.IsDropDownOpen) {
+					//Closed by something else (a pointer, the sheet going away).
+					_openPopup = null;
+				}
+				Control? target = _openPopup ?? _window.FocusManager?.GetFocusedElement() as Control;
+				if(target is null) {
+					return false;
+				}
+				PadValueAnswer answer = PlayPadValueRules.Next(KindOf(target), _openPopup is not null, action);
+				switch(answer.Verb) {
+					case PadValueVerb.None:
+						return false;
+					case PadValueVerb.Step when target is Slider slider:
+						slider.Value = PlayPadValueRules.Step(slider.Value, slider.SmallChange, slider.Minimum, slider.Maximum, answer.Delta);
+						break;
+					case PadValueVerb.Open when target is ComboBox combo:
+						_walk = combo.SelectedIndex;
+						_openPopup = combo;
+						combo.IsDropDownOpen = true;
+						break;
+					case PadValueVerb.Walk when target is ComboBox combo:
+						//The row is only highlighted (focused, so the ring shows it);
+						//the value is written by the commit alone, so Back can leave it.
+						_walk = PlayPadValueRules.Walk(_walk, combo.ItemCount, answer.Delta);
+						(combo.ContainerFromIndex(_walk) as Control)?.Focus(NavigationMethod.Directional);
+						break;
+					case PadValueVerb.Commit when target is ComboBox combo:
+						if(_walk >= 0) {
+							combo.SelectedIndex = _walk;
+						}
+						ClosePopup(combo);
+						break;
+					case PadValueVerb.Cancel when target is ComboBox combo:
+						ClosePopup(combo);
+						break;
+					case PadValueVerb.HoldStart when target is Button button:
+						_holding = button;
+						SetHold(button, true);
+						break;
+				}
+				return true;
+			}
+
+			//What the focused control is to the value rule. Hold to Compare is the
+			//one hold button in Play, and it is named here because nothing else
+			//marks a hold: its view listens only to the pointer and Space.
+			private static PadValueKind KindOf(Control focused)
+			{
+				return focused switch {
+					Slider => PadValueKind.Slider,
+					ComboBox => PadValueKind.Popup,
+					Button { Name: "btnLookHoldToCompare", DataContext: LookConfigViewModel } => PadValueKind.Hold,
+					_ => PadValueKind.None
+				};
+			}
+
+			private void ClosePopup(ComboBox combo)
+			{
+				//The focus comes back BEFORE the popup closes: Avalonia's ComboBox
+				//refocuses itself on close without a navigation method, and a focus
+				//it already holds is not re-entered - so the ring would be lost.
+				//Directly, not PlayFocusOnOpen.Enter: the focus is on a row of the
+				//popup, which Enter's other-top-level guard would refuse.
+				_openPopup = null;
+				_walk = -1;
+				combo.Focus(NavigationMethod.Directional);
+				combo.IsDropDownOpen = false;
+			}
+
+			//The view model's own SetCompare, the call the view's pointer and Space
+			//handlers make - not a synthetic Space, which MainWindow's tunnel key
+			//handler would hand to the console as a key press.
+			private static void SetHold(Button button, bool on)
+			{
+				(button.DataContext as LookConfigViewModel)?.SetCompare(on);
 			}
 
 			//The grid itself, or a control inside one (nothing puts one there today,
