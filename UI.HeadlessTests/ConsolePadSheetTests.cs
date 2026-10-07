@@ -29,6 +29,7 @@ public class ConsolePadSheetTests
 	[InlineData(ConsoleType.Nes, SetupConsole.Nes)]
 	[InlineData(ConsoleType.Gameboy, SetupConsole.GameBoy)]
 	[InlineData(ConsoleType.Sms, SetupConsole.MasterSystem)]
+	[InlineData(ConsoleType.Gba, SetupConsole.Gba)]
 	public void The_sheet_draws_the_consoles_own_pad(ConsoleType type, SetupConsole console)
 	{
 		const int device = 7;
@@ -65,6 +66,8 @@ public class ConsolePadSheetTests
 			SetupButton[] steps = ControllerSetupSteps.For(console).ToArray();
 			Border[] keys = pad.FindAll<Border>().Where(b => b.Name == "ControllerSetupKey").ToArray();
 			Assert.Equal(steps.Length, keys.Length);
+			//#954: the GBA sheet realizes its L/R shoulders, so the loop below pins them too.
+			Assert.Equal(console == SetupConsole.Gba, steps.Contains(SetupButton.L) && steps.Contains(SetupButton.R));
 			for(int i = 0; i < steps.Length; i++) {
 				PadKey expected = ControllerPadLayout.Of(console, steps[i]);
 				Point at = keys[i].TranslatePoint(new Point(0, 0), pad)!.Value;
