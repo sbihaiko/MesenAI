@@ -281,12 +281,22 @@ public class PlayerLibraryTests : IDisposable
 		WaitFor(() => (window.FocusManager?.GetFocusedElement() as Control)?.Name == "PlayHomeOpenRomPrimary",
 			"the first-run home did not put the focus on its one action");
 		Press(window, PadNavAction.Confirm);
+		WaitFor(() => model.RomPicker.Tiles.Count == 3, $"the grid never filled ({Focused(window)})");
 		WaitFor(() => FocusedTilePath(window) == model.RomPicker.Tiles[0].Path, $"the sheet did not open on its first tile ({Focused(window)})");
 
+		//The ring is moved off the first tile on purpose: every tile loads a
+		//synthetic NROM, so "a game loaded" is true whichever one the press plays -
+		//the path is the only observable that tells the focused tile from the first.
 		Press(window, PadNavAction.Right);
+		Assert.Equal(model.RomPicker.Tiles[1].Path, FocusedTilePath(window));
+
 		Press(window, PadNavAction.Confirm);
 		WaitFor(() => EmuApi.IsRunning() && model.RomInfo.Format != RomFormat.Unknown,
 			"confirming the focused tile did not load it");
+
+		//And the game that opened is the FOCUSED one, not the first: a press that
+		//played Tiles[0] regardless of the ring fails here.
+		Assert.Equal(model.RomPicker.Tiles[1].Path, model.RomInfo.RomPath);
 
 		//The sheet is gone: the pick IS the open, not a step before one.
 		Assert.False(model.RomPicker.IsVisible);
