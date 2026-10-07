@@ -291,20 +291,30 @@ namespace Mesen.Utilities
 		//#986: a dropped pack goes through the Enhancement Packs window's own
 		//install (MepZipValidator, then a copy into EnhancementPacks/ that the
 		//core scans, ADR-0040); with a game running it offers the same power
-		//cycle that window does, so the pack loads now.
+		//cycle that window does, so the pack loads now. LoadFile also serves the
+		//command line, the ROM picker, shortcuts and RemasterWorkspaceView, so a
+		//pack path from any of them installs the same way (#993 review) - on
+		//purpose: a pack is never a ROM.
 		private static async void InstallPack(string path)
 		{
-			string error = await EnhancementPacksViewModel.InstallPackFile(path, ConfigManager.EnhancementPackFolder);
-			if(error.Length > 0) {
-				DisplayMessageHelper.DisplayMessage("Error", ResourceHelper.GetMessage(error));
-				return;
-			}
-			if(!EmuApi.IsRunning()) {
-				DisplayMessageHelper.DisplayMessage("MEP", ResourceHelper.GetMessage("DropPackInstalled", Path.GetFileName(Path.TrimEndingDirectorySeparator(path))));
-				return;
-			}
-			if(await MesenMsgBox.Show(ApplicationHelper.GetMainWindow(), "InstallMepPackConfirmReset", MessageBoxButtons.OKCancel, MessageBoxIcon.Question) == DialogResult.OK) {
-				PowerCycle();
+			try {
+				string error = await EnhancementPacksViewModel.InstallPackFile(path, ConfigManager.EnhancementPackFolder);
+				switch(DropRoute.AfterPackInstall(error, EmuApi.IsRunning())) {
+					case PackInstallOutcome.ShowError:
+						DisplayMessageHelper.DisplayMessage("Error", ResourceHelper.GetMessage(error));
+						break;
+					case PackInstallOutcome.ShowInstalled:
+						DisplayMessageHelper.DisplayMessage("MEP", ResourceHelper.GetMessage("DropPackInstalled", Path.GetFileName(Path.TrimEndingDirectorySeparator(path))));
+						break;
+					case PackInstallOutcome.OfferPowerCycle:
+						if(await MesenMsgBox.Show(ApplicationHelper.GetMainWindow(), "InstallMepPackConfirmReset", MessageBoxButtons.OKCancel, MessageBoxIcon.Question) == DialogResult.OK) {
+							PowerCycle();
+						}
+						break;
+				}
+			} catch(Exception ex) {
+				//#993: an async void - nothing above may escape onto the UI thread.
+				DisplayMessageHelper.DisplayMessage("Error", ex.Message);
 			}
 		}
 
