@@ -12,7 +12,9 @@ evidence that the new job cannot repeat that:
     `.wireframe.md`, or a PNG older than the run fails;
   * a run missing an expected W-P render or its report (a case deleted,
     renamed out of `*RenderTests`, or a run that stopped before writing it)
-    fails, and the pinned expected set covers every committed baseline;
+    fails, and the pinned expected set covers every committed baseline and
+    every Player wireframe (W-S1 and each W-P*) in docs/media/gui-redesign/
+    (#1010);
   * a run whose TRX summary is not `Completed`, or whose counters show a case
     that did not pass (a host abort mid-run leaves no row for the rest), fails;
   * a run of real, fresh renders with their reports passes;
@@ -179,6 +181,13 @@ def main() -> int:
         failures += 1
     else:
         print(f"ok   [pinned W-P set holds every committed baseline ({len(pinned)} renders)]")
+    # #1010: every Player wireframe has a render case, so the gate compares it.
+    drawn = {p.stem for p in (REPO_ROOT / "docs" / "media" / "gui-redesign").glob("W-P*.png")} | {"W-S1"}
+    if not drawn <= pinned:
+        print(f"FAIL [pinned wireframe set]: {sorted(drawn - pinned)} drawn in docs/media/gui-redesign but not expected")
+        failures += 1
+    else:
+        print(f"ok   [pinned set holds every Player wireframe ({len(drawn)} drawn)]")
     got = run_case(check, PASSED, FRESH_PAIR, pinned)
     if not any("W-P2.png was not rendered" in line for line in got):
         print(f"FAIL [default expected set]: a run with only W-P1 must miss W-P2, got {got}")
@@ -200,7 +209,7 @@ def main() -> int:
         else:
             print(f"ok   [workflow: {label}]")
 
-    total = len(RUN_CASES) + 3 + len(WORKFLOW_MUTATIONS)
+    total = len(RUN_CASES) + 4 + len(WORKFLOW_MUTATIONS)
     if failures:
         print(f"FAIL: {failures} of {total} case(s) did not hold")
         return 1
