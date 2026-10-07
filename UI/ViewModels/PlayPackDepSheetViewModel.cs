@@ -28,6 +28,9 @@ namespace Mesen.ViewModels
 		[ObservableProperty] public partial string PrimaryLabel { get; private set; } = "";
 		[ObservableProperty] public partial string DropHint { get; private set; } = "";
 		[ObservableProperty] public partial bool IsBusy { get; private set; }
+		//#939: W-P6's orange line - whether a file is pending, and its title.
+		[ObservableProperty] public partial bool HasPending { get; private set; }
+		[ObservableProperty] public partial string PendingTitle { get; private set; } = "";
 
 		public PackDepNoticeState Notice { get; } = new();
 
@@ -44,12 +47,18 @@ namespace Mesen.ViewModels
 		{
 			_pending = pending;
 			Notice.Pending(packName, pending.Count);
+			HasPending = PackDetailPendingFile.Shows(Notice);
+			PendingTitle = !HasPending ? ""
+				: Notice.FileCount == 1 ? ResourceHelper.GetMessage("PackDepSheetTitleOne", Notice.PackName)
+				: ResourceHelper.GetMessage("PackDepSheetTitleMany", Notice.PackName, Notice.FileCount);
 		}
 
 		public void Clear()
 		{
 			_pending = Array.Empty<CommunityPackDepPrompt>();
 			Notice.Clear();
+			HasPending = false;
+			PendingTitle = "";
 			IsVisible = false;
 		}
 

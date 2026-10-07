@@ -61,5 +61,6 @@ namespace Mesen.Views
 
 		private void OnKeep(object? sender, RoutedEventArgs e) => Model?.CancelRestore();
 		private void OnDone(object? sender, RoutedEventArgs e) => Model?.ClosePackDetail();
+		private void OnAddFile(object? sender, RoutedEventArgs e) => Model?.AddPendingFileFromDetail();
 	}
 }
