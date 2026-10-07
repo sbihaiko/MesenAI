@@ -47,17 +47,24 @@ public class PlayerLibraryScanGenerationTests
 			//and so the case is about the library scan alone.
 			SuggestionSource = _ => Array.Empty<RomPickerHit>()
 		};
-		picker.LibraryScanSource = (scanned, _) => {
+		//#1037: the walk answers through the same stream the real one does, so the
+		//held folder hands its games over late rather than all at once - which is
+		//what the generation has to drop, now that a batch lands the moment it is
+		//found instead of only when the last folder answers.
+		picker.LibraryScanStreamSource = (scanned, _, onEntries) => {
 			if(scanned.Contains("A")) {
 				//The folder the player is about to leave: the scan holds its
 				//answer until the case says the new folder has already answered.
 				oldScanStarted.Set();
 				oldScanMayFinish.Wait(TimeSpan.FromSeconds(30));
 				LibraryScanResult stale = Scan("Contra", "Metroid");
+				onEntries(stale.Entries);
 				oldScanAnswered.Set();
 				return stale;
 			}
-			return Scan("Tetris");
+			LibraryScanResult fresh = Scan("Tetris");
+			onEntries(fresh.Entries);
+			return fresh;
 		};
 
 		picker.Open();
@@ -112,7 +119,11 @@ public class PlayerLibraryScanGenerationTests
 			//runs on; the case must not depend on its disks.
 			VolumeSource = () => Array.Empty<string>(),
 			WholeComputerFolder = null,
-			LibraryScanSource = (_, _) => Scan("Contra")
+			LibraryScanStreamSource = (_, _, onEntries) => {
+				LibraryScanResult result = Scan("Contra");
+				onEntries(result.Entries);
+				return result;
+			}
 		};
 		picker.SuggestionSource = pass => {
 			if(pass == RomScanPass.Shallow) {
@@ -162,10 +173,12 @@ public class PlayerLibraryScanGenerationTests
 			VolumeSource = () => Array.Empty<string>(),
 			WholeComputerFolder = null
 		};
-		picker.LibraryScanSource = (_, _) => {
+		picker.LibraryScanStreamSource = (_, _, onEntries) => {
 			libraryScanStarted.Set();
 			libraryScanMayAnswer.Wait(TimeSpan.FromSeconds(30));
-			return Scan("Contra");
+			LibraryScanResult result = Scan("Contra");
+			onEntries(result.Entries);
+			return result;
 		};
 		picker.SuggestionSource = pass => {
 			if(pass == RomScanPass.Deep) {
