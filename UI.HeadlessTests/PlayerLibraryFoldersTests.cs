@@ -274,7 +274,7 @@ public class PlayerLibraryFoldersTests : IDisposable
 
 		//The list is the seeded one: the single games folder the app already had.
 		Assert.Equal(new[] { games }, model.RomPicker.LibraryFolderRows.Select(r => r.Path).ToArray());
-		Assert.Contains("1 folder", model.RomPicker.CountText);
+		Assert.Contains("1 folder", model.RomPicker.HeaderText);
 
 		//Confirm on *Add a folder…* is the PAD's door: the sheet's own browser.
 		Press(window, PadNavAction.Confirm);
@@ -311,8 +311,12 @@ public class PlayerLibraryFoldersTests : IDisposable
 		Assert.Contains(extra, model.RomPicker.LibraryFolderRows.Select(r => r.Path));
 		Assert.False(model.RomPicker.IsPickingLibraryFolder);
 		WaitFor(() => model.RomPicker.Tiles.Count == 2, "the grid did not gain the games under the added folder");
-		Assert.Contains("2 folders", model.RomPicker.CountText);
-		Assert.Contains("2 games", model.RomPicker.CountText);
+		Assert.Equal("Your library · 2 games in 2 folders", model.RomPicker.HeaderText);
+		//The browser's path line went with the browser: nothing of the folder the
+		//pad walked into is left over the folders sheet.
+		Assert.Equal("", model.RomPicker.PathText);
+		Assert.Equal("", model.RomPicker.NoticeText);
+		Assert.False(window.FindNamed<TextBlock>("RomPickerPath").IsOnScreen(), "the browser's path is still printed over the sheet");
 	}
 
 	//#1036 (ADR-0264 Decision 8): the pad REMOVES a folder, and removing it is a
@@ -343,8 +347,8 @@ public class PlayerLibraryFoldersTests : IDisposable
 		WaitFor(() => model.RomPicker.LibraryFolderRows.Count == 1, "the press did not take the folder out of the list");
 		//The grid lost that folder's game, and the header counts one folder.
 		WaitFor(() => model.RomPicker.Tiles.Count == 1, "the grid did not lose the removed folder's game");
-		Assert.Contains("1 folder", model.RomPicker.CountText);
-		Assert.Contains("1 game", model.RomPicker.CountText);
+		Assert.Contains("1 folder", model.RomPicker.HeaderText);
+		Assert.Contains("1 game", model.RomPicker.HeaderText);
 		Assert.Contains("Nothing was deleted", model.RomPicker.FoldersNoticeText);
 
 		//The whole point: the folder and its game are untouched on the disk.
@@ -381,6 +385,35 @@ public class PlayerLibraryFoldersTests : IDisposable
 		//The mouse's door never walks the browser: the sheet stayed on its own list.
 		Assert.True(model.RomPicker.IsFoldersSheetVisible);
 		Assert.Equal(RomPickerMode.Library, model.RomPicker.Mode);
+	}
+
+	//#1036 review finding 4: the sheet can go while the native dialog is still up
+	//(another ROM opened, the pad dropped). What the player picked is still theirs,
+	//so the list is saved - but the notice and the re-scan are for a sheet nobody is
+	//looking at.
+	[AvaloniaFact]
+	public void A_folder_picked_after_the_sheet_closed_is_saved_without_a_notice_or_a_rescan()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(_, string extra, _) = LibraryRoots();
+
+		(MainWindow window, MainWindowViewModel model) = ShowFirstRunHome();
+		OpenFoldersSheetWithPad(window, model);
+
+		System.Threading.Tasks.TaskCompletionSource<string?> dialog = new();
+		model.RomPicker.FolderPickerSource = () => dialog.Task;
+		window.FindNamed<Button>("RomPickerAddFolder").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+		model.RomPicker.CloseFoldersSheet();
+		int rowsBefore = model.RomPicker.LibraryFolderRows.Count;
+		string headerBefore = model.RomPicker.HeaderText;
+
+		dialog.SetResult(extra);
+		WaitFor(() => ConfigManager.Config.Preferences.LibraryFolders?.Contains(extra) == true,
+			"the folder the dialog answered was not saved");
+		for(int i = 0; i < 40; i++) { Pump(); Thread.Sleep(25); }
+		Assert.Equal("", model.RomPicker.FoldersNoticeText);
+		Assert.Equal(rowsBefore, model.RomPicker.LibraryFolderRows.Count);
+		Assert.Equal(headerBefore, model.RomPicker.HeaderText);
 	}
 
 	//#1036 (ADR-0264 Decision 8): adding the SAME folder again changes nothing, and
@@ -557,7 +590,7 @@ public class PlayerLibraryFoldersTests : IDisposable
 		(MainWindow window, MainWindowViewModel model) = ShowFirstRunHome();
 		OpenFoldersSheetWithPad(window, model);
 		Assert.Single(model.RomPicker.LibraryFolderRows);
-		Assert.Contains("1 folder", model.RomPicker.CountText);
+		Assert.Contains("1 folder", model.RomPicker.HeaderText);
 
 		//Up out of *Add a folder…* reaches the rows, where the press is Remove.
 		Press(window, PadNavAction.Up);

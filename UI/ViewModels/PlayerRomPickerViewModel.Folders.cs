@@ -184,6 +184,13 @@ namespace Mesen.ViewModels
 				//said about it.
 				return;
 			}
+			if(!IsVisible || !IsFoldersSheetVisible) {
+				//The sheet went while the dialog was up. The pick is still the
+				//player's, so the list is saved; the notice and the re-scan are for a
+				//sheet nobody is looking at.
+				CommitLibraryFolders(LibraryFolders.Add(_folders, picked).Folders);
+				return;
+			}
 			AddLibraryFolder(picked);
 		}
 
@@ -253,6 +260,11 @@ namespace Mesen.ViewModels
 				IsLibraryMode = true;
 				IsBrowseMode = false;
 				_folder = null;
+				//The browser's own lines go with it: ShowLibrary's reset, without
+				//the scan it kicks (the rescan below owns that).
+				HeaderText = ResourceHelper.GetMessage("RomPickerLibraryTitle");
+				PathText = "";
+				NoticeText = "";
 				IsFoldersSheetVisible = true;
 			}
 			FillLibraryFolderRows();
@@ -281,7 +293,7 @@ namespace Mesen.ViewModels
 				//state again, never a grid still showing games no folder on the list
 				//reaches any more.
 				ClearTiles();
-				CountText = "";
+				HeaderText = ResourceHelper.GetMessage("RomPickerLibraryTitle");
 				SearchingText = "";
 				TruncatedText = "";
 				EmptyText = ResourceHelper.GetMessage("RomPickerLibraryNoFolders");

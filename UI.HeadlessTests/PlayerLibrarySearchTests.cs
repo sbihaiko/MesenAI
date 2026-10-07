@@ -276,7 +276,7 @@ public class PlayerLibrarySearchTests : IDisposable
 
 		//The header reads the LIBRARY, not the grid (Decision 8): a search narrows
 		//which games are on screen and never how many the player owns.
-		Assert.Equal("4 games in 1 folder", model.RomPicker.CountText);
+		Assert.Equal("Your library · 4 games in 1 folder", model.RomPicker.HeaderText);
 
 		//And the tiles the query kept are the tiles the grid draws.
 		Assert.Equal(new[] { "Super Mario Land" },

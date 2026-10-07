@@ -447,9 +447,11 @@ namespace Mesen.ViewModels
 			//library, so a folder that holds no ROM (or one the scan has not reached
 			//yet) is still a folder the header names, and the sheet's own folder list
 			//is the one source of it.
-			CountText = ResourceHelper.GetMessage("RomPickerLibraryCount",
-				CountLabel(result.Entries.Count, "RomPickerGameOne", "RomPickerGameMany"),
-				CountLabel(_folders.Count, "RomPickerFolderOne", "RomPickerFolderMany"));
+			//The header is ONE sentence - "Your library · N games in M folders" - and
+			//the plural rule is the host-free LibraryFolders.HeaderResourceId.
+			HeaderText = ResourceHelper.GetMessage(
+				LibraryFolders.HeaderResourceId(result.Entries.Count, _folders.Count),
+				result.Entries.Count, _folders.Count);
 			TruncatedText = result.Truncated
 				? ResourceHelper.GetMessage("RomPickerLibraryTruncated", GameLibrary.MaxEntries)
 				: "";

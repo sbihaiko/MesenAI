@@ -241,8 +241,7 @@ public class PlayerLibraryTests : IDisposable
 		//Three games, two of them one level down and one two levels down: the
 		//folders shape the scan, they are never rows.
 		Assert.Equal(new[] { "Contra", "Metroid", "Tetris" }, model.RomPicker.Tiles.Select(t => t.Title).ToArray());
-		Assert.Equal("Your library", model.RomPicker.HeaderText);
-		Assert.Contains("3 games", model.RomPicker.CountText);
+		Assert.Equal("Your library · 3 games in 1 folder", model.RomPicker.HeaderText);
 		Assert.True(window.FindNamed<ItemsControl>("RomPickerGrid").IsOnScreen(), "the grid is not on screen");
 
 		//And the header's own controls read as words: a key the locale files do
@@ -563,10 +562,10 @@ public class PlayerLibraryTests : IDisposable
 		Assert.Contains("Add a folder", sentence.Text ?? "");
 
 		//And the ring is never left with nothing to press: with no tile to play, the
-		//next press reaches a header action rather than the way out of the sheet.
-		WaitFor(() => (window.FocusManager?.GetFocusedElement() as Control)?.Name == "RomPickerBrowseFile",
-			$"the ring did not land on a header action ({Focused(window)})");
-		Assert.True(window.FindNamed<Button>("RomPickerBrowseFile").IsOnScreen(), "the focused action is not on screen");
+		//next press reaches the step the sentence names, *Library folders…*.
+		WaitFor(() => (window.FocusManager?.GetFocusedElement() as Control)?.Name == "RomPickerLibraryFolders",
+			$"the ring did not land on the step the sentence names ({Focused(window)})");
+		Assert.True(window.FindNamed<Button>("RomPickerLibraryFolders").IsOnScreen(), "the focused action is not on screen");
 	}
 
 	//#1060 review finding 1: the sheet must not claim "no games found" while the

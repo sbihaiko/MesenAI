@@ -398,7 +398,7 @@ namespace Mesen.Windows
 				//lands on the control its empty sentence names, and Back stays
 				//the last resort, being the one control the sheet always has.
 				return RomPickerTile(window, model.RomPicker.LastFocusedTilePath, model.RomPicker.IsRestorePending)
-					?? Named(window, "RomPickerBrowseFile") ?? Named(window, "RomPickerBack");
+					?? Named(window, "RomPickerLibraryFolders") ?? Named(window, "RomPickerBrowseFile") ?? Named(window, "RomPickerBack");
 			}
 			return RomPickerFirstRow(window) ?? Named(window, "RomPickerBack");
 		}

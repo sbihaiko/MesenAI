@@ -219,8 +219,7 @@ public class PlayerLibraryRenderTests : IDisposable
 		Assert.True(window.FindNamed<Border>("PlayerRomPickerSheet").IsOnScreen(), "the sheet is not on screen");
 		//Eleven games, none of them a row: the folders shaped the scan.
 		Assert.Equal(11, model.RomPicker.Tiles.Count);
-		Assert.Equal("Your library", model.RomPicker.HeaderText);
-		Assert.Equal("11 games in 1 folder", model.RomPicker.CountText);
+		Assert.Equal("Your library · 11 games in 1 folder", model.RomPicker.HeaderText);
 		Assert.True(window.FindNamed<ItemsControl>("RomPickerGrid").IsOnScreen(), "the grid is not on screen");
 		Assert.True(window.FindNamed<Button>("RomPickerBrowseFile").IsOnScreen(), "Browse a file… is not on the sheet");
 		Assert.True(window.FindNamed<Button>("RomPickerBack").IsOnScreen(), "Back is not on the sheet");
@@ -310,8 +309,7 @@ public class PlayerLibraryRenderTests : IDisposable
 		//being a picture of the narrowed library fails here rather than being
 		//noticed by whoever opens it next.
 		Assert.True(window.FindNamed<Border>("PlayerRomPickerSheet").IsOnScreen(), "the sheet is not on screen");
-		Assert.Equal("Your library", model.RomPicker.HeaderText);
-		Assert.Equal("13 games in 1 folder", model.RomPicker.CountText);
+		Assert.Equal("Your library · 13 games in 1 folder", model.RomPicker.HeaderText);
 		Assert.Equal("zel", box.Text ?? "");
 		Assert.Equal(
 			new[] { "The Legend of Zelda", "The Legend of Zelda - Oracle of Ages", "Zelda II - The Adventure of Link" },

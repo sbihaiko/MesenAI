@@ -197,13 +197,12 @@ namespace Mesen.ViewModels
 		public partial bool IsLibraryMode { get; private set; } = true;
 		[ObservableProperty] public partial bool IsBrowseMode { get; private set; }
 
-		//The library's two header lines: "Your library" and "<N> games in <M>
-		//folders" (Decision 8). The count is what the scan actually found, so a
+		//The library's header: "Your library" until the scan answers, then "Your
+		//library · <N> games in <M> folders" (Decision 8). The count is what the scan actually found, so a
 		//capped scan and a complete one read differently.
 		[ObservableProperty]
 		[NotifyPropertyChangedFor(nameof(SheetHeading))]
 		public partial string HeaderText { get; private set; } = "";
-		[ObservableProperty] public partial string CountText { get; private set; } = "";
 		//The one thing the header has to say about a capped scan: it stopped
 		//collecting (Decision 9). Never shown otherwise.
 		[ObservableProperty] public partial string TruncatedText { get; private set; } = "";
@@ -374,7 +373,6 @@ namespace Mesen.ViewModels
 			//#1033 (ADR-0264 Decision 4): fresh visit, empty box and no entries
 			//from the previous scan (PlayerRomPickerViewModel.Search).
 			BeginLibraryVisit();
-			CountText = "";
 			TruncatedText = "";
 			EmptyText = "";
 			//The grid is going: the pictures the previous visit decoded go back
@@ -637,13 +635,6 @@ namespace Mesen.ViewModels
 		private static string LibraryEmptyText(string? messageId)
 		{
 			return messageId is null ? "" : ResourceHelper.GetMessage(messageId);
-		}
-
-		//A counted noun: "1 game" and "11 games" are different words in English,
-		//and the header shows both counts on every visit.
-		private static string CountLabel(int count, string oneId, string manyId)
-		{
-			return ResourceHelper.GetMessage(count == 1 ? oneId : manyId, count);
 		}
 
 		private void ShowRoots()

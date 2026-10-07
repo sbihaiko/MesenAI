@@ -132,7 +132,6 @@
 					<TextBox Name="RomPickerSearch" DockPanel.Dock="Right" Width="240" Margin="0 0 8 0" VerticalAlignment="Center" Text="{Binding SearchQuery}" PlaceholderText="{l:Translate lblRomPickerSearchPlaceholder}" IsVisible="{Binding IsLibrarySurfaceVisible}" />
 					<StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
 						<TextBlock Name="RomPickerTitle" Classes="sheet-heading" Text="{Binding SheetHeading}" />
-						<TextBlock Name="RomPickerCount" Classes="footnote secondary" Text="{Binding CountText}" VerticalAlignment="Center" IsVisible="{Binding IsLibrarySurfaceVisible}" />
 					</StackPanel>
 				</DockPanel>
 				<TextBlock Classes="subhead secondary" DockPanel.Dock="Top" Text="{l:Translate lblRomPickerHint}" TextWrapping="Wrap" IsVisible="{Binding IsBrowseMode}" />
