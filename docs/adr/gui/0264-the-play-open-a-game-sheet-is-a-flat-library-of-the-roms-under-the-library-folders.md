@@ -199,8 +199,15 @@ library.
     control, the pad hints, *Library folders…*, *Browse a file…* and Back) and
     **W-P19b** (the same surface with search active and the query `zel`) are
     produced by `scripts/render_gui_wireframes.py` into
-    `docs/media/gui-redesign/` and are read by the render gate like every
-    other W-P* wireframe, so a visual regression turns CI red.
+    `docs/media/gui-redesign/`. Both are held in the render gate's
+    **`WIREFRAMES_AWAITING_RENDER_CASE`** set, not in
+    `EXPECTED_WIREFRAME_RENDERS`: no `RenderTests` case writes them yet, so
+    the gate pins them as *drawn* without demanding a render that does not
+    exist. They move into `EXPECTED_WIREFRAME_RENDERS` with the tickets that
+    build the surface they picture — **L.1 (#1032)** for W-P19 and **L.2
+    (#1033)** for W-P19b — which is when a visual regression in either starts
+    turning CI red. Until then a regression in these two is caught by review
+    of the regenerated PNG, not by the gate.
 
 ## Consequences
 
