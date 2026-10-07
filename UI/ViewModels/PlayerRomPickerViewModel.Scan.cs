@@ -5,6 +5,7 @@ using Mesen.Localization;
 using Mesen.Logic;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -310,10 +311,11 @@ namespace Mesen.ViewModels
 			if(!_scanGeneration.IsCurrent(generation) || !IsVisible || Mode != RomPickerMode.Library) {
 				return;
 			}
-			//With a query on, the grid is a filtered view of the list and a tile's
-			//position is not the game's: the view is refilled instead, and the ring -
-			//which is on the box while the player types - is not claimed.
-			bool query = HasQuery;
+			//With a query or a console filter on, the grid is a filtered view of the
+			//list and a tile's position is not the game's: the view is refilled
+			//instead, and the ring - which is on the box while the player types - is
+			//not claimed.
+			bool query = HasQuery || SelectedConsole != null;
 			bool wasEmpty = Tiles.Count == 0;
 			bool restoreLanded = false;
 			for(int index = from; index < from + count; index++) {
@@ -328,6 +330,13 @@ namespace Mesen.ViewModels
 					Tiles.Insert(at, TileFor(entry, game.Cover));
 				}
 				restoreLanded |= _restoreTargetPath.Length > 0 && entry.Path == _restoreTargetPath;
+			}
+			//#1034: a console the scan has just found joins the row (the row lists
+			//only the consoles present). The rebuild refills the grid, so it is done
+			//only when the set actually grew, never once per batch.
+			if(ConsoleOptions.Count - 1 != LibraryConsoleFilter.Options(_libraryGames.Select(game => game.Entry.Console)).Count - 1) {
+				RebuildConsoleOptions();
+				return;
 			}
 			if(query) {
 				FillTiles();

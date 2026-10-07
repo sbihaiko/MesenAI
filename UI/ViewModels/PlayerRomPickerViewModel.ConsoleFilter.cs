@@ -119,7 +119,7 @@ namespace Mesen.ViewModels
 		//selection.
 		private void ResetConsoleFilter()
 		{
-			_libraryGames = Array.Empty<LibraryGame>();
+			_libraryGames.Clear();
 			RebuildConsoleOptions();
 		}
 
