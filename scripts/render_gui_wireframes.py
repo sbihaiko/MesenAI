@@ -1344,7 +1344,9 @@ def w_p19b():
     c = base("play", "No game loaded")
     # The header stays the library's own count (ADR-0264 Decision 8); only the grid
     # narrows, and the console filter keeps all six segments (Decision 5).
-    library_sheet(c, "· 128 games in 4 folders", tiles, LIBRARY_CONSOLES, focus=0, query="zel")
+    # The search field owns focus while a query is typed (ADR-0256 Decision 3), so
+    # no tile carries the focus ring here: focus=None, not the first tile.
+    library_sheet(c, "· 128 games in 4 folders", tiles, LIBRARY_CONSOLES, query="zel")
     c.caption("W-P19b", "Play — search typing narrows the library live (Y on a pad)", 6)
     return c
 

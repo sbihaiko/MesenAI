@@ -193,8 +193,11 @@ library.
     lives in the app-support folder keyed by console and SHA1; a miss is cached
     negatively so it is not re-queried on every visit. **With the switch off,
     no request is made at all** — the switch means what it says. Offline, the
-    library opens and plays exactly as fast as online: nothing waits on the
-    network and every tile falls to Decision 6's generic cover.
+    library opens and plays exactly as fast as online: no request ever waits,
+    every cover the machine already holds is still used in Decision 6's order
+    — the cached box art, the cached title screen, the player's own screenshot
+    from Recent — and only a game that has none of them falls to the generic
+    cover.
     **No artwork is redistributed.** Nothing from libretro-thumbnails is
     committed to this repository or bundled in a release; the images exist only
     in the player's own cache.
