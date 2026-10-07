@@ -26,8 +26,15 @@ namespace Mesen.Logic
 	//implement it with a fake and touch no network at all.
 	//
 	//The contract: return a response for anything the server answered, and THROW for
-	//a transport failure (offline, DNS, TLS, a timeout). The cache turns a throw into
-	//a negative cache entry - a tile that quietly falls back to its generic cover is
-	//the only acceptable outcome, so nothing may reach the sheet.
-	public delegate Task<BoxArtHttpResponse> BoxArtHttpSender(Uri url, CancellationToken cancellationToken);
+	//a transport failure (offline, DNS, TLS, a timeout).
+	//
+	//`maxBytes` is the ceiling the adapter enforces while it reads, not a number for
+	//the caller to check afterwards: it stops at `maxBytes + 1` bytes and returns
+	//what it has, so a body past the cap costs one byte of overshoot instead of a
+	//whole response held in memory before anybody can measure it. A body longer than
+	//`maxBytes` is past the cap, and BoxArtCache rejects it - which is a definitive
+	//answer and costs a recorded miss, whereas a throw is not. Cancelling the token
+	//must end the read as a throw like any other transport failure: the cache
+	//answers null either way.
+	public delegate Task<BoxArtHttpResponse> BoxArtHttpSender(Uri url, int maxBytes, CancellationToken cancellationToken);
 }

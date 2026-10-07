@@ -157,7 +157,7 @@ namespace Mesen.Tests.BoxArt
 			TaskCompletionSource gate = new(TaskCreationOptions.RunContinuationsAsynchronously);
 			TaskCompletionSource started = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
-			FakeBoxArtSender sender = new(async (_, _) => {
+			FakeBoxArtSender sender = new(async (_, _, _) => {
 				started.TrySetResult();
 				await gate.Task;
 				return BoxArtHttpResponse.Ok(FakeImages.Png());
@@ -182,6 +182,27 @@ namespace Mesen.Tests.BoxArt
 			Assert.NotNull(await first);
 			//A tile that gave up before sending asked nothing.
 			Assert.Equal(1, sender.RequestCount);
+		}
+
+		[Fact]
+		public async Task An_oversized_streamed_body_is_cut_at_the_cap_and_rejected()
+		{
+			//A collection streaming far more than the cap will ever allow.
+			FakeBoxArtSender sender = FakeBoxArtSender.Streaming(FakeImages.Png(4096));
+			BoxArtCache cache = Cache(sender, new BoxArtCacheOptions { MaxImageBytes = 64 });
+
+			Assert.Null(await cache.GetCover(BoxArtConsole.Nes, Sha1, Name));
+
+			//The cap is part of the contract, not a measurement taken afterwards: the
+			//transport is told where to stop, and what it hands back is the cap's own
+			//overflow rather than the whole body.
+			Assert.Equal(64, sender.MaxBytesSeen);
+			Assert.Equal(65, sender.LargestDeliveredBytes);
+
+			Assert.Empty(Directory.GetFiles(ConsoleFolder, "*.png"));
+			Assert.Empty(Directory.GetFiles(ConsoleFolder, "*.jpg"));
+			//Past the cap is a definitive answer, so it is remembered like any other.
+			Assert.True(File.Exists(Path.Combine(ConsoleFolder, Sha1 + ".miss")));
 		}
 
 		[Fact]
@@ -291,7 +312,7 @@ namespace Mesen.Tests.BoxArt
 			TaskCompletionSource gate = new(TaskCreationOptions.RunContinuationsAsynchronously);
 			TaskCompletionSource started = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
-			FakeBoxArtSender sender = new(async (_, _) => {
+			FakeBoxArtSender sender = new(async (_, _, _) => {
 				int now = Interlocked.Increment(ref inFlight);
 				peak = Math.Max(peak, now);
 				Interlocked.Increment(ref requests);

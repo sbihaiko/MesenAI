@@ -143,14 +143,18 @@ allow-listed raw host, and lives only in the player's own cache.**
     name rule and a cache layout — no artwork.
 
 11. **The seam is a host-free delegate, and the HTTP client is not in
-    `UI/Logic`.** `BoxArtCache` takes a `BoxArtHttpSender` delegate (URL in, a
-    status and a body out, throwing on a transport failure) and a cache
-    directory. This is what ADR-0138 §53 requires rather than a style choice: a
-    file under `UI/Logic/` that named `System.Net.Http` would fail
-    `scripts/verify-ui-logic-firewall.sh`. The shipped `HttpClient` adapter —
-    redirects, the stream cap, the hardened handler — belongs in `UI/Services/*.cs`
-    and is the integration half's to write; the unit tests drive the whole
-    service with a fake and touch no network.
+    `UI/Logic`.** `BoxArtCache` takes a `BoxArtHttpSender` delegate (URL and byte
+    ceiling in, a status and a body out, throwing on a transport failure) and a
+    cache directory. The ceiling travels with the request because the adapter is
+    where reading happens: it stops at `MaxImageBytes + 1` bytes, so a body past
+    the cap costs one byte of overshoot rather than a whole response held in
+    memory before anyone can measure it. This is what ADR-0138 §53 requires
+    rather than a style choice: a file under `UI/Logic/` that named
+    `System.Net.Http` would fail `scripts/verify-ui-logic-firewall.sh`. The
+    shipped `HttpClient` adapter — redirects, the stream cap, the hardened
+    handler — belongs in `UI/Services/*.cs` and is the integration half's to
+    write; the unit tests drive the whole service with a fake and touch no
+    network.
 
 ## Consequences
 

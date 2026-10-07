@@ -172,7 +172,10 @@ namespace Mesen.Logic
 				using CancellationTokenSource timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
 				timeout.CancelAfter(_options.RequestTimeout);
 
-				BoxArtHttpResponse response = await _sender(url, timeout.Token).ConfigureAwait(false);
+				//The cap travels with the request: the adapter stops reading at it, and
+				//what comes back longer than the cap is its own overflow, which the
+				//check below turns into a definitive "no".
+				BoxArtHttpResponse response = await _sender(url, _options.MaxImageBytes, timeout.Token).ConfigureAwait(false);
 				if(response.StatusCode != 200 || response.Body.Length > _options.MaxImageBytes) {
 					return (null, true);
 				}

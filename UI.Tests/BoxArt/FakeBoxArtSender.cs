@@ -14,10 +14,12 @@ namespace Mesen.Tests.BoxArt
 	//real clock.
 	internal sealed class FakeBoxArtSender
 	{
-		private readonly Func<Uri, CancellationToken, Task<BoxArtHttpResponse>> _answer;
+		private readonly Func<Uri, int, CancellationToken, Task<BoxArtHttpResponse>> _answer;
 		private readonly List<Uri> _requests = new();
+		private int _maxBytesSeen;
+		private int _largestDeliveredBytes;
 
-		public FakeBoxArtSender(Func<Uri, CancellationToken, Task<BoxArtHttpResponse>> answer)
+		public FakeBoxArtSender(Func<Uri, int, CancellationToken, Task<BoxArtHttpResponse>> answer)
 		{
 			_answer = answer;
 		}
@@ -38,18 +40,30 @@ namespace Mesen.Tests.BoxArt
 			}
 		}
 
-		public Task<BoxArtHttpResponse> Send(Uri url, CancellationToken cancellationToken)
+		//The byte ceiling the cache asked this transport to enforce, and the biggest
+		//body it ever handed back. The pair is what lets a test see that the cap is
+		//part of the contract - the adapter stops reading at it - rather than a
+		//number the cache applies to a body that was already read whole.
+		public int MaxBytesSeen => Volatile.Read(ref _maxBytesSeen);
+		public int LargestDeliveredBytes => Volatile.Read(ref _largestDeliveredBytes);
+
+		public async Task<BoxArtHttpResponse> Send(Uri url, int maxBytes, CancellationToken cancellationToken)
 		{
 			lock(_requests) {
 				_requests.Add(url);
 			}
-			return _answer(url, cancellationToken);
+			Volatile.Write(ref _maxBytesSeen, maxBytes);
+			BoxArtHttpResponse response = await _answer(url, maxBytes, cancellationToken).ConfigureAwait(false);
+			//The largest, not the last: a test that follows one oversized answer with a
+			//404 must still see what the oversized one cost.
+			Volatile.Write(ref _largestDeliveredBytes, Math.Max(Volatile.Read(ref _largestDeliveredBytes), response.Body.Length));
+			return response;
 		}
 
 		//200 with `boxart` for Named_Boxarts; when `title` is given, 200 with it for
 		//Named_Titles, otherwise 404 there.
 		public static FakeBoxArtSender Images(byte[] boxart, byte[]? title = null) =>
-			new((url, _) => {
+			new((url, _, _) => {
 				if(url.AbsolutePath.Contains("/Named_Boxarts/", StringComparison.Ordinal)) {
 					return Task.FromResult(BoxArtHttpResponse.Ok(boxart));
 				}
@@ -62,22 +76,35 @@ namespace Mesen.Tests.BoxArt
 		//404 for Named_Boxarts and 200 with `title` for Named_Titles: the collection
 		//has a title screen for this game and no box art.
 		public static FakeBoxArtSender TitlesOnly(byte[] title) =>
-			new((url, _) => Task.FromResult(
+			new((url, _, _) => Task.FromResult(
 				url.AbsolutePath.Contains("/Named_Titles/", StringComparison.Ordinal)
 					? BoxArtHttpResponse.Ok(title)
 					: BoxArtHttpResponse.NotFound()
 			));
 
 		//The collection knows the system and not the game.
-		public static FakeBoxArtSender Missing() => new((_, _) => Task.FromResult(BoxArtHttpResponse.NotFound()));
+		public static FakeBoxArtSender Missing() => new((_, _, _) => Task.FromResult(BoxArtHttpResponse.NotFound()));
+
+		//A transport that streams `body` and enforces the contract's cap the way the
+		//shipped adapter must: at most `maxBytes + 1` bytes ever leave the stream, so
+		//the cache can tell "past the cap" from "exactly the cap" without the whole
+		//body having to be read first.
+		public static FakeBoxArtSender Streaming(byte[] body) =>
+			new((url, maxBytes, _) => {
+				if(!url.AbsolutePath.Contains("/Named_Boxarts/", StringComparison.Ordinal)) {
+					return Task.FromResult(BoxArtHttpResponse.NotFound());
+				}
+				byte[] capped = body.Length > maxBytes ? body[..(maxBytes + 1)] : body;
+				return Task.FromResult(BoxArtHttpResponse.Ok(capped));
+			});
 
 		//A transport failure, as the delegate's contract describes one: offline,
 		//DNS, TLS. The cache must turn it into a null, never into a throw.
-		public static FakeBoxArtSender Offline() => new((_, _) => throw new IOException("the collection is unreachable"));
+		public static FakeBoxArtSender Offline() => new((_, _, _) => throw new IOException("the collection is unreachable"));
 
 		//A transport that answers nothing and ignores nothing but cancellation -
 		//what a dropped connection looks like when only the timeout ends it.
-		public static FakeBoxArtSender Hanging() => new(async (_, cancellationToken) => {
+		public static FakeBoxArtSender Hanging() => new(async (_, _, cancellationToken) => {
 			await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
 			return BoxArtHttpResponse.NotFound();
 		});
