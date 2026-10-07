@@ -316,8 +316,7 @@ namespace Mesen.Windows
 		private void OnDrop(object? sender, DragEventArgs e)
 		{
 			//#953: what the drop opens is DropRoute's (UI/Logic, pinned in UI.Tests).
-			//No pack branch: a pack archive goes to the ROM loader, a folder is
-			//reported missing.
+			//#986: a pack archive or folder (told by its manifest) is installed.
 			string? filename = e.DataTransfer.TryGetFiles()?.FirstOrDefault()?.Path.LocalPath;
 			DropAction action = LoadRomHelper.Route(filename);
 			if(action == DropAction.Ignore) {

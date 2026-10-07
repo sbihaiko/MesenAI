@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.IO.Compression;
 using System.Reflection;
 using System.Threading;
 using Avalonia.Headless.XUnit;
@@ -18,7 +19,8 @@ namespace Mesen.HeadlessTests;
 
 //#953: a file dropped anywhere on the Player window (MainWindow.OnDrop, the
 //PlayHomeView note) reaches LoadRomHelper.LoadFile - a ROM opens, and an IPS
-//patch beside a single ROM opens that ROM patched. MainWindow needs the real
+//patch beside a single ROM opens that ROM patched. #986: a pack archive or
+//folder dropped there is installed into EnhancementPacks/. MainWindow needs the real
 //core (InitDll), so this class skips without one; the core-free drop sheets
 //are PlayDragDropSheetTests. ConfigManager's home points at this case's temp
 //folder (the PackAudioNoticeInstallTests pattern) so the recent-games entry the
@@ -149,5 +151,46 @@ public class PlayDragDropRomTests : IDisposable
 		RomInfo info = model.RomInfo;
 		Assert.Equal(rom, info.RomPath);
 		Assert.Equal(patch, info.PatchPath);
+	}
+
+	//#986: the pack's files, under one top-level folder named like the pack.
+	private string PackFolder()
+	{
+		string pack = Path.Combine(_folder, "downloads", "Contra Remastered");
+		Directory.CreateDirectory(Path.Combine(pack, "textures"));
+		File.WriteAllText(Path.Combine(pack, "pack.json"), "{\"name\": \"Contra Remastered\"}");
+		File.WriteAllText(Path.Combine(pack, "textures", "hires.txt"), "<ver>106\n");
+		return pack;
+	}
+
+	[AvaloniaFact]
+	public void A_pack_archive_dropped_on_the_player_window_is_installed()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		string archive = Path.Combine(_folder, "downloads", "Contra Remastered.zip");
+		ZipFile.CreateFromDirectory(PackFolder(), archive, CompressionLevel.Fastest, true);
+		(MainWindow window, _) = ShowPlay();
+
+		PlayDragDrop.DropFile(window, window, archive);
+
+		string installed = Path.Combine(ConfigManager.EnhancementPackFolder, "Contra Remastered.zip");
+		WaitFor(() => File.Exists(installed), "the dropped pack archive never reached EnhancementPacks/");
+		Assert.False(EmuApi.IsRunning(), "a pack archive went to the ROM loader");
+	}
+
+	[AvaloniaFact]
+	public void A_pack_folder_dropped_on_the_player_window_is_installed()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		string pack = PackFolder();
+		(MainWindow window, _) = ShowPlay();
+
+		PlayDragDrop.DropFile(window, window, pack);
+
+		string installed = Path.Combine(ConfigManager.EnhancementPackFolder, "Contra Remastered.zip");
+		WaitFor(() => File.Exists(installed), "the dropped pack folder never reached EnhancementPacks/");
+		using(ZipArchive zip = ZipFile.OpenRead(installed)) {
+			Assert.NotNull(zip.GetEntry("Contra Remastered/pack.json"));
+		}
 	}
 }

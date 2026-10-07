@@ -24,9 +24,10 @@ namespace Mesen.HeadlessTests;
 [Collection(NativeCoreCollection.Name)]
 public class PadPortLampsRenderTests : IDisposable
 {
-	//The PNG the coordinator asked to look at: a scratchpad outside the repo, so
-	//the file is evidence to read, not a build artifact to commit.
-	private const string EvidencePath = "/private/tmp/claude-503/-Users-bihaiko-VSCodeProjects-MesenCE/b37bbfac-925a-47f5-a113-0146191cb6b2/scratchpad/lamps.png";
+	//The PNG to look at: under the host's temp folder (Path.GetTempPath, so the
+	//same case runs on the Linux render-gate runner), so the file is evidence to
+	//read, not a build artifact to commit.
+	private static readonly string EvidencePath = Path.Combine(Path.GetTempPath(), "mesence-pad-port-lamps", "lamps.png");
 
 	//PlayerTintShareBrush (the status dot's own live tint) and PlayerText3Brush
 	//(its dim one): the strip reuses the status line's palette, it does not

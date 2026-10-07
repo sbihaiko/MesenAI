@@ -246,7 +246,28 @@ namespace Mesen.Utilities
 		public static DropAction Route(string? filename)
 		{
 			bool exists = !string.IsNullOrEmpty(filename) && File.Exists(filename);
-			return DropRoute.Decide(filename, exists, exists ? ReadHeader(filename!) : Array.Empty<byte>(), EmuApi.IsRunning());
+			bool isFolder = !exists && !string.IsNullOrEmpty(filename) && Directory.Exists(filename);
+			return DropRoute.Decide(filename, exists, exists ? ReadHeader(filename!) : Array.Empty<byte>(), EmuApi.IsRunning(),
+				isFolder, ReadPackEntries(filename, exists, isFolder));
+		}
+
+		//#986: what DropRoute looks for a pack manifest in - a .zip's entry
+		//names, or the names directly inside a folder; null otherwise or when
+		//unreadable (then it is not a pack).
+		private static IReadOnlyCollection<string>? ReadPackEntries(string? filename, bool exists, bool isFolder)
+		{
+			try {
+				if(isFolder) {
+					return Directory.EnumerateFileSystemEntries(filename!).Select(entry => Path.GetFileName(entry)).ToList();
+				}
+				if(exists && Path.GetExtension(filename!).Equals(DropRoute.ZipExt, StringComparison.OrdinalIgnoreCase)) {
+					using(ZipArchive zip = ZipFile.OpenRead(filename!)) {
+						return zip.Entries.Select(entry => entry.FullName).ToList();
+					}
+				}
+			} catch(Exception ex) when(ex is IOException or UnauthorizedAccessException or InvalidDataException) {
+			}
+			return null;
 		}
 
 		public static void LoadFile(string filename)
@@ -262,7 +283,28 @@ namespace Mesen.Utilities
 				case DropAction.ApplyPatch: LoadPatchFile(filename); break;
 				case DropAction.LoadState: EmuApi.LoadStateFile(filename); break;
 				case DropAction.PlayMovie: RecordApi.MoviePlay(filename); break;
+				case DropAction.InstallPack: InstallPack(filename); break;
 				default: LoadRom(filename); break;
+			}
+		}
+
+		//#986: a dropped pack goes through the Enhancement Packs window's own
+		//install (MepZipValidator, then a copy into EnhancementPacks/ that the
+		//core scans, ADR-0040); with a game running it offers the same power
+		//cycle that window does, so the pack loads now.
+		private static async void InstallPack(string path)
+		{
+			string error = await EnhancementPacksViewModel.InstallPackFile(path, ConfigManager.EnhancementPackFolder);
+			if(error.Length > 0) {
+				DisplayMessageHelper.DisplayMessage("Error", ResourceHelper.GetMessage(error));
+				return;
+			}
+			if(!EmuApi.IsRunning()) {
+				DisplayMessageHelper.DisplayMessage("MEP", ResourceHelper.GetMessage("DropPackInstalled", Path.GetFileName(Path.TrimEndingDirectorySeparator(path))));
+				return;
+			}
+			if(await MesenMsgBox.Show(ApplicationHelper.GetMainWindow(), "InstallMepPackConfirmReset", MessageBoxButtons.OKCancel, MessageBoxIcon.Question) == DialogResult.OK) {
+				PowerCycle();
 			}
 		}
 
