@@ -43,11 +43,14 @@ namespace Mesen.Tests.BoxArt
 				});
 
 			using Barrier start = new(24);
+			//Dedicated threads, not the pool: 24 workers parked on the barrier would
+			//starve the pool and delay the timers of the cache tests running beside
+			//this class, failing their wall-clock bounds.
 			List<(BoxArtCache, RomHashCache)> seen = Enumerable.Range(0, 24)
-				.Select(_ => Task.Run(() => {
+				.Select(_ => Task.Factory.StartNew(() => {
 					start.SignalAndWait();
 					return (session.Cache, session.Hashes);
-				}))
+				}, CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default))
 				.ToList()
 				.Select(t => t.GetAwaiter().GetResult())
 				.ToList();
