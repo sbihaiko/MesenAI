@@ -103,6 +103,37 @@ namespace Mesen.Tests.Play
 			}
 		}
 
+		//Two .rgd files can name the same ROM path: two games opened out of one
+		//collection.zip both record the archive's path. The winner follows the clock,
+		//not the name - the order Directory.GetFiles hands files over is unspecified.
+		//The timestamps are set explicitly, so the test cannot flake on the
+		//filesystem's own mtime granularity.
+		[Fact]
+		public void The_later_written_recent_file_wins_for_the_same_rom_path()
+		{
+			string folder = NewTempFolder();
+			try {
+				byte[] older = { 0x89, 0x50, 0x4E, 0x47, 1, 1 };
+				byte[] newer = { 0x89, 0x50, 0x4E, 0x47, 2, 2 };
+				string rom = Path.Combine(folder, "roms", "Contra (USA).nes");
+
+				//Named and created the wrong way round on purpose: the newer file is
+				//written first and sorts first, so name order and creation order both
+				//point at the older file. Only the timestamp picks the newer one.
+				string newerFile = WriteRecent(folder, "a-newer", RomInfo(rom), newer);
+				string olderFile = WriteRecent(folder, "z-older", RomInfo(rom), older);
+				DateTime olderAt = new(2026, 1, 2, 3, 4, 5, DateTimeKind.Utc);
+				File.SetLastWriteTimeUtc(newerFile, olderAt.AddHours(1));
+				File.SetLastWriteTimeUtc(olderFile, olderAt);
+
+				RecentCoverIndex index = new(folder, StringComparison.Ordinal);
+
+				Assert.Equal(newer, index.FindCover(rom));
+			} finally {
+				Directory.Delete(folder, true);
+			}
+		}
+
 		//The default factory derives the rule from the platform: Windows and macOS
 		//compare paths without case, the rest of the world does not.
 		[Fact]

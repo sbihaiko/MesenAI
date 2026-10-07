@@ -12,8 +12,13 @@ namespace Mesen.Logic;
 //The Recent folder holds one `<rombasename>.rgd` per played game: a zip with
 //Screenshot.png and RomInfo.txt, whose second line is the ROM path the Core
 //reopens (PlayRecentGameFailure.ParseRomInfo). The index reads that path from
-//every entry once, and answers one question: full ROM path -> PNG bytes, or
-//null.
+//every entry once, while it is being constructed, and answers one question:
+//full ROM path -> PNG bytes, or null.
+//
+//That single read is a snapshot, not a live view of the folder: a `.rgd` written
+//after the index was created is not in it, and a game played in this session
+//keeps its generic cover until the index is thrown away and created again. The
+//lookup never rescans.
 //
 //Host-free (ADR-0123): no Avalonia, no core, no ConfigManager, no window. It
 //reads files and returns bytes, so the library's cover choice is unit-tested
@@ -21,13 +26,17 @@ namespace Mesen.Logic;
 //never a partial image: the tile keeps its generic cover.
 public sealed class RecentCoverIndex
 {
-	private readonly Dictionary<string, string> _recentFileByRomPath;
+	//One indexed `.rgd`: the file, and when it was last written. The stamp decides
+	//which entry a ROM path resolves to when two entries name the same path.
+	private readonly record struct RecentEntry(string File, DateTime WrittenAt);
+
+	private readonly Dictionary<string, RecentEntry> _recentFileByRomPath;
 	private readonly Dictionary<string, byte[]> _coverByRecentFile = new(StringComparer.Ordinal);
 
-	//The case rule a path comparison follows on this machine, as ADR-0264 says:
-	//Windows and macOS compare paths without case, the others do not. The index
-	//takes the rule as a parameter so both behaviours are testable; this is only
-	//the default the app opens with.
+	//The case rule a path comparison follows on this machine: Windows and macOS
+	//compare paths without case, the others do not. The index takes the rule as a
+	//parameter so both behaviours are testable; this is only the default the app
+	//opens with.
 	public static StringComparison PlatformPathComparison =>
 		OperatingSystem.IsWindows() || OperatingSystem.IsMacOS() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
 
@@ -39,13 +48,19 @@ public sealed class RecentCoverIndex
 
 	public RecentCoverIndex(string? recentGamesFolder, StringComparison pathComparison)
 	{
-		_recentFileByRomPath = new Dictionary<string, string>(StringComparer.FromComparison(pathComparison));
+		_recentFileByRomPath = new Dictionary<string, RecentEntry>(StringComparer.FromComparison(pathComparison));
 		foreach(string recentFile in RecentFiles(recentGamesFolder)) {
 			string? romPath = FullPath(ReadRomPath(recentFile));
-			if(romPath != null) {
-				//One file per ROM name, so a duplicate is the same ROM played
-				//again: the later name wins, as the Recent list itself would.
-				_recentFileByRomPath[romPath] = recentFile;
+			if(romPath == null) {
+				continue;
+			}
+			//Two entries can name the same ROM path: two games opened out of one
+			//collection.zip both record the archive's path. The later play is the
+			//later file, so the later timestamp wins - never the file name, since
+			//the order Directory.GetFiles hands files over is unspecified.
+			RecentEntry candidate = new(recentFile, LastWriteTimeUtc(recentFile));
+			if(!_recentFileByRomPath.TryGetValue(romPath, out RecentEntry current) || candidate.WrittenAt > current.WrittenAt) {
+				_recentFileByRomPath[romPath] = candidate;
 			}
 		}
 	}
@@ -56,16 +71,19 @@ public sealed class RecentCoverIndex
 	public byte[]? FindCover(string? romPath)
 	{
 		string? full = FullPath(romPath);
-		if(full == null || !_recentFileByRomPath.TryGetValue(full, out string? recentFile)) {
+		if(full == null || !_recentFileByRomPath.TryGetValue(full, out RecentEntry entry)) {
 			return null;
 		}
+		string recentFile = entry.File;
 		if(_coverByRecentFile.TryGetValue(recentFile, out byte[]? cached)) {
 			return cached;
 		}
 		byte[]? cover = PlayHome.ReadScreenshot(recentFile);
 		if(cover != null) {
-			//A tile is drawn many times; the zip is opened once. A miss is not
-			//cached, so a game played later in the session is still picked up.
+			//A tile is drawn many times; the zip is opened once. Only a hit is
+			//cached, so an indexed `.rgd` that has no screenshot yet is read again
+			//on the next lookup. A `.rgd` this index does not know about is not
+			//reached at all - recreate the index to see it.
 			_coverByRecentFile[recentFile] = cover;
 		}
 		return cover;
@@ -114,9 +132,24 @@ public sealed class RecentCoverIndex
 		}
 	}
 
-	//The comparison is on full paths, so a relative one, a `.` segment or a
-	//trailing separator still matches the same file. A path the OS refuses is no
-	//candidate at all.
+	//When the `.rgd` was last written, or DateTime.MinValue when the filesystem
+	//will not say: a stamp that cannot be read loses to any readable one instead
+	//of deciding the winner.
+	private static DateTime LastWriteTimeUtc(string recentFile)
+	{
+		try {
+			return File.GetLastWriteTimeUtc(recentFile);
+		} catch(IOException) {
+			return DateTime.MinValue;
+		} catch(UnauthorizedAccessException) {
+			return DateTime.MinValue;
+		} catch(ArgumentException) {
+			return DateTime.MinValue;
+		}
+	}
+
+	//The comparison is on full paths, so a relative one or a `.` segment still
+	//matches the same file. A path the OS refuses is no candidate at all.
 	private static string? FullPath(string? path)
 	{
 		if(string.IsNullOrEmpty(path)) {
