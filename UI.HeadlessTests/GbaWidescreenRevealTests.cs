@@ -78,6 +78,7 @@ public class GbaWidescreenRevealTests : IDisposable
 		try {
 			Directory.Delete(_folder, true);
 		} catch(IOException) {
+		} catch(UnauthorizedAccessException) {
 		}
 	}
 
@@ -142,6 +143,28 @@ public class GbaWidescreenRevealTests : IDisposable
 		Assert.Equal(Standard, width);
 		Assert.Equal(Height, height);
 		AssertRun(frame, Height / 2, 0, Standard, Tone.Shown, "the 240-px picture");
+	}
+
+	//Issue #963: Directory.Delete throws UnauthorizedAccessException, not
+	//IOException, when a folder it must empty refuses writes (as when the core
+	//still holds it), and teardown must not turn a passing case red. Host-only:
+	//it never starts the core, so it runs with or without the native library.
+	[AvaloniaFact]
+	public void Teardown_tolerates_a_folder_it_is_not_allowed_to_delete()
+	{
+		Assert.SkipWhen(OperatingSystem.IsWindows(), "Unix file modes lock the folder");
+		GbaWidescreenRevealTests inner = new();
+		string locked = Path.Combine(inner._folder, "locked");
+		Directory.CreateDirectory(locked);
+		File.WriteAllBytes(Path.Combine(locked, "held.gba"), new byte[] { 0 });
+		File.SetUnixFileMode(locked, UnixFileMode.UserRead | UnixFileMode.UserExecute);
+		try {
+			Exception? thrown = Record.Exception(inner.Dispose);
+			Assert.Null(thrown);
+		} finally {
+			File.SetUnixFileMode(locked, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+			Directory.Delete(inner._folder, true);
+		}
 	}
 
 	private Tone[,] RunScene(GbaScene scene, bool widescreen, out int width, out int height)
