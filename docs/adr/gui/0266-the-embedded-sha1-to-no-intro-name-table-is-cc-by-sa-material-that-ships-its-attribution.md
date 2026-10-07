@@ -22,10 +22,11 @@
 
 ## Context
 
-`scripts/no_intro_sha1.tsv.gz` is a gzipped TSV of 7000-odd rows keyed by the
-SHA-1 of a ROM payload, and `UI/UI.csproj` embeds it in the binary so the flat
-game library can show a player the database's own name for a ROM instead of a
-file name. It is not written by hand and it is not our data: it is extracted
+`scripts/no_intro_sha1.tsv.gz` is a gzipped TSV of about 17 900 rows across 7
+consoles, keyed by the SHA-1 of a ROM payload, and `UI/UI.csproj` embeds it in
+the binary so the flat game library can show a player the database's own name
+for a ROM instead of a file name. It is not written by hand and it is not our
+data: it is extracted
 from the No-Intro DATs that the libretro-database repository mirrors. That makes
 it **third-party material redistributed inside our app**, and the question the
 code alone cannot answer is what licence it carries and what that licence asks
