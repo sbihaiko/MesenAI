@@ -49,6 +49,16 @@ namespace Mesen.Config
 		[ObservableProperty] public partial bool AssociateGameGearRomFiles { get; set; } = false;
 		[ObservableProperty] public partial bool AssociateSgRomFiles { get; set; } = false;
 
+		//ADR-0265 (#1039, owner decision 2026-10-07): the flat library's master
+		//switch for box art. On by default, like AutoInstallCommunityPacks and
+		//PauseWhenInBackground above; the row that flips it is Settings › System.
+		//Off means the app makes no box-art request at all, so a missing key in an
+		//existing settings.json reads as on - the switch is a refusal, and nobody
+		//has made it yet. It lives in the preferences because it is one global
+		//choice about the app talking to a server, not a per-game or per-console
+		//one; nothing here reaches the core (no Interop struct field).
+		[ObservableProperty] public partial bool DownloadBoxArt { get; set; } = true;
+
 		[ObservableProperty] public partial bool EnableAutoSaveState { get; set; } = true;
 		[ObservableProperty] public partial UInt32 AutoSaveStateDelay { get; set; } = 5;
 
