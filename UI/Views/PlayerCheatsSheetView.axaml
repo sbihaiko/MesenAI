@@ -63,6 +63,15 @@
 				</ItemsControl.ItemTemplate>
 			</ItemsControl>
 
+			<!--P.12 (ADR-0245 §4, #924): a copy not in the list can look its codes up
+			online; only codes checked on this copy come back, as rows below.-->
+			<StackPanel Name="CheatsWebPanel" Spacing="8" Margin="0 0 0 12" IsVisible="{Binding IsWebLookupAvailable}">
+				<Button Name="CheatsLookOnline" Classes="secondary regular" HorizontalAlignment="Left" Content="{Binding LookOnlineLabel}" IsEnabled="{Binding !IsWebSearching}" Click="OnLookOnline" />
+				<!--Every wait moves (2026-10-03).-->
+				<ProgressBar Name="CheatsWebBar" IsIndeterminate="True" Width="200" HorizontalAlignment="Left" IsVisible="{Binding IsWebSearching}" />
+				<TextBlock Name="CheatsWebLine" Classes="subhead secondary" TextWrapping="Wrap" Text="{Binding WebLine}" IsVisible="{Binding WebLine.Length}" />
+			</StackPanel>
+
 			<!--The inset is drawn behind the list, not around it: CheatsList stays
 			in the visual tree when there are no rows (only the chrome hides).-->
 			<Panel>

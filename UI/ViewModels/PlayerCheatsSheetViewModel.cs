@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Mesen.Interop;
 using Mesen.Logic;
@@ -54,6 +56,16 @@ namespace Mesen.ViewModels
 		[ObservableProperty] public partial string KeyText { get; set; } = "";
 		[ObservableProperty] public partial string KeyLine { get; private set; } = "";
 
+		//P.12 (ADR-0245 §4, #924): a copy not in the bundled list can look its
+		//codes up online. scripts/cheat_web_lookup.py runs through the injected
+		//checker and checks each code on the user's copy; only codes whose check
+		//passed become rows ("found online, checked on your copy"), toggled into
+		//the same CheatCodes list as a database row.
+		[ObservableProperty] public partial bool IsWebLookupAvailable { get; private set; }
+		[ObservableProperty] public partial bool IsWebSearching { get; private set; }
+		[ObservableProperty] public partial string WebLine { get; private set; } = "";
+		public string LookOnlineLabel => CheatWebLookup.LookOnlineLabel;
+
 		public string FindLabel => CheatIntentSearch.FindLabel;
 		public string IntentPlaceholder => CheatIntentSearch.IntentPlaceholder;
 		public string SaveKeyLabel => CheatIntentSearch.SaveKeyLabel;
@@ -86,6 +98,11 @@ namespace Mesen.ViewModels
 		private Func<Task<ICheatIntentRunner?>>? _intentRunner;
 		private CheatDbCode? _intentMatch;
 		private int _intentToken;
+		private string _romPath = "";
+		private Func<Task<ICheatWebChecker?>>? _webChecker;
+		private Func<bool>? _webInstalled;
+		private IReadOnlyList<WebFoundCode> _web = Array.Empty<WebFoundCode>();
+		private int _webToken;
 
 		//CheatCodes saves to the running game's file: a sheet left over from
 		//another copy must not write that game's list (CheatSheet.SavesTo).
@@ -99,13 +116,14 @@ namespace Mesen.ViewModels
 		//form; community is the catalog known when the sheet opens
 		//(CommunityCheatCatalogFetcher.LastKnown).
 		public void Open(ConsoleType console, string cheatSha1, IReadOnlyList<CheatDbGame> db, IReadOnlyList<StoredCheat> stored, bool recordingArt, bool disableAll, Action<IReadOnlyList<StoredCheat>> save,
-			string gameName = "", Action<string>? openUrl = null, IReadOnlyList<CommunityCheatGame>? community = null, Func<string>? runningCheatSha1 = null, string romFile = "")
+			string gameName = "", Action<string>? openUrl = null, IReadOnlyList<CommunityCheatGame>? community = null, Func<string>? runningCheatSha1 = null, string romFile = "", string romPath = "")
 		{
 			_runningCheatSha1 = runningCheatSha1;
 			_console = console;
 			_cheatSha1 = cheatSha1;
 			_gameName = gameName;
 			_romFile = romFile ?? "";
+			_romPath = romPath ?? "";
 			_openUrl = openUrl ?? (_ => { });
 			_community = CommunityCheatCatalog.ForCopy(community ?? Array.Empty<CommunityCheatGame>(), _cheatSha1, console);
 			_db = db;
@@ -121,6 +139,7 @@ namespace Mesen.ViewModels
 			AddCodeError = "";
 			SetSearchTextSilently("");
 			ClearIntent();
+			ClearWebLookup();
 			Refresh();
 			IsVisible = true;
 		}
@@ -199,6 +218,80 @@ namespace Mesen.ViewModels
 			_keyStore = keyStore;
 			_intentRunner = runner;
 			Refresh();
+		}
+
+		//The web lookup (null when python3 or the tools are missing); without
+		//it, or for a copy the bundled list has, Look Online stays hidden. The
+		//installed gate (#949 review) says whether the script and the recorder
+		//its check launches are on disk; RecheckWebLookup re-reads it.
+		public void ConfigureWebLookup(Func<Task<ICheatWebChecker?>> checker, Func<bool>? installed = null)
+		{
+			_webChecker = checker;
+			_webInstalled = installed;
+			Refresh();
+		}
+
+		public void RecheckWebLookup()
+		{
+			Refresh();
+		}
+
+		public async Task LookOnline()
+		{
+			if(!IsWebLookupAvailable || IsWebSearching || _webChecker == null) {
+				return;
+			}
+			int token = ++_webToken;
+			IsWebSearching = true;
+			WebLine = CheatWebLookup.SearchingLine;
+			IReadOnlyList<WebFoundCode> found = Array.Empty<WebFoundCode>();
+			string line = CheatWebLookup.FailedLine;
+			try {
+				ICheatWebChecker? checker = await _webChecker();
+				if(checker == null) {
+					line = CheatWebLookup.NeedsToolsLine;
+				} else {
+					found = await checker.LookUpAsync(_romPath, _gameName);
+					line = CheatWebLookup.Offered(found).Count == 0 ? CheatWebLookup.NoneLine : "";
+				}
+			} catch(Exception ex) when(ex is IOException || ex is CheatWebLookupException || ex is System.ComponentModel.Win32Exception || ex is InvalidOperationException) {
+				found = Array.Empty<WebFoundCode>();
+				line = CheatWebLookup.FailedLine;
+			} finally {
+				//#949 review: the wait always ends, and on the UI thread - the
+				//answer can come back on the child's Exited thread.
+				IReadOnlyList<WebFoundCode> result = found;
+				string shown = line;
+				OnUiThread(() => FinishLookOnline(token, result, shown));
+			}
+		}
+
+		private void FinishLookOnline(int token, IReadOnlyList<WebFoundCode> found, string line)
+		{
+			if(token != _webToken) {
+				return;
+			}
+			_web = found;
+			IsWebSearching = false;
+			WebLine = line;
+			Refresh();
+		}
+
+		private static void OnUiThread(Action action)
+		{
+			if(Dispatcher.UIThread.CheckAccess()) {
+				action();
+			} else {
+				Dispatcher.UIThread.Post(action);
+			}
+		}
+
+		private void ClearWebLookup()
+		{
+			_webToken++;
+			_web = Array.Empty<WebFoundCode>();
+			IsWebSearching = false;
+			WebLine = "";
 		}
 
 		public async Task SearchByIntent()
@@ -339,11 +432,14 @@ namespace Mesen.ViewModels
 
 			GameResults = IsGameSearch ? CheatSheet.SearchGamesByName(_db, SearchText).ToList() : new List<CheatDbGame>();
 			string rowFilter = IsGameSearch ? "" : SearchText;
-			IReadOnlyList<CheatSheetRow> rows = CheatSheet.BuildRows(_console, game, anotherCopy, _stored, _recordingArt, rowFilter, _community);
+			//Web codes are for a copy the bundled list does not have (§4).
+			IReadOnlyList<WebFoundCode> web = _thisCopy == null ? _web : Array.Empty<WebFoundCode>();
+			IReadOnlyList<CheatSheetRow> rows = CheatSheet.BuildRows(_console, game, anotherCopy, _stored, _recordingArt, rowFilter, _community, web);
 			Rows = rows.Select(r => new PlayerCheatRow(r, CheatShare.CanShare(r, _console, _cheatSha1), CheatIntentSearch.IsMatch(r, _intentMatch))).ToList();
 			IsIntentAvailable = _intentRunner != null && _keyStore?.UnsupportedReason == null && game != null && CheatConsoleScope.HasCheatList(_console);
+			IsWebLookupAvailable = _webChecker != null && (_webInstalled?.Invoke() ?? true) && _thisCopy == null && CheatConsoleScope.HasCheatList(_console) && _romPath.Length > 0;
 			CountOn = CheatSheet.CountOn(_stored);
-			StatusLine = CheatSheet.StatusLine(_console, game, anotherCopy, CountOn, rows.Count(r => r.Source == CheatRowSource.Community), IsCommunityLoading);
+			StatusLine = CheatSheet.StatusLine(_console, game, anotherCopy, CountOn, rows.Count(r => r.Source == CheatRowSource.Community), IsCommunityLoading, rows.Count(r => r.Source == CheatRowSource.WebFound));
 		}
 	}
 
