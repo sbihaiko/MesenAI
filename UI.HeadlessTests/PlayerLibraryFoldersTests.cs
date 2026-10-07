@@ -429,7 +429,10 @@ public class PlayerLibraryFoldersTests : IDisposable
 		WaitFor(() => !model.RomPicker.IsFoldersSheetVisible, "B did not close the folders sheet");
 		WaitFor(() => model.RomPicker.IsLibrarySurfaceVisible, "the library surface did not come back");
 		Assert.True(model.RomPicker.IsVisible, "B out of the folders sheet closed the whole picker");
-		WaitFor(() => FocusedName(window) is "RomPickerBrowseFile" or "RomPickerLibraryFolders" or "RomPickerBack",
+		//The ring comes back to the library the sheet was over - a header control, or
+		//one of the grid's tiles, whichever the arbiter lands it on - and what matters
+		//here is that it is the library's and not a row of the sheet that just closed.
+		WaitFor(() => FocusedName(window) is "RomPickerBrowseFile" or "RomPickerLibraryFolders" or "RomPickerBack" || Focused(window)?.DataContext is PlayerLibraryTile,
 			$"the ring did not come back to the library surface ({FocusedWhat(window)})");
 
 		//And B again is the dismiss of the picker itself: the sheet is not a trap.
