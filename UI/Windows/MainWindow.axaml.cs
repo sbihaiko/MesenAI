@@ -112,6 +112,10 @@ namespace Mesen.Windows
 		//the player's Esc instead of firing the moment the window comes forward.
 		private bool _focusPausedWithOverlay;
 
+		//#967: where the focus poll reads "is the app active"; a headless test
+		//swaps it to lose and regain focus.
+		public IAppFocus AppFocus { get; set; } = Mesen.Windows.AppFocus.Desktop;
+
 		public Control Renderer => _usesSoftwareRenderer ? _softwareRenderer : _renderer;
 
 		static MainWindow()
@@ -1223,7 +1227,7 @@ namespace Mesen.Windows
 
 		private void UpdateAutoPause()
 		{
-			Window? activeWindow = ApplicationHelper.GetActiveWindow();
+			Window? activeWindow = AppFocus.GetActiveWindow();
 			PreferencesConfig cfg = ConfigManager.Config.Preferences;
 
 			//ADR-0254: the focus half is resolved on its own, because it is the one
