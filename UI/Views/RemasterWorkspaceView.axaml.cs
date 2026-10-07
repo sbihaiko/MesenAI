@@ -48,6 +48,8 @@ namespace Mesen.Views
 
 		private void OnRecord(object? sender, RoutedEventArgs e) => _ = Model?.StartRecording();
 
+		private void OnOpenRightGame(object? sender, RoutedEventArgs e) => Model?.OpenRightGame();
+
 		private void OnPrepare(object? sender, RoutedEventArgs e) => Model?.StartKit();
 
 		private void OnBuild(object? sender, RoutedEventArgs e) => Model?.StartBuild();

@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.IO;
 using Mesen.Interop;
 
 namespace Mesen.Logic;
@@ -84,6 +86,13 @@ public sealed record RemasterScreenState(
 	//The probe's wait (a sentence and a moving bar) where the banner would be.
 	bool ShowFeasibilityChecking = false
 );
+
+//#969 (W-X2, rule 10): Open the Right Game…'s next step - the project's ROM,
+//or "" when none was found and the button opens the ROM picker instead.
+public sealed record RemasterRightGame(string RomPath)
+{
+	public bool OpensPicker => RomPath.Length == 0;
+}
 
 public static class RemasterScreen
 {
@@ -192,6 +201,31 @@ public static class RemasterScreen
 			return Off(RemasterReason.NeedsTools);
 		}
 		return RemasterControl.On;
+	}
+
+	//#969: "This is not the game the project was recorded from." comes with the
+	//button that fixes it. The project folder is named after its ROM file
+	//(ADR-0049 sibling `<dir>/<Game>/`), so the ROM is the recent game, then the
+	//games-folder file, whose name without extension is the folder's name.
+	//Nothing found: the button opens the picker. Any other reason: no step.
+	public static RemasterRightGame? RightGameStep(RemasterReason reason, string projectFolder, IEnumerable<string> recentRoms, IEnumerable<string> gamesFolderRoms)
+	{
+		if(reason != RemasterReason.NotThisProjectsGame) {
+			return null;
+		}
+		string game = Path.GetFileName((projectFolder ?? "").TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+		string? rom = game.Length == 0 ? null : FirstNamed(recentRoms, game) ?? FirstNamed(gamesFolderRoms, game);
+		return new RemasterRightGame(rom ?? "");
+	}
+
+	private static string? FirstNamed(IEnumerable<string> roms, string game)
+	{
+		foreach(string rom in roms) {
+			if(!string.IsNullOrEmpty(rom) && string.Equals(Path.GetFileNameWithoutExtension(rom), game, StringComparison.OrdinalIgnoreCase)) {
+				return rom;
+			}
+		}
+		return null;
 	}
 
 	//After Stop, the kit runs by itself (W-R2: "Esc or Stop ends the
