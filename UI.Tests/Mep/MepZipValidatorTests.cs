@@ -55,6 +55,19 @@ namespace Mesen.Tests.Mep
 			Assert.Equal("InstallMepPackInvalidPack", MepZipValidator.Validate(zip));
 		}
 
+		//#993 review: the classic Mesen HD pack zip - hires.txt and its PNGs at
+		//the zip's root, no wrapper folder - is accepted, as the core's
+		//DetectConventionLayout root-hires.txt branch (ADR-0121) loads it.
+		//The #161 rule holds here too: a lone hires.txt is not a pack.
+		[Fact]
+		public void Validate_AcceptsAClassicHdPackAtTheZipRoot()
+		{
+			using ZipArchive pack = BuildZip(("hires.txt", "<ver>106"), ("Chr_00_0.png", "x"));
+			Assert.Null(MepZipValidator.Validate(pack));
+			using ZipArchive manifestOnly = BuildZip(("hires.txt", "<ver>106"), ("readme.txt", "x"));
+			Assert.Equal("InstallMepPackInvalidPack", MepZipValidator.Validate(manifestOnly));
+		}
+
 		[Fact]
 		public void Validate_RejectsAnEmptyZip()
 		{
