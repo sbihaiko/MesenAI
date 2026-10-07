@@ -203,6 +203,22 @@ def main() -> int:
         failures += 1
     else:
         print(f"ok   [pinned set holds every Player wireframe ({len(drawn)} drawn)]")
+    # #1033 (ADR-0264 Decision 12): L.1 (#1032) moved W-P19 up into the expected
+    # set when it built the sheet, and L.2 (#1033) does the same for W-P19b. Both
+    # are pinned here, because the two sets are read from the module: a ticket
+    # that emptied the exemption without promoting the wireframe, or one that
+    # re-opened it for a wireframe that already has a render case, would leave
+    # every other case in this file green.
+    if "W-P19b" not in pinned:
+        print("FAIL [W-P19b promoted]: W-P19b is drawn in docs/media/gui-redesign but is not in EXPECTED_WIREFRAME_RENDERS")
+        failures += 1
+    else:
+        print("ok   [W-P19b is in EXPECTED_WIREFRAME_RENDERS (#1033)]")
+    if awaiting:
+        print(f"FAIL [awaiting set emptied]: {sorted(awaiting)} still waits for a render case, but every drawn Player wireframe has one")
+        failures += 1
+    else:
+        print("ok   [WIREFRAMES_AWAITING_RENDER_CASE is empty (#1033)]")
     got = run_case(check, PASSED, FRESH_PAIR, pinned)
     if not any("W-P2.png was not rendered" in line for line in got):
         print(f"FAIL [default expected set]: a run with only W-P1 must miss W-P2, got {got}")
@@ -224,7 +240,7 @@ def main() -> int:
         else:
             print(f"ok   [workflow: {label}]")
 
-    total = len(RUN_CASES) + 5 + len(WORKFLOW_MUTATIONS)
+    total = len(RUN_CASES) + 7 + len(WORKFLOW_MUTATIONS)
     if failures:
         print(f"FAIL: {failures} of {total} case(s) did not hold")
         return 1

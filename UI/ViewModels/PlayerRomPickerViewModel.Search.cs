@@ -31,11 +31,20 @@ namespace Mesen.ViewModels
 		//box and ClearSearch: the grid follows it, and nothing else writes it.
 		[ObservableProperty]
 		[NotifyPropertyChangedFor(nameof(HasQuery))]
+		[NotifyPropertyChangedFor(nameof(ShowSearchClear))]
 		public partial string SearchQuery { get; set; } = "";
 
 		//Whether the box holds anything, which is what shows the Clear action: a
 		//search the player cannot see is a search they cannot undo.
 		public bool HasQuery => SearchQuery.Length > 0;
+
+		//Whether the Clear action belongs on screen at all (#1033). The library is
+		//where the box is, so the browser *Browse a file…* steps into is where it is
+		//not: Clear there would sit beside a search box that is hidden, undo a query
+		//nobody can see, and refill a grid that is not the surface on screen.
+		//IsLibraryMode is part of the answer AND of the change notification, so the
+		//step into the browser takes the button away with the box it belongs to.
+		public bool ShowSearchClear => IsLibraryMode && HasQuery;
 
 		//The whole of "the grid narrows live". The generator answers this hook on
 		//every change, including the property's own initial value, so there is no

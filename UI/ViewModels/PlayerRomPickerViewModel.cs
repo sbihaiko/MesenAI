@@ -178,7 +178,12 @@ namespace Mesen.ViewModels
 		[ObservableProperty]
 		[NotifyPropertyChangedFor(nameof(SheetHeading))]
 		public partial RomPickerMode Mode { get; private set; }
-		[ObservableProperty] public partial bool IsLibraryMode { get; private set; } = true;
+		//ShowSearchClear rides the mode as well as the query (#1033): the Clear action
+		//is the library's, and the step into the browser has to take it off screen
+		//with the box it belongs to.
+		[ObservableProperty]
+		[NotifyPropertyChangedFor(nameof(ShowSearchClear))]
+		public partial bool IsLibraryMode { get; private set; } = true;
 		[ObservableProperty] public partial bool IsBrowseMode { get; private set; }
 
 		//The library's two header lines: "Your library" and "<N> games in <M>
@@ -386,6 +391,12 @@ namespace Mesen.ViewModels
 			IsBrowseMode = true;
 			_folder = null;
 			EmptyText = "";
+			//#1033: the box is not on this surface, so a query left in it would be
+			//one the player cannot see, cannot clear and would still be holding when
+			//they stepped back into the library. The browser is a fresh start, so the
+			//query goes with the rest of the surface's state - after the mode, so the
+			//grid this empties is the one going away.
+			SearchQuery = "";
 			ShowRoots();
 			StartScan();
 		}

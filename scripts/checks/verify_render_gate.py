@@ -71,7 +71,7 @@ EXPECTED_WIREFRAME_RENDERS = (
     "W-S1",
     "W-P1", "W-P2", "W-P3", "W-P4", "W-P5", "W-P6", "W-P7", "W-P8", "W-P8b",
     "W-P8c", "W-P9", "W-P10", "W-P11", "W-P12", "W-P13", "W-P13-confirm",
-    "W-P14", "W-P15", "W-P15-pill", "W-P16", "W-P19",
+    "W-P14", "W-P15", "W-P15-pill", "W-P16", "W-P19", "W-P19b",
 )
 
 # Wireframes drawn into docs/media/gui-redesign/ whose render case has not
@@ -81,12 +81,14 @@ EXPECTED_WIREFRAME_RENDERS = (
 # expects a wireframe drawn without a render case instead of failing on it —
 # and the same test asserts this set and EXPECTED_WIREFRAME_RENDERS stay
 # disjoint, so the exemption cannot survive into the run the ticket lands.
-# ADR-0264 Decision 12 draws W-P19 and W-P19b with
-# scripts/render_gui_wireframes.py *before* the sheet they picture exists; PRD
-# row L.1 (#1032) builds it and moves W-P19 up into EXPECTED_WIREFRAME_RENDERS,
-# and L.2 (#1033) does the same for W-P19b. Pinned like that set is: a
-# wireframe drawn without an entry in one of the two still fails.
-WIREFRAMES_AWAITING_RENDER_CASE = ("W-P19b",)
+# ADR-0264 Decision 12 drew W-P19 and W-P19b with
+# scripts/render_gui_wireframes.py *before* the sheet they picture existed; PRD
+# row L.1 (#1032) built it and moved W-P19 up into EXPECTED_WIREFRAME_RENDERS,
+# and L.2 (#1033) did the same for W-P19b. The list is empty now: every Player
+# wireframe drawn has a case that compares a render against it. Pinned like the
+# other set is — a wireframe drawn without an entry in one of the two still
+# fails, and the next W-P wireframe drawn before its surface exists goes here.
+WIREFRAMES_AWAITING_RENDER_CASE = ()
 
 # A PNG may predate the TRX's start by this much (filesystem/clock rounding).
 FRESHNESS_SLACK_SECONDS = 2.0

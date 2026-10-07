@@ -8,6 +8,7 @@ using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.Media.Imaging;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using Mesen.Config;
@@ -36,8 +37,10 @@ namespace Mesen.HeadlessTests;
 //
 //W-P19b is the target picture of this half (ADR-0264 Decision 12): the library
 //with a query active, the grid narrowed and the header still reading the
-//LIBRARY's own count. The last case renders it, so the render gate holds the
-//sheet to it once PR #1040's wireframe lands.
+//LIBRARY's own count. The last case renders it AND compares the render to the
+//wireframe, and W-P19b sits in the render gate's EXPECTED_WIREFRAME_RENDERS
+//beside W-P19 - the picture was already drawn when #1033 was cut, so the same
+//ticket that builds the surface is the one that starts holding it to it.
 [Collection(NativeCoreCollection.Name)]
 public class PlayerLibrarySearchTests : IDisposable
 {
@@ -179,9 +182,12 @@ public class PlayerLibrarySearchTests : IDisposable
 		}
 	}
 
-	//A library with three games, one of two levels down, and the settings pointed
+	//A library with four games, one of two levels down, and the settings pointed
 	//at it - the tree the scan exists for, and the titles a query has to pick
-	//between: two of them answer `mario`, one of them only answers `super`.
+	//between: two of them answer `mario`, one of them only answers `super`, and
+	//one of them only answers `zel` - the query ADR-0264 Decision 4 names as the
+	//acceptance criterion and W-P19b draws (`zel` leaves *The Legend of Zelda*
+	//and nothing else).
 	private string LibraryRoot()
 	{
 		string root = Path.Combine(_folder, "games");
@@ -191,6 +197,7 @@ public class PlayerLibrarySearchTests : IDisposable
 		Directory.CreateDirectory(gb);
 		File.WriteAllBytes(Path.Combine(nes, "Super Mario Bros. 3 (U) [!].nes"), SyntheticNrom.Build());
 		File.WriteAllBytes(Path.Combine(nes, "Metroid (USA).nes"), SyntheticNrom.Build());
+		File.WriteAllBytes(Path.Combine(nes, "The Legend of Zelda (USA).nes"), SyntheticNrom.Build());
 		File.WriteAllBytes(Path.Combine(gb, "Super Mario Land (World).gb"), SyntheticNrom.Build());
 		ConfigManager.Config.Preferences.GameFolder = root;
 		ConfigManager.Config.Preferences.OverrideGameFolder = true;
@@ -223,12 +230,17 @@ public class PlayerLibrarySearchTests : IDisposable
 		WaitFor(() => (window.FocusManager?.GetFocusedElement() as Control)?.Name == "PlayHomeOpenRomPrimary",
 			"the first-run home did not put the focus on its one action");
 		Press(window, PadNavAction.Confirm);
-		WaitFor(() => model.RomPicker.Tiles.Count == 3, "the library did not fill with the fake tree's three games");
+		WaitFor(() => model.RomPicker.Tiles.Count == 4, "the library did not fill with the fake tree's four games");
 		Assert.True(window.FindNamed<TextBox>("RomPickerSearch").IsOnScreen(), "the search box is not on the sheet");
 		return (window, model);
 	}
 
 	private static string[] TileTitles(MainWindowViewModel model) => model.RomPicker.Tiles.Select(t => t.Title).ToArray();
+
+	//The game list the fixture holds, in the order the scan answers it: by the
+	//clean title, with the leading article sorted out - so *The Legend of Zelda*
+	//sorts under L and leads the four.
+	private static readonly string[] WholeLibrary = { "The Legend of Zelda", "Metroid", "Super Mario Bros. 3", "Super Mario Land" };
 
 	//#1033 (ADR-0264 Decision 4): the query narrows the grid as it is typed, and
 	//the match is a substring of the CLEAN title - `mario` finds both halves of
@@ -243,7 +255,7 @@ public class PlayerLibrarySearchTests : IDisposable
 		(MainWindow window, MainWindowViewModel model) = ShowOpenLibrary();
 		TextBox box = window.FindNamed<TextBox>("RomPickerSearch");
 
-		Assert.Equal(new[] { "Metroid", "Super Mario Bros. 3", "Super Mario Land" }, TileTitles(model));
+		Assert.Equal(WholeLibrary, TileTitles(model));
 
 		//Through the control, which is the path a keyboard takes: the binding is
 		//what carries the query to the grid.
@@ -262,7 +274,7 @@ public class PlayerLibrarySearchTests : IDisposable
 
 		//The header reads the LIBRARY, not the grid (Decision 8): a search narrows
 		//which games are on screen and never how many the player owns.
-		Assert.Equal("3 games in 1 folder", model.RomPicker.CountText);
+		Assert.Equal("4 games in 1 folder", model.RomPicker.CountText);
 
 		//And the tiles the query kept are the tiles the grid draws.
 		Assert.Equal(new[] { "Super Mario Land" },
@@ -324,9 +336,84 @@ public class PlayerLibrarySearchTests : IDisposable
 
 		Assert.Equal("", model.RomPicker.SearchQuery);
 		Assert.False(model.RomPicker.HasQuery);
-		Assert.Equal(new[] { "Metroid", "Super Mario Bros. 3", "Super Mario Land" }, TileTitles(model));
+		Assert.Equal(WholeLibrary, TileTitles(model));
 		Assert.Equal("", model.RomPicker.EmptyText);
 		Assert.False(window.FindNamed<TextBlock>("RomPickerLibraryEmpty").IsOnScreen(), "the empty result stayed on screen after Clear");
+	}
+
+	//#1033 (ADR-0264 Decisions 3 and 4): the Clear action is the library's, so it
+	//is not on the folder browser - where the search box is hidden, a Clear for a
+	//query nobody can see is a control acting on a surface that is not up. Stepping
+	//into the browser with a query on clears it, and the box is empty when the
+	//player comes back.
+	[AvaloniaFact]
+	public void Clear_is_not_offered_on_the_folder_browser_and_stepping_into_it_empties_the_box()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		LibraryRoot();
+
+		(MainWindow window, MainWindowViewModel model) = ShowOpenLibrary();
+		Button clear = window.FindNamed<Button>("RomPickerSearchClear");
+		TextBox box = window.FindNamed<TextBox>("RomPickerSearch");
+
+		box.Text = "zzzz";
+		Pump();
+		Assert.True(clear.IsOnScreen(), "Clear is not on the sheet while the library holds a query");
+
+		//Browse a file…, through the view: the same press the player makes.
+		window.FindNamed<Button>("RomPickerBrowseFile").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+		Pump();
+
+		Assert.Equal(RomPickerMode.BrowseFile, model.RomPicker.Mode);
+		Assert.False(window.FindNamed<TextBox>("RomPickerSearch").IsOnScreen(), "the search box stayed on screen over the folder browser");
+		Assert.False(window.FindNamed<Button>("RomPickerSearchClear").IsOnScreen(), "the folder browser offers a Clear for a search box it does not show");
+		Assert.Equal("", model.RomPicker.SearchQuery);
+
+		//And the box the player comes back to is empty - the query did not survive
+		//a trip through a surface that cannot show it.
+		model.RomPicker.Back();
+		Pump();
+		Assert.Equal(RomPickerMode.Library, model.RomPicker.Mode);
+		Assert.True(window.FindNamed<TextBox>("RomPickerSearch").IsOnScreen(), "the search box did not come back with the library");
+		Assert.Equal("", model.RomPicker.SearchQuery);
+		Assert.False(model.RomPicker.HasQuery);
+		Assert.Equal(WholeLibrary, TileTitles(model));
+	}
+
+	//#1033 (ADR-0264 Decision 4, ADR-0256 Decision 3): the Clear action hides
+	//ITSELF - the box empties, so the button has nothing left to be shown for -
+	//and it did so while it held the ring, leaving a pad player with no focus at
+	//all: the next D-pad press had nowhere to move from. The ring goes to the
+	//search box instead, which is still on screen and is where the player who
+	//just undid a search is.
+	[AvaloniaFact]
+	public void Clear_hands_the_ring_to_the_search_box_instead_of_hiding_under_it()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		LibraryRoot();
+
+		(MainWindow window, MainWindowViewModel model) = ShowOpenLibrary();
+		TextBox box = window.FindNamed<TextBox>("RomPickerSearch");
+		Button clear = window.FindNamed<Button>("RomPickerSearchClear");
+
+		box.Text = "zel";
+		Pump();
+		Assert.Equal(new[] { "The Legend of Zelda" }, TileTitles(model));
+
+		//The pad walks to Clear and presses A on it, which is the path the defect
+		//was found on: the button is the thing with the ring when it disappears.
+		clear.Focus(NavigationMethod.Directional);
+		Pump();
+		Assert.Equal("RomPickerSearchClear", FocusedName(window));
+
+		Press(window, PadNavAction.Confirm);
+		Pump();
+
+		Assert.Equal("", model.RomPicker.SearchQuery);
+		Assert.False(clear.IsOnScreen(), "Clear stayed on screen with nothing to clear");
+		Assert.Equal("RomPickerSearch", FocusedName(window));
+		Assert.True(box.IsFocused, "the ring did not land on the search box");
+		Assert.Equal(WholeLibrary, TileTitles(model));
 	}
 
 	//#1033 (ADR-0264 Decision 3): Y opens search. It puts the ring on the box and
@@ -350,10 +437,14 @@ public class PlayerLibrarySearchTests : IDisposable
 		Assert.True(window.GetVisualDescendants().OfType<Control>().Any(c => c.Name == "PadKeyboardPanel"),
 			"the pad keyboard was not drawn");
 
-		TypeOnPad(window, "mario");
+		//`zel`, which is ADR-0264 Decision 4's own acceptance criterion ("`zel`
+		//finds *The Legend of Zelda*") and the query W-P19b draws: typing it leaves
+		//exactly one tile, and the three games it did not match are gone.
+		TypeOnPad(window, "zel");
 
-		Assert.Equal("mario", model.RomPicker.SearchQuery);
-		Assert.Equal(new[] { "Super Mario Bros. 3", "Super Mario Land" }, TileTitles(model));
+		Assert.Equal("zel", model.RomPicker.SearchQuery);
+		Assert.Equal(new[] { "The Legend of Zelda" }, TileTitles(model));
+		Assert.DoesNotContain("Super Mario Bros. 3", TileTitles(model));
 
 		//The box still holds the focus while the query is typed, which is what
 		//lets the next key land in it: the grid rebuilt under the ring and did not
@@ -383,7 +474,7 @@ public class PlayerLibrarySearchTests : IDisposable
 		//noticed by whoever opens it next.
 		Assert.True(window.FindNamed<Border>("PlayerRomPickerSheet").IsOnScreen(), "the sheet is not on screen");
 		Assert.Equal("Your library", model.RomPicker.HeaderText);
-		Assert.Equal("3 games in 1 folder", model.RomPicker.CountText);
+		Assert.Equal("4 games in 1 folder", model.RomPicker.CountText);
 		Assert.Equal("mario", window.FindNamed<TextBox>("RomPickerSearch").Text ?? "");
 		Assert.Equal(new[] { "Super Mario Bros. 3", "Super Mario Land" }, TileTitles(model));
 		Assert.True(window.FindNamed<ItemsControl>("RomPickerGrid").IsOnScreen(), "the grid is not on screen");
@@ -396,6 +487,56 @@ public class PlayerLibrarySearchTests : IDisposable
 		//grid and not of the whole library with a box on top.
 		Assert.DoesNotContain("Metroid", texts);
 
-		PlayerRender.Save(PlayerRender.Capture(window), "W-P19b");
+		Bitmap frame = PlayerRender.Capture(window);
+		PlayerRender.Save(frame, "W-P19b");
+		AssertMatchesWireframe(frame, "W-P19b", W_P19bDeviations());
+	}
+
+	//#1033 (ADR-0264 Decision 12): the same gate W-P19 got in L.1 (#1032).
+	//PlayerRender.Save only *writes* the wireframe report and a failure inside it
+	//is logged rather than thrown, so a frame captured and saved without this is a
+	//picture nothing compares: the render gate would still find the PNG and its
+	//report, and a sheet that stopped matching W-P19b would keep the suite green.
+	//Compare the regions against the wireframe, gate the deviations this render is
+	//known to carry, and fail on what is left.
+	private static void AssertMatchesWireframe(Bitmap frame, string wId, IReadOnlyList<KnownDeviation> known)
+	{
+		string wireframe = PlayerRender.WireframePath(wId);
+		Assert.True(File.Exists(wireframe), $"{wId} has no wireframe at {wireframe}, so there is nothing to compare the render against");
+		RgbFrame fresh = PlayerRender.Rgb(frame);
+		IReadOnlyList<RegionResult> results = PlayerWireframe.Compare(wId, fresh, RgbFrame.FromPng(wireframe));
+		List<string> violations = PlayerWireframe.Gate(wId, results, known).ToList();
+		Assert.True(violations.Count == 0, string.Join(Environment.NewLine, violations));
+	}
+
+	//What this render is known to differ from W-P19b on, each with the cause that
+	//makes it a known one. The wireframe fills the window with 128 games over three
+	//tiles and near-full-window sheet; the tracer's library holds four, two of them
+	//after the query, so its sheet is short and the region's own dominant colour is
+	//the backdrop around it rather than the sheet. That is the fixture, which is why
+	//the colour kind is tolerated rather than required to fail. The kinds that are
+	//left are layout: the console filter of #1034 and the *Library folders…* row of
+	//#1036 are not in the header, and the two text lines the sheet does draw are the
+	//wireframe's seven minus them and the five further tile labels - the same shape
+	//of entry W_P19Deviations carries for the sheet W-P19 pictures. The status line's
+	//ink box is the P1-P4 port chips every render draws and no wireframe does (#951);
+	//off macOS the title bar's ink box moves because the shell bar is not inset for
+	//the traffic lights (#968).
+	private static IReadOnlyList<KnownDeviation> W_P19bDeviations()
+	{
+		List<KnownDeviation> known = new() {
+			new("content", PlayerWireframe.Colour,
+				"the tracer's four games (two under `mario`) draw a short sheet where the wireframe fills the window with 128, so the backdrop is the region's dominant colour", false),
+			new("content", PlayerWireframe.InkBox,
+				"the same short sheet, and the console filter of #1034 and the folder row of #1036 missing from the header", true),
+			new("content", PlayerWireframe.TextLines,
+				"two lines where the wireframe has seven: the same missing filter and folder row, plus the five further tile labels", true),
+			new("status line", PlayerWireframe.InkBox,
+				"the P1-P4 port chips the wireframe does not draw", false),
+		};
+		if(!OperatingSystem.IsMacOS()) {
+			known.Add(new("title bar", PlayerWireframe.InkBox, "no traffic-light inset off macOS", false));
+		}
+		return known;
 	}
 }
