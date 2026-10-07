@@ -80,12 +80,12 @@ allow-listed raw host, and lives only in the player's own cache.**
    next reader of that list does not have to guess why the app talks to it.
 
 3. **The key is the ROM's identity, never its file name.** The caller resolves
-   the SHA-1 through the `#1038` table (`UI/Logic/NoIntroNameTable.cs`) and
-   passes the name it returns. **A ROM the table does not know gets no request
-   at all**: with no name there is nothing to ask for, and the tile falls
-   straight to its generic cover rather than guessing a name from a file name.
-   The SHA-1 must be the table's own 40 hex characters — a value that is not hex
-   cannot be a key, and it is also a file name in the cache.
+   the SHA-1 through the `#1038` table and passes the name it returns. **A ROM
+   the table does not know gets no request at all**: with no name there is
+   nothing to ask for, and the tile falls straight to its generic cover rather
+   than guessing a name from a file name. The SHA-1 must be the table's own 40
+   hex characters — a value that is not hex cannot be a key, and it is also a
+   file name in the cache.
 
 4. **Lazy, bounded, and over HTTPS only.** Fetching is driven by the caller for
    the tiles that are actually visible, one call per tile; the service never
