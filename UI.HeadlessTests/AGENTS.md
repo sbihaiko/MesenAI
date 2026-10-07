@@ -117,3 +117,11 @@ survive (restore the probe in `Dispose`).
 - `MainWindow.axaml` changes that only add `x:Name`/automation ids so a
   test can find a control are acceptable here; a change that alters layout
   or behaviour to satisfy a test is not.
+
+**Wireframe regions (#951).** `PlayerRender.Save` of a `W-P*` render also writes
+`<W-id>.wireframe.md`: `PlayerWireframe` crops the wireframe's window box,
+scales it to the render and compares named regions — dominant colour (CIE76
+ΔE ≤ 10), ink-box edges (≤ 8 logical px) and text-line bands (same count,
+centres ≤ 8 px). Never a pixel diff. `PlayerThemeRenderTests` gates its
+screens: a region passes, or it is a named known deviation with its reason,
+which must still fail — closing the gap means promoting the region.
