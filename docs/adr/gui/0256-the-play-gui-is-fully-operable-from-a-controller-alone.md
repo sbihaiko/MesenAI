@@ -57,13 +57,24 @@
   picker and gains exactly one folder to set: the games folder it already lists.
   What that changes is set out under Decision 9, which also says which of the
   proxy's quoted clauses it narrows.
+  **Decision 9's folder navigation is SUPERSEDED BY ADR-0264 (2026-10-07)**, at
+  the owner's request on issue #1031: the *Open a game* sheet opens as a flat
+  library of every openable ROM under the library folders, and the folder walk
+  Decision 9 decided survives only behind *Browse a file…*. The sheet itself,
+  its roots, its *Make this my games folder* action row and its first-row focus
+  guard live on inside that entry point; what is retired is the folder walk as
+  the sheet's opening shape. Decision 9's text above stands unchanged as the
+  record of what was decided on 2026-10-05.
 - Date: 2026-10-04
 - Related: ADR-0241 (Play's home and the W-P4 pause overlay), ADR-0249 (the
   rendered wireframes as the visual spec), ADR-0250 (every menu entry has one
   place per door; Classic is a fourth), ADR-0251 (the pad's way *into* W-P4),
   ADR-0255 (the Controller sheet, one of the surfaces this has to drive),
   ADR-0123 (host-free rules).
-- Supersedes / amends: none.
+- Supersedes / amends: none. **Superseded by: ADR-0264** (2026-10-07) —
+  Decision 9's folder navigation as the *Open a game* sheet's opening shape,
+  and the first-row focus guard that went with it; the rest of Decision 9, and
+  every other Decision here, stand.
 
 ## Context
 
