@@ -449,6 +449,19 @@ public class PlayerLibrarySearchTests : IDisposable
 		//lets the next key land in it: the grid rebuilt under the ring and did not
 		//take it.
 		Assert.Equal("RomPickerSearch", FocusedName(window));
+
+		//And the way back, in the same chain (ADR-0264 AC 2): the pad walks to
+		//Clear, presses A on it, and the whole library is back.
+		Button clear = window.FindNamed<Button>("RomPickerSearchClear");
+		Assert.True(clear.IsOnScreen(), "Clear is not offered while the query is on");
+		clear.Focus(NavigationMethod.Directional);
+		Pump();
+		Assert.Equal("RomPickerSearchClear", FocusedName(window));
+		Press(window, PadNavAction.Confirm);
+		Pump();
+
+		Assert.Equal("", model.RomPicker.SearchQuery);
+		Assert.Equal(WholeLibrary, TileTitles(model));
 	}
 
 	//#1033 round 4 (finding 2): a scan that lands while the player is already in

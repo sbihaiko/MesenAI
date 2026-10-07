@@ -326,6 +326,15 @@ namespace Mesen.Windows
 		private static Control? RomPickerFocusTarget(MainWindow window, MainWindowViewModel model)
 		{
 			if(model.RomPicker.Mode == RomPickerMode.Library) {
+				//#1033: a scan landing bumps TilesRevision, which is a claim for the
+				//first tile - and the player who pressed Y (or is typing) before a
+				//slow scan answered is in the box, with the pad keyboard possibly open
+				//over it. The claim keeps the ring where it is rather than taking the
+				//query away mid-word.
+				Control? search = Named(window, "RomPickerSearch");
+				if(search is not null && (search.IsFocused || KeyboardForTest(window) is not null)) {
+					return search;
+				}
 				return RomPickerFirstTile(window) ?? Named(window, "RomPickerBrowseFile") ?? Named(window, "RomPickerBack");
 			}
 			return RomPickerFirstRow(window) ?? Named(window, "RomPickerBack");
