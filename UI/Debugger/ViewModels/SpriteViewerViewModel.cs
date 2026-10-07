@@ -53,7 +53,6 @@ namespace Mesen.Debugger.ViewModels
 		public SpriteViewerListViewModel ListView { get; }
 
 		[ObservableProperty] public partial int MaxSourceOffset { get; set; } = 0;
-		[ObservableProperty] public partial bool ShowFilter { get; set; } = false;
 
 		public List<object> FileMenuActions { get; } = new();
 		public List<object> ViewMenuActions { get; } = new();
@@ -152,8 +151,6 @@ namespace Mesen.Debugger.ViewModels
 			if(Design.IsDesignMode || wnd == null) {
 				return;
 			}
-
-			UpdateFilterVisibility();
 
 			AddDisposables(DebugShortcutManager.CreateContextMenu(picViewer, scrollViewer, new List<object> {
 				GetCopyTileAction(wnd),
@@ -615,8 +612,7 @@ namespace Mesen.Debugger.ViewModels
 			}
 
 			GetSpritePreviewOptions options = new GetSpritePreviewOptions() {
-				Background = Config.Background,
-				Filter = Config.Filter
+				Background = Config.Background
 			};
 
 			DebugSpritePreviewInfo previewInfo = DebugApi.GetSpritePreviewInfo(CpuType, options, _data.PpuState, _data.PpuToolsState);
@@ -739,15 +735,9 @@ namespace Mesen.Debugger.ViewModels
 			return null;
 		}
 
-		private void UpdateFilterVisibility()
-		{
-			ShowFilter = CpuType == CpuType.Pce && DebugApi.GetConsoleState<PceState>(ConsoleType.PcEngine).IsSuperGrafx;
-		}
-
 		public void OnGameLoaded()
 		{
 			RefreshTiming = new RefreshTimingViewModel(Config.RefreshTiming, CpuType);
-			UpdateFilterVisibility();
 			RefreshData();
 		}
 	}
