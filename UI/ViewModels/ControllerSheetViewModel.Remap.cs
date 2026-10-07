@@ -271,6 +271,7 @@ namespace Mesen.ViewModels
 		//call the classic Input page uses (ADR-0255 Consequences). It lands in the
 		//slot that already binds the control, else the port's first free slot; with
 		//all four taken the sheet refuses and says so rather than overwriting one.
+		//The same button on any other control of the port is cleared (#941).
 		private void BindCaptured(ushort code, int portIndex, SheetPort port)
 		{
 			ConsoleType console = CurrentConsole();
@@ -287,10 +288,35 @@ namespace Mesen.ViewModels
 				RemapNote = ResourceHelper.GetMessage("ControllerSheetRemapNoSlot");
 				return;
 			}
+			//#941: the button comes off every other control of this port that had
+			//it, in the same write, so one press never fires two controls. Only
+			//this port's own KeyMapping fields are read and cleared - other ports
+			//and other codes (keyboard keys included) are untouched - and only once
+			//the bind is known to land, so a refused bind clears nothing.
+			IReadOnlyList<RemapDisplaced> displaced = ControllerSheetRemap.Displaced(
+				ControllerSheetRemap.Controls(console),
+				(i, control) => ControllerSheetSlotWrite.Field(ControllerSheetSlotWrite.Slot(config, i), control),
+				4, button, code);
+			foreach(RemapDisplaced moved in displaced) {
+				ControllerSheetSlotWrite.SetField(ControllerSheetSlotWrite.Slot(config, moved.Slot), moved.Control, 0);
+			}
 			ControllerSheetSlotWrite.SetField(ControllerSheetSlotWrite.Slot(config, slot), button, code);
 			ConfigManager.Config.ApplyConfig();
 			ConfigManager.Config.Save();
-			RemapNote = ResourceHelper.GetMessage("ControllerSheetRemapBound", ControllerSheetRemap.ControlLabel(console, button), KeyName(code));
+			RemapNote = BoundNote(console, button, code, displaced);
+		}
+
+		//"A is now Button 1." - and, when the bind took the button off another
+		//control, that control is named on the same line, so the player sees
+		//which control lost it instead of finding it dead later (#941).
+		private string BoundNote(ConsoleType console, SetupButton button, ushort code, IReadOnlyList<RemapDisplaced> displaced)
+		{
+			string bound = ResourceHelper.GetMessage("ControllerSheetRemapBound", ControllerSheetRemap.ControlLabel(console, button), KeyName(code));
+			if(displaced.Count == 0) {
+				return bound;
+			}
+			string lost = string.Join(", ", displaced.Select(d => ControllerSheetRemap.ControlLabel(console, d.Control)).Distinct());
+			return bound + " " + string.Format(ResourceHelper.GetViewLabel("PlayerControllerSheetView", "lblControllerSheetRemapMoved"), lost);
 		}
 	}
 }

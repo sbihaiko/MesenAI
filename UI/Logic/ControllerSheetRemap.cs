@@ -83,6 +83,32 @@ public static class ControllerSheetRemap
 		return null;
 	}
 
+	//The other half of a rebind (#941): the pad button just bound to `control`
+	//comes off every other control of the same port that had it, in any of the
+	//port's four slots - they are alternatives for one player, so the same button
+	//on two controls is one press firing two controls. The control being bound is
+	//never in the answer (where its own binding lands is TargetSlot's call), a
+	//code nothing else holds - a keyboard key, another pad button - is untouched,
+	//and an unbound code displaces nothing. `controls` is the console's own list
+	//(Controls), `field(slot, control)` reads the port's mapping, so the answer
+	//is read off the one store the port already keeps and is not a second record
+	//of which control owns a button. In slot order, then the console's order.
+	public static IReadOnlyList<RemapDisplaced> Displaced(IReadOnlyList<SetupButton> controls, Func<int, SetupButton, ushort> field, int slotCount, SetupButton control, ushort code)
+	{
+		List<RemapDisplaced> displaced = new();
+		if(code == 0) {
+			return displaced;
+		}
+		for(int slot = 0; slot < slotCount; slot++) {
+			foreach(SetupButton other in controls) {
+				if(other != control && field(slot, other) == code) {
+					displaced.Add(new RemapDisplaced(slot, other));
+				}
+			}
+		}
+		return displaced;
+	}
+
 	//The pad's own button a bound key code names, by the core's name for that
 	//button - the per-backend order slice 1 reads through ControllerLivePad. The
 	//device *number* is ignored on purpose (see Lights): a binding whose device
@@ -133,6 +159,10 @@ public static class ControllerSheetRemap
 			boundCode != 0 && portCodeHeld);
 	}
 }
+
+//One control a rebind took its pad button off (#941): the slot it was bound in
+//and the control, so the write can clear that field and the note can name it.
+public readonly record struct RemapDisplaced(int Slot, SetupButton Control);
 
 //The two lights of one row, as the ViewModel applies them.
 public sealed record RemapLights(bool PadLit, bool PortLit);
