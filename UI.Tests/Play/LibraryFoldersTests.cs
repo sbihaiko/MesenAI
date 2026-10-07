@@ -31,6 +31,16 @@ namespace Mesen.Tests.Play
 			return (dir, dir + Path.DirectorySeparatorChar, Path.Combine(dir, "."));
 		}
 
+		//How many folder levels below `parent` the folder `child` sits, read off the
+		//paths alone. ADR-0264 Decision 9 bounds the scan at six levels below a
+		//library folder, so this is the number that decides whether a row's games
+		//are inside the budget.
+		private static int LevelsBelow(string parent, string child)
+		{
+			string relative = Path.GetRelativePath(Path.GetFullPath(parent), Path.GetFullPath(child));
+			return relative.Split(Path.DirectorySeparatorChar, StringSplitOptions.RemoveEmptyEntries).Length;
+		}
+
 		[Fact]
 		public void A_first_run_seeds_the_list_from_the_old_games_folder()
 		{
@@ -135,8 +145,15 @@ namespace Mesen.Tests.Play
 		//library at a folder the player never named, so the path is stored as the
 		//caller gave it. Only a path that is BLANK is refused; whitespace around a
 		//name is part of the name.
+		//
+		//Where the platform has already decided the question, this module does not
+		//second-guess it: Windows' own path rules strip a trailing space, so there
+		//`NES ` IS `NES` and the second add is the same row. The module stores
+		//`Path.GetFullPath`'s spelling on both platforms - what differs is what the
+		//platform's `GetFullPath` answers, so each platform asserts its own rule
+		//rather than one of them asserting the other's.
 		[Fact]
-		public void A_folder_name_that_ends_in_a_space_is_stored_as_given()
+		public void A_folder_name_that_ends_in_a_space_follows_the_platforms_path_rule()
 		{
 			string games = NewTempDir();
 			string spaced = Path.Combine(games, "NES ");
@@ -147,13 +164,27 @@ namespace Mesen.Tests.Play
 				Assert.Equal(LibraryFolderChange.Added, edit.Change);
 				Assert.Single(edit.Folders);
 				Assert.Equal(Path.GetFullPath(spaced), edit.Folders[0]);
-				Assert.EndsWith("NES ", edit.Folders[0]);
 
-				//And the trimmed spelling is a DIFFERENT folder, not the same one
-				//under another spelling: adding it is a second row.
-				edit = LibraryFolders.Add(edit.Folders, spaced.TrimEnd());
-				Assert.Equal(LibraryFolderChange.Added, edit.Change);
-				Assert.Equal(2, edit.Folders.Count);
+				if(OperatingSystem.IsWindows()) {
+					//The space is already gone: `GetFullPath` trimmed it, which is
+					//Windows' rule for the name and not this module rewriting it.
+					Assert.EndsWith("NES", edit.Folders[0]);
+					Assert.DoesNotContain(" ", edit.Folders[0]);
+
+					//So the trimmed spelling names the same folder, and it is one row.
+					edit = LibraryFolders.Add(edit.Folders, spaced.TrimEnd());
+					Assert.Equal(LibraryFolderChange.AlreadyListed, edit.Change);
+					Assert.Single(edit.Folders);
+				} else {
+					//The space is part of the name, and the path is stored as given.
+					Assert.EndsWith("NES ", edit.Folders[0]);
+
+					//And the trimmed spelling is a DIFFERENT folder, not the same one
+					//under another spelling: adding it is a second row.
+					edit = LibraryFolders.Add(edit.Folders, spaced.TrimEnd());
+					Assert.Equal(LibraryFolderChange.Added, edit.Change);
+					Assert.Equal(2, edit.Folders.Count);
+				}
 			} finally {
 				Directory.Delete(games, true);
 			}
@@ -209,10 +240,12 @@ namespace Mesen.Tests.Play
 				Assert.Equal(LibraryFolderChange.AlreadyListed, edit.Change);
 				Assert.Single(edit.Folders);
 
-				//`nes/sub` IS below `NES` here, so it is absorbed rather than listed.
+				//`nes/sub` IS below `NES` here, and it is still a row of its own: the
+				//scan under `NES` is depth-bounded, so a subfolder is not covered by
+				//being reached (ADR-0264 Decision 9).
 				edit = LibraryFolders.Add(new[] { upper }, Path.Combine(lower, "sub"), StringComparison.OrdinalIgnoreCase);
-				Assert.Equal(LibraryFolderChange.CoveredByListed, edit.Change);
-				Assert.Single(edit.Folders);
+				Assert.Equal(LibraryFolderChange.Added, edit.Change);
+				Assert.Equal(2, edit.Folders.Count);
 
 				IReadOnlyList<string> union = LibraryFolders.Union(new[] {
 					new[] { upper + "/contra.nes" },
@@ -254,29 +287,35 @@ namespace Mesen.Tests.Play
 			}
 		}
 
-		//Decision 8's nested case, resolved by ADR-0264's "the folders shape the
-		//scan, not the list": a folder inside one that is already listed adds no
-		//game the list does not already reach, so it is absorbed rather than added
-		//as a second row.
+		//Decision 8's nested case: a folder inside one that is already listed is a
+		//row of its OWN, because "the list already reaches it" is not the same as
+		//"the scan already reaches it". ADR-0264 Decision 9 bounds the scan at six
+		//levels below a library folder, so a nested root reached through its parent
+		//is one level further down than the same root reached directly - the parent
+		//can be past the budget on a folder the nested row still reaches. The two
+		//rows answer the same games once, through `Union`, which is where the grid's
+		//de-duplication lives.
 		[Fact]
-		public void A_folder_inside_a_listed_one_is_absorbed()
+		public void A_folder_inside_a_listed_one_is_listed_on_its_own_row()
 		{
 			string games = NewTempDir();
 			string nested = Path.Combine(games, "nes");
 			Directory.CreateDirectory(nested);
 			try {
 				LibraryFolderEdit edit = LibraryFolders.Add(new[] { games }, nested);
-				Assert.Equal(LibraryFolderChange.CoveredByListed, edit.Change);
-				Assert.Equal(new[] { Path.GetFullPath(games) }, edit.Folders);
+				Assert.Equal(LibraryFolderChange.Added, edit.Change);
+				Assert.Equal(new[] { Path.GetFullPath(games), Path.GetFullPath(nested) }, edit.Folders);
 			} finally {
 				Directory.Delete(games, true);
 			}
 		}
 
-		//The same rule read the other way: a folder that CONTAINS listed ones
-		//merges them, because the ancestor already reaches their games.
+		//The same rule read the other way: a folder that CONTAINS listed ones is
+		//added BESIDE them, never in their place. Replacing them would re-root their
+		//subtrees one level higher, and the scan is bounded at six levels (ADR-0264
+		//Decision 9) - so a merge silently drops the games that sat at the boundary.
 		[Fact]
-		public void Adding_a_folder_that_contains_listed_ones_merges_them()
+		public void Adding_a_folder_that_contains_listed_ones_keeps_them_as_rows()
 		{
 			string games = NewTempDir();
 			string nes = Path.Combine(games, "nes");
@@ -285,10 +324,52 @@ namespace Mesen.Tests.Play
 			Directory.CreateDirectory(gb);
 			try {
 				LibraryFolderEdit edit = LibraryFolders.Add(new[] { nes, gb }, games);
-				Assert.Equal(LibraryFolderChange.MergedWithListed, edit.Change);
-				Assert.Equal(new[] { Path.GetFullPath(games) }, edit.Folders);
+				Assert.Equal(LibraryFolderChange.Added, edit.Change);
+				Assert.Equal(new[] { Path.GetFullPath(nes), Path.GetFullPath(gb), Path.GetFullPath(games) }, edit.Folders);
 			} finally {
 				Directory.Delete(games, true);
+			}
+		}
+
+		//The boundary the two rules above exist for, stated as the case that was
+		//lost: a ROM whose folder sits exactly six levels below a nested root. It is
+		//inside the scan's budget below `NES` and one level PAST it below `roms`, so
+		//absorbing `NES` into `roms` is what makes the game disappear from the
+		//library. Both rows stay, the union answers the game once, and neither row
+		//has to claim it alone.
+		[Fact]
+		public void A_nested_root_survives_its_parent_so_the_depth_budget_still_reaches_its_games()
+		{
+			string roms = NewTempDir();
+			string nes = Path.Combine(roms, "NES");
+			string sixDeep = Path.Combine(nes, "1", "2", "3", "4", "5", "6");
+			Directory.CreateDirectory(sixDeep);
+			try {
+				string rom = Path.Combine(sixDeep, "contra.nes");
+
+				//The whole regression, as arithmetic: within the six-level budget
+				//below the nested root, one level beyond it below the parent.
+				Assert.Equal(6, LevelsBelow(nes, sixDeep));
+				Assert.Equal(7, LevelsBelow(roms, sixDeep));
+
+				LibraryFolderEdit edit = LibraryFolders.Add(new List<string>(), nes);
+				Assert.Equal(LibraryFolderChange.Added, edit.Change);
+
+				//Adding the parent keeps the nested row, so the game is still reached
+				//by a root that is inside the budget for it.
+				edit = LibraryFolders.Add(edit.Folders, roms);
+				Assert.Equal(LibraryFolderChange.Added, edit.Change);
+				Assert.Equal(new[] { Path.GetFullPath(nes), Path.GetFullPath(roms) }, edit.Folders);
+
+				//And the two rows are one grid: the game both scans answer is one
+				//entry, not two.
+				IReadOnlyList<string> union = LibraryFolders.Union(new[] {
+					new[] { rom },
+					new[] { rom }
+				});
+				Assert.Equal(new[] { Path.GetFullPath(rom) }, union);
+			} finally {
+				Directory.Delete(roms, true);
 			}
 		}
 

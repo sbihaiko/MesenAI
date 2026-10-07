@@ -26,12 +26,17 @@ public enum LibraryFolderChange
 	//The same folder is already listed, under another spelling of the same path.
 	AlreadyListed,
 
-	//The folder is inside one that is already listed, so every game under it is
-	//already reached by the list; it is absorbed rather than listed twice.
+	//The folder is inside one that is already listed. `Add` does NOT answer this:
+	//a nested root is added on its own row, because the scan under the parent is
+	//depth-bounded (ADR-0264 Decision 9) and the nested root is one level further
+	//down when it is reached through the parent - see `Add`. The member stays for
+	//the callers that already name every answer a folder add can give.
 	CoveredByListed,
 
-	//The folder CONTAINS folders that are listed; those rows go away and this
-	//ancestor takes their place, because it already reaches their games.
+	//The folder CONTAINS folders that are listed. `Add` does NOT answer this
+	//either, and for the same reason: replacing those rows with their ancestor
+	//re-roots their subtrees one level higher, past the scan's budget for the
+	//games that sat at its edge.
 	MergedWithListed,
 
 	//Nothing to add: a blank path, or one the platform's path rules refuse.
@@ -105,19 +110,6 @@ public static class LibraryFolders
 		}
 	}
 
-	//Is `child` strictly below `parent`? The separator after the prefix is what
-	//keeps `/games2` from reading as inside `/games`. "Inside" folds exactly when
-	//"the same folder" does: on a folding file system `/roms/nes/sub` is below
-	//`/roms/NES`, and on a case-sensitive one it is a folder of its own.
-	private static bool IsInside(string parent, string child, StringComparison comparison)
-	{
-		if(string.Equals(parent, child, comparison)) {
-			return false;
-		}
-		string prefix = Path.EndsInDirectorySeparator(parent) ? parent : parent + Path.DirectorySeparatorChar;
-		return child.StartsWith(prefix, comparison);
-	}
-
 	private static IReadOnlyList<string> Copy(IReadOnlyList<string> folders)
 	{
 		return new List<string>(folders);
@@ -149,14 +141,22 @@ public static class LibraryFolders
 		return seeded != null ? new List<string> { seeded } : new List<string>();
 	}
 
-	//The nested case, decided: **absorb, do not reject.** A folder inside one that
-	//is already listed adds no game the list does not already reach - the scan
-	//walks a folder's whole subtree - so listing it too would show the player two
-	//rows that are one library and make the header's folder count claim a folder
-	//that contributes nothing. The same rule read the other way is why adding a
-	//folder that CONTAINS listed ones takes their place instead of standing beside
-	//them. Neither is an error: `CoveredByListed` and `MergedWithListed` are
-	//answers, not refusals, and in both the list is already right.
+	//The nested case, decided: **keep every root, do not absorb one into another.**
+	//A nested folder looks redundant - the parent is a prefix of it - and the walk
+	//that reads this list is BOUNDED: ADR-0264 Decision 9 caps the scan at six
+	//levels below a library folder. Re-rooting a subtree one level higher is
+	//therefore not free. Adding `/roms` over a listed `/roms/NES` used to drop the
+	//`NES` row, and a ROM whose folder sits six levels below `NES` then sat seven
+	//below the only root left - inside the budget before the add, outside it after,
+	//silently gone from the library. So a nested folder is a row of its own, and
+	//overlap is answered where it belongs: the scan's results are unioned by path
+	//(`Union`), which is one entry per game no matter how many roots reached it.
+	//
+	//Nothing here is a refusal: a folder that is already listed comes back as
+	//`AlreadyListed`, and every other add is `Added`. The nested rows cost the
+	//player a second row in the list and the header's folder count - which is the
+	//truth about their library - and buy back the games that only the deeper root
+	//reaches.
 	//
 	//`comparison` is how the CALLER's file system folds case (see `DefaultComparison`),
 	//so a caller that knows its volume - a case-sensitive APFS volume is the case
@@ -171,31 +171,21 @@ public static class LibraryFolders
 			return new LibraryFolderEdit(Copy(folders), LibraryFolderChange.Invalid);
 		}
 
+		//The SAME folder under another spelling is the one case that adds no row:
+		//`folders` is a list of folders, and one folder is one row. A folder that is
+		//merely INSIDE a listed one is a different folder and gets its own row - see
+		//the comment above this method - and that comparison is deliberately not made
+		//here.
 		foreach(string listed in folders) {
 			string? normalized = Normalize(listed);
-			if(normalized == null) {
-				continue;
-			}
-			if(string.Equals(normalized, added, compare)) {
+			if(normalized != null && string.Equals(normalized, added, compare)) {
 				return new LibraryFolderEdit(Copy(folders), LibraryFolderChange.AlreadyListed);
-			}
-			if(IsInside(normalized, added, compare)) {
-				return new LibraryFolderEdit(Copy(folders), LibraryFolderChange.CoveredByListed);
 			}
 		}
 
-		List<string> merged = new();
-		bool replacedAny = false;
-		foreach(string listed in folders) {
-			string? normalized = Normalize(listed);
-			if(normalized != null && IsInside(added, normalized, compare)) {
-				replacedAny = true;
-				continue;
-			}
-			merged.Add(listed);
-		}
-		merged.Add(added);
-		return new LibraryFolderEdit(merged, replacedAny ? LibraryFolderChange.MergedWithListed : LibraryFolderChange.Added);
+		List<string> withAdded = new(folders);
+		withAdded.Add(added);
+		return new LibraryFolderEdit(withAdded, LibraryFolderChange.Added);
 	}
 
 	//Removing takes the row out of the list and does nothing else - there is no
@@ -222,7 +212,10 @@ public static class LibraryFolders
 	}
 
 	//The union of what several folders answered, each PATH once: two library folders
-	//that overlap are one game in the grid, not two. "Path" is meant literally - this
+	//that overlap are one game in the grid, not two. This is the de-duplication the
+	//list relies on - `Add` keeps overlapping roots as separate rows (ADR-0264
+	//Decision 9 bounds the scan, so the deeper root reaches games the shallower one
+	//does not), and the overlap is answered here instead. "Path" is meant literally - this
 	//is a string set, so the same game spelled two ways is two entries, and a game
 	//reached through a symlink and through its target is two entries as well, because
 	//nothing here resolves a link (see `Normalize`; #1032's scan owns that). The
