@@ -145,25 +145,36 @@ namespace Mesen.Tests.BoxArt
 
 		//#1039 review (ADR-0265 section 6): the table's answer carries the console it
 		//filed the dump under, and the collection is keyed by console PLUS SHA-1 - "a
-		//Game Boy game never answers for a Game Gear one". A hit filed under another
-		//machine is the wrong game's name, so it is dropped whole: asking for it would
-		//query the wrong repository and the 404 that came back would be written down
-		//as "this collection has no cover" under the tile's own console, for thirty
-		//days (section 7).
+		//Game Boy game never answers for a Game Gear one". The table, not the file
+		//extension, knows which machine the dump is for (a dual-mode cart saved as .gb
+		//but filed under Game Boy Color), so a hit filed under another console is asked
+		//for under THAT console's repository: the right repository, never the tile's.
 		[Fact]
-		public async Task A_hit_filed_under_another_console_is_dropped_rather_than_asked_for_or_recorded()
+		public async Task A_hit_filed_under_another_console_is_asked_for_under_that_console()
 		{
 			FakeBoxArtSender sender = FakeBoxArtSender.Images(FakeImages.Png());
 			NoIntroRomName otherMachine = new(RomConsole.GameGear, Name);
 
 			BoxArtCover? cover = await Library(sender, _ => otherMachine).GetCover(Entry(), CancellationToken.None);
 
+			Assert.NotNull(cover);
+			Assert.Equal(1, sender.RequestCount);
+			Assert.Contains("/Sega_-_Game_Gear/", sender.Requests[0].AbsolutePath);
+			Assert.DoesNotContain("Nintendo_Entertainment_System", sender.Requests[0].AbsolutePath);
+		}
+
+		//The one drop that remains: the table's console is one the collection does not
+		//carry, so there is no repository to ask and nothing is requested or recorded.
+		[Fact]
+		public async Task A_hit_filed_under_a_console_the_collection_lacks_is_dropped()
+		{
+			FakeBoxArtSender sender = FakeBoxArtSender.Images(FakeImages.Png());
+			NoIntroRomName uncarried = new(RomConsole.Unknown, Name);
+
+			BoxArtCover? cover = await Library(sender, _ => uncarried).GetCover(Entry(), CancellationToken.None);
+
 			Assert.Null(cover);
-			//Not the wrong repository asked: nothing was asked at all.
 			Assert.Equal(0, sender.RequestCount);
-			//And no miss was written: the collection was never given the chance to
-			//answer about this game, so it must not be remembered as one that has no
-			//cover (the record outlives the mistake by MissExpiry).
 			Assert.Empty(Directory.GetFiles(_cache.FullName, "*.miss", SearchOption.AllDirectories));
 		}
 

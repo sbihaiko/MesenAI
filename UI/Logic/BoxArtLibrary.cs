@@ -66,15 +66,18 @@ namespace Mesen.Logic
 			}
 
 			//The table keys its rows by the dump AND files each one under the console
-			//it belongs to, and ADR-0265 section 6 keys the collection the same way:
-			//"a Game Boy game never answers for a Game Gear one". So the answer is
-			//dropped whole when the console it was filed under is not this tile's -
-			//not turned into a name, because that name would be asked for in the
-			//WRONG machine's repository and the 404 that came back would be written
-			//down as "this collection has no cover": a thirty-day bad answer for a
-			//game the collection may well have.
+			//it belongs to, and ADR-0265 section 6 keys the collection the same way.
+			//The table, not the file extension, knows the machine (a dual-mode cart
+			//saved as .gb but filed under Game Boy Color), so the name is asked for
+			//under the console the table filed it under: still the right repository,
+			//never the wrong one. The answer is dropped only when that console is one
+			//the collection does not carry - there is no repository to ask.
 			NoIntroRomName? rom = _romOf(sha1);
-			if(rom is not { } match || string.IsNullOrEmpty(match.Name) || match.Console != entry.Console) {
+			if(rom is not { } match || string.IsNullOrEmpty(match.Name)) {
+				return null;
+			}
+			console = (BoxArtConsole)(int)match.Console;
+			if(BoxArtSystems.CacheTag(console).Length == 0) {
 				return null;
 			}
 

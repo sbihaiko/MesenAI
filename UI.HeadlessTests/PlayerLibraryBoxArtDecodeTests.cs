@@ -4,6 +4,7 @@ using Avalonia;
 using Avalonia.Headless.XUnit;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform;
+using Mesen.Config;
 using Mesen.Logic;
 using Mesen.ViewModels;
 using Xunit;
@@ -11,9 +12,16 @@ using Xunit;
 namespace Mesen.HeadlessTests;
 
 //#1039 review findings 1 and 2 on PR #1057.
+[Collection(NativeCoreCollection.Name)]
 public class PlayerLibraryBoxArtDecodeTests : IDisposable
 {
 	private readonly string _folder = Path.Combine(Path.GetTempPath(), "mesen-1039-decode-" + Guid.NewGuid().ToString("N"));
+
+	//The shell the finding-1 test builds sets the global Instance and rewrites
+	//these two preferences, so both are put back in Dispose.
+	private readonly MainWindowViewModel _instance = MainWindowViewModel.Instance;
+	private readonly UiMode _uiMode = ConfigManager.Config.Preferences.UiMode;
+	private readonly Workspace _workspace = ConfigManager.Config.Preferences.Workspace;
 
 	public PlayerLibraryBoxArtDecodeTests()
 	{
@@ -22,6 +30,10 @@ public class PlayerLibraryBoxArtDecodeTests : IDisposable
 
 	public void Dispose()
 	{
+		PreferencesConfig prefs = ConfigManager.Config.Preferences;
+		prefs.UiMode = _uiMode;
+		prefs.Workspace = _workspace;
+		typeof(MainWindowViewModel).GetProperty(nameof(MainWindowViewModel.Instance))!.SetValue(null, _instance);
 		try {
 			Directory.Delete(_folder, true);
 		} catch {
