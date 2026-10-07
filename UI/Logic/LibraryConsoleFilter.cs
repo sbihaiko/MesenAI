@@ -61,10 +61,24 @@ public static class LibraryConsoleFilter
 		return Cycle(options, selected, -1);
 	}
 
-	//The ring itself. A selection the set no longer holds - the folder was
-	//removed, the rescan found no Game Boy game where there was one - is treated
-	//as All rather than as an index into nothing: the sheet came back with a
-	//selection it cannot show, and All is the one option that is always true.
+	//The selection the row can actually show: a selection the set no longer holds
+	//- the folder was removed, the rescan found no Game Boy game where there was
+	//one - reads as All, never as an index into nothing. The sheet came back with
+	//a selection it cannot draw, and All is the one option that is always true.
+	//
+	//This is the single rule for that case rather than a fallback every reader
+	//remembers on its own: `Next`, `Previous` and `Apply` all resolve through it,
+	//so Decision 5's "never land on an empty filter" is enforced by the module
+	//instead of by each caller.
+	public static RomConsole? Resolve(IReadOnlyList<RomConsole?> options, RomConsole? selected)
+	{
+		return options.Contains(selected) ? selected : null;
+	}
+
+	//The ring itself, over the resolved selection: a stale one reads as All, so
+	//RB and LB step off All rather than off a position the row cannot show (and
+	//off a set that does not carry All at all, the index stays 0 - the same
+	//first-option fallback).
 	private static RomConsole? Cycle(IReadOnlyList<RomConsole?> options, RomConsole? selected, int step)
 	{
 		int count = options.Count;
@@ -72,9 +86,10 @@ public static class LibraryConsoleFilter
 			return null;
 		}
 
+		RomConsole? current = Resolve(options, selected);
 		int index = 0;
 		for(int i = 0; i < count; i++) {
-			if(options[i] == selected) {
+			if(options[i] == current) {
 				index = i;
 				break;
 			}
@@ -103,14 +118,24 @@ public static class LibraryConsoleFilter
 	//
 	//`matchesSearch` is null when the search field is empty, so the sheet has
 	//one call shape for "no query" as well as for "a query".
+	//
+	//The option set is derived from these same entries and the selection is run
+	//through `Resolve` before it narrows anything: a selection the last rescan
+	//invalidated returns the whole library instead of an empty grid under a
+	//filter the row cannot show. Doing it here rather than asking the sheet to
+	//remember is the point - the caller cannot get this wrong, because it never
+	//passes the option set in.
 	public static List<T> Apply<T>(
 		IEnumerable<T> entries,
 		RomConsole? selected,
 		Func<T, RomConsole> consoleOf,
 		Func<T, bool>? matchesSearch = null)
 	{
-		return entries
-			.Where(entry => Allows(selected, consoleOf(entry)))
+		List<T> all = entries.ToList();
+		RomConsole? narrowing = Resolve(Options(all.Select(consoleOf)), selected);
+
+		return all
+			.Where(entry => Allows(narrowing, consoleOf(entry)))
 			.Where(entry => matchesSearch is null || matchesSearch(entry))
 			.ToList();
 	}

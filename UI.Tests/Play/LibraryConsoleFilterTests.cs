@@ -82,6 +82,45 @@ namespace Mesen.Tests
 			Assert.Equal(RomConsole.GameBoy, LibraryConsoleFilter.Previous(options, null));
 		}
 
+		//The same stale selection, one pad press later: the row holds a console the
+		//set no longer lists, so the ring resolves it to All (index 0) and steps
+		//off All - RB lands on the first console, LB wraps to the last. Both
+		//directions are asserted, since the fallback is the only thing keeping a
+		//removed folder's selection from walking off the row.
+		[Fact]
+		public void Next_from_a_console_the_set_no_longer_holds_steps_off_All()
+		{
+			IReadOnlyList<RomConsole?> options = LibraryConsoleFilter.Options(new[] { RomConsole.Nes, RomConsole.MasterSystem });
+
+			Assert.DoesNotContain(RomConsole.GameBoy, options);
+			Assert.Equal(RomConsole.Nes, LibraryConsoleFilter.Next(options, RomConsole.GameBoy));
+			Assert.Equal(LibraryConsoleFilter.Next(options, null), LibraryConsoleFilter.Next(options, RomConsole.GameBoy));
+		}
+
+		[Fact]
+		public void Previous_from_a_console_the_set_no_longer_holds_wraps_to_the_last_console()
+		{
+			IReadOnlyList<RomConsole?> options = LibraryConsoleFilter.Options(new[] { RomConsole.Nes, RomConsole.MasterSystem });
+
+			Assert.DoesNotContain(RomConsole.GameBoy, options);
+			Assert.Equal(RomConsole.MasterSystem, LibraryConsoleFilter.Previous(options, RomConsole.GameBoy));
+			Assert.Equal(LibraryConsoleFilter.Previous(options, null), LibraryConsoleFilter.Previous(options, RomConsole.GameBoy));
+		}
+
+		//The rule itself, at its own seam: a selection outside the set is All.
+		//Everything else here reads through it, so it is worth pinning directly.
+		[Fact]
+		public void Resolve_maps_a_selection_outside_the_set_to_All()
+		{
+			IReadOnlyList<RomConsole?> options = LibraryConsoleFilter.Options(new[] { RomConsole.Nes, RomConsole.MasterSystem });
+
+			Assert.Null(LibraryConsoleFilter.Resolve(options, RomConsole.GameBoy));
+			Assert.Null(LibraryConsoleFilter.Resolve(options, RomConsole.Unknown));
+			Assert.Null(LibraryConsoleFilter.Resolve(options, null));
+			Assert.Equal(RomConsole.Nes, LibraryConsoleFilter.Resolve(options, RomConsole.Nes));
+			Assert.Equal(RomConsole.MasterSystem, LibraryConsoleFilter.Resolve(options, RomConsole.MasterSystem));
+		}
+
 		//A library of one console (and no games at all) still has the All row, and
 		//cycling it is the pad pressing LB/RB on a filter that cannot change -
 		//staying put, not walking off the end.
@@ -122,6 +161,21 @@ namespace Mesen.Tests
 				Filtered(entries, RomConsole.Nes).Select(entry => entry.Title));
 			Assert.Equal(new[] { "Super Mario Bros. 3", "Super Mario Land" },
 				Filtered(entries, null, "mario").Select(entry => entry.Title));
+		}
+
+		//A selection the rescan invalidated: the player selected Game Boy, the
+		//folder was then removed and the library rescanned, so `Options` no longer
+		//lists Game Boy. The stale selection must read as All - the row cannot even
+		//show it, and Decision 5 forbids landing on a filter that holds nothing.
+		[Fact]
+		public void A_stale_selection_after_a_rescan_returns_every_entry()
+		{
+			List<Entry> entries = Entries(("Contra", RomConsole.Nes), ("Castlevania", RomConsole.Nes));
+
+			Assert.DoesNotContain(RomConsole.GameBoy, LibraryConsoleFilter.Options(entries.Select(entry => entry.Console)));
+
+			Assert.Equal(new[] { "Contra", "Castlevania" },
+				Filtered(entries, RomConsole.GameBoy).Select(entry => entry.Title));
 		}
 
 		//All is the absence of the narrowing, not a claim that every entry names a
