@@ -3156,13 +3156,13 @@ or while a movie, shared replay or netplay is on.
                      ┌──────────────────────────────────────────────┐
                      │  Settings                                    │
                      │                                              │
-                     │  Display │ Look │ Audio │ Controls           │
+                     │  Display │ Look │ Audio │ Controls │ System  │
                      │  ────────┘                                   │
                      │  Fullscreen           [x]                    │
                      │  Aspect ratio         [Auto        ▾]        │
                      │  Scale                [3×          ▾]        │
                      │                                              │
-                     │  Everything else: Tools ⋯ › Options          │
+                     │  Everything else: Classic › Settings         │
                      │                                   [Done]     │
                      └──────────────────────────────────────────────┘
 ```
@@ -3171,7 +3171,10 @@ Today's `PlayerSettingsEssentials` tabs, with *Video* split in two:
 **Display** is the window (size, shape, full screen) and **Look** (W-P10) is
 what the pixels look like. The shader selector moves out of here into Look,
 next to the filter it is usually confused with. The last line is rule 10
-applied to settings. Elements: tab strip, 3 rows, Done = 5. ✔
+applied to settings: Play's Tools ⋯ has no Options entry (ADR-0250), so the
+way out is Classic › Settings. **System** is the fifth pane (ADR-0256
+Decision 8), the one a pad can reach without a keyboard; its rows are not drawn
+here. Elements: tab strip, 3 rows, Done = 5. ✔
 
 **W-P8b / W-P8c — Settings › Audio and Controls (the same list, never the
 classic pages)**
@@ -3235,7 +3238,7 @@ status line.
 ```
                      ┌──────────────────────────────────────────────┐
                      │  Settings                                    │
-                     │  Display │ Look │ Audio │ Controls           │
+                     │  Display │ Look │ Audio │ Controls │ System  │
                      │          └──────┘                            │
                      │  ART  ⟨drawn by an artist⟩                   │
                      │  ▣ Contra 80s · textures                ▸    │
