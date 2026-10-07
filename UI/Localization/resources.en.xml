@@ -41,6 +41,13 @@
 			    placeholder is the wireframe's own words (W-P19).-->
 			<Control ID="lblRomPickerSearchPlaceholder">Search games</Control>
 			<Control ID="btnRomPickerSearchClear">Clear</Control>
+			<!--#1036 (ADR-0264 Decision 8): *Library folders…* and the sheet it opens -
+			    the list, the press that adds a folder, and the press that takes one out
+			    of the list without touching the disk.-->
+			<Control ID="btnRomPickerLibraryFolders">Library folders…</Control>
+			<Control ID="lblRomPickerFoldersHint">Your library shows every game in these folders.</Control>
+			<Control ID="btnRomPickerFoldersAdd">Add a folder…</Control>
+			<Control ID="btnRomPickerFolderRemove">Remove</Control>
 		</Form>
 		<Form ID="PlayerPackPickerSheetView">
 			<Control ID="lblPackPickerRemembered">Remembered for this game. Change it any time from the pause menu.</Control>
@@ -2705,6 +2712,18 @@ E
 		     folder answers something too - so "will keep opening where you last
 		     played" was false here in both cases. -->
 		<Message ID="RomPickerGamesFolderEmpty">Saved. There are no games in that folder yet, so MesenAI is not using it for now.</Message>
+		<!-- #1036 (ADR-0264 Decision 8): the folders sheet's own heading, the answers an
+		     add can give, and the action row the folder browser shows while the sheet
+		     is picking a folder. The answers that did NOT change the list say why,
+		     rather than leaving a press that appears to do nothing. {0} = the folder. -->
+		<Message ID="RomPickerFoldersTitle">Library folders</Message>
+		<Message ID="RomPickerFolderAdded">{0} is now in your library.</Message>
+		<Message ID="RomPickerFolderMerged">Added {0} — a folder inside it was already in your library.</Message>
+		<Message ID="RomPickerFolderAlreadyListed">{0} is already in your library.</Message>
+		<Message ID="RomPickerFolderCovered">Every game in {0} is already in your library.</Message>
+		<Message ID="RomPickerFolderInvalid">MesenAI cannot use that folder.</Message>
+		<Message ID="RomPickerFolderRemoved">Removed {0} from your library. Nothing was deleted from your disk.</Message>
+		<Message ID="RomPickerAddThisFolder">Add this folder to your library</Message>
 		<!-- The console a discovered library holds, shown first on its row in the
 		     picker's suggestion list. The IDs are `RomConsole` + the RomConsole
 		     member (UI/Logic/RomConsoleKinds.cs), so the enum and this file must

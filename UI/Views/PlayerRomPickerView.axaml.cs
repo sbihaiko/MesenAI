@@ -155,5 +155,28 @@ namespace Mesen.Views
 		}
 
 		private void OnBack(object? sender, RoutedEventArgs e) => Model?.Back();
+
+		//#1036 (ADR-0264 Decision 8): *Library folders…*, and the two presses inside
+		//the sheet it opens. Add is the MOUSE door - the native folder dialog, which
+		//is what a player at a desk expects. The pad's Confirm never lands here: the
+		//bridge answers it with the sheet's own folder browser instead, because a
+		//native dialog owns the screen once it is up (PlayPadNavigationWiring).
+		private void OnLibraryFolders(object? sender, RoutedEventArgs e) => Model?.OpenFoldersSheet();
+
+		private async void OnAddFolder(object? sender, RoutedEventArgs e)
+		{
+			if(Model is PlayerRomPickerViewModel model) {
+				await model.AddFolderFromMouse();
+			}
+		}
+
+		//The row's own Remove. It edits the list and nothing else: no file call is
+		//made on this path, on purpose.
+		private void OnRemoveFolder(object? sender, RoutedEventArgs e)
+		{
+			if(sender is Control { DataContext: PlayerLibraryFolderRow row }) {
+				Model?.RemoveLibraryFolder(row);
+			}
+		}
 	}
 }

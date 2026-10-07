@@ -187,8 +187,13 @@ namespace Mesen.ViewModels
 		//ShowSearchClear rides the mode as well as the query (#1033): the Clear action
 		//is the library's, and the step into the browser has to take it off screen
 		//with the box it belongs to.
+		//#1036: the library SURFACE (PlayerRomPickerViewModel.Folders.cs) is this
+		//flag AND "the folders sheet is down", so the view binds the surface's own
+		//controls to the computed property - and it has to be told when this half of
+		//it changes.
 		[ObservableProperty]
 		[NotifyPropertyChangedFor(nameof(ShowSearchClear))]
+		[NotifyPropertyChangedFor(nameof(IsLibrarySurfaceVisible))]
 		public partial bool IsLibraryMode { get; private set; } = true;
 		[ObservableProperty] public partial bool IsBrowseMode { get; private set; }
 
@@ -212,7 +217,12 @@ namespace Mesen.ViewModels
 		//single control the player reads either way - two TextBlocks swapping
 		//places would be two headings that happen to be exclusive, and the one the
 		//sheet's own case reads would be off screen half the time.
-		public string SheetHeading => Mode == RomPickerMode.Library ? HeaderText : Title;
+		//#1036 (ADR-0264 Decision 8): *Library folders…* is a surface of this sheet,
+		//so the heading is its own while it is up - the same one heading the player
+		//reads either way.
+		public string SheetHeading => IsFoldersSheetVisible
+			? ResourceHelper.GetMessage("RomPickerFoldersTitle")
+			: Mode == RomPickerMode.Library ? HeaderText : Title;
 
 		//The grid itself: one instance for the life of the view-model, mutated in
 		//place so a scan that lands while the sheet is up does not rebuild the
@@ -250,11 +260,11 @@ namespace Mesen.ViewModels
 		//A test runs the scan in the Open() turn instead of on the thread pool.
 		public bool RunScanInline { get; set; }
 
-		//#1032 (ADR-0264 Decision 8): the folders the library reads. The app has
-		//ONE games folder today, and the list is seeded from it; the multi-folder
-		//list *Library folders…* edits is its own slice, and it arrives by
-		//replacing this seam rather than by changing the scan.
-		public Func<IReadOnlyList<string>> LibraryFolderSource { get; set; } = ConfiguredLibraryFolders;
+		//#1032 (ADR-0264 Decision 8): the folders the library reads. #1036 arrived
+		//by replacing this seam's DEFAULT, exactly as that note said it would and
+		//without changing the scan: the stored list (Preferences.LibraryFolders,
+		//seeded once from the single games folder) is what the sheet reads now.
+		public Func<IReadOnlyList<string>> LibraryFolderSource { get; set; } = StoredLibraryFolders;
 		//The library scan and its own seams live in PlayerRomPickerViewModel.Scan.cs:
 		//#1037 made it a stream, and a stream is a lifetime of its own.
 		//
@@ -438,10 +448,25 @@ namespace Mesen.ViewModels
 			if(!IsVisible) {
 				return;
 			}
+			//#1036 (ADR-0264 Decision 8): *Library folders…* is a surface of this
+			//sheet, so B closes it back to the library rather than leaving the whole
+			//picker - the same step the sheet's own Back button takes.
+			if(IsFoldersSheetVisible) {
+				CloseFoldersSheet();
+				return;
+			}
 			//On the library there is nowhere back to: it is the sheet, so the
 			//step is the dismiss (ADR-0264 Decision 3, ADR-0256's stop rule).
 			if(Mode == RomPickerMode.Library) {
 				IsVisible = false;
+				return;
+			}
+			//#1036 (ADR-0264 Decision 8): the browser is also the pad's door onto
+			//adding a library folder, and B there is the CANCEL of that pick - back
+			//to *Library folders…*, with the list as it was, rather than a step out
+			//of a sheet the player opened to do one thing.
+			if(IsPickingLibraryFolder) {
+				CancelFolderPick();
 				return;
 			}
 			//The browser is INSIDE the sheet (Decision 11), so walking out of
@@ -482,6 +507,14 @@ namespace Mesen.ViewModels
 			}
 			switch(row.Kind) {
 				case RomPickerRowKind.Action:
+					//#1036 (ADR-0264 Decision 8): the action row is the press that
+					//acts on the folder it sits in, and which action that is depends
+					//on why the browser is up - adding a library folder, or naming
+					//the games folder.
+					if(IsPickingLibraryFolder) {
+						AddLibraryFolder(row.Path);
+						return;
+					}
 					MakeGamesFolder(row.Path);
 					return;
 				case RomPickerRowKind.Folder:
@@ -607,7 +640,14 @@ namespace Mesen.ViewModels
 			//posted, so it would survive either order today - this is so that it
 			//still does if it is ever made to answer in the same turn.
 			ReplaceRows(PlayRomPicker.FolderRows(
-				folder, GamesFolder, ResourceHelper.GetMessage("RomPickerMakeGamesFolder"), folders, files));
+				folder,
+				//#1036 (ADR-0264 Decision 8): the action row reads and does what the
+				//pick is for. In pick mode no folder is already "the one to make", so
+				//every folder offers the row - which is what lets a player walk to the
+				//folder they want and add THAT one.
+				IsPickingLibraryFolder ? null : GamesFolder,
+				ResourceHelper.GetMessage(IsPickingLibraryFolder ? "RomPickerAddThisFolder" : "RomPickerMakeGamesFolder"),
+				folders, files));
 			//Both lines belong to the state they were set in: the searching line
 			//belongs to the roots list, and a save notice belongs to the folder it
 			//was made in. A step clears them; a save sets the notice after this.
@@ -825,17 +865,6 @@ namespace Mesen.ViewModels
 		//action row keeps offering to designate one.
 		private static string? GamesFolder => GamesFolderChoice.Usable(
 			ConfigManager.Config.Preferences.OverrideGameFolder ? ConfigManager.Config.Preferences.GameFolder : null);
-
-		//#1032 (ADR-0264 Decision 8): the folders the library reads, seeded from
-		//the one games folder the app already has, so no player loses the folder
-		//they had set. A player who set none gets an EMPTY list, and an empty
-		//list is what the empty state is: the sheet tells them to add a library
-		//folder rather than showing a grid with nothing in it.
-		private static IReadOnlyList<string> ConfiguredLibraryFolders()
-		{
-			string? games = GamesFolder;
-			return games is null ? Array.Empty<string>() : new[] { games };
-		}
 
 		//The app's own ROM folder, beside its settings. Created on demand: a
 		//fresh install has no Roms folder, and a root that does not answer would
