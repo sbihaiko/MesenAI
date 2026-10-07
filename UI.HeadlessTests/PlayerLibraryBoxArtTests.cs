@@ -111,7 +111,7 @@ public class PlayerLibraryBoxArtTests : IDisposable
 
 	//The first-run home, up and focused, with the library scan running in the
 	//Open() turn so the grid is complete before a case asserts anything about it.
-	private (MainWindow Window, MainWindowViewModel Model) ShowFirstRunHome()
+	private (MainWindow Window, MainWindowViewModel Model) ShowFirstRunHome(bool inlineScan = true)
 	{
 		PreferencesConfig prefs = ConfigManager.Config.Preferences;
 		prefs.UiMode = UiMode.Player;
@@ -128,7 +128,7 @@ public class PlayerLibraryBoxArtTests : IDisposable
 		MainWindowViewModel model = Assert.IsType<MainWindowViewModel>(window.DataContext);
 		WaitFor(() => model.MainMenu.HelpMenuItems.Count > 0, "MainWindow never finished building its menus.");
 
-		model.RomPicker.RunLibraryScanInline = true;
+		model.RomPicker.RunLibraryScanInline = inlineScan;
 		model.RecentGames.Init(GameScreenMode.RecentGames);
 		Pump();
 		Assert.True(model.RecentGames.ShowFirstRunHome, "the home is not the first-run one, so this case would prove nothing");
@@ -357,6 +357,55 @@ public class PlayerLibraryBoxArtTests : IDisposable
 		lock(asked) {
 			return asked.ToArray();
 		}
+	}
+
+	//#1039, the path the app ships: the scan runs on a worker and its answer is
+	//posted to the UI thread, so the sheet lays out EMPTY and the tiles land
+	//afterwards. Nothing about the grid's size or the scroll offset changes then, so
+	//the covers have to be asked for again when the tiles arrive.
+	[AvaloniaFact]
+	public void A_scan_that_lands_after_the_sheet_is_up_still_draws_its_covers()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		LibraryRoot();
+		string rom = RomPath("Game 00 (USA).nes");
+		SeedBoxArt(rom);
+		SeedBoxArt(RomPath("Game 01 (USA).nes"));
+		SeedBoxArt(RomPath("Game 02 (USA).nes"));
+
+		RecordingSender sender = new();
+		(MainWindow window, MainWindowViewModel model) = ShowFirstRunHome(inlineScan: false);
+		model.RomPicker.BoxArtCoverSource = Chain(sender, _ => new NoIntroRomName(RomConsole.Nes, "Game 00 (USA)")).GetCover;
+
+		OpenLibrary(window, model);
+
+		//Pad focus rests on the first tile and asks about it on its own, so the tile
+		//that proves the visible ask is one the focus never reached.
+		PlayerLibraryTile last = TileFor(model, "Game 02 (USA).nes");
+		WaitFor(() => last.HasArt, "the cover never reached a tile that landed after the sheet was up");
+	}
+
+	//#1039: every search keystroke rebuilds the grid, which releases the art on it;
+	//the tiles still on screen have to get their covers back.
+	[AvaloniaFact]
+	public void A_search_brings_the_covers_of_the_tiles_it_keeps_back()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		LibraryRoot();
+		string rom = RomPath("Game 00 (USA).nes");
+		SeedBoxArt(rom);
+
+		RecordingSender sender = new();
+		(MainWindow window, MainWindowViewModel model) = ShowFirstRunHome();
+		model.RomPicker.BoxArtCoverSource = Chain(sender, sha1 => string.Equals(sha1, Sha1(rom), StringComparison.OrdinalIgnoreCase) ? new NoIntroRomName(RomConsole.Nes, "Game 00 (USA)") : null).GetCover;
+		OpenLibrary(window, model);
+		WaitFor(() => TileFor(model, "Game 00 (USA).nes").HasArt, "the cover never arrived before the search");
+
+		model.RomPicker.SearchQuery = "Game 00";
+		Pump();
+		Assert.Single(model.RomPicker.Tiles);
+
+		WaitFor(() => TileFor(model, "Game 00 (USA).nes").HasArt, "the search left the on-screen cover generic");
 	}
 
 	//ADR-0265 section 8: with the switch off the cache makes NO request - not a

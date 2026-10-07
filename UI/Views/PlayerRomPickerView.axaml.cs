@@ -3,9 +3,12 @@ using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.Markup.Xaml;
+using Avalonia.Threading;
 using Avalonia.VisualTree;
 using Mesen.ViewModels;
+using System;
 using System.Collections.Generic;
+using System.Collections.Specialized;
 
 namespace Mesen.Views
 {
@@ -53,9 +56,46 @@ namespace Mesen.Views
 		//The ring is the second way in: the pad moves the real focus (ADR-0256 Decision
 		//3), and OnTileFocus below asks about whatever it reaches, in case a tile is
 		//reached before its layout has settled.
-		private void OnGridShowing(object? sender, EffectiveViewportChangedEventArgs e)
+		private void OnGridShowing(object? sender, EffectiveViewportChangedEventArgs e) => AskShowing();
+
+		//The viewport event stays silent when the grid itself changes under an
+		//unchanged ScrollViewer (the scan landing after the sheet laid out empty, a
+		//search rebuilding the tiles), so a change of the tiles asks again, posted
+		//at Render priority so the containers exist and are measured by then.
+		private PlayerRomPickerViewModel? _watched;
+		private bool _askPosted;
+
+		protected override void OnDataContextChanged(EventArgs e)
 		{
-			if(sender is not ItemsControl grid || Model is not { } model) {
+			base.OnDataContextChanged(e);
+			if(_watched != null) {
+				_watched.Tiles.CollectionChanged -= OnTilesChanged;
+			}
+			_watched = Model;
+			if(_watched != null) {
+				_watched.Tiles.CollectionChanged += OnTilesChanged;
+			}
+		}
+
+		private void OnTilesChanged(object? sender, NotifyCollectionChangedEventArgs e) => PostAskShowing();
+
+		private void OnGridLayoutUpdated(object? sender, EventArgs e) => PostAskShowing();
+
+		private void PostAskShowing()
+		{
+			if(_askPosted) {
+				return;
+			}
+			_askPosted = true;
+			Dispatcher.UIThread.Post(() => {
+				_askPosted = false;
+				AskShowing();
+			}, DispatcherPriority.Render);
+		}
+
+		private void AskShowing()
+		{
+			if(this.FindControl<ItemsControl>("RomPickerGrid") is not { } grid || Model is not { } model) {
 				return;
 			}
 			if(grid.FindAncestorOfType<ScrollViewer>() is not { } sheet) {

@@ -20,8 +20,13 @@ namespace Mesen.ViewModels
 		//nothing here spells those.
 		public static string BoxArtFolder => Path.Combine(ConfigManager.HomeFolder, "BoxArt");
 
-		private static BoxArtCache? _boxArtCache;
-		private static RomHashCache? _romHashes;
+		//Built on first use and thread-safe (BoxArtSession): the first screenful asks
+		//from worker threads all at once.
+		private static readonly BoxArtSession _session = new(
+			() => new BoxArtCache(BoxArtFetcher.Send, BoxArtFolder, new BoxArtCacheOptions {
+				DownloadEnabled = () => ConfigManager.Config.Preferences.DownloadBoxArt
+			}),
+			() => new RomHashCache(Path.Combine(BoxArtFolder, "hashes")));
 
 		//One tile's cover, or null when there is none to draw. Called by the sheet
 		//off the UI thread, once per tile it is showing (ADR-0265 section 4).
@@ -44,11 +49,9 @@ namespace Mesen.ViewModels
 		//The switch's own meaning is the cache's: off is no request at all, not a
 		//quieter one, and a cover already on the player's disk is still served,
 		//because reading their disk is not a request (ADR-0265 section 8).
-		private static BoxArtCache Cache() => _boxArtCache ??= new BoxArtCache(BoxArtFetcher.Send, BoxArtFolder, new BoxArtCacheOptions {
-			DownloadEnabled = () => ConfigManager.Config.Preferences.DownloadBoxArt
-		});
+		private static BoxArtCache Cache() => _session.Cache;
 
-		private static RomHashCache Hashes() => _romHashes ??= new RomHashCache(Path.Combine(BoxArtFolder, "hashes"));
+		private static RomHashCache Hashes() => _session.Hashes;
 
 		//The SHA1 -> No-Intro name table (#1038/#1041), read from the artifact the
 		//app's own assembly ships and kept after the first use

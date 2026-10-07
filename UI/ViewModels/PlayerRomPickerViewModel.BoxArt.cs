@@ -65,8 +65,8 @@ namespace Mesen.ViewModels
 		private void TilesReplaced(object? sender, NotifyCollectionChangedEventArgs e)
 		{
 			if(e.Action == NotifyCollectionChangedAction.Reset) {
+				CancelCovers();
 				ReleaseCovers();
-				_coversAsked.Clear();
 			}
 		}
 
@@ -143,25 +143,6 @@ namespace Mesen.ViewModels
 			});
 		}
 
-		//The sheet closed. Nothing of this open is worth finishing: the tiles are
-		//about to be out of sight, and a request that is no longer drawn is exactly
-		//the kind ADR-0265 section 7 says must not be remembered as a miss.
-		partial void OnIsVisibleChanged(bool value)
-		{
-			if(!value) {
-				CancelCovers();
-			}
-		}
-
-		//A second grid replaces the first (another scan, another open): the covers
-		//of the first belong to tiles nobody will see again.
-		partial void OnModeChanged(RomPickerMode value)
-		{
-			if(value != RomPickerMode.Library) {
-				CancelCovers();
-			}
-		}
-
 		private void CancelCovers()
 		{
 			_coverLifetime?.Cancel();
@@ -189,10 +170,8 @@ namespace Mesen.ViewModels
 	//this slice's: it arrives as the entry's own `Cover` and needs no change here -
 	//the downloaded art simply outranks it, and a tile with no art keeps whatever
 	//the scan gave it.)
-	public partial class PlayerLibraryTile : INotifyPropertyChanged
+	public partial class PlayerLibraryTile
 	{
-		public event PropertyChangedEventHandler? PropertyChanged;
-
 		private IImage? _art;
 		private BoxArtCoverKind? _downloaded;
 
@@ -259,7 +238,7 @@ namespace Mesen.ViewModels
 		private void Raise(params string[] names)
 		{
 			foreach(string name in names) {
-				PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+				OnPropertyChanged(name);
 			}
 		}
 	}

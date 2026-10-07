@@ -117,6 +117,7 @@ namespace Mesen.ViewModels
 		{
 			if(!value) {
 				StopCanonicalTitles();
+				CancelCovers();
 			}
 		}
 
@@ -132,6 +133,7 @@ namespace Mesen.ViewModels
 		{
 			if(value != RomPickerMode.Library) {
 				StopCanonicalTitles();
+				CancelCovers();
 			}
 		}
 
