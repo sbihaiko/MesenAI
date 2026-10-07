@@ -71,8 +71,17 @@ EXPECTED_WIREFRAME_RENDERS = (
     "W-S1",
     "W-P1", "W-P2", "W-P3", "W-P4", "W-P5", "W-P6", "W-P7", "W-P8", "W-P8b",
     "W-P8c", "W-P9", "W-P10", "W-P11", "W-P12", "W-P13", "W-P13-confirm",
-    "W-P14", "W-P15", "W-P15-pill", "W-P16", "W-P19", "W-P19b",
+    "W-P14", "W-P15", "W-P15-pill", "W-P16",
 )
+
+# Wireframes drawn into docs/media/gui-redesign/ whose render case has not
+# landed yet, so the docs side of the check below can hold them without the run
+# side demanding a render no case writes. ADR-0264 Decision 12 draws W-P19 and
+# W-P19b with scripts/render_gui_wireframes.py *before* the sheet they picture
+# exists, and PRD row L.1 (#1032) is the ticket that builds it and moves them up
+# into EXPECTED_WIREFRAME_RENDERS. Pinned like that set is: a wireframe drawn
+# without an entry in one of the two still fails.
+WIREFRAMES_AWAITING_RENDER_CASE = ("W-P19", "W-P19b")
 
 # A PNG may predate the TRX's start by this much (filesystem/clock rounding).
 FRESHNESS_SLACK_SECONDS = 2.0

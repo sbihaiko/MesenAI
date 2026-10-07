@@ -182,9 +182,12 @@ def main() -> int:
     else:
         print(f"ok   [pinned W-P set holds every committed baseline ({len(pinned)} renders)]")
     # #1010: every Player wireframe has a render case, so the gate compares it.
+    # A wireframe ADR-0264 Decision 12 draws before its surface exists is held
+    # in WIREFRAMES_AWAITING_RENDER_CASE instead, which is pinned the same way.
     drawn = {p.stem for p in (REPO_ROOT / "docs" / "media" / "gui-redesign").glob("W-P*.png")} | {"W-S1"}
-    if not drawn <= pinned:
-        print(f"FAIL [pinned wireframe set]: {sorted(drawn - pinned)} drawn in docs/media/gui-redesign but not expected")
+    expectable = pinned | set(check.WIREFRAMES_AWAITING_RENDER_CASE)
+    if not drawn <= expectable:
+        print(f"FAIL [pinned wireframe set]: {sorted(drawn - expectable)} drawn in docs/media/gui-redesign but not expected")
         failures += 1
     else:
         print(f"ok   [pinned set holds every Player wireframe ({len(drawn)} drawn)]")
