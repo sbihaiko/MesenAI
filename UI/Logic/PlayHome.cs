@@ -63,23 +63,7 @@ public static class PlayHome
 			}
 			using FileStream fs = new(recentGameFile, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
 			using ZipArchive zip = new(fs, ZipArchiveMode.Read);
-			ZipArchiveEntry? entry = zip.GetEntry("Screenshot.png");
-			if(entry == null) {
-				return null;
-			}
-			//A user-placed file can claim any size: read at most MaxScreenshotBytes
-			//decompressed, whatever the entry declares, and keep the placeholder past it.
-			using Stream stream = entry.Open();
-			using MemoryStream copy = new();
-			byte[] buffer = new byte[81920];
-			int read;
-			while((read = stream.Read(buffer, 0, buffer.Length)) > 0) {
-				if(copy.Length + read > MaxScreenshotBytes) {
-					return null;
-				}
-				copy.Write(buffer, 0, read);
-			}
-			return copy.ToArray();
+			return ReadScreenshot(zip);
 		} catch(IOException) {
 			return null;
 		} catch(InvalidDataException) {
@@ -87,6 +71,33 @@ public static class PlayHome
 		} catch(UnauthorizedAccessException) {
 			return null;
 		}
+	}
+
+	//The same read over an archive the caller has already opened: RecentCoverIndex
+	//has its own reason to open the `.rgd` once (it takes the ROM path and this
+	//screenshot out of one read, so a namesake overwrite cannot land between
+	//them), and the cap lives here alone so both callers read it the same way.
+	//Throws what the archive itself throws, so a caller outside this file keeps
+	//its own null-instead-of-throw rule - the path overload above does.
+	public static byte[]? ReadScreenshot(ZipArchive zip)
+	{
+		ZipArchiveEntry? entry = zip.GetEntry("Screenshot.png");
+		if(entry == null) {
+			return null;
+		}
+		//A user-placed file can claim any size: read at most MaxScreenshotBytes
+		//decompressed, whatever the entry declares, and keep the placeholder past it.
+		using Stream stream = entry.Open();
+		using MemoryStream copy = new();
+		byte[] buffer = new byte[81920];
+		int read;
+		while((read = stream.Read(buffer, 0, buffer.Length)) > 0) {
+			if(copy.Length + read > MaxScreenshotBytes) {
+				return null;
+			}
+			copy.Write(buffer, 0, read);
+		}
+		return copy.ToArray();
 	}
 
 	//Beyond this many days the subtitle names the date instead of a count.

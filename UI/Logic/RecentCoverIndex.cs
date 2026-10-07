@@ -145,7 +145,7 @@ public sealed class RecentCoverIndex
 		try {
 			using FileStream fs = new(recentFile, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
 			using ZipArchive zip = new(fs, ZipArchiveMode.Read);
-			return (RomPathIn(zip), ReadScreenshot(zip));
+			return (RomPathIn(zip), PlayHome.ReadScreenshot(zip));
 		} catch(IOException) {
 			return (null, null);
 		} catch(InvalidDataException) {
@@ -168,27 +168,6 @@ public sealed class RecentCoverIndex
 		using Stream stream = entry.Open();
 		using StreamReader reader = new(stream);
 		return PlayRecentGameFailure.ParseRomInfo(reader.ReadToEnd())?.Path;
-	}
-
-	//Screenshot.png of the same open entry, capped the way PlayHome caps a
-	//user-placed file: an entry that claims more than the limit is no cover at all.
-	private static byte[]? ReadScreenshot(ZipArchive zip)
-	{
-		ZipArchiveEntry? entry = zip.GetEntry("Screenshot.png");
-		if(entry == null) {
-			return null;
-		}
-		using Stream stream = entry.Open();
-		using MemoryStream copy = new();
-		byte[] buffer = new byte[81920];
-		int read;
-		while((read = stream.Read(buffer, 0, buffer.Length)) > 0) {
-			if(copy.Length + read > PlayHome.MaxScreenshotBytes) {
-				return null;
-			}
-			copy.Write(buffer, 0, read);
-		}
-		return copy.ToArray();
 	}
 
 	//When the `.rgd` was last written, or DateTime.MinValue when the filesystem
