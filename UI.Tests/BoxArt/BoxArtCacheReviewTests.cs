@@ -39,6 +39,21 @@ namespace Mesen.Tests.BoxArt
 
 		private string ConsoleFolder => Path.Combine(_cache.FullName, "nes");
 
+		//The permit comes back on a thread-pool continuation and the download the tile
+		//joined ends on its own task, so the test asks the way a tile would - again,
+		//bounded - rather than assuming either has already happened.
+		private static async Task<BoxArtCover?> Eventually(BoxArtCache cache, string sha1)
+		{
+			for(int attempt = 0; attempt < 20; attempt++) {
+				BoxArtCover? cover = await cache.GetCover(BoxArtConsole.Nes, sha1, Name);
+				if(cover != null) {
+					return cover;
+				}
+				await Task.Delay(100);
+			}
+			return null;
+		}
+
 		//ADR-0265 section 9, "offline is not a wait": the deadline covers the queue.
 		//A tile waiting behind MaxConcurrentRequests is holding no socket - it has not
 		//sent anything - so the only bound on it is the one the call itself carries.
@@ -95,7 +110,7 @@ namespace Mesen.Tests.BoxArt
 				return BoxArtHttpResponse.Ok(FakeImages.Png());
 			});
 
-			BoxArtCache cache = Cache(sender, new BoxArtCacheOptions { RequestTimeout = TimeSpan.FromMilliseconds(150) });
+			BoxArtCache cache = Cache(sender, new BoxArtCacheOptions { RequestTimeout = TimeSpan.FromMilliseconds(500) });
 
 			Stopwatch watch = Stopwatch.StartNew();
 			Task<BoxArtCover?> cover = cache.GetCover(BoxArtConsole.Nes, Sha1, Name);
@@ -104,13 +119,162 @@ namespace Mesen.Tests.BoxArt
 
 			Assert.Same(cover, finished);
 			Assert.Null(await cover);
-			//Bounded by the two timeouts - box art, then the title screen - and not by
-			//the transport.
-			Assert.True(watch.Elapsed < TimeSpan.FromSeconds(5), $"the call took {watch.Elapsed}");
+			//Bounded by the two deadlines - box art, then the title screen - and not by
+			//the transport: the call is over in about two RequestTimeouts, and the bound
+			//is half again that for a loaded machine rather than the five-second
+			//watchdog, which a regression to a doubled per-attempt wait would still
+			//slip under.
+			Assert.True(
+				watch.Elapsed < TimeSpan.FromMilliseconds(1500),
+				$"the call took {watch.Elapsed} for a {TimeSpan.FromMilliseconds(500)} timeout");
 			//A request nobody answered is not evidence about the game.
 			Assert.False(File.Exists(Path.Combine(ConsoleFolder, Sha1 + ".miss")));
 
 			gate.TrySetResult();
+		}
+
+		//ADR-0265 section 4, "at most 4 in flight": the ceiling counts requests, not
+		//the calls that asked for them. A transport that ignores its token is still
+		//reading after the tile that asked gave up, and the permit it holds is the
+		//ceiling's - handing it back when the call answers would let a library
+		//scrolled quickly run as many senders at once as it has tiles.
+		[Fact]
+		public async Task A_sender_that_ignores_its_cancellation_token_keeps_its_permit_until_it_finishes()
+		{
+			TaskCompletionSource gate = new(TaskCreationOptions.RunContinuationsAsynchronously);
+			TaskCompletionSource started = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+			//A transport that answers only when the test says so and ignores the token
+			//it was handed: the request outlives its own deadline.
+			FakeBoxArtSender sender = new(async (_, _, _) => {
+				started.TrySetResult();
+				await gate.Task;
+				return BoxArtHttpResponse.Ok(FakeImages.Png());
+			});
+
+			BoxArtCache cache = Cache(sender, new BoxArtCacheOptions {
+				MaxConcurrentRequests = 1,
+				RequestTimeout = TimeSpan.FromMilliseconds(200)
+			});
+
+			//The first tile gives up on its deadline and answers its generic cover while
+			//the transport is still reading: the call is over, the request is not.
+			Assert.Null(await cache.GetCover(BoxArtConsole.Nes, Sha1, Name));
+			await started.Task;
+
+			int asked = sender.RequestCount;
+			Assert.Equal(1, asked);
+
+			//A second tile asks for another game while that request is still open. The
+			//one permit belongs to the request that has not ended, so this tile must not
+			//send - whatever the call ahead of it decided to do about its deadline.
+			Assert.Null(await cache.GetCover(BoxArtConsole.Nes, OtherSha1, Name));
+			Assert.Equal(asked, sender.RequestCount);
+
+			//The request really ends, and only then is the permit back: the next tile
+			//reaches the collection and gets its cover.
+			gate.TrySetResult();
+
+			BoxArtCover? third = await Eventually(cache, OtherSha1);
+			Assert.NotNull(third);
+			Assert.Equal(asked + 1, sender.RequestCount);
+		}
+
+		//ADR-0265 section 9 on the shared download: the token it runs on is the
+		//download's own, not the token of whichever tile happened to start it. A tile
+		//that walks away - the sheet closed, the tile scrolled off - cancels its own
+		//wait and nothing else, so the tile that is still there still gets its cover.
+		[Fact]
+		public async Task A_tile_that_gives_up_does_not_cancel_the_download_a_joiner_is_waiting_on()
+		{
+			TaskCompletionSource boxartStarted = new(TaskCreationOptions.RunContinuationsAsynchronously);
+			TaskCompletionSource gate = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+			//A transport that honours the token it is handed, the way the shipped
+			//adapter must: stamped with the first tile's cancellation, this read ends
+			//with it and the joiner is left with nothing.
+			FakeBoxArtSender sender = new(async (url, _, cancellationToken) => {
+				boxartStarted.TrySetResult();
+				await gate.Task.WaitAsync(cancellationToken);
+				return url.AbsolutePath.Contains("/Named_Boxarts/", StringComparison.Ordinal)
+					? BoxArtHttpResponse.Ok(FakeImages.Png())
+					: BoxArtHttpResponse.NotFound();
+			});
+
+			BoxArtCache cache = Cache(sender);
+
+			using CancellationTokenSource owner = new();
+			Task<BoxArtCover?> first = cache.GetCover(BoxArtConsole.Nes, Sha1, Name, owner.Token);
+			await boxartStarted.Task;
+
+			//The second tile of the same ROM joins while the first tile's request is
+			//open, and it brought no cancellation of its own.
+			Task<BoxArtCover?> second = cache.GetCover(BoxArtConsole.Nes, Sha1, Name);
+
+			//The tile that started the download goes away, and the download it started
+			//is the joiner's too.
+			owner.Cancel();
+			gate.SetResult();
+
+			//The tile that walked away asks for nothing and cancels only its own wait.
+			Assert.Null(await first);
+			//The tile that is still there gets its cover.
+			Assert.NotNull(await second);
+			//One ROM is one download, whoever is left waiting for it.
+			Assert.Equal(1, sender.RequestCount);
+			Assert.Equal(
+				new[] { Path.Combine(ConsoleFolder, Sha1 + ".boxart.png") },
+				Directory.GetFiles(ConsoleFolder));
+		}
+
+		//The other half of the same rule: a tile waits for the whole download, not for
+		//the request that happens to be in flight when it arrives. The cover may come
+		//from the collection's second answer - the title screen - after the box art has
+		//missed, and a joiner's deadline is the download's budget rather than one
+		//request's.
+		[Fact]
+		public async Task A_joiner_whose_cover_comes_from_the_title_fallback_still_gets_it()
+		{
+			TaskCompletionSource boxartStarted = new(TaskCreationOptions.RunContinuationsAsynchronously);
+			TaskCompletionSource boxartGate = new(TaskCreationOptions.RunContinuationsAsynchronously);
+			TaskCompletionSource titleGate = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+			//No box art for this game and a title screen: the picture arrives with the
+			//second of the download's two requests.
+			FakeBoxArtSender sender = new(async (url, _, cancellationToken) => {
+				if(url.AbsolutePath.Contains("/Named_Boxarts/", StringComparison.Ordinal)) {
+					boxartStarted.TrySetResult();
+					await boxartGate.Task.WaitAsync(cancellationToken);
+					return BoxArtHttpResponse.NotFound();
+				}
+				await titleGate.Task.WaitAsync(cancellationToken);
+				return BoxArtHttpResponse.Ok(FakeImages.Jpeg());
+			});
+
+			BoxArtCache cache = Cache(sender, new BoxArtCacheOptions { RequestTimeout = TimeSpan.FromSeconds(2) });
+
+			Task<BoxArtCover?> owner = cache.GetCover(BoxArtConsole.Nes, Sha1, Name);
+			await boxartStarted.Task;
+
+			//The second tile joins while the box art request is still open, so what it is
+			//waiting for is the download and not that first request.
+			Task<BoxArtCover?> joiner = cache.GetCover(BoxArtConsole.Nes, Sha1, Name);
+
+			await Task.Delay(800);
+			boxartGate.SetResult();
+			//Past the joiner's own single-request deadline, and inside the download's:
+			//one RequestTimeout is not enough to wait for two requests.
+			await Task.Delay(1600);
+			titleGate.SetResult();
+
+			Assert.Same(joiner, await Task.WhenAny(joiner, Task.Delay(TimeSpan.FromSeconds(5))));
+			BoxArtCover? cover = await joiner;
+			Assert.NotNull(cover);
+			Assert.Equal(BoxArtCoverKind.Title, cover!.Kind);
+			Assert.NotNull(await owner);
+			//Two requests for one ROM: the box art that missed and the title screen that
+			//answered. A joiner that opened a download of its own would be four.
+			Assert.Equal(2, sender.RequestCount);
 		}
 
 		//The key is the ROM's identity (ADR-0265 section 3), and the table spells it

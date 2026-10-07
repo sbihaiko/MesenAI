@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -47,7 +48,14 @@ namespace Mesen.Logic
 		private readonly string _cacheDirectory;
 		private readonly BoxArtCacheOptions _options;
 		private readonly SemaphoreSlim _inFlight;
-		private readonly ConcurrentDictionary<string, Task<BoxArtAttempt>> _downloads = new();
+		private readonly ConcurrentDictionary<string, SharedDownload> _downloads = new();
+
+		//How long a tile may wait on a download it shares with other tiles. A download
+		//is up to two requests - the box art, then the title screen - so the budget is
+		//two request timeouts; the grace on top is scheduling, since the two
+		//per-request deadlines are the real bound and this one must not fire a hair
+		//before the second of them has had its say.
+		private readonly TimeSpan _downloadBudget;
 
 		public BoxArtCache(BoxArtHttpSender sender, string cacheDirectory, BoxArtCacheOptions? options = null)
 		{
@@ -57,6 +65,7 @@ namespace Mesen.Logic
 				: cacheDirectory;
 			_options = options ?? new BoxArtCacheOptions();
 			_inFlight = new SemaphoreSlim(Math.Max(1, _options.MaxConcurrentRequests));
+			_downloadBudget = _options.RequestTimeout * 2 + TimeSpan.FromMilliseconds(250);
 		}
 
 		//The cache directory this instance writes to - the app-support folder the
@@ -125,42 +134,126 @@ namespace Mesen.Logic
 		//as "the collection has no art" and records a miss for a cover that is on disk.
 		//The second tile joins the first tile's request instead, so both answer the
 		//same thing and the collection is asked once.
+		//
+		//The download belongs to the game, not to the tile that started it: it runs on
+		//a token of its own, cancelled only once the last tile waiting for it has left,
+		//and every tile - the one that started it included - waits for the answer under
+		//its own cancellation and its own deadline. A sheet that closes on one tile is
+		//not a reason for the cover another tile is still waiting for to be cancelled
+		//mid-read, and a tile whose box art has already been written to the cache
+		//answers from the disk before any of this.
 		private async Task<BoxArtAttempt> DownloadOnce(string consoleTag, string sha1, BoxArtConsole console, string noIntroName, string folder, CancellationToken cancellationToken)
 		{
 			string key = $"{consoleTag}/{sha1}";
 			while(true) {
-				if(_downloads.TryGetValue(key, out Task<BoxArtAttempt>? running)) {
-					//The join carries the same deadline as the request it joined: a tile
-					//that arrives late still falls back to its generic cover within
-					//RequestTimeout (ADR-0265 section 9) rather than waiting out somebody
-					//else's download, and a caller that walked away while waiting is a
-					//null like every other cancellation.
-					try {
-						return await running.WaitAsync(_options.RequestTimeout, cancellationToken).ConfigureAwait(false);
-					} catch(Exception) {
-						return new BoxArtAttempt(null, false);
+				SharedDownload shared;
+				if(_downloads.TryGetValue(key, out SharedDownload? running)) {
+					if(!running.TryJoin()) {
+						//Every tile that was waiting for this download has left, and with
+						//them the token it runs on: waiting on it would answer a cover
+						//that is still on its way with a null. Its place in the table goes
+						//away and this tile starts a fresh download.
+						_downloads.TryRemove(new KeyValuePair<string, SharedDownload>(key, running));
+						continue;
 					}
-				}
-
-				TaskCompletionSource<BoxArtAttempt> mine = new(TaskCreationOptions.RunContinuationsAsynchronously);
-				if(!_downloads.TryAdd(key, mine.Task)) {
-					//Another tile added the entry between the read and the write: take
-					//the turn again and join it.
-					continue;
+					shared = running;
+				} else {
+					SharedDownload mine = new();
+					if(!_downloads.TryAdd(key, mine)) {
+						//Another tile published its download between the read and the
+						//write: take the turn again and join that one.
+						continue;
+					}
+					//Started only once the entry is in the table, so a tile that arrives
+					//while the download is being set up joins it rather than opening a
+					//second one beside it.
+					mine.Start(() => Download(console, sha1, noIntroName, folder, mine.Lifetime.Token));
+					if(!mine.TryJoin()) {
+						//A tile that had already joined left before this one could, taking
+						//the download with it: the next turn starts a fresh one.
+						_downloads.TryRemove(new KeyValuePair<string, SharedDownload>(key, mine));
+						continue;
+					}
+					shared = mine;
 				}
 
 				try {
-					BoxArtAttempt attempt = await Download(console, sha1, noIntroName, folder, cancellationToken).ConfigureAwait(false);
-					mine.SetResult(attempt);
-					return attempt;
-				} catch {
-					//Download answers for everything a network and a disk can do, so this
-					//cannot be reached from those - but a joined tile must never be left
-					//waiting on a task that never completes.
-					mine.SetResult(new BoxArtAttempt(null, false));
-					throw;
+					//The wait is the tile's own: its cancellation ends this tile's wait
+					//and nothing else, and the deadline covers the whole download (box
+					//art, then the title screen) rather than one of the two requests.
+					return await shared.Attempt.WaitAsync(_downloadBudget, cancellationToken).ConfigureAwait(false);
+				} catch(Exception) {
+					//A tile that gave up on the wait answers its generic cover and records
+					//nothing: it never saw the collection answer.
+					return new BoxArtAttempt(null, false);
 				} finally {
-					_downloads.TryRemove(key, out _);
+					if(shared.Leave()) {
+						//The last tile waiting has left, so nobody is left for this
+						//download to answer: its token ends the request the transport may
+						//still be reading, and its place in the table is freed.
+						shared.Lifetime.Cancel();
+						_downloads.TryRemove(new KeyValuePair<string, SharedDownload>(key, shared));
+					}
+				}
+			}
+		}
+
+		//One download, shared by every tile that asked for it while it runs. The
+		//lifetime is the download's own - not the token of whichever tile started it -
+		//and the waiters are counted so that it is cancelled exactly when the last of
+		//them has left: a tile that walks away cancels its own wait, and a download
+		//nobody is waiting for any more stops reading.
+		private sealed class SharedDownload
+		{
+			private readonly TaskCompletionSource<BoxArtAttempt> _attempt = new(TaskCreationOptions.RunContinuationsAsynchronously);
+			private readonly object _gate = new();
+			private int _waiters;
+			private bool _abandoned;
+
+			//The token the download runs on.
+			public CancellationTokenSource Lifetime { get; } = new();
+
+			//The answer, for every tile that joined. Completed once, whatever happens to
+			//the download: a joined tile is never left waiting on a task that never ends.
+			public Task<BoxArtAttempt> Attempt => _attempt.Task;
+
+			public void Start(Func<Task<BoxArtAttempt>> download) => _ = Run(download);
+
+			private async Task Run(Func<Task<BoxArtAttempt>> download)
+			{
+				try {
+					_attempt.TrySetResult(await download().ConfigureAwait(false));
+				} catch(Exception) {
+					//Download answers for everything a network and a disk can do, so this
+					//cannot be reached from those - but a joined tile must still be
+					//answered rather than left on a task that never completes.
+					_attempt.TrySetResult(new BoxArtAttempt(null, false));
+				}
+			}
+
+			//False when the download was already given up on by every tile that was
+			//waiting: its token is cancelled, so the caller starts a fresh download
+			//instead of waiting on this one.
+			public bool TryJoin()
+			{
+				lock(_gate) {
+					if(_abandoned) {
+						return false;
+					}
+					_waiters++;
+					return true;
+				}
+			}
+
+			//True for the tile that leaves last, which is the one that ends the download.
+			public bool Leave()
+			{
+				lock(_gate) {
+					if(--_waiters > 0) {
+						return false;
+					}
+					_abandoned = true;
+					return true;
 				}
 			}
 		}
@@ -221,17 +314,27 @@ namespace Mesen.Logic
 			//OperationCanceledException thrown by the wait itself would reach the
 			//sheet. Waiting for a turn is part of the call that never throws.
 			bool acquired = false;
+			CancellationTokenSource? deadline = null;
+			Task<BoxArtHttpResponse>? request = null;
 			try {
 				//The deadline is created before the wait, not after it, because the
 				//wait is part of the call: a tile queued behind the ceiling is holding
 				//nothing but a place in line, and it must fall back to its generic
 				//cover within RequestTimeout rather than inherit whichever request
-				//ahead of it happens to end. The timer starts with the queueing.
-				using CancellationTokenSource timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-				timeout.CancelAfter(_options.RequestTimeout);
+				//ahead of it happens to end. The timer starts with the queueing, and
+				//the request that follows it spends what is left of the same deadline
+				//rather than getting a fresh one on top of the wait.
+				deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+				deadline.CancelAfter(_options.RequestTimeout);
 
-				await _inFlight.WaitAsync(timeout.Token).ConfigureAwait(false);
+				await _inFlight.WaitAsync(deadline.Token).ConfigureAwait(false);
 				acquired = true;
+
+				//Nothing is sent once the deadline has run out while queueing: a tile
+				//that spent all of it in line has none left for the collection.
+				if(deadline.IsCancellationRequested) {
+					return (null, false);
+				}
 
 				//The cap travels with the request: the adapter stops reading at it, and
 				//what comes back longer than the cap is its own overflow, which the
@@ -240,10 +343,11 @@ namespace Mesen.Logic
 				//The deadline is enforced here as well, and not only through the token
 				//the sender was handed: honouring that token is the adapter's side of
 				//the delegate's contract, and a bug on that side would otherwise become
-				//a library that never draws. The tile gives up on the task either way.
-				BoxArtHttpResponse response = await _sender(url, _options.MaxImageBytes, timeout.Token)
-					.WaitAsync(_options.RequestTimeout, cancellationToken)
-					.ConfigureAwait(false);
+				//a library that never draws. The tile gives up on the task either way -
+				//which says nothing about the task, and is why the permit is not given
+				//back here.
+				request = _sender(url, _options.MaxImageBytes, deadline.Token);
+				BoxArtHttpResponse response = await request.WaitAsync(deadline.Token).ConfigureAwait(false);
 				if(response.StatusCode != 200 || response.Body.Length > _options.MaxImageBytes) {
 					return (null, true);
 				}
@@ -255,8 +359,38 @@ namespace Mesen.Logic
 				//answers null while recording nothing.
 				return (null, false);
 			} finally {
-				if(acquired) {
-					_inFlight.Release();
+				if(request != null) {
+					//The permit belongs to the request and not to this call: ADR-0265
+					//section 4 counts requests in flight, and this one is in flight until
+					//the transport task ends - however long that is, and whatever this
+					//call decided about its own deadline. Giving it back now would let a
+					//transport that ignores its token hand the ceiling a second, a third
+					//and a forth request that all run beside the first. The deadline
+					//travels with it too: it is the sender's turn to be finished with
+					//before either is handed back.
+					Task<BoxArtHttpResponse> finished = request;
+					_ = finished.ContinueWith(
+						static (task, state) => {
+							(CancellationTokenSource deadline, SemaphoreSlim inFlight) = ((CancellationTokenSource, SemaphoreSlim))state!;
+							//A request that was abandoned and then failed has nobody left
+							//to await it; observing the exception here keeps it from
+							//surfacing as an unobserved task failure.
+							if(task.IsFaulted) {
+								_ = task.Exception;
+							}
+							deadline.Dispose();
+							inFlight.Release();
+						},
+						(deadline!, _inFlight),
+						TaskScheduler.Default);
+				} else {
+					//No request was ever sent - the transport threw before it handed back
+					//a task, or its turn never came - so the permit, if this call took
+					//one, is this call's to give back.
+					deadline?.Dispose();
+					if(acquired) {
+						_inFlight.Release();
+					}
 				}
 			}
 		}
