@@ -71,7 +71,7 @@ EXPECTED_WIREFRAME_RENDERS = (
     "W-S1",
     "W-P1", "W-P2", "W-P3", "W-P4", "W-P5", "W-P6", "W-P7", "W-P8", "W-P8b",
     "W-P8c", "W-P9", "W-P10", "W-P11", "W-P12", "W-P13", "W-P13-confirm",
-    "W-P14", "W-P15", "W-P15-pill", "W-P16",
+    "W-P14", "W-P15", "W-P15-pill", "W-P16", "W-P19", "W-P19b",
 )
 
 # A PNG may predate the TRX's start by this much (filesystem/clock rounding).
