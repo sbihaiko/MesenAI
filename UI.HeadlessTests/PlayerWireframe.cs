@@ -58,6 +58,7 @@ internal static class PlayerWireframe
 			new("resume button", new Rect(390, 168, 320, 32)),
 			new("grouped rows", new Rect(376, 230, 348, 250)),
 		},
+		["W-P15"] = new WireframeRegion[] { new("setup sheet", new Rect(320, 120, 460, 440)) },
 	};
 
 	public static bool IsPlayerWireframe(string name) => name.StartsWith("W-P", StringComparison.Ordinal) && File.Exists(PathOf(name));
