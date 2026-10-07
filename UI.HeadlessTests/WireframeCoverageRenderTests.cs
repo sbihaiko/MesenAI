@@ -40,13 +40,15 @@ public class WireframeCoverageRenderTests : IDisposable
 	private readonly int _hintsShown = ConfigManager.Config.Preferences.PlayMenuHintsShown;
 	private readonly bool _autoInstall = ConfigManager.Config.EnhancementPacks.AutoInstallCommunityPacks;
 	private readonly string _folder = Path.Combine(Path.GetTempPath(), "mesen-wireframes-" + Guid.NewGuid().ToString("N"));
-	private readonly List<string> _recents = new();
 
 	//The game is synthetic and named to match no catalog row, and the
 	//auto-install is off: a real install's pill must not race the one driven here.
 	public WireframeCoverageRenderTests()
 	{
 		Directory.CreateDirectory(_folder);
+		//#1017: the recents this class stamps live in its own folder.
+		ConfigManager.RecentGamesFolderOverride = Path.Combine(_folder, "RecentGames");
+		Directory.CreateDirectory(ConfigManager.RecentGamesFolderOverride);
 		ConfigManager.Config.EnhancementPacks.AutoInstallCommunityPacks = false;
 	}
 
@@ -64,10 +66,7 @@ public class WireframeCoverageRenderTests : IDisposable
 		prefs.PauseWhenInMenusAndConfig = _pauseInMenus;
 		prefs.PlayMenuHintsShown = _hintsShown;
 		ConfigManager.Config.EnhancementPacks.AutoInstallCommunityPacks = _autoInstall;
-		//Only the recent-game files this test wrote are removed.
-		foreach(string recent in _recents.Where(File.Exists)) {
-			File.Delete(recent);
-		}
+		ConfigManager.RecentGamesFolderOverride = null;
 		try {
 			Directory.Delete(_folder, true);
 		} catch(IOException) {
@@ -139,6 +138,16 @@ public class WireframeCoverageRenderTests : IDisposable
 		return sheet;
 	}
 
+	//#1017: W-S1 stamps .rgd files to order the Recents, so the folder it writes
+	//to must be this test's own, never the developer's real RecentGames.
+	[AvaloniaFact]
+	public void Recents_folder_is_not_the_developers_real_one()
+	{
+		string real = Path.Combine(ConfigManager.HomeFolder, "RecentGames");
+		Assert.NotEqual(real, ConfigManager.RecentGamesFolder);
+		Assert.StartsWith(_folder, ConfigManager.RecentGamesFolder);
+	}
+
 	//W-S1: the two controls at rest (the active profile, Tools ⋯) on the 52 px
 	//bar, the workspace content, and the read-only status sentence, drawn over
 	//the W-P2 home it frames.
@@ -149,10 +158,7 @@ public class WireframeCoverageRenderTests : IDisposable
 		DateTime written = DateTime.Now;
 		foreach(string game in new[] { "Contra (USA)", "Castlevania (USA)", "Metroid (USA)" }) {
 			string file = Path.Combine(ConfigManager.RecentGamesFolder, game + ".rgd");
-			if(!File.Exists(file)) {
-				File.WriteAllText(file, "");
-				_recents.Add(file);
-			}
+			File.WriteAllText(file, "");
 			File.SetLastWriteTime(file, written);
 			written = written.AddMinutes(-1);
 		}
