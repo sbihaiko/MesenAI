@@ -157,9 +157,15 @@ library.
     pack allow-list, and cached only on the player's machine.** With the
     master switch **Download box art** (Settings › System, default **on**,
     consistent with `AutoInstallCommunityPacks`) each *visible* tile fetches
-    its art once from the libretro-thumbnails collection, matched by the ROM's
-    No-Intro SHA1 per ADR-0003 — never by file name — from
-    `Named_Boxarts`, falling back to `Named_Titles`. The host is the GitHub raw
+    its art once from the libretro-thumbnails collection under
+    `Named_Boxarts`, falling back to `Named_Titles`. **The match is the ROM's
+    No-Intro SHA1, resolved to a name** (ADR-0003): the hash — never the ROM's
+    file name — is looked up in the **L.7 SHA1 → No-Intro name table (#1038)**,
+    and the collection's URL path is that name sanitised the way
+    libretro-thumbnails names its own files, the characters
+    `` & * / : ` < > ? \ | " `` each replaced by `_`. A ROM the table does not
+    know gets **no fetch at all**: there is no name to ask for, and the tile
+    falls straight to Decision 6's cover. The host is the GitHub raw
     host the pack allow-list already carries (ADR-0138 §41); this ADR is the
     record of that host being used for this second, outbound purpose. Fetches
     are lazy (visible tiles only), bounded in concurrency, HTTPS only, with a
