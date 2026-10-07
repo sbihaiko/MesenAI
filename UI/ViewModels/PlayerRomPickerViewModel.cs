@@ -48,7 +48,7 @@ namespace Mesen.ViewModels
 			Title = entry.Title;
 			Console = entry.Console;
 			ConsoleName = consoleName;
-			(Cover, ShowsTitleOnCover) = TileCover(entry, cover);
+			(Cover, ShowsTitleOnCover, CoverArt) = TileCover(entry, cover);
 		}
 
 		public string Path { get; }
@@ -346,7 +346,9 @@ namespace Mesen.ViewModels
 			CountText = "";
 			TruncatedText = "";
 			EmptyText = "";
-			Tiles.Clear();
+			//The grid is going: the pictures the previous visit decoded go back
+			//with it (#1035).
+			ClearTiles();
 			TilesRevision++;
 			//Nothing to browse, so the searching line belongs to no state: it is
 			//set below, by the scan that is actually about to run.
@@ -589,7 +591,6 @@ namespace Mesen.ViewModels
 				return;
 			}
 			LibraryScanResult result = payload.Result;
-			SearchingText = "";
 			//A scan that landed after the player left the library - a B press, a
 			//step into *Browse a file…* - belongs to no surface: the browser's
 			//own rows must not be replaced by a grid nobody is looking at, and
@@ -603,10 +604,10 @@ namespace Mesen.ViewModels
 			//#1060: a scan that answered no game is a named state that names the next
 			//step, not a blank grid. The rule is PlayRomPicker's; this is the lookup.
 			EmptyText = LibraryEmptyText(PlayRomPicker.LibraryEmptyMessageId(_folders.Count, result.Entries.Count));
-			Tiles.Clear();
+			ClearTiles();
 			for(int i = 0; i < result.Entries.Count; i++) {
 				LibraryEntry entry = result.Entries[i];
-				Tiles.Add(new PlayerLibraryTile(entry, ConsoleName(entry.Console), payload.Covers[i]));
+				Tiles.Add(TileFor(entry, payload.Covers[i]));
 			}
 			CountText = ResourceHelper.GetMessage("RomPickerLibraryCount",
 				CountLabel(result.Entries.Count, "RomPickerGameOne", "RomPickerGameMany"),
