@@ -510,6 +510,16 @@ public class ShareThemeRenderTests : IDisposable
 		Assert.Equal(new CornerRadius(10), panel.CornerRadius);
 		string[] tail = OperatingSystem.IsMacOS() ? new[] { "Help" } : new[] { "Settings…", "Help", "About MesenAI", "Quit MesenAI" };
 		Assert.Equal(new[] { "Reset", "Power Cycle", "Screenshot", "Fullscreen" }.Concat(tail).ToArray(), items.Select(i => LabelOf(i).Text!.Replace("_", "")).ToArray());
+		//#1007: with no game loaded, Reset, Power Cycle and Screenshot are there
+		//but greyed (the render's TEXT3 ink); Fullscreen prints its shortcut.
+		foreach(string name in new[] { "Reset", "Power Cycle", "Screenshot" }) {
+			MenuItem row = items.Single(m => LabelOf(m).Text!.Replace("_", "") == name);
+			Assert.False(row.IsEffectivelyEnabled, name + " is enabled with no game loaded");
+			Assert.Equal(Color.Parse("#A1A1A6"), PlayerRender.SolidColor(LabelOf(row).Foreground));
+		}
+		TextBlock shortcut = fullscreen.FindNamed<TextBlock>("PlayerShortcut");
+		Assert.True(shortcut.IsOnScreen(), "Fullscreen shows no shortcut");
+		Assert.Equal(OperatingSystem.IsMacOS() ? "⌃⌘F" : "Ctrl+F", shortcut.Text);
 		foreach(MenuItem item in items) {
 			Assert.Equal(26, item.Bounds.Height, 0.5);
 			TextBlock label = LabelOf(item);
