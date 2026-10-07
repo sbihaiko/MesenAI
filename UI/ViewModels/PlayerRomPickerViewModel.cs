@@ -99,6 +99,29 @@ namespace Mesen.ViewModels
 		public bool IsAction => Kind == RomPickerRowKind.Action;
 	}
 
+	//#1032 review finding 1: both scans of this sheet run off the UI thread and
+	//are answered later, so the sheet has to know WHICH surface a late answer
+	//belongs to. This is that bookkeeping and nothing else: a counter every scan
+	//is tagged with. It is bumped when a scan is scheduled and again when the
+	//surface a scan reads is rebuilt, so an answer whose tag is no longer the
+	//current generation was read from a folder the sheet has already left - and
+	//applying it would put the old folder's tiles back on the grid, or its
+	//suggestions back under the rows, which is the bug this guards.
+	//
+	//A type of its own, free of Avalonia and of the core, because the rule is
+	//about which answer wins and not about the sheet it is drawn on.
+	internal sealed class ScanGeneration
+	{
+		private int _current;
+
+		//The generation the next unit of scan work carries. Called both when a
+		//scan starts and when the surface it reads is reset: either way every
+		//scan already in flight is left behind by it.
+		public int Next() => ++_current;
+
+		public bool IsCurrent(int generation) => generation == _current;
+	}
+
 	//#845 (ADR-0256 Decision 9): the in-app ROM picker, which is what the Play
 	//home's *Open a ROM…* opens. It used to reach Avalonia's StorageProvider - a
 	//native dialog that owns the screen once it opens, so the focus engine (and
@@ -250,6 +273,10 @@ namespace Mesen.ViewModels
 		private readonly List<PlayerRomPickerRow> _suggestionRows = new();
 		private bool _scanStarted;
 		private bool _scanDone;
+		//The surface every scan in flight was read for. A result carries the
+		//generation it was scheduled under and is dropped when that is no longer
+		//the one on the sheet (see ScanGeneration).
+		private readonly ScanGeneration _scanGeneration = new();
 
 		//Opens on the roots. Called by the Play home's own action, and only when
 		//there is nothing to pause: the picker is what a machine with no game
@@ -286,6 +313,14 @@ namespace Mesen.ViewModels
 		//and otherwise kicks the bounded scan and fills the grid as it lands.
 		private void ShowLibrary()
 		{
+			//The surface is rebuilt here from the folders as they are NOW, so
+			//every scan still in flight was read for the surface this replaces -
+			//and a folder list that no longer answers anything (the early return
+			//below) is as much a rebuild as one that does. The bump is what makes
+			//the rebuild, not the new scan, the thing that decides which answer
+			//may land: a scan scheduled before it can only fill a grid the player
+			//has already left.
+			_scanGeneration.Next();
 			Mode = RomPickerMode.Library;
 			IsLibraryMode = true;
 			IsBrowseMode = false;
@@ -470,14 +505,20 @@ namespace Mesen.ViewModels
 		private void StartLibraryScan()
 		{
 			SearchingText = ResourceHelper.GetMessage("RomPickerSearching");
+			//The generation is taken BEFORE the work is handed out, so the answer
+			//carries the surface it was read for - and the check that drops a
+			//stale one happens where the answer lands (ApplyLibraryScan), never
+			//here: the posting thread cannot know what the UI thread did while
+			//the scan ran.
+			int generation = _scanGeneration.Next();
 			if(RunLibraryScanInline || RunScanInline) {
-				ApplyLibraryScan(ScanLibrary(_folders));
+				ApplyLibraryScan(ScanLibrary(_folders), generation);
 				return;
 			}
 			IReadOnlyList<string> folders = _folders;
 			Task.Run(() => {
 				LibraryScanResult result = ScanLibrary(folders);
-				Dispatcher.UIThread.Post(() => ApplyLibraryScan(result));
+				Dispatcher.UIThread.Post(() => ApplyLibraryScan(result, generation));
 			});
 		}
 
@@ -495,8 +536,17 @@ namespace Mesen.ViewModels
 		//One scan's answer into the grid. The entries are the module's, in the
 		//module's order (by title, Decision 1); this only carries them across and
 		//says what the header reads.
-		private void ApplyLibraryScan(LibraryScanResult result)
+		private void ApplyLibraryScan(LibraryScanResult result, int generation)
 		{
+			//First, before anything is written - not even the searching line. A
+			//scan the player has already left behind answers about a folder the
+			//sheet no longer shows, however slowly it got there: the grid, the
+			//counts and the waiting line all belong to the scan that is current
+			//NOW, and letting the older one through would hand them all to the
+			//folder the player walked away from.
+			if(!_scanGeneration.IsCurrent(generation)) {
+				return;
+			}
 			SearchingText = "";
 			//A scan that landed after the player left the library - a B press, a
 			//step into *Browse a file…* - belongs to no surface: the browser's
@@ -586,17 +636,22 @@ namespace Mesen.ViewModels
 			}
 			_scanStarted = true;
 			SearchingText = ResourceHelper.GetMessage("RomPickerSearching");
+			//This scan's tag, taken before any of its work is handed out: the
+			//surface it reads is the one the sheet is on now (see
+			//ScanGeneration), and every answer below is dropped if that surface
+			//is rebuilt before the answer lands.
+			int generation = _scanGeneration.Next();
 
 			if(RunScanInline) {
-				PublishInline(RomScanPass.Shallow);
-				PublishInline(RomScanPass.Deep);
-				FinishScan();
+				PublishInline(RomScanPass.Shallow, generation);
+				PublishInline(RomScanPass.Deep, generation);
+				FinishScan(generation);
 				return;
 			}
 			Task.Run(() => {
-				Publish(RomScanPass.Shallow);
-				Publish(RomScanPass.Deep);
-				Dispatcher.UIThread.Post(FinishScan);
+				Publish(RomScanPass.Shallow, generation);
+				Publish(RomScanPass.Deep, generation);
+				Dispatcher.UIThread.Post(() => FinishScan(generation));
 			});
 		}
 
@@ -604,20 +659,20 @@ namespace Mesen.ViewModels
 		//leaves whatever the other one found in place: the scan runs on a machine
 		//whose disks are not ours, and an exception there is not a reason to erase
 		//the rows the player is reading.
-		private void Publish(RomScanPass pass)
+		private void Publish(RomScanPass pass, int generation)
 		{
 			try {
 				IReadOnlyList<RomPickerHit> hits = SuggestionSource(pass);
-				Dispatcher.UIThread.Post(() => ApplySuggestions(pass, hits));
+				Dispatcher.UIThread.Post(() => ApplySuggestions(pass, hits, generation));
 			} catch {
 				//The shallow pass's rows, or the roots alone, stay.
 			}
 		}
 
-		private void PublishInline(RomScanPass pass)
+		private void PublishInline(RomScanPass pass, int generation)
 		{
 			try {
-				ApplySuggestions(pass, SuggestionSource(pass));
+				ApplySuggestions(pass, SuggestionSource(pass), generation);
 			} catch {
 				//As above.
 			}
@@ -625,10 +680,18 @@ namespace Mesen.ViewModels
 
 		//The line belongs to the scan, not to a pass: it goes when the deep pass
 		//is done, once, and it goes whatever that pass answered.
-		private void FinishScan()
+		private void FinishScan(int generation)
 		{
+			//The scan is over, and that is a fact about the scan, not about the
+			//sheet: it is recorded even when the surface was rebuilt under it, so
+			//the roots list does not go on claiming a wait that has ended (the
+			//scan runs once, and a lost flag would leave "Searching…" there
+			//forever). Only the LINE is refused to a scan that no longer owns it:
+			//by then it belongs to the scan the rebuild started.
 			_scanDone = true;
-			SearchingText = "";
+			if(_scanGeneration.IsCurrent(generation)) {
+				SearchingText = "";
+			}
 		}
 
 		//One pass's answer. It is always cached, so later Opens include the
@@ -640,8 +703,15 @@ namespace Mesen.ViewModels
 		//the point of the whole thing: a deep pass that offers FEWER rows than the
 		//shallow one already did is discarded. "The scan finished" must never read
 		//as "your libraries are gone".
-		private void ApplySuggestions(RomScanPass pass, IReadOnlyList<RomPickerHit> hits)
+		private void ApplySuggestions(RomScanPass pass, IReadOnlyList<RomPickerHit> hits, int generation)
 		{
+			//The suggestions and the cache behind them belong to the surface this
+			//pass was read for: a pass whose surface is gone is dropped whole,
+			//before it can rewrite _suggestions (the cache every later visit to
+			//the roots reads) or put rows under a list it was never read for.
+			if(!_scanGeneration.IsCurrent(generation)) {
+				return;
+			}
 			IReadOnlyList<RomPickerSuggestion> offered = PlayRomPicker.Suggestions(hits, _roots);
 			if(pass == RomScanPass.Deep && offered.Count < _suggestions.Count) {
 				return;
