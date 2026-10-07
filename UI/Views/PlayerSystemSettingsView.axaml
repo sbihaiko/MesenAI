@@ -47,6 +47,17 @@
 			<RadioButton Name="SystemKeyboardWasd" Classes="choice" GroupName="SystemKeyboard" Content="{l:Translate cboSystemWasd}" IsChecked="{Binding UsesWasd}" Margin="14 6 14 0" />
 			<TextBlock Classes="system-detail" Text="{l:Translate lblSystemGamepads}" Margin="42 6 14 12" />
 
+			<Separator Classes="hairline" Margin="14 12 14 0" />
+
+			<!--#1039 (ADR-0265 section 8): the library's box-art switch. The one
+			choice on this sheet that is about the app talking to a server, so it
+			says what it does rather than only what it is called - the tile carries
+			the generic cover either way, and a cover already downloaded is kept
+			(the app stops asking, it does not throw away what the player has).-->
+			<TextBlock Name="lblSystemBoxArtRow" Classes="callout strong" Text="{l:Translate lblSystemBoxArtRow}" Margin="14 12 14 2" />
+			<CheckBox Name="SystemBoxArtSwitch" Classes="choice" Content="{l:Translate chkDownloadBoxArt}" IsChecked="{Binding DownloadBoxArt}" Margin="14 0 14 0" />
+			<TextBlock Classes="system-detail" Text="{l:Translate lblSystemBoxArtDetail}" Margin="42 6 14 12" />
+
 			<TextBlock Name="SystemNotice" Classes="reason" Text="{Binding NoticeText}" IsVisible="{Binding NoticeText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" TextWrapping="Wrap" Margin="14 12 14 0" />
 			<!-- The relaunch the wizard's flow ended with (Program.cs started the
 			executable again once the settings file existed). Only offered for a

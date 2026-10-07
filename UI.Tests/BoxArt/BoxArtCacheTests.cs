@@ -247,7 +247,7 @@ namespace Mesen.Tests.BoxArt
 		public async Task The_switch_off_makes_no_request_at_all()
 		{
 			FakeBoxArtSender sender = FakeBoxArtSender.Images(FakeImages.Png());
-			BoxArtCache cache = Cache(sender, new BoxArtCacheOptions { DownloadEnabled = false });
+			BoxArtCache cache = Cache(sender, new BoxArtCacheOptions { DownloadEnabled = static () => false });
 
 			Assert.Null(await cache.GetCover(BoxArtConsole.Nes, Sha1, Name));
 
@@ -265,10 +265,36 @@ namespace Mesen.Tests.BoxArt
 
 			//Off is a refusal to talk to a server, not a reason to hide the player's
 			//own file.
-			BoxArtCover? cover = await Cache(sender, new BoxArtCacheOptions { DownloadEnabled = false })
+			BoxArtCover? cover = await Cache(sender, new BoxArtCacheOptions { DownloadEnabled = static () => false })
 				.GetCover(BoxArtConsole.Nes, Sha1, Name);
 
 			Assert.NotNull(cover);
+			Assert.Equal(1, sender.RequestCount);
+		}
+
+		//#1039 review: the switch is read on every call, not read once when the cache
+		//is built. The app keeps ONE cache for the session (MainWindowViewModel.Cache)
+		//precisely so the Settings › System row takes effect without a rebuild - and a
+		//rebuild would hand out a second SemaphoreSlim and a second in-flight table,
+		//putting four more requests beside the four already running (ADR-0265 section
+		//4) and downloading one ROM twice. So this drives one instance through both
+		//positions of the switch.
+		[Fact]
+		public async Task The_switch_is_read_on_every_call_so_one_cache_follows_it_with_no_rebuild()
+		{
+			FakeBoxArtSender sender = FakeBoxArtSender.Images(FakeImages.Png());
+			bool enabled = false;
+			BoxArtCache cache = Cache(sender, new BoxArtCacheOptions { DownloadEnabled = () => enabled });
+
+			//Off: the same instance makes no request at all.
+			Assert.Null(await cache.GetCover(BoxArtConsole.Nes, Sha1, Name));
+			Assert.Equal(0, sender.RequestCount);
+
+			//Flipped on, with nothing rebuilt and nothing passed in again: the very
+			//same cache now asks, because it reads the preference rather than a copy
+			//of it.
+			enabled = true;
+			Assert.NotNull(await cache.GetCover(BoxArtConsole.Nes, Sha1, Name));
 			Assert.Equal(1, sender.RequestCount);
 		}
 

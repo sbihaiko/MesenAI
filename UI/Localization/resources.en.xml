@@ -1033,6 +1033,9 @@
 			<Control ID="cboSystemArrows">Arrow keys + S / A</Control>
 			<Control ID="cboSystemWasd">WASD + K / J</Control>
 			<Control ID="lblSystemGamepads">Xbox and PlayStation controllers work as soon as you plug them in. Another controller asks to be set up the first time you press a button.</Control>
+			<Control ID="lblSystemBoxArtRow">Box art</Control>
+			<Control ID="chkDownloadBoxArt">Download box art</Control>
+			<Control ID="lblSystemBoxArtDetail">Covers come from libretro-thumbnails, one request per game you can see, once. A cover already downloaded is kept either way.</Control>
 			<Control ID="btnSystemRestart">Restart now</Control>
 		</Form>
 		<Form ID="PlayerSettingsSheetView">

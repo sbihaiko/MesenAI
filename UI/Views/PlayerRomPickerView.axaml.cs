@@ -1,7 +1,14 @@
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
+using Avalonia.Layout;
 using Avalonia.Markup.Xaml;
+using Avalonia.Threading;
+using Avalonia.VisualTree;
 using Mesen.ViewModels;
+using System;
+using System.Collections.Generic;
+using System.Collections.Specialized;
 
 namespace Mesen.Views
 {
@@ -35,6 +42,87 @@ namespace Mesen.Views
 		{
 			if(sender is Control { DataContext: PlayerLibraryTile tile }) {
 				Model?.Play(tile);
+			}
+		}
+
+		//#1039 (ADR-0265 section 4): the covers are asked for lazily and only for the
+		//tiles the sheet is showing. WHO those are is a question about layout, so it is
+		//answered here rather than guessed at in the view-model: every container the
+		//WrapPanel has realized is measured against the ScrollViewer's viewport, and
+		//the tiles that intersect it are handed over. This fires on the layout that
+		//fills the grid and again on every scroll, so a tile below the fold is asked
+		//about the moment it comes into view.
+		//
+		//The ring is the second way in: the pad moves the real focus (ADR-0256 Decision
+		//3), and OnTileFocus below asks about whatever it reaches, in case a tile is
+		//reached before its layout has settled.
+		private void OnGridShowing(object? sender, EffectiveViewportChangedEventArgs e) => AskShowing();
+
+		//The viewport event stays silent when the grid itself changes under an
+		//unchanged ScrollViewer (the scan landing after the sheet laid out empty, a
+		//search rebuilding the tiles), so a change of the tiles asks again, posted
+		//at Render priority so the containers exist and are measured by then.
+		private PlayerRomPickerViewModel? _watched;
+		private bool _askPosted;
+
+		protected override void OnDataContextChanged(EventArgs e)
+		{
+			base.OnDataContextChanged(e);
+			if(_watched != null) {
+				_watched.Tiles.CollectionChanged -= OnTilesChanged;
+			}
+			_watched = Model;
+			if(_watched != null) {
+				_watched.Tiles.CollectionChanged += OnTilesChanged;
+			}
+		}
+
+		private void OnTilesChanged(object? sender, NotifyCollectionChangedEventArgs e) => PostAskShowing();
+
+		private void OnGridLayoutUpdated(object? sender, EventArgs e) => PostAskShowing();
+
+		private void PostAskShowing()
+		{
+			if(_askPosted) {
+				return;
+			}
+			_askPosted = true;
+			Dispatcher.UIThread.Post(() => {
+				_askPosted = false;
+				AskShowing();
+			}, DispatcherPriority.Render);
+		}
+
+		private void AskShowing()
+		{
+			if(this.FindControl<ItemsControl>("RomPickerGrid") is not { } grid || Model is not { } model) {
+				return;
+			}
+			if(grid.FindAncestorOfType<ScrollViewer>() is not { } sheet) {
+				return;
+			}
+
+			//The viewport is a rectangle in the content's own coordinates, which is
+			//what a container's Bounds are measured in - the WrapPanel sits at the
+			//content's origin and the containers sit in the panel.
+			Rect viewport = new(sheet.Offset.X, sheet.Offset.Y, sheet.Viewport.Width, sheet.Viewport.Height);
+			List<PlayerLibraryTile> showing = new();
+			for(int i = 0; i < model.Tiles.Count; i++) {
+				if(grid.ContainerFromIndex(i) is Control { } container && container.Bounds.Intersects(viewport)) {
+					showing.Add(model.Tiles[i]);
+				}
+			}
+			model.AskVisible(showing);
+		}
+
+		//#1039 (ADR-0265 section 4): the ring is the other half of "the tiles that are
+		//actually visible" - a tile the pad has reached is being looked at whatever the
+		//layout says, so it is asked about here too, and nothing else in the library
+		//ever is.
+		private void OnTileFocus(object? sender, RoutedEventArgs e)
+		{
+			if(sender is Control { DataContext: PlayerLibraryTile tile }) {
+				Model?.TileReached(tile);
 			}
 		}
 
