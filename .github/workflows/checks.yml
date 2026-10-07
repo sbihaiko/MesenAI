@@ -284,17 +284,21 @@ jobs:
       # the committed renders, not fresh ones - a layout change reaches CI only
       # once its render is re-committed (the headless gate catches it locally).
       - name: Run unit tests
+        id: ui-unit-tests
         env:
           MESEN_PLAYER_RENDERS: ${{ runner.temp }}/wireframe-reports
         run: dotnet test UI.Tests/UI.Tests.csproj --nologo
 
+      # #974: a missing report is an error only when the tests passed; when
+      # the test step failed or never ran (a build that died before writing
+      # any report) it is a warning, so this step adds no second, misleading red.
       - name: Upload wireframe reports of the committed Player renders
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: wireframe-reports
           path: ${{ runner.temp }}/wireframe-reports
-          if-no-files-found: error
+          if-no-files-found: ${{ steps.ui-unit-tests.outcome == 'success' && 'error' || 'warn' }}
 
   # ADR-0150 (accepted 2026-09-03): headless Avalonia XAML-wiring tests in a
   # separate project that references UI/UI.csproj. Kept as its own job - NOT a

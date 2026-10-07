@@ -231,6 +231,48 @@ namespace Mesen.Tests.Theme
 			Assert.True(violations.Count == 0, string.Join(Environment.NewLine, violations));
 		}
 
+		//#974: the focus outline is a focus state, not layout, so the W-P1
+		//primary button's ink-box deviation is tolerated but never required.
+		[Fact]
+		public void The_focus_outline_deviation_is_not_a_ratchet()
+		{
+			KnownDeviation focus = PlayerWireframe.KnownDeviationsOf("W-P1").Single(k => k.Region == "primary button" && k.Kind == PlayerWireframe.InkBox);
+			Assert.Equal("focus outline", focus.Why);
+			Assert.False(focus.Ratchet);
+		}
+
+		private static RgbFrame CommittedRender(string wId) => RgbFrame.FromPng(Path.Combine(CommittedRenders, wId + ".png"));
+
+		//#974: a fresh headless render is held to its committed copy region by
+		//region, so a stale committed render fails locally instead of reaching CI.
+		[Fact]
+		public void A_fresh_render_equal_to_the_committed_one_has_no_drift()
+		{
+			RgbFrame committed = CommittedRender("W-P1");
+			Assert.Empty(PlayerWireframe.Drift("W-P1", committed, committed, "UI.Tests/Theme/PlayerRenders/W-P1.png"));
+		}
+
+		[Fact]
+		public void A_fresh_render_with_a_moved_block_drifts_and_asks_to_recommit()
+		{
+			RgbFrame committed = CommittedRender("W-P1");
+			RgbFrame fresh = committed.Moved(new PixelBox(300, 150, 500, 290), 20, Rgb.Parse("#F5F5F7"));
+			IReadOnlyList<string> drift = PlayerWireframe.Drift("W-P1", fresh, committed, "UI.Tests/Theme/PlayerRenders/W-P1.png");
+			string block = Assert.Single(drift, d => d.StartsWith("W-P1 drop block:"));
+			Assert.Contains("UI.Tests/Theme/PlayerRenders/W-P1.png", block);
+			Assert.Contains("re-commit the render", block);
+			Assert.DoesNotContain(drift, d => d.StartsWith("W-P1 title bar:"));
+		}
+
+		[Fact]
+		public void A_fresh_render_of_another_size_drifts()
+		{
+			RgbFrame committed = CommittedRender("W-P1");
+			string only = Assert.Single(PlayerWireframe.Drift("W-P1", PlayerWireframe.Window(Wireframe("W-P1"), 1100, 600), committed, "W-P1.png"));
+			Assert.Contains("1100 x 600", only);
+			Assert.Contains("re-commit the render", only);
+		}
+
 		private static string FindRepoRoot()
 		{
 			DirectoryInfo? dir = new DirectoryInfo(AppContext.BaseDirectory);
