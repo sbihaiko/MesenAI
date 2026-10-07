@@ -636,6 +636,11 @@ namespace Mesen.ViewModels
 			//travel with the entries (#1052, merged after this slice): the query
 			//narrows the grid, and a narrowed grid still draws the player's own
 			//screenshot on the tiles that have one.
+			//#1038 review finding 5: the ring's tile goes with the tiles this scan
+			//replaced - it belonged to the previous grid, and the arbiter would
+			//otherwise be asked to keep the ring on a control that is no longer
+			//there.
+			ForgetFocusedTile();
 			ShowLibraryGames(result.Entries, payload.Covers);
 			CountText = ResourceHelper.GetMessage("RomPickerLibraryCount",
 				CountLabel(result.Entries.Count, "RomPickerGameOne", "RomPickerGameMany"),

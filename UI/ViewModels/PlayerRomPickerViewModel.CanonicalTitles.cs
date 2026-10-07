@@ -31,12 +31,14 @@ namespace Mesen.ViewModels
 	//    new list would re-claim the ring out from under a player already moving
 	//    across it.
 	//
-	//  - **The grid's ORDER stays the scan's answer.** The tiles keep the places
-	//    GameLibrary.Scan gave them (ordered by the title it knew, the cleaned
-	//    file name); the rename never re-sorts. Live re-sorting would move a tile
-	//    under the player's finger. An order by CANONICAL titles would mean the
-	//    scan reading the cached hash itself, which is a change to the scan and
-	//    not to this pass.
+	//  - **The grid's ORDER follows the titles it shows.** Decision 1 orders the
+	//    grid by title and Decision 7 makes the canonical title the displayed
+	//    one, so when a canonical title arrives the order it belongs in is not
+	//    the one the scan left: the walk re-sorts once, when it ends, and the
+	//    tiles move under the player rather than being rebuilt. That moves a tile
+	//    under a finger, and it is why the re-sort MOVES the tiles and never
+	//    replaces them: the ring travels with the game the player selected
+	//    (review finding 5 on #1038).
 	public partial class PlayerRomPickerViewModel
 	{
 		//How many renames one posted turn carries. The pass resolves hundreds of
@@ -164,6 +166,12 @@ namespace Mesen.ViewModels
 				if(batch.Count > 0) {
 					PostTitles(batch, token, generation);
 				}
+				//Once, when the walk is over - never per batch. The order is
+				//Decision 1's rule over the titles the tiles now read, and the
+				//titles are not final until the walk is: a re-sort per batch would
+				//be up to MaxEntries / TitleBatch sorts of the whole grid, each one
+				//moving tiles for titles that are still arriving.
+				PostOrder(token, generation);
 			});
 		}
 
@@ -219,5 +227,74 @@ namespace Mesen.ViewModels
 				}
 			});
 		}
+
+		//The grid into Decision 1's order, over the titles the tiles now read.
+		//Guarded exactly as a batch is - the token and the generation say whether
+		//this pass is still the one the sheet is showing.
+		private void PostOrder(CancellationToken token, int generation)
+		{
+			if(token.IsCancellationRequested) {
+				return;
+			}
+			Dispatcher.UIThread.Post(() => {
+				if(token.IsCancellationRequested || !_scanGeneration.IsCurrent(generation)) {
+					return;
+				}
+				if(!IsVisible || Mode != RomPickerMode.Library) {
+					return;
+				}
+				OrderTiles();
+			});
+		}
+
+		//The order GameLibrary.Scan's own comparer produces, applied to what the
+		//tiles read NOW: SortTitle, so "The Legend of Zelda" files under L where a
+		//player looks for it (Decision 1), and the path as the tiebreak, so two
+		//games of one name keep a stable order (GameLibrary.Compare's own rule, and
+		//its own platform-folded comparer).
+		//
+		//Moved, never rebuilt: every tile that changes place is the same tile, so
+		//the view-model's list still holds the objects the scan made and a tile is
+		//never dropped and rebuilt. The CONTAINERS do not survive the move - the
+		//grid rebuilds the ones that changed place - so the ring has to be told
+		//where to go back, and TilesRevision is what makes the focus arbiter
+		//re-claim: RomPickerFocusTarget reads FocusTile for exactly this reason.
+		//Without it the ring lands on whatever leads the grid - the first game, not
+		//the one the player had selected (review finding 5 on #1038).
+		private void OrderTiles()
+		{
+			List<PlayerLibraryTile> ordered = Tiles
+				.OrderBy(tile => GameLibrary.SortTitle(tile.Title), StringComparer.OrdinalIgnoreCase)
+				.ThenBy(tile => tile.Path, GameLibrary.PathComparer)
+				.ToList();
+			bool moved = false;
+			for(int place = 0; place < ordered.Count; place++) {
+				int current = Tiles.IndexOf(ordered[place]);
+				if(current != place) {
+					Tiles.Move(current, place);
+					moved = true;
+				}
+			}
+			if(moved) {
+				//The rebuilt containers took the ring with them; this is the same
+				//bump ApplyLibraryScan makes, for the same reason.
+				TilesRevision++;
+			}
+		}
+
+		//The game the ring is on, as the tile itself and never as a place in the
+		//grid. The view-model cannot see the ring - Avalonia's focus lives in the
+		//visual tree - so the tile's own GotFocus reports it, and the focus arbiter
+		//reads it back whenever the grid is rebuilt or re-sorted (see OrderTiles).
+		public PlayerLibraryTile? FocusTile { get; private set; }
+
+		//The tile that took the ring, reported by the view. Nothing else may call
+		//this: it is the ring's own state and not a selection the sheet keeps.
+		public void NoteFocusedTile(PlayerLibraryTile tile) => FocusTile = tile;
+
+		//The tiles a scan made are the only ones the ring can legitimately be on, so
+		//a scan that replaces them drops the claim with them - the same reason the
+		//scan's apply turn rebuilds the grid at all.
+		private void ForgetFocusedTile() => FocusTile = null;
 	}
 }

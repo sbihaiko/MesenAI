@@ -143,7 +143,7 @@
 								</ItemsControl.ItemsPanel>
 								<ItemsControl.ItemTemplate>
 									<DataTemplate x:DataType="vm:PlayerLibraryTile">
-										<Button Classes="library-tile" Click="OnPlayTile">
+										<Button Classes="library-tile" Click="OnPlayTile" GotFocus="OnTileFocused">
 											<StackPanel>
 												<Border Name="TileCover" Classes="library-cover" Background="{Binding Cover}" Width="104" Height="139" CornerRadius="8">
 													<TextBlock Classes="library-cover-title" Text="{Binding Title}" Margin="8" VerticalAlignment="Center" IsVisible="{Binding ShowsTitleOnCover}" />

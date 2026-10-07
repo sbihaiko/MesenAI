@@ -38,6 +38,19 @@ namespace Mesen.Views
 			}
 		}
 
+		//#1038 review finding 5 (ADR-0264 Decisions 1 and 7): the grid is re-sorted
+		//once the canonical titles arrive, and a re-sort rebuilds the containers of
+		//the tiles that changed place - so the ring has to be given back to the game
+		//the player had selected rather than to the place it held. The view-model
+		//cannot see the ring, so the tile that takes it says so, and the focus
+		//arbiter reads it back (see PlayerRomPickerViewModel.FocusTile).
+		private void OnTileFocused(object? sender, RoutedEventArgs e)
+		{
+			if(sender is Control { DataContext: PlayerLibraryTile tile }) {
+				Model?.NoteFocusedTile(tile);
+			}
+		}
+
 		//#1032 (ADR-0264 Decision 11): *Browse a file…* steps into the folder
 		//browser ADR-0256 Decision 9 built, which is the same sheet's second
 		//surface rather than a second sheet.

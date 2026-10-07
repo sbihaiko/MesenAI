@@ -342,18 +342,31 @@ namespace Mesen.Windows
 				if(search is not null && (search.IsFocused || ReferenceEquals(KeyboardFieldForTest(window), search))) {
 					return search;
 				}
-				return RomPickerFirstTile(window) ?? Named(window, "RomPickerBrowseFile") ?? Named(window, "RomPickerBack");
+				return RomPickerFirstTile(window, model) ?? Named(window, "RomPickerBrowseFile") ?? Named(window, "RomPickerBack");
 			}
 			return RomPickerFirstRow(window) ?? Named(window, "RomPickerBack");
 		}
 
-		//The grid's first tile. The items are found by their own data context -
-		//the same way the rows are - so a rebuild that reorders the grid moves
-		//the ring to whatever leads it now.
-		private static Control? RomPickerFirstTile(MainWindow window)
+		//The grid's first tile, or - #1038 review finding 5 - the game the player had
+		//selected, when the sheet still has it. The items are found by their own data
+		//context, the same way the rows are.
+		//
+		//The order matters: a rebuilt grid has no ring at all, so the tile that is
+		//left is the first one - but a grid RE-SORTED under the player (the
+		//canonical-title pass ordering by the titles it just resolved, Decision 1)
+		//rebuilt only the containers that changed place, and the player's game is
+		//still theirs to be on. Asking for the first tile there is asking for the
+		//wrong game: the same position in the grid, a different game under it.
+		private static Control? RomPickerFirstTile(MainWindow window, MainWindowViewModel model)
 		{
 			IEnumerable<Button> tiles = (Named(window, "RomPickerGrid") as ItemsControl)?.GetVisualDescendants().OfType<Button>()
 				?? Enumerable.Empty<Button>();
+			if(model.RomPicker.FocusTile is { } selected) {
+				Button? kept = tiles.FirstOrDefault(b => ReferenceEquals(b.DataContext, selected));
+				if(kept != null) {
+					return kept;
+				}
+			}
 			return tiles.FirstOrDefault(b => b.DataContext is PlayerLibraryTile);
 		}
 
@@ -413,7 +426,7 @@ namespace Mesen.Windows
 				//only while that tile is one the grid still draws (a rebuild
 				//replaced its container, and the old one is attached no longer).
 				return (lastTile is { IsEffectivelyVisible: true } ? lastTile : null)
-					?? RomPickerFirstTile(window) ?? Named(window, "RomPickerBack");
+					?? RomPickerFirstTile(window, model) ?? Named(window, "RomPickerBack");
 			}
 			return null;
 		}
