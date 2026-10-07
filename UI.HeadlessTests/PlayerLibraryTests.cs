@@ -505,4 +505,51 @@ public class PlayerLibraryTests : IDisposable
 		//And it names the next step rather than the problem.
 		Assert.Contains("Browse a file", sentence.Text ?? "");
 	}
+
+	//#1060: a library folder the scan answers with nothing is a BLANK GRID today -
+	//the sheet is up, the header counts zero games, and the only control the player
+	//has is the way out. Decision 8 already refused that shape for the player who
+	//set no folder at all; a folder that was set and answered nothing is the same
+	//dead end and gets the same named state, whose next step is what the ring lands
+	//on (ADR-0256 Decision 9: the sheet is drivable from the controller alone, so
+	//the ring is never left with nothing to press).
+	//
+	//The folder is deliberately NOT empty: it holds entries, so #887 keeps it as the
+	//games folder and the library really does have a folder to read - it simply
+	//holds no ROM, which is a library still being copied or a folder of notes. That
+	//is what tells this state from "no library folder yet", and it is the state that
+	//used to render as an empty grid.
+	[AvaloniaFact]
+	public void A_library_folder_with_no_games_says_so_and_puts_the_ring_on_the_next_step()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		string root = Path.Combine(_folder, "still-copying");
+		Directory.CreateDirectory(Path.Combine(root, "NES"));
+		File.WriteAllText(Path.Combine(root, "readme.txt"), "the ROMs are on the way");
+		ConfigManager.Config.Preferences.GameFolder = root;
+		ConfigManager.Config.Preferences.OverrideGameFolder = true;
+
+		(MainWindow window, MainWindowViewModel model) = ShowFirstRunHome();
+		WaitFor(() => (window.FocusManager?.GetFocusedElement() as Control)?.Name == "PlayHomeOpenRomPrimary",
+			"the first-run home did not put the focus on its one action");
+		Press(window, PadNavAction.Confirm);
+		Pump();
+
+		Assert.True(model.RomPicker.IsVisible, "the sheet did not open");
+		Assert.Empty(model.RomPicker.Tiles);
+		//The named state, in words: GetMessage answers an id the locale file does not
+		//hold with "[[id]]", which is a defect a player would read.
+		Assert.True(model.RomPicker.EmptyText.Length > 0,
+			"a library folder with no games says nothing, so the player reads a blank grid");
+		Assert.DoesNotContain("[[", model.RomPicker.EmptyText);
+		TextBlock sentence = window.FindNamed<TextBlock>("RomPickerLibraryEmpty");
+		Assert.True(sentence.IsOnScreen(), "the empty state is not on screen");
+		Assert.Contains("Browse a file", sentence.Text ?? "");
+
+		//And the ring is on the step that sentence names: with no tile to play, the
+		//next press has to reach the action rather than the way out of the sheet.
+		WaitFor(() => (window.FocusManager?.GetFocusedElement() as Control)?.Name == "RomPickerBrowseFile",
+			$"the ring did not land on the next step the empty state names ({Focused(window)})");
+		Assert.True(window.FindNamed<Button>("RomPickerBrowseFile").IsOnScreen(), "the focused action is not on screen");
+	}
 }

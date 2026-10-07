@@ -129,6 +129,26 @@ public static class PlayRomPicker
 		return roots.Select(r => new RomPickerRow(r.Label, r.Folder, RomPickerRowKind.Folder)).ToList();
 	}
 
+	//#1060 (ADR-0264 Decision 8): the named state a library with nothing to play
+	//shows - the message id, or null when the grid says it all. It is a decision
+	//table over the two things the library knows, and it is here rather than in
+	//the view-model because it is a rule, not a lookup: the two empty states are
+	//different facts to the player. With no library folder the sheet has to say
+	//how to get one; with folders the scan answered nothing for, the folders are
+	//already set and it is the scan that came back empty - a library still being
+	//copied, a folder of notes, games on a stick that is not plugged in.
+	//
+	//`gamesFound` is the scan's own count, so a caller that has not scanned yet
+	//passes zero and gets the sentence for the state it does know. An id, not the
+	//wording: the locale files own that, and this file stays free of it.
+	public static string? LibraryEmptyMessageId(int libraryFolderCount, int gamesFound)
+	{
+		if(libraryFolderCount == 0) {
+			return "RomPickerLibraryNoFolders";
+		}
+		return gamesFound == 0 ? "RomPickerLibraryEmpty" : null;
+	}
+
 	//The action row: the one row that is not a place and not a game, but the
 	//press that names the folder it sits in as the games folder. Its subject is
 	//always the folder currently shown, which is why `folder` is its path.
