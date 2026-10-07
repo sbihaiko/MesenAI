@@ -350,7 +350,12 @@ namespace Mesen.ViewModels
 			_folders = LibraryFolderSource();
 			//#1060: nothing scanned yet, so the only state known here is the folder
 			//list's own; a library with folders waits for its scan to say anything.
-			EmptyText = LibraryEmptyText(PlayRomPicker.LibraryEmptyMessageId(_folders.Count, 0));
+			//The null is that "nothing scanned yet" - the rule cannot answer the empty
+			//sentence without a scan's count, so the wait cannot read as a verdict
+			//(review finding 1 on #1060: passing zero here showed "No games found in
+			//your library folder." next to "Looking for your games…" for the whole
+			//scan). ApplyLibraryScan is the only caller that has an answer to give.
+			EmptyText = LibraryEmptyText(PlayRomPicker.LibraryEmptyMessageId(_folders.Count, null));
 			if(_folders.Count == 0) {
 				return;
 			}

@@ -552,4 +552,49 @@ public class PlayerLibraryTests : IDisposable
 			$"the ring did not land on the next step the empty state names ({Focused(window)})");
 		Assert.True(window.FindNamed<Button>("RomPickerBrowseFile").IsOnScreen(), "the focused action is not on screen");
 	}
+
+	//#1060 review finding 1: the sheet must not claim "no games found" while the
+	//scan it just kicked is still running. A library that HAS folders has been told
+	//nothing yet, so the only thing on the sheet is the wait - and on a slow or
+	//large drive that wait is long enough to read as a verdict. The scan is held
+	//open by the case, so this reads the state that is genuinely in flight rather
+	//than whatever won a race: every other library case runs the scan inline
+	//(RunLibraryScanInline), which is exactly why this state was invisible to them.
+	[AvaloniaFact]
+	public void While_the_scan_runs_the_sheet_does_not_claim_the_library_is_empty()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		LibraryRoot();
+
+		(MainWindow window, MainWindowViewModel model) = ShowFirstRunHome();
+		WaitFor(() => (window.FocusManager?.GetFocusedElement() as Control)?.Name == "PlayHomeOpenRomPrimary",
+			"the first-run home did not put the focus on its one action");
+
+		ManualResetEventSlim gate = new(false);
+		model.RomPicker.RunLibraryScanInline = false;
+		model.RomPicker.LibraryScanSource = (folders, lister) => {
+			gate.Wait(TimeSpan.FromSeconds(30));
+			return GameLibrary.Scan(folders, lister);
+		};
+
+		try {
+			Press(window, PadNavAction.Confirm);
+			Pump();
+
+			Assert.True(model.RomPicker.IsVisible, "the pad's Confirm opened no sheet");
+			Assert.Equal(RomPickerMode.Library, model.RomPicker.Mode);
+			Assert.True(model.RomPicker.SearchingText.Length > 0,
+				"the sheet is not waiting on the scan, so this case would prove nothing");
+			//No scan has answered, so the sheet has nothing to say about the games:
+			//the empty sentence here is a claim the scan has not made.
+			Assert.Equal("", model.RomPicker.EmptyText);
+		} finally {
+			gate.Set();
+		}
+
+		//And the wait really is a wait: the answer the gate released fills the grid.
+		WaitFor(() => model.RomPicker.Tiles.Count == 3,
+			$"the scan the gate released never filled the grid ({model.RomPicker.Tiles.Count} tiles)");
+		Assert.Equal("", model.RomPicker.EmptyText);
+	}
 }

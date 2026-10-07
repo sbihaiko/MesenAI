@@ -837,6 +837,23 @@ namespace Mesen.Tests.Play
 			Assert.Null(PlayRomPicker.LibraryEmptyMessageId(4, 250));
 		}
 
+		//#1060 review finding 2: the empty sentence belongs to a scan that ANSWERED
+		//nothing, never to a library that has not been scanned yet. `gamesFound` is
+		//nullable for exactly that reason - null is "no scan has answered" - and a
+		//library WITH folders then has nothing to say: borrowing the sentence for a
+		//scan that came back empty would put "No games found in your library folder."
+		//next to "Looking for your games…" for the whole scan, which is a false fact
+		//on a slow or large drive.
+		[Fact]
+		public void A_library_that_has_not_been_scanned_yet_claims_nothing_about_its_games()
+		{
+			Assert.Null(PlayRomPicker.LibraryEmptyMessageId(1, null));
+			Assert.Null(PlayRomPicker.LibraryEmptyMessageId(4, null));
+			//The missing-folder state is known BEFORE any scan - it is the folder
+			//list's own answer, not the scan's - so it still speaks.
+			Assert.Equal("RomPickerLibraryNoFolders", PlayRomPicker.LibraryEmptyMessageId(0, null));
+		}
+
 		private static FolderLister FakeLister(Dictionary<string, (string[] Folders, string[] Files)> tree, Action<string>? onCall = null)
 		{
 			return folder => {
