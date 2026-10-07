@@ -68,6 +68,19 @@
 		<Style Selector=".player Button.library-tile:focus-visible Border#TileCover">
 			<Setter Property="BoxShadow" Value="{StaticResource PlayerFocusRing}" />
 		</Style>
+		<!--#1039 (ADR-0265): a downloaded cover fades in over its tile instead of
+		appearing out of nowhere under the player's ring. The wait itself has no
+		spinner on purpose - the tile draws its generic cover while the art is on
+		its way, and offline it keeps drawing it (section 9) - so what the animation
+		covers is the arrival, which is the one visible change.-->
+		<Style Selector=".player Image.library-cover-art">
+			<Setter Property="Stretch" Value="UniformToFill" />
+			<Setter Property="Transitions">
+				<Transitions>
+					<DoubleTransition Property="Opacity" Duration="0:0:0.25" />
+				</Transitions>
+			</Setter>
+		</Style>
 		<!--The cover's own title. A generic cover carries it (Decision 6 case 4),
 		which is why it is white on the console's colour rather than the sheet's
 		own text colour.-->
@@ -159,10 +172,20 @@
 								</ItemsControl.ItemsPanel>
 								<ItemsControl.ItemTemplate>
 									<DataTemplate x:DataType="vm:PlayerLibraryTile">
-										<Button Classes="library-tile" Click="OnPlayTile">
+										<Button Classes="library-tile" Click="OnPlayTile" GotFocus="OnTileFocus">
 											<StackPanel>
-												<Border Name="TileCover" Classes="library-cover" Background="{Binding Cover}" Width="104" Height="139" CornerRadius="8">
-													<TextBlock Classes="library-cover-title" Text="{Binding Title}" Margin="8" VerticalAlignment="Center" IsVisible="{Binding ShowsTitleOnCover}" />
+												<Border Name="TileCover" Classes="library-cover" Background="{Binding Cover}" Width="104" Height="139" CornerRadius="8" ClipToBounds="True">
+													<!--#1039 (ADR-0265): the downloaded cover over the cover the
+													scan gave the tile, which is what the tile is built with and
+													never loses - a tile with no art (offline, a game the
+													collection does not have) simply goes on showing it. The
+													title belongs to the generic colour cover alone (#1035), so
+													any picture - the scan's screenshot or the downloaded box
+													art - takes it off (ShowsTitle).-->
+													<Panel>
+														<Image Classes="library-cover-art" Source="{Binding Art}" Opacity="{Binding ArtOpacity}" IsVisible="{Binding HasArt}" />
+														<TextBlock Classes="library-cover-title" Text="{Binding Title}" Margin="8" VerticalAlignment="Center" IsVisible="{Binding ShowsTitle}" />
+													</Panel>
 												</Border>
 												<TextBlock Classes="library-title" Text="{Binding Title}" />
 												<TextBlock Classes="library-console" Text="{Binding ConsoleName}" />

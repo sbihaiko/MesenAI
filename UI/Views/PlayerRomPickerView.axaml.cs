@@ -38,6 +38,18 @@ namespace Mesen.Views
 			}
 		}
 
+		//#1039 (ADR-0265 section 4): the covers are asked for lazily, for the tiles
+		//the player can actually see, and the ring is how this sheet knows where the
+		//player is looking - the pad moves the real focus (ADR-0256 Decision 3), so
+		//a tile scrolled past the window is still asked about the moment it is
+		//reached, and nothing else in the library ever is.
+		private void OnTileFocus(object? sender, RoutedEventArgs e)
+		{
+			if(sender is Control { DataContext: PlayerLibraryTile tile }) {
+				Model?.TileReached(tile);
+			}
+		}
+
 		//#1032 (ADR-0264 Decision 11): *Browse a file…* steps into the folder
 		//browser ADR-0256 Decision 9 built, which is the same sheet's second
 		//surface rather than a second sheet.

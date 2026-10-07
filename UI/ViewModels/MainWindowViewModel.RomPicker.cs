@@ -24,6 +24,10 @@ namespace Mesen.ViewModels
 					//an archive still asks which game it holds, a pack still
 					//resolves, and the load card still shows.
 					_romPicker.RomChosen += path => LoadRomHelper.LoadFile(path);
+					//#1039 (ADR-0265): the tiles draw a downloaded cover when there
+					//is one - one call per visible tile, through the box-art cache
+					//(MainWindowViewModel.BoxArt).
+					_romPicker.BoxArtCoverSource = BoxArtCoverFor;
 				}
 				return _romPicker;
 			}
