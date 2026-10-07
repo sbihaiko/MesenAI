@@ -557,12 +557,15 @@ public class PlayerLibraryTests : IDisposable
 		Assert.DoesNotContain("[[", model.RomPicker.EmptyText);
 		TextBlock sentence = window.FindNamed<TextBlock>("RomPickerLibraryEmpty");
 		Assert.True(sentence.IsOnScreen(), "the empty state is not on screen");
-		Assert.Contains("Browse a file", sentence.Text ?? "");
+		//The sentence names the step that works with a stored list (#1036): the
+		//header's *Library folders…*, then *Add a folder…*.
+		Assert.Contains("Library folders", sentence.Text ?? "");
+		Assert.Contains("Add a folder", sentence.Text ?? "");
 
-		//And the ring is on the step that sentence names: with no tile to play, the
-		//next press has to reach the action rather than the way out of the sheet.
+		//And the ring is never left with nothing to press: with no tile to play, the
+		//next press reaches a header action rather than the way out of the sheet.
 		WaitFor(() => (window.FocusManager?.GetFocusedElement() as Control)?.Name == "RomPickerBrowseFile",
-			$"the ring did not land on the next step the empty state names ({Focused(window)})");
+			$"the ring did not land on a header action ({Focused(window)})");
 		Assert.True(window.FindNamed<Button>("RomPickerBrowseFile").IsOnScreen(), "the focused action is not on screen");
 	}
 

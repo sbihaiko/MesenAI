@@ -2693,8 +2693,10 @@ E
 		<!-- #1060 (ADR-0264 Decision 8): the OTHER empty state - a library folder the
 		     scan answered nothing for (a library still being copied, a folder of
 		     notes, games on a stick that is not plugged in). It is a different fact
-		     from the one above, and it names the same next step. -->
-		<Message ID="RomPickerLibraryEmpty">No games found in your library folder. Pick another folder with Browse a file…, then choose Make this my games folder.</Message>
+		     from the one above, and it names the same next step in the same words:
+		     once the list is stored, *Make this my games folder* no longer changes
+		     the library, so only Library folders… -> Add a folder… does. -->
+		<Message ID="RomPickerLibraryEmpty">No games found in your library folders. Open Library folders…, then choose Add a folder….</Message>
 		<!-- Decision 4 (#1033): the named empty RESULT - the other empty state again,
 		     and a different fact from the one above: the library answered, and the
 		     QUERY kept nothing. A query that finds nothing says so with the query in
@@ -2719,9 +2721,7 @@ E
 		     rather than leaving a press that appears to do nothing. {0} = the folder. -->
 		<Message ID="RomPickerFoldersTitle">Library folders</Message>
 		<Message ID="RomPickerFolderAdded">{0} is now in your library.</Message>
-		<Message ID="RomPickerFolderMerged">Added {0} — a folder inside it was already in your library.</Message>
 		<Message ID="RomPickerFolderAlreadyListed">{0} is already in your library.</Message>
-		<Message ID="RomPickerFolderCovered">Every game in {0} is already in your library.</Message>
 		<Message ID="RomPickerFolderInvalid">MesenAI cannot use that folder.</Message>
 		<Message ID="RomPickerFolderRemoved">Removed {0} from your library. Nothing was deleted from your disk.</Message>
 		<Message ID="RomPickerAddThisFolder">Add this folder to your library</Message>

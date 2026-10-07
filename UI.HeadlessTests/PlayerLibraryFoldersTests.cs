@@ -383,11 +383,12 @@ public class PlayerLibraryFoldersTests : IDisposable
 		Assert.Equal(RomPickerMode.Library, model.RomPicker.Mode);
 	}
 
-	//#1036 (ADR-0264 Decision 8) with LibraryFolders.Add's absorbing rule: adding a
-	//folder that is inside one already listed changes nothing, and the sheet SAYS
-	//so rather than leaving a press that appears to do nothing.
+	//#1036 (ADR-0264 Decision 8): adding the SAME folder again changes nothing, and
+	//the sheet SAYS so rather than leaving a press that appears to do nothing. A
+	//folder nested inside a listed one is a root of its own (LibraryFolders.Add
+	//keeps every root), so it is a third row.
 	[AvaloniaFact]
-	public void Adding_a_folder_already_covered_says_so_and_leaves_the_list_alone()
+	public void Adding_a_folder_already_listed_says_so_and_a_nested_one_is_its_own_row()
 	{
 		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
 		(string games, string extra, _) = LibraryRoots();
@@ -408,9 +409,8 @@ public class PlayerLibraryFoldersTests : IDisposable
 
 		model.RomPicker.FolderPickerSource = () => System.Threading.Tasks.Task.FromResult<string?>(Path.Combine(games, "NES"));
 		window.FindNamed<Button>("RomPickerAddFolder").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-		WaitFor(() => model.RomPicker.FoldersNoticeText.StartsWith("Every game in "),
-			$"a folder inside one already listed was not answered as such ('{model.RomPicker.FoldersNoticeText}')");
-		Assert.Equal(2, model.RomPicker.LibraryFolderRows.Count);
+		WaitFor(() => model.RomPicker.LibraryFolderRows.Count == 3,
+			$"a folder inside a listed one was not kept as its own root ('{model.RomPicker.FoldersNoticeText}')");
 	}
 
 	//#1036 (ADR-0264 Decision 8): B closes the folders sheet back to the library
@@ -609,5 +609,88 @@ public class PlayerLibraryFoldersTests : IDisposable
 		//that landed is the one the preference now holds.
 		Assert.Same(injected, model.RomPicker.LibraryFolderSource);
 		Assert.Empty(ConfigManager.Config.Preferences.LibraryFolders!);
+	}
+
+	//The empty state of a library that HAS a stored list. Once the list is stored,
+	//*Make this my games folder* no longer changes the library, so the sentence
+	//must name the step that does: *Library folders…* → *Add a folder…*.
+	[AvaloniaFact]
+	public void A_listed_folder_with_no_game_names_the_add_folder_step()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		string empty = Path.Combine(_folder, "empty");
+		Directory.CreateDirectory(empty);
+		File.WriteAllText(Path.Combine(empty, "notes.txt"), "not a game");
+		ConfigManager.Config.Preferences.LibraryFolders = new List<string> { empty };
+
+		(MainWindow window, MainWindowViewModel model) = ShowFirstRunHome();
+		model.RomPicker.Open();
+		WaitFor(() => model.RomPicker.IsVisible && model.RomPicker.EmptyText.Length > 0, "the library never answered the empty folder");
+
+		Assert.Empty(model.RomPicker.Tiles);
+		Assert.Contains("Library folders", model.RomPicker.EmptyText);
+		Assert.Contains("Add a folder", model.RomPicker.EmptyText);
+		Assert.DoesNotContain("Make this my games folder", model.RomPicker.EmptyText);
+		Assert.DoesNotContain("Browse a file", model.RomPicker.EmptyText);
+	}
+
+	//Decision 8 "seeds the list on first run": the seed is persisted by the first
+	//open, so the list is the same list from then on and a later change to the
+	//single games folder does not reach it.
+	[AvaloniaFact]
+	public void The_first_open_persists_the_seed_and_a_later_games_folder_change_does_not_alter_it()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(string games, string extra, _) = LibraryRoots();
+		PreferencesConfig prefs = ConfigManager.Config.Preferences;
+		Assert.Null(prefs.LibraryFolders);
+
+		(MainWindow window, MainWindowViewModel model) = ShowFirstRunHome();
+		model.RomPicker.Open();
+		WaitFor(() => model.RomPicker.IsVisible, "the picker did not open");
+
+		Assert.NotNull(prefs.LibraryFolders);
+		string seeded = Assert.Single(prefs.LibraryFolders!);
+		Assert.Equal(Path.GetFullPath(games), Path.GetFullPath(seeded));
+
+		prefs.GameFolder = extra;
+		model.RomPicker.Hide();
+		model.RomPicker.Open();
+		WaitFor(() => model.RomPicker.IsVisible, "the picker did not reopen");
+
+		Assert.Equal(new[] { seeded }, prefs.LibraryFolders!);
+	}
+
+	//Removing the last folder empties the grid through ClearTiles (#1035), so the
+	//cover bitmaps the grid held are handed back with it.
+	[AvaloniaFact]
+	public void Removing_the_last_folder_releases_the_cover_art_the_grid_held()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		LibraryRoots();
+
+		(MainWindow window, MainWindowViewModel model) = ShowFirstRunHome();
+		OpenFoldersSheetWithPad(window, model);
+
+		System.Reflection.FieldInfo field = typeof(PlayerRomPickerViewModel).GetField("_coverArt", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+			?? throw new InvalidOperationException("PlayerRomPickerViewModel no longer holds its covers in _coverArt");
+		CoverArtLedger ledger = Assert.IsType<CoverArtLedger>(field.GetValue(model.RomPicker));
+		DisposeProbe held = new();
+		ledger.Track(held);
+
+		Press(window, PadNavAction.Up);
+		WaitFor(() => FocusedName(window) == "RomPickerFolderRemove",
+			$"Up from *Add a folder…* did not reach a row's Remove ({FocusedWhat(window)})");
+		Press(window, PadNavAction.Confirm);
+		WaitFor(() => model.RomPicker.LibraryFolderRows.Count == 0, "the press did not take the last folder out of the list");
+
+		Assert.True(held.Disposed, "removing the last folder left the grid's cover art held until the next ShowLibrary");
+	}
+
+	private sealed class DisposeProbe : IDisposable
+	{
+		public bool Disposed { get; private set; }
+
+		public void Dispose() => Disposed = true;
 	}
 }

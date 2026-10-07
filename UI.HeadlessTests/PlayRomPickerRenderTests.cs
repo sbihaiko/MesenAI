@@ -39,6 +39,7 @@ public class PlayRomPickerRenderTests : IDisposable
 	private readonly Workspace _workspace = ConfigManager.Config.Preferences.Workspace;
 	private readonly string? _gameFolder = ConfigManager.Config.Preferences.GameFolder;
 	private readonly bool _overrideGameFolder = ConfigManager.Config.Preferences.OverrideGameFolder;
+	private readonly List<string>? _libraryFolders = ConfigManager.Config.Preferences.LibraryFolders;
 
 	private readonly List<MainWindow> _windows = new();
 	private readonly string _folder = Path.Combine(Path.GetTempPath(), "mesen-rom-picker-renders-" + Guid.NewGuid().ToString("N"));
@@ -65,6 +66,7 @@ public class PlayRomPickerRenderTests : IDisposable
 		prefs.Workspace = _workspace;
 		prefs.GameFolder = _gameFolder ?? "";
 		prefs.OverrideGameFolder = _overrideGameFolder;
+		prefs.LibraryFolders = _libraryFolders;
 		ConfigManager.Config.Save();
 
 		try {
@@ -111,6 +113,7 @@ public class PlayRomPickerRenderTests : IDisposable
 		File.WriteAllBytes(Path.Combine(sub, "Contra.nes"), SyntheticNrom.Build());
 		ConfigManager.Config.Preferences.GameFolder = root;
 		ConfigManager.Config.Preferences.OverrideGameFolder = true;
+		ConfigManager.Config.Preferences.LibraryFolders = null;
 		return root;
 	}
 
@@ -285,6 +288,7 @@ public class PlayRomPickerRenderTests : IDisposable
 		Directory.CreateDirectory(Path.Combine(root, "empty"));
 		ConfigManager.Config.Preferences.GameFolder = root;
 		ConfigManager.Config.Preferences.OverrideGameFolder = true;
+		ConfigManager.Config.Preferences.LibraryFolders = null;
 
 		(MainWindow window, MainWindowViewModel model) = Show();
 		model.RomPicker.SuggestionSource = _ => Array.Empty<RomPickerHit>();

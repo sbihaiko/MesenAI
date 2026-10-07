@@ -95,11 +95,13 @@ namespace Mesen.ViewModels
 		//app's own read of the pair (a folder the player never designated is not
 		//their library) and `Seed` does the rest.
 		//
-		//Nothing is WRITTEN here, and that is deliberate. Until the player edits the
-		//list this is the same read the app did before the list existed, so a start
-		//with no folder set cannot turn into an emptied library nobody emptied; the
-		//preference is persisted by the first add or remove, which is the first
-		//moment it holds something the player chose rather than something inherited.
+		//The seed is persisted ONCE, by the first Open() that finds the preference
+		//absent (SeedLibraryFolders), so the list is the same list from then on and
+		//*Make this my games folder* cannot change the library before an edit and
+		//stop changing it after one. Only a seed that holds a folder is written: a
+		//start with no folder set must not turn into an emptied library nobody
+		//emptied, and the absent preference stays absent until there is something
+		//to seed.
 		private static IReadOnlyList<string> StoredLibraryFolders()
 		{
 			PreferencesConfig prefs = ConfigManager.Config.Preferences;
@@ -108,6 +110,19 @@ namespace Mesen.ViewModels
 			}
 			string? games = GamesFolder;
 			return LibraryFolders.Seed(null, games is not null, games);
+		}
+
+		private static void SeedLibraryFolders()
+		{
+			PreferencesConfig prefs = ConfigManager.Config.Preferences;
+			if(prefs.LibraryFolders is not null) {
+				return;
+			}
+			IReadOnlyList<string> seed = StoredLibraryFolders();
+			if(seed.Count > 0) {
+				prefs.LibraryFolders = new List<string>(seed);
+				ConfigManager.Config.Save();
+			}
 		}
 
 		//*Library folders…*: the list comes up over the library, and it is the
@@ -265,7 +280,7 @@ namespace Mesen.ViewModels
 				//The last folder just left the list. The library is the named empty
 				//state again, never a grid still showing games no folder on the list
 				//reaches any more.
-				Tiles.Clear();
+				ClearTiles();
 				CountText = "";
 				SearchingText = "";
 				TruncatedText = "";
@@ -278,16 +293,15 @@ namespace Mesen.ViewModels
 		}
 
 		//One message per answer the host-free rule can give about an add. `Added`
-		//and `MergedWithListed` both changed the list; the other three did not, and
-		//each of them says why rather than leaving the player pressing a button that
-		//appears to do nothing.
+		//changed the list; the other two did not, and each of them says why rather
+		//than leaving the player pressing a button that appears to do nothing. A
+		//folder nested in a listed one is not an answer of its own: every root is
+		//kept, so it is a row like any other.
 		private static string AddNoticeId(LibraryFolderChange change)
 		{
 			return change switch {
 				LibraryFolderChange.Added => "RomPickerFolderAdded",
-				LibraryFolderChange.MergedWithListed => "RomPickerFolderMerged",
 				LibraryFolderChange.AlreadyListed => "RomPickerFolderAlreadyListed",
-				LibraryFolderChange.CoveredByListed => "RomPickerFolderCovered",
 				_ => "RomPickerFolderInvalid"
 			};
 		}

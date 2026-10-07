@@ -330,6 +330,7 @@ namespace Mesen.ViewModels
 			IsPickingLibraryFolder = false;
 			IsFoldersSheetVisible = false;
 			FoldersNoticeText = "";
+			SeedLibraryFolders();
 			_roots = BuildRoots(GamesFolder);
 			_folder = null;
 			Title = ResourceHelper.GetMessage("RomPickerTitle");

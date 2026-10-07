@@ -50,6 +50,7 @@ public class PlayerLibraryRecentCoversTests : IDisposable
 	private readonly Workspace _workspace = ConfigManager.Config.Preferences.Workspace;
 	private readonly string? _gameFolder = ConfigManager.Config.Preferences.GameFolder;
 	private readonly bool _overrideGameFolder = ConfigManager.Config.Preferences.OverrideGameFolder;
+	private readonly List<string>? _libraryFolders = ConfigManager.Config.Preferences.LibraryFolders;
 	//#1052 review finding 2: ShowLibrary turns the quit confirmation off so a
 	//window can be closed without the player being asked, and Dispose has to
 	//hand every preference this class touched back - this one included, or the
@@ -101,6 +102,7 @@ public class PlayerLibraryRecentCoversTests : IDisposable
 		prefs.Workspace = _workspace;
 		prefs.GameFolder = _gameFolder ?? "";
 		prefs.OverrideGameFolder = _overrideGameFolder;
+		prefs.LibraryFolders = _libraryFolders;
 		prefs.ConfirmExitResetPower = _confirm;
 		ConfigManager.Config.Save();
 		ConfigManager.RecentGamesFolderOverride = _recentFolderOverride;
@@ -155,6 +157,7 @@ public class PlayerLibraryRecentCoversTests : IDisposable
 		File.WriteAllBytes(Path.Combine(nes, "Metroid (USA).nes"), SyntheticNrom.Build());
 		ConfigManager.Config.Preferences.GameFolder = root;
 		ConfigManager.Config.Preferences.OverrideGameFolder = true;
+		ConfigManager.Config.Preferences.LibraryFolders = null;
 		return root;
 	}
 
