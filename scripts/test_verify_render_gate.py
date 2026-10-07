@@ -184,8 +184,20 @@ def main() -> int:
     # #1010: every Player wireframe has a render case, so the gate compares it.
     # A wireframe ADR-0264 Decision 12 draws before its surface exists is held
     # in WIREFRAMES_AWAITING_RENDER_CASE instead, which is pinned the same way.
+    # The awaiting set must stay *disjoint* from the expected set: a tile that
+    # starts in both would be exempt and demanded at once, and a ticket that
+    # adds W-P19 to EXPECTED_WIREFRAME_RENDERS without removing it from the
+    # awaiting set would extend the exemption forever instead of ending it.
+    awaiting = set(check.WIREFRAMES_AWAITING_RENDER_CASE)
+    both = sorted(pinned & awaiting)
+    if both:
+        print(f"FAIL [awaiting/expected disjoint]: {both} is in both "
+              f"WIREFRAMES_AWAITING_RENDER_CASE and EXPECTED_WIREFRAME_RENDERS")
+        failures += 1
+    else:
+        print(f"ok   [awaiting and expected render sets are disjoint ({len(awaiting)} awaiting)]")
     drawn = {p.stem for p in (REPO_ROOT / "docs" / "media" / "gui-redesign").glob("W-P*.png")} | {"W-S1"}
-    expectable = pinned | set(check.WIREFRAMES_AWAITING_RENDER_CASE)
+    expectable = pinned | awaiting
     if not drawn <= expectable:
         print(f"FAIL [pinned wireframe set]: {sorted(drawn - expectable)} drawn in docs/media/gui-redesign but not expected")
         failures += 1
@@ -212,7 +224,7 @@ def main() -> int:
         else:
             print(f"ok   [workflow: {label}]")
 
-    total = len(RUN_CASES) + 4 + len(WORKFLOW_MUTATIONS)
+    total = len(RUN_CASES) + 5 + len(WORKFLOW_MUTATIONS)
     if failures:
         print(f"FAIL: {failures} of {total} case(s) did not hold")
         return 1
