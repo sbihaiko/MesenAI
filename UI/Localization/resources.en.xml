@@ -2675,11 +2675,6 @@ E
 		     than from a plural form: "1 games" and "11 games in 1 folders" are
 		     both what a single template gets wrong, and a player reads this line
 		     on every visit. {0} = the games, {1} = the folders that answered. -->
-		<Message ID="RomPickerLibraryCount">{0} in {1}</Message>
-		<Message ID="RomPickerGameOne">1 game</Message>
-		<Message ID="RomPickerGameMany">{0} games</Message>
-		<Message ID="RomPickerFolderOne">1 folder</Message>
-		<Message ID="RomPickerFolderMany">{0} folders</Message>
 		<!-- Decision 9: a scan that hit LibraryScan.MaxEntries says so rather than
 		     silently dropping games. {0} = the cap. -->
 		<Message ID="RomPickerLibraryTruncated">Showing the first {0} games — the scan stopped at its limit.</Message>
