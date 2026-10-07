@@ -12,9 +12,9 @@ namespace Mesen.ViewModels
 {
 	//One button on the sheet's picture: lit for the current step, ticked once
 	//bound, placed where it sits on the pad (ADR-0249 W-P15).
-	public sealed record ControllerSetupChip(string Name, bool IsCurrent, bool IsDone, SetupButton Button = SetupButton.A)
+	public sealed record ControllerSetupChip(string Name, bool IsCurrent, bool IsDone, SetupButton Button = SetupButton.A, SetupConsole Console = SetupConsole.Nes)
 	{
-		private PadKey Key => ControllerPadLayout.Of(Button);
+		private PadKey Key => ControllerPadLayout.Of(Console, Button);
 		public double Left => Key.Left;
 		public double Top => Key.Top;
 		public double Width => Key.Width;
@@ -42,6 +42,12 @@ namespace Mesen.ViewModels
 		[ObservableProperty] public partial double Progress { get; private set; }
 		[ObservableProperty] public partial string ErrorText { get; private set; } = "";
 		[ObservableProperty] public partial IReadOnlyList<ControllerSetupChip> Chips { get; private set; } = Array.Empty<ControllerSetupChip>();
+		//#940: the loaded console's own pad body (the Game Boy's carries its screen).
+		[ObservableProperty]
+		[NotifyPropertyChangedFor(nameof(HasScreen), nameof(Screen))]
+		public partial PadBody Pad { get; private set; } = ControllerPadLayout.BodyOf(SetupConsole.Nes);
+		public bool HasScreen => Pad.Screen != null;
+		public PadKey Screen => Pad.Screen ?? default;
 
 		private readonly UnknownControllerDetector _detector = new();
 		private readonly Stopwatch _clock = Stopwatch.StartNew();
@@ -115,6 +121,7 @@ namespace Mesen.ViewModels
 				return;
 			}
 			_console = console;
+			Pad = ControllerPadLayout.BodyOf(console);
 			ushort any = pressed.FirstOrDefault(k => ControllerDevices.DeviceOf(k) == device);
 			_label = ControllerDevices.DisplayName(DeviceName(device), KeyName(any));
 			if(string.IsNullOrEmpty(_label)) {
@@ -154,7 +161,7 @@ namespace Mesen.ViewModels
 			Prompt = ResourceHelper.GetMessage("ControllerSetupPrompt", ButtonName(step));
 			StepText = ResourceHelper.GetMessage("ControllerSetupStep", session.StepIndex + 1, session.Steps.Count, string.Join(", ", session.Steps.Select(ButtonName)));
 			Progress = session.Progress;
-			Chips = session.Steps.Select((b, i) => new ControllerSetupChip(ButtonName(b), i == session.StepIndex, session.Bindings.ContainsKey(b), b)).ToList();
+			Chips = session.Steps.Select((b, i) => new ControllerSetupChip(ButtonName(b), i == session.StepIndex, session.Bindings.ContainsKey(b), b, _console)).ToList();
 		}
 
 		private void Close(ControllerSetupSession session)
