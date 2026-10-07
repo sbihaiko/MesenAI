@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using Mesen.Interop;
 
 namespace Mesen.Logic;
@@ -218,10 +219,28 @@ public static class RemasterScreen
 		return new RemasterRightGame(rom ?? "");
 	}
 
+	//The on-disk form OpenRightGame asks: recents still on disk, then the
+	//games folder's files.
+	public static RemasterRightGame? RightGameStepOnDisk(RemasterReason reason, string projectFolder, IEnumerable<string> recentRoms, string? gamesFolder)
+	{
+		return RightGameStep(reason, projectFolder, recentRoms.Where(File.Exists), FilesIn(gamesFolder));
+	}
+
+	private static IEnumerable<string> FilesIn(string? folder)
+	{
+		try {
+			return string.IsNullOrEmpty(folder) || !Directory.Exists(folder) ? Array.Empty<string>() : Directory.GetFiles(folder);
+		} catch(Exception) {
+			return Array.Empty<string>();
+		}
+	}
+
+	//A same-named patch, save or movie beside the ROM is not the game: only a
+	//file the picker would call a ROM matches (RomFileKinds' table, asked).
 	private static string? FirstNamed(IEnumerable<string> roms, string game)
 	{
 		foreach(string rom in roms) {
-			if(!string.IsNullOrEmpty(rom) && string.Equals(Path.GetFileNameWithoutExtension(rom), game, StringComparison.OrdinalIgnoreCase)) {
+			if(!string.IsNullOrEmpty(rom) && RomFileKinds.IsRomFile(rom) && string.Equals(Path.GetFileNameWithoutExtension(rom), game, StringComparison.OrdinalIgnoreCase)) {
 				return rom;
 			}
 		}

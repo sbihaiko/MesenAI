@@ -194,8 +194,8 @@ namespace Mesen.ViewModels
 		public RemasterRightGame? OpenRightGame()
 		{
 			string? games = GamesFolder();
-			RemasterRightGame? step = RemasterScreen.RightGameStep(Evaluate().Record.Reason, _project?.Folder ?? "",
-				RecentRoms().Where(File.Exists), FilesIn(games));
+			RemasterRightGame? step = RemasterScreen.RightGameStepOnDisk(Evaluate().Record.Reason, _project?.Folder ?? "",
+				RecentRoms(), games);
 			if(step == null) {
 				return null;
 			}
@@ -217,15 +217,6 @@ namespace Mesen.ViewModels
 			PlayerRomPickerViewModel picker = new();
 			picker.RomChosen += path => LoadRom(path);
 			return picker;
-		}
-
-		private static IEnumerable<string> FilesIn(string? folder)
-		{
-			try {
-				return string.IsNullOrEmpty(folder) || !Directory.Exists(folder) ? Array.Empty<string>() : Directory.GetFiles(folder);
-			} catch(Exception) {
-				return Array.Empty<string>();
-			}
 		}
 
 		private static IEnumerable<string> ConfiguredRecentRoms() => ConfigManager.Config.RecentFiles.Items.Select(i => i.RomFile.Path);
