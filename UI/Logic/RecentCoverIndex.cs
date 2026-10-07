@@ -20,6 +20,12 @@ namespace Mesen.Logic;
 //keeps its generic cover until the index is thrown away and created again. The
 //lookup never rescans.
 //
+//The lookup does re-read the `.rgd`, and takes the screenshot only if that same
+//read still names the requested path: the file is named after the ROM's
+//basename, so a namesake in another folder overwrites the very archive this
+//index recorded, and a cover read apart from the identity it is checked
+//against can be the other game's.
+//
 //Host-free (ADR-0123): no Avalonia, no core, no ConfigManager, no window. It
 //reads files and returns bytes, so the library's cover choice is unit-tested
 //without a host. A corrupt or incomplete entry is ignored - never a throw,
@@ -31,7 +37,7 @@ public sealed class RecentCoverIndex
 	private readonly record struct RecentEntry(string File, DateTime WrittenAt);
 
 	private readonly Dictionary<string, RecentEntry> _recentFileByRomPath;
-	private readonly Dictionary<string, byte[]> _coverByRecentFile = new(StringComparer.Ordinal);
+	private readonly Dictionary<string, byte[]> _coverByRomPath = new(StringComparer.Ordinal);
 
 	//The case rule a path comparison follows on this machine: Windows and macOS
 	//compare paths without case, the others do not. The index takes the rule as a
@@ -66,26 +72,31 @@ public sealed class RecentCoverIndex
 	}
 
 	//The one lookup the library sheet makes: the screenshot of the game at this
-	//full path, or null when the player never played it, the entry is corrupt, or
-	//the folder is not there. Never throws.
+	//full path, or null when the player never played it, the entry is corrupt, the
+	//archive no longer records that path, or the folder is not there. Never throws.
 	public byte[]? FindCover(string? romPath)
 	{
 		string? full = FullPath(romPath);
 		if(full == null || !_recentFileByRomPath.TryGetValue(full, out RecentEntry entry)) {
 			return null;
 		}
-		string recentFile = entry.File;
-		if(_coverByRecentFile.TryGetValue(recentFile, out byte[]? cached)) {
+		if(_coverByRomPath.TryGetValue(full, out byte[]? cached)) {
 			return cached;
 		}
-		byte[]? cover = PlayHome.ReadScreenshot(recentFile);
-		if(cover != null) {
-			//A tile is drawn many times; the zip is opened once. Only a hit is
-			//cached, so an indexed `.rgd` that has no screenshot yet is read again
-			//on the next lookup. A `.rgd` this index does not know about is not
-			//reached at all - recreate the index to see it.
-			_coverByRecentFile[recentFile] = cover;
+		//The path and the screenshot come out of one read of the file, and the path
+		//is checked before the bytes are handed over: an archive a namesake
+		//overwrote since the index was built records another game, so its screenshot
+		//is not this ROM's cover, and nothing is cached under this path.
+		(string? recordedPath, byte[]? cover) = ReadEntry(entry.File);
+		string? recorded = FullPath(recordedPath);
+		if(cover == null || recorded == null || !_recentFileByRomPath.Comparer.Equals(full, recorded)) {
+			return null;
 		}
+		//A tile is drawn many times; the zip is opened once. Only a hit is cached,
+		//so an indexed `.rgd` that has no screenshot yet is read again on the next
+		//lookup. A `.rgd` this index does not know about is not reached at all -
+		//recreate the index to see it.
+		_coverByRomPath[full] = cover;
 		return cover;
 	}
 
@@ -114,13 +125,7 @@ public sealed class RecentCoverIndex
 		try {
 			using FileStream fs = new(recentFile, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
 			using ZipArchive zip = new(fs, ZipArchiveMode.Read);
-			ZipArchiveEntry? entry = zip.GetEntry("RomInfo.txt");
-			if(entry == null) {
-				return null;
-			}
-			using Stream stream = entry.Open();
-			using StreamReader reader = new(stream);
-			return PlayRecentGameFailure.ParseRomInfo(reader.ReadToEnd())?.Path;
+			return RomPathIn(zip);
 		} catch(IOException) {
 			return null;
 		} catch(InvalidDataException) {
@@ -130,6 +135,60 @@ public sealed class RecentCoverIndex
 		} catch(NotSupportedException) {
 			return null;
 		}
+	}
+
+	//The same `.rgd` opened once, read for the two things the lookup has to agree
+	//on: the ROM path it records and the screenshot beside it. Two opens would let
+	//an overwrite land between them and pair one game's path with another's cover.
+	private static (string? RomPath, byte[]? Cover) ReadEntry(string recentFile)
+	{
+		try {
+			using FileStream fs = new(recentFile, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+			using ZipArchive zip = new(fs, ZipArchiveMode.Read);
+			return (RomPathIn(zip), ReadScreenshot(zip));
+		} catch(IOException) {
+			return (null, null);
+		} catch(InvalidDataException) {
+			return (null, null);
+		} catch(UnauthorizedAccessException) {
+			return (null, null);
+		} catch(NotSupportedException) {
+			return (null, null);
+		}
+	}
+
+	//RomInfo.txt of an open entry: the ROM path the Core reopens, or null when the
+	//archive holds no such file or no path on its second line.
+	private static string? RomPathIn(ZipArchive zip)
+	{
+		ZipArchiveEntry? entry = zip.GetEntry("RomInfo.txt");
+		if(entry == null) {
+			return null;
+		}
+		using Stream stream = entry.Open();
+		using StreamReader reader = new(stream);
+		return PlayRecentGameFailure.ParseRomInfo(reader.ReadToEnd())?.Path;
+	}
+
+	//Screenshot.png of the same open entry, capped the way PlayHome caps a
+	//user-placed file: an entry that claims more than the limit is no cover at all.
+	private static byte[]? ReadScreenshot(ZipArchive zip)
+	{
+		ZipArchiveEntry? entry = zip.GetEntry("Screenshot.png");
+		if(entry == null) {
+			return null;
+		}
+		using Stream stream = entry.Open();
+		using MemoryStream copy = new();
+		byte[] buffer = new byte[81920];
+		int read;
+		while((read = stream.Read(buffer, 0, buffer.Length)) > 0) {
+			if(copy.Length + read > PlayHome.MaxScreenshotBytes) {
+				return null;
+			}
+			copy.Write(buffer, 0, read);
+		}
+		return copy.ToArray();
 	}
 
 	//When the `.rgd` was last written, or DateTime.MinValue when the filesystem

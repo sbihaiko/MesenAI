@@ -134,6 +134,45 @@ namespace Mesen.Tests.Play
 			}
 		}
 
+		//#1035: the `.rgd` is named after the ROM's basename, and the Core keeps one
+		//archive per name, shared by every folder - playing /B/Game.nes overwrites
+		//the `Game.rgd` the index recorded for /A/Game.nes. The ROM path and the
+		//screenshot have to come out of the same read of the file, or A is served
+		//B's cover.
+		[Fact]
+		public void A_recent_file_overwritten_by_a_namesake_does_not_serve_the_wrong_cover()
+		{
+			string folder = NewTempFolder();
+			try {
+				byte[] coverA = { 0x89, 0x50, 0x4E, 0x47, 1, 1, 1 };
+				byte[] coverB = { 0x89, 0x50, 0x4E, 0x47, 2, 2, 2, 2 };
+				string romA = Path.Combine(folder, "A", "Game.nes");
+				string romB = Path.Combine(folder, "B", "Game.nes");
+
+				//A was played first, so the index is built while `Game.rgd` records A.
+				string recent = WriteRecent(folder, "Game", RomInfo(romA), coverA);
+				File.SetLastWriteTimeUtc(recent, new DateTime(2026, 1, 2, 3, 4, 5, DateTimeKind.Utc));
+				RecentCoverIndex index = new(folder, StringComparison.Ordinal);
+
+				//B is played next: the Core writes B's RomInfo and B's Screenshot.png
+				//over the same file, which keeps its name.
+				File.Delete(recent);
+				WriteRecent(folder, "Game", RomInfo(romB), coverB);
+				File.SetLastWriteTimeUtc(recent, new DateTime(2026, 1, 2, 4, 5, 6, DateTimeKind.Utc));
+
+				//A is not in that archive anymore: the generic cover, never B's. The
+				//miss is asked twice, so a mismatched cover is not cached either.
+				Assert.Null(index.FindCover(romA));
+				Assert.Null(index.FindCover(romA));
+
+				//The direction is pinned: an index built now finds B's own screenshot,
+				//so the null above is the identity check and not a missing archive.
+				Assert.Equal(coverB, new RecentCoverIndex(folder, StringComparison.Ordinal).FindCover(romB));
+			} finally {
+				Directory.Delete(folder, true);
+			}
+		}
+
 		//The default factory derives the rule from the platform: Windows and macOS
 		//compare paths without case, the rest of the world does not.
 		[Fact]
