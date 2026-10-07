@@ -5,7 +5,8 @@ using System.Linq;
 namespace Mesen.Logic;
 
 //PRD Part B §6, §13.5.2 W-P8 (G.4): in Player mode the Settings page shows only
-//the essentials, as one strip in this order: Display | Look | Audio | Controls.
+//the essentials, as one strip in this order: Display | Look | Audio | Controls | System
+//(ADR-0256).
 //Display is the window (full screen, aspect ratio, scale) and Look (W-P10,
 //ADR-0246) is what the pixels look like, so Advanced's Video tab is not part of
 //Play; everything else is Classic › Settings. The ConfigWindow shows a separate
@@ -41,9 +42,10 @@ public static class PlayerSettingsEssentials
 
 	//W-P8 is a 340 px sheet - three rows, then the "Everything else" hint (or,
 	//on Audio and Controls, the "More in Options..." link in the hint's place)
-	//right under the group, and Done; Look is W-P10's taller 480 px sheet
-	//(ADR-0249: a sheet in the main window, not a window), and Play's System tab
-	//(ADR-0256 Decision 8) needs the same room: two storage choices with their
+	//right under the group ("Everything else: Classic › Settings", ADR-0250
+	//Decisions 2 and 3: Play's Tools ⋯ has no Options entry), and Done; Look is
+	//W-P10's taller 480 px sheet (ADR-0249: a sheet in the main window, not a
+	//window), and Play's System tab (ADR-0256 Decision 8) needs the same room: two storage choices with their
 	//folder lines, two keyboard choices, and the restart line a folder change
 	//puts there.
 	public static double SheetHeight(ConfigWindowTab tab) => tab is ConfigWindowTab.Look or ConfigWindowTab.System ? 480 : 340;
@@ -54,7 +56,7 @@ public static class PlayerSettingsEssentials
 	//segments leave the track centred and narrower than the sheet. ADR-0256
 	//Decision 8 added the fifth (System) and the fixed 96 px ran 42 px past the
 	//sheet's right edge, so the last label rendered as "Syst": the mockups were
-	//drawn before the tab existed. A segment is 96 px while 96 px still fits the
+	//drawn before the tab existed (since #1006 they draw all five, 84 px each). A segment is 96 px while 96 px still fits the
 	//width the track is handed, and the segments share it evenly once they do
 	//not, so no tab count can overflow the sheet again. Pure, so the rule is
 	//pinned host-free in UI.Tests/Play/PlayerSettingsStripTests; the rendered

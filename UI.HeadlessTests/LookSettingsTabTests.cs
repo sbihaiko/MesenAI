@@ -122,7 +122,7 @@ public class LookSettingsTabTests : IDisposable
 		ConfigManager.Config.Video.ShaderFile = "";
 
 		(MainWindow window, _) = ShowSettings(ConfigWindowTab.Look);
-		//G.4 (W-P8): Player mode's own strip, Display | Look | Audio | Controls.
+		//G.4 (W-P8): Player mode's own strip, Display | Look | Audio | Controls | System.
 		List<TabItem> tabs = window.FindNamed<TabControl>("PlayerSettingsTabs").Items.Cast<TabItem>().ToList();
 		TabItem look = tabs[PlayerSettingsEssentials.IndexOf(ConfigWindowTab.Look)];
 		Assert.Equal("tabPlayerVideo", look.Name);

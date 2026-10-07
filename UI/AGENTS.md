@@ -778,10 +778,11 @@ drawn by `scripts/render_gui_wireframes.py`), not classic Mesen. The theme is
     byline is the game's name plus "Made on this computer from what you
     played", naming the scaler in parentheses when the project's
     `.bootstrap` stamp does ("(xBRZ 4×)"). *Settings* (W-P8) is the
-    Display | Look | Audio | Controls strip: Audio (Sound, Volume, Output
+    Display | Look | Audio | Controls | System strip (System: ADR-0256, the
+    storage and keyboard choices the first-run wizard used to ask): Audio (Sound, Volume, Output
     device) and Controls (pads, Rumble, deadzone) are three-row lists whose
     "More in Options…" opens that tab's classic page, Display carries the
-    "Everything else: Tools ⋯ › Options" hint, Look its own footer.
+    "Everything else: Classic › Settings" hint, Look its own footer.
   - Icons (`StreamGeometry`, 20 x 20 box, use with `PathIcon`):
     `PlayerIconPlay`, `Remaster`, `Pencil`, `Share`, `Pack`, `SaveStates`,
     `Enhancements`, `Cheats`, `Settings`, `Folder`, `ChevronRight`,
