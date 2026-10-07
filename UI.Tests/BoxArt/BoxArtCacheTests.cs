@@ -172,7 +172,7 @@ namespace Mesen.Tests.BoxArt
 		}
 
 		[Fact]
-		public async Task An_unreachable_collection_returns_null_and_records_the_miss()
+		public async Task An_unreachable_collection_returns_null_without_recording_a_miss()
 		{
 			FakeBoxArtSender sender = FakeBoxArtSender.Offline();
 			BoxArtCache cache = Cache(sender);
@@ -180,9 +180,14 @@ namespace Mesen.Tests.BoxArt
 			Assert.Null(await cache.GetCover(BoxArtConsole.Nes, Sha1, Name));
 			Assert.Equal(2, sender.RequestCount);
 
+			//A transport failure says something about the network and nothing about
+			//the game: one offline session must not blank every visible cover for
+			//thirty days.
+			Assert.False(File.Exists(Path.Combine(ConsoleFolder, Sha1 + ".miss")));
+
 			Assert.Null(await cache.GetCover(BoxArtConsole.Nes, Sha1, Name));
-			//A network that is down is not retried tile by tile.
-			Assert.Equal(2, sender.RequestCount);
+			//Nothing was recorded, so the tile asks again once the network is back.
+			Assert.Equal(4, sender.RequestCount);
 		}
 
 		[Fact]
@@ -200,6 +205,8 @@ namespace Mesen.Tests.BoxArt
 			//the network, so the whole call is bounded by the two timeouts and not by
 			//the transport.
 			Assert.True(watch.Elapsed < TimeSpan.FromSeconds(5), $"the call took {watch.Elapsed}");
+			//A timeout is a transport failure like any other: no answer, no miss.
+			Assert.False(File.Exists(Path.Combine(ConsoleFolder, Sha1 + ".miss")));
 		}
 
 		[Theory]

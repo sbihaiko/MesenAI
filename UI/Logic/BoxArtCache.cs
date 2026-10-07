@@ -32,10 +32,13 @@ namespace Mesen.Logic
 	//  5. **Otherwise the collection is asked**: Named_Boxarts first, then
 	//     Named_Titles, HTTPS only, at most MaxImageBytes, and the body is cached
 	//     only after its own first bytes say it is a PNG or a JPEG.
-	//  6. **Every failure becomes a recorded miss**: a 404, a transport exception
-	//     (offline, DNS, TLS), a timeout, an oversized body, a body that is not an
-	//     image, a cache directory that cannot be written. A tile whose art is
-	//     unavailable is a tile that falls back to its generic cover, and no
+	//  6. **A failure is answered with null, and only a definitive one is
+	//     remembered.** A 404, an oversized body, a body that is not an image, a
+	//     cache directory that cannot be written: those say the collection has no
+	//     picture for this game, so the miss is recorded. A transport failure
+	//     (offline, DNS, TLS) or a timeout says something about the network and
+	//     nothing about the game, so it records nothing at all - one offline
+	//     session must not blank every cover for thirty days. Either way no
 	//     exception from here ever reaches the sheet.
 	public sealed class BoxArtCache
 	{
@@ -81,35 +84,56 @@ namespace Mesen.Logic
 				return null;
 			}
 
-			BoxArtCover? cover = await Download(console, sha1, noIntroName, folder, cancellationToken).ConfigureAwait(false);
-			if(cover != null) {
+			BoxArtAttempt attempt = await Download(console, sha1, noIntroName, folder, cancellationToken).ConfigureAwait(false);
+			if(attempt.Cover != null) {
 				BoxArtCacheStore.ClearMiss(folder, sha1);
-				return cover;
+				return attempt.Cover;
 			}
 
-			//A call the caller itself cancelled (the sheet closed, the tile
-			//scrolled away) says nothing about the game, so it is not recorded:
-			//thirty days of "no art" written because a player moved the focus
-			//would be a bug they cannot see and cannot clear.
-			if(!cancellationToken.IsCancellationRequested) {
+			//Only an answer the collection actually gave is worth remembering; a
+			//network that was down when the tile was drawn is not evidence that the
+			//game has no cover. A call the caller itself cancelled (the sheet closed,
+			//the tile scrolled away) says nothing about the game either, so it is not
+			//recorded: thirty days of "no art" written because a player moved the
+			//focus would be a bug they cannot see and cannot clear.
+			if(attempt.Definitive && !cancellationToken.IsCancellationRequested) {
 				BoxArtCacheStore.WriteMiss(folder, sha1, _options.Clock());
 			}
 			return null;
 		}
 
-		private async Task<BoxArtCover?> Download(BoxArtConsole console, string sha1, string noIntroName, string folder, CancellationToken cancellationToken)
+		//What one call to the collection decided. `Definitive` is the whole point of
+		//the pair: a cover makes it moot, and without one it says whether the
+		//collection actually answered (a 404, an oversized body, a body that is not
+		//an image) or the transport failed - which is the difference between
+		//recording a miss and not.
+		private readonly record struct BoxArtAttempt(BoxArtCover? Cover, bool Definitive);
+
+		private async Task<BoxArtAttempt> Download(BoxArtConsole console, string sha1, string noIntroName, string folder, CancellationToken cancellationToken)
 		{
 			(BoxArtCoverKind Kind, Uri? Url)[] attempts = {
 				(BoxArtCoverKind.Boxart, BoxArtUrl.Boxarts(console, noIntroName)),
 				(BoxArtCoverKind.Title, BoxArtUrl.Titles(console, noIntroName))
 			};
 
+			//A miss may only be recorded when the collection answered. One attempt
+			//that failed for transport reasons, with no cover from the rest, is not
+			//evidence that the game has no art - it is evidence about the network.
+			bool answered = false;
+			bool transportFailed = false;
+
 			foreach((BoxArtCoverKind kind, Uri? url) in attempts) {
 				if(url == null) {
 					continue;
 				}
 
-				byte[]? body = await TryFetch(url, cancellationToken).ConfigureAwait(false);
+				(byte[]? body, bool thisAnswered) = await TryFetch(url, cancellationToken).ConfigureAwait(false);
+				if(!thisAnswered) {
+					transportFailed = true;
+					continue;
+				}
+				answered = true;
+
 				if(body == null) {
 					continue;
 				}
@@ -121,16 +145,19 @@ namespace Mesen.Logic
 
 				string? path = BoxArtCacheStore.WriteImage(folder, sha1, kind, format, body);
 				if(path != null) {
-					return new BoxArtCover(path, kind);
+					return new BoxArtAttempt(new BoxArtCover(path, kind), true);
 				}
 			}
-			return null;
+			return new BoxArtAttempt(null, answered && !transportFailed);
 		}
 
-		//One request under the concurrency ceiling and the per-request timeout. Null
-		//means "not this one" - a non-200 answer, an oversized body, or a transport
-		//that failed - and the caller moves on to the next collection.
-		private async Task<byte[]?> TryFetch(Uri url, CancellationToken cancellationToken)
+		//One request under the concurrency ceiling and the per-request timeout.
+		//`Answered` is false only when the transport itself failed - offline, DNS,
+		//TLS, a timeout, a proxy that answered with nonsense - and that is the one
+		//outcome the caller may not turn into a recorded miss. A null body with
+		//`Answered` true is a definitive "not this one": a non-200 answer or a body
+		//past the cap, and the caller moves on to the next collection.
+		private async Task<(byte[]? Body, bool Answered)> TryFetch(Uri url, CancellationToken cancellationToken)
 		{
 			await _inFlight.WaitAsync(cancellationToken).ConfigureAwait(false);
 			try {
@@ -139,14 +166,15 @@ namespace Mesen.Logic
 
 				BoxArtHttpResponse response = await _sender(url, timeout.Token).ConfigureAwait(false);
 				if(response.StatusCode != 200 || response.Body.Length > _options.MaxImageBytes) {
-					return null;
+					return (null, true);
 				}
-				return response.Body;
+				return (response.Body, true);
 			} catch(Exception) {
 				//Offline, DNS, TLS, a timeout, a proxy that answered with nonsense:
-				//from the sheet's point of view these are one thing - this picture
-				//is not available now - and the caller records the miss.
-				return null;
+				//from the sheet's point of view these are one thing - this picture is
+				//not available now - and the caller answers null while recording
+				//nothing.
+				return (null, false);
 			} finally {
 				_inFlight.Release();
 			}

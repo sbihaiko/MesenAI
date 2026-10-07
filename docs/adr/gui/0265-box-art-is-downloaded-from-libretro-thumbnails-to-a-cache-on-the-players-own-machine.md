@@ -110,14 +110,19 @@ allow-listed raw host, and lives only in the player's own cache.**
    kind (box art or title screen) is in the file name, so no sidecar and no
    decoder are needed to serve a hit.
 
-7. **A miss is remembered, and the memory expires.** A 404, a transport failure
-   (offline, DNS, TLS), a timeout, an oversized body, a body that is not an
-   image, a cache directory that cannot be written: each records a timestamped
-   negative entry, so a game the collection does not have costs one pair of
-   requests rather than one per visit. The entry expires after **30 days**
-   (`MissExpiry`), so a game added to the collection later is picked up without
-   anyone clearing a cache by hand. A call the caller itself cancelled records
-   nothing: the sheet closing is not evidence about the game.
+7. **A miss is remembered, and the memory expires — but only an answer is
+   remembered.** A 404, an oversized body, a body that is not an image, a cache
+   directory that cannot be written: each is a definitive answer, so each
+   records a timestamped negative entry, and a game the collection does not have
+   costs one pair of requests rather than one per visit. The entry expires after
+   **30 days** (`MissExpiry`), so a game added to the collection later is picked
+   up without anyone clearing a cache by hand. **Nothing is recorded when no
+   answer came**: a transport failure (offline, DNS, TLS) or a timeout says
+   something about the network and nothing about the game, and one offline
+   session must not blank every visible cover for thirty days — such a call
+   returns `null` and leaves the cache untouched, at the cost of asking again
+   once the network is back. A call the caller itself cancelled records nothing
+   either: the sheet closing is not evidence about the game.
 
 8. **One master switch, default on, and off means no request at all.** The
    preference `PreferencesConfig.DownloadBoxArt` (Settings › System, default
