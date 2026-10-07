@@ -35,15 +35,18 @@ namespace Mesen.ViewModels
 	//is chosen here and only here. The palette is the wireframe's own
 	//(scripts/render_gui_wireframes.py, CONSOLE_TINT), so a render of this sheet
 	//and W-P19 agree on what a Game Boy game looks like.
-	public class PlayerLibraryTile
+	public partial class PlayerLibraryTile
 	{
-		public PlayerLibraryTile(LibraryEntry entry, string consoleName)
+		//`recentCover` is the screenshot the player's Recent list holds for this
+		//game, when it holds one (#1035) - null for a game never run, and the tile
+		//then draws the cover it always drew.
+		public PlayerLibraryTile(LibraryEntry entry, string consoleName, byte[]? recentCover = null)
 		{
 			Path = entry.Path;
 			Title = entry.Title;
 			Console = entry.Console;
 			ConsoleName = consoleName;
-			Cover = ConsoleCover(entry.Console);
+			(Cover, ShowsTitleOnCover) = TileCover(entry, recentCover);
 		}
 
 		public string Path { get; }
@@ -591,8 +594,9 @@ namespace Mesen.ViewModels
 			//step, not a blank grid. The rule is PlayRomPicker's; this is the lookup.
 			EmptyText = LibraryEmptyText(PlayRomPicker.LibraryEmptyMessageId(_folders.Count, result.Entries.Count));
 			Tiles.Clear();
+			RefreshRecentCovers();
 			foreach(LibraryEntry entry in result.Entries) {
-				Tiles.Add(new PlayerLibraryTile(entry, ConsoleName(entry.Console)));
+				Tiles.Add(new PlayerLibraryTile(entry, ConsoleName(entry.Console), RecentCoverOf(entry)));
 			}
 			CountText = ResourceHelper.GetMessage("RomPickerLibraryCount",
 				CountLabel(result.Entries.Count, "RomPickerGameOne", "RomPickerGameMany"),
