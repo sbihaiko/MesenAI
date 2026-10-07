@@ -34,6 +34,8 @@ namespace Mesen.HeadlessTests;
 public class PlayerCheatsSheetTests : IDisposable
 {
 	private static string CheatFile => Path.Combine(ConfigManager.CheatFolder, EmuApi.GetRomInfo().GetRomName() + ".json");
+	private readonly bool _pauseInBackground = ConfigManager.Config.Preferences.PauseWhenInBackground;
+	private readonly bool _pauseInMenus = ConfigManager.Config.Preferences.PauseWhenInMenusAndConfig;
 
 	public PlayerCheatsSheetTests()
 	{
@@ -44,6 +46,8 @@ public class PlayerCheatsSheetTests : IDisposable
 
 	public void Dispose()
 	{
+		ConfigManager.Config.Preferences.PauseWhenInBackground = _pauseInBackground;
+		ConfigManager.Config.Preferences.PauseWhenInMenusAndConfig = _pauseInMenus;
 		if(NativeCore.IsAvailable) {
 			DeleteCheatFile();
 		}
@@ -59,6 +63,10 @@ public class PlayerCheatsSheetTests : IDisposable
 	private static (MainWindow Window, MainWindowViewModel Model) ShowPlayer(ConsoleType console)
 	{
 		ConfigManager.Config.Preferences.UiMode = UiMode.Player;
+		//#955: no headless window is ever active, so the focus pause (ADR-0254)
+		//would reopen W-P4 on its next tick; a sheet test is not about focus.
+		ConfigManager.Config.Preferences.PauseWhenInBackground = false;
+		ConfigManager.Config.Preferences.PauseWhenInMenusAndConfig = false;
 		ConfigManager.Config.Cheats.DisableAllCheats = false;
 		MainWindow window = new();
 		window.ShowStarted();
@@ -234,6 +242,42 @@ public class PlayerCheatsSheetTests : IDisposable
 		model.TogglePlayerOverlay();
 		Dispatcher.UIThread.RunJobs();
 		Assert.False(window.FindNamed<Border>("PlayerOverlay").IsOnScreen());
+	}
+
+	//#955: no headless window is ever active, so with the default
+	//PauseWhenInBackground (ADR-0254) MainWindow's 100 ms focus tick paused a
+	//running game and reopened W-P4 right after Esc resumed it. Alone the class
+	//never met it - only with a game left running by an earlier class (most
+	//load one) and a tick inside the test. This runs a game and waits past a tick.
+	[AvaloniaFact]
+	public void Esc_resume_is_not_undone_by_the_background_focus_tick()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		string rom = Path.Combine(Path.GetTempPath(), "mesen-cheats-esc-" + Guid.NewGuid().ToString("N") + ".nes");
+		File.WriteAllBytes(rom, SyntheticNrom.Build());
+		(MainWindow window, MainWindowViewModel model) = ShowPlayer(ConsoleType.Nes);
+		try {
+			Assert.True(EmuApi.LoadRom(rom, string.Empty), $"the core refused to load {rom}");
+			System.Diagnostics.Stopwatch clock = System.Diagnostics.Stopwatch.StartNew();
+			while(!(EmuApi.IsRunning() && model.RomInfo.RomPath == rom && !model.RecentGames.Visible)) {
+				Assert.True(clock.ElapsedMilliseconds < 30000, "the ROM never reported as loaded");
+				Dispatcher.UIThread.RunJobs();
+				System.Threading.Thread.Sleep(20);
+			}
+			model.TogglePlayerOverlay();
+			Dispatcher.UIThread.RunJobs();
+			Assert.True(window.FindNamed<Border>("PlayerOverlay").IsOnScreen());
+			model.TogglePlayerOverlay();
+			Dispatcher.UIThread.RunJobs();
+			Assert.False(window.FindNamed<Border>("PlayerOverlay").IsOnScreen());
+
+			System.Threading.Thread.Sleep(250);
+			Dispatcher.UIThread.RunJobs();
+			Assert.False(window.FindNamed<Border>("PlayerOverlay").IsOnScreen());
+		} finally {
+			EmuApi.Stop();
+			File.Delete(rom);
+		}
 	}
 
 	//R.4 (ADR-0248 §2, §5): the community rows of docs/community-cheats.json.
