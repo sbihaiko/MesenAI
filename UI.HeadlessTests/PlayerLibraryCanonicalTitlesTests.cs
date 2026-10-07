@@ -353,6 +353,51 @@ public class PlayerLibraryCanonicalTitlesTests : IDisposable
 		Assert.Equal(1, Volatile.Read(ref calls));
 	}
 
+	//#1038 review finding 4 (ADR-0264 Decision 11): *Browse a file…* leaves the
+	//library for the sheet's SECOND surface without closing the sheet, so neither
+	//trigger the pass had - a new scan, IsVisible false - fires, and the walk keeps
+	//hashing the library behind a player who is now in the folder browser. Every
+	//batch it posts from there is thrown away by the `Mode != Library` guard, and
+	//coming back to the library starts a fresh scan and a fresh pass anyway: up to
+	//MaxEntries files read for nothing, while the browser's own scan wants the same
+	//disk.
+	[AvaloniaFact]
+	public void A_pass_the_player_left_the_library_from_stops_at_the_tile_it_never_started()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+
+		TaskCompletionSource<bool> held = new();
+		int calls = 0;
+		CancellationToken? passToken = null;
+		(MainWindow _, _, PlayerRomPickerViewModel picker) = ShowLibrary(async (path, _, token) => {
+			Interlocked.Increment(ref calls);
+			passToken = token;
+			await held.Task;
+			return Path.GetFileName(path).StartsWith("Contra", StringComparison.Ordinal) ? KnownSha1 : UnknownSha1;
+		});
+		WaitFor(() => Volatile.Read(ref calls) == 1, $"the pass never asked for a hash ({calls} calls)");
+
+		//The player steps into the browser. The sheet stays up, so the library's
+		//surface is left rather than closed - which is exactly the state the two
+		//older triggers cannot see.
+		picker.BrowseFile();
+		Assert.Equal(RomPickerMode.BrowseFile, picker.Mode);
+
+		//The token the read was handed is the one that fires: the pass is stopped at
+		//the source, not only around it - a read already inside a file is what this
+		//is for.
+		WaitFor(() => passToken?.IsCancellationRequested == true,
+			"stepping into the browser never cancelled the token the pass's read was handed");
+
+		held.SetResult(true);
+
+		//The read the pass was holding answers after the player left the library, and
+		//the pass has no second tile to ask for: the count stays where the step left
+		//it.
+		Settle(400);
+		Assert.Equal(1, Volatile.Read(ref calls));
+	}
+
 	//The grid's tile for one game, by data context - the same way the focus
 	//arbiter finds them, so this reads the container the player's ring would be on.
 	private static Button? TileButton(MainWindow window, PlayerLibraryTile tile)

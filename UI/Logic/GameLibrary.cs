@@ -312,15 +312,41 @@ public static class GameLibrary
 		return new string(output.ToArray());
 	}
 
-	//By title, then by path: two games of the same name (an NES and a Game Boy
-	//one, or the same ROM under two folders) keep one stable order between runs
-	//rather than whatever the disk answered first. The path tiebreak asks the
-	//scan's own "is this the same path?" question, so two spellings that tie on
-	//Windows and macOS are still ordered on Linux instead of left to the host.
+	//The order the grid shows two games in (Decision 1), over the two things the
+	//order is made of - the title a reader looks the game up under and the path
+	//that separates two games of one name. Public because the rule has TWO
+	//callers and must not be written twice (#1038 review finding 3): the scan
+	//sorts the entries it walked with it, and the canonical-title pass re-sorts
+	//the grid with the very same one once the real titles land. A copy in the
+	//pass could drift from the scan's order with every test still green, and the
+	//drift is exactly what a player would see as the library shuffling for no
+	//reason.
+	//
+	//By title first, over SortTitle so a leading article files where a player
+	//looks for it, and folded so two spellings of one name are one answer. Then
+	//by path, which is what keeps two games of one name (an NES and a Game Boy
+	//one, or the same ROM under two folders) in one stable order between runs
+	//rather than in whatever order the disk answered first.
+	public static int Compare(string leftTitle, string leftPath, string rightTitle, string rightPath)
+	{
+		return Compare(leftTitle, leftPath, rightTitle, rightPath, PathComparer);
+	}
+
+	//The same rule with the fold named by the caller, for the reason PathComparer
+	//exists: folding a path is a file system rule, so a caller that has already
+	//decided which fold its library is read under says so rather than inheriting
+	//this machine's.
+	public static int Compare(string leftTitle, string leftPath, string rightTitle, string rightPath, StringComparer pathComparer)
+	{
+		int byTitle = string.Compare(SortTitle(leftTitle), SortTitle(rightTitle), StringComparison.OrdinalIgnoreCase);
+		return byTitle != 0 ? byTitle : pathComparer.Compare(leftPath, rightPath);
+	}
+
+	//The scan's own use of the rule above: one entry against another, so the walk
+	//and the re-sort cannot answer differently for the same two games.
 	private static int Compare(LibraryEntry left, LibraryEntry right, StringComparer pathComparer)
 	{
-		int byTitle = string.Compare(SortTitle(left.Title), SortTitle(right.Title), StringComparison.OrdinalIgnoreCase);
-		return byTitle != 0 ? byTitle : pathComparer.Compare(left.Path, right.Path);
+		return Compare(left.Title, left.Path, right.Title, right.Path, pathComparer);
 	}
 
 	//A folder listing that threw is an empty answer: the scan runs over disks
