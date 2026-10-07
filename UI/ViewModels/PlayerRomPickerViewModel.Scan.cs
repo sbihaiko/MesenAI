@@ -56,15 +56,15 @@ namespace Mesen.ViewModels
 		//tile is a container a rebuilt grid throws away.
 		[ObservableProperty] public partial string LastFocusedTilePath { get; private set; } = "";
 
-		//The entries behind Tiles, in the module's own order and in the same
-		//positions: a batch is merged here as it arrives, so the grid reads in
-		//title order at every instant rather than only once the scan ends.
+		//The entries behind the grid live in _libraryGames (Search), in the module's
+		//own order: a batch is merged there as it arrives, so the list reads in title
+		//order at every instant rather than only once the scan ends, and the query
+		//decides which of them are tiles.
 		//
 		//Which scan a batch belongs to is the sheet's own ScanGeneration (see
 		//PlayerRomPickerViewModel.cs): a batch from a scan the player has already
 		//left - a B press, a step into *Browse a file…* and back - must not land
 		//in the grid of the scan that replaced it.
-		private readonly List<LibraryEntry> _ordered = new();
 		//The walk of the scan that is running, so the next one can stop it: a
 		//superseded scan that keeps reading the disk is exactly what Decision 9's
 		//"bounded" forbids once the player has left the sheet.
@@ -97,7 +97,7 @@ namespace Mesen.ViewModels
 		//leak one decoded image per visit.
 		private void ResetLibraryGrid()
 		{
-			_ordered.Clear();
+			_libraryGames.Clear();
 			ClearTiles();
 			TilesRevision++;
 		}
@@ -156,6 +156,9 @@ namespace Mesen.ViewModels
 			_tileTookRing = false;
 
 			ResetLibraryGrid();
+			//The library has folders and is being read, so the box owns the empty
+			//result from here on (Search.UpdateEmptyResult).
+			_hasLibrary = true;
 			IsScanning = true;
 			SearchingText = ResourceHelper.GetMessage("RomPickerSearching");
 
@@ -257,17 +260,28 @@ namespace Mesen.ViewModels
 			if(!_scanGeneration.IsCurrent(generation) || !IsVisible || Mode != RomPickerMode.Library) {
 				return;
 			}
-			bool wasEmpty = _ordered.Count == 0;
+			//With a query on, the grid is a filtered view of the list and a tile's
+			//position is not the game's: the view is refilled instead, and the ring -
+			//which is on the box while the player types - is not claimed.
+			bool query = HasQuery;
+			bool wasEmpty = Tiles.Count == 0;
 			bool restoreLanded = false;
 			for(int index = from; index < from + count; index++) {
 				LibraryEntry entry = batch[index];
 				int at = InsertIndex(entry);
-				_ordered.Insert(at, entry);
 				//The cover travels with its entry, in the same order (#1035): a
 				//tile inserted mid-grid draws the picture the scan resolved for
 				//THAT game and never its neighbour's.
-				Tiles.Insert(at, TileFor(entry, covers[index]));
+				LibraryGame game = new(entry, covers[index]);
+				_libraryGames.Insert(at, game);
+				if(!query) {
+					Tiles.Insert(at, TileFor(entry, game.Cover));
+				}
 				restoreLanded |= _restoreTargetPath.Length > 0 && entry.Path == _restoreTargetPath;
+			}
+			if(query) {
+				FillTiles();
+				return;
 			}
 			//The first games to arrive are the ones the ring has been waiting for:
 			//the sheet opened with nothing to play, so it is holding Back, and this
@@ -279,7 +293,7 @@ namespace Mesen.ViewModels
 			//lands: until then the arbiter has kept the ring off the grid
 			//(IsRestorePending), so this is the sheet finishing what it promised
 			//rather than a claim over the player's ring.
-			if((wasEmpty && _ordered.Count > 0) || restoreLanded) {
+			if((wasEmpty && Tiles.Count > 0) || restoreLanded) {
 				TilesRevision++;
 			}
 		}
@@ -290,10 +304,10 @@ namespace Mesen.ViewModels
 		private int InsertIndex(LibraryEntry entry)
 		{
 			int low = 0;
-			int high = _ordered.Count;
+			int high = _libraryGames.Count;
 			while(low < high) {
 				int middle = low + (high - low) / 2;
-				if(GameLibrary.Compare(_ordered[middle], entry) <= 0) {
+				if(GameLibrary.Compare(_libraryGames[middle].Entry, entry) <= 0) {
 					low = middle + 1;
 				} else {
 					high = middle;
@@ -329,7 +343,7 @@ namespace Mesen.ViewModels
 			IsScanning = false;
 			if(_restoreTargetPath.Length > 0) {
 				_restoreTargetPath = "";
-				if(!_tileTookRing && _ordered.Count > 0) {
+				if(!_tileTookRing && Tiles.Count > 0 && !HasQuery) {
 					TilesRevision++;
 				}
 			}
@@ -348,7 +362,8 @@ namespace Mesen.ViewModels
 			//step, not a blank grid. The rule is PlayRomPicker's; this is the lookup -
 			//and it is taken here, at the finish, because until the walk returns "no
 			//games" is a claim the scan has not made.
-			EmptyText = LibraryEmptyText(PlayRomPicker.LibraryEmptyMessageId(_folders.Count, result.Entries.Count));
+			_scanEmptyText = LibraryEmptyText(PlayRomPicker.LibraryEmptyMessageId(_folders.Count, result.Entries.Count));
+			UpdateEmptyResult();
 			CountText = ResourceHelper.GetMessage("RomPickerLibraryCount",
 				CountLabel(result.Entries.Count, "RomPickerGameOne", "RomPickerGameMany"),
 				CountLabel(result.FolderCount, "RomPickerFolderOne", "RomPickerFolderMany"));

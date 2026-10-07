@@ -64,7 +64,7 @@ namespace Mesen.ViewModels
 		//since have changed.
 		private void BeginLibraryVisit()
 		{
-			_libraryGames = Array.Empty<LibraryGame>();
+			_libraryGames.Clear();
 			_titles = new LibraryTitleBook();
 			_hasLibrary = false;
 			_scanEmptyText = "";
@@ -78,35 +78,18 @@ namespace Mesen.ViewModels
 		//that was filtered out.
 		private sealed record LibraryGame(LibraryEntry Entry, LibraryCoverPick Cover);
 
-		//What the scan answered, kept whole. The query narrows the grid OVER this
-		//list rather than over the tiles, so clearing the box and typing the next
-		//query both cost nothing but a walk of the list.
-		private IReadOnlyList<LibraryGame> _libraryGames = Array.Empty<LibraryGame>();
+		//What the scan has answered so far, kept whole and in the module's order.
+		//The streamed batches are merged in here as they arrive (Scan), and the query
+		//narrows the grid OVER this list rather than over the tiles, so clearing the
+		//box and typing the next query both cost nothing but a walk of the list.
+		private readonly List<LibraryGame> _libraryGames = new();
 		//The title each of them is shown and searched by (see LibraryTitleBook):
 		//the canonical-title pass writes here, and FillTiles reads from here.
 		private LibraryTitleBook _titles = new();
-		//Whether those entries came from a scan of THIS library. False while the
+		//Whether those entries come from a scan of THIS library. False while the
 		//sheet has no library folder at all, where the empty state belongs to
 		//ShowLibrary's own sentence and not to this box.
 		private bool _hasLibrary;
-
-		//One scan's answer into the grid (#1032, ADR-0264 Decisions 1 and 9). The
-		//entries and their order are the module's; this half keeps them and lets
-		//the query decide which of them are on screen.
-		private void ShowLibraryGames(IReadOnlyList<LibraryEntry> entries, IReadOnlyList<LibraryCoverPick> covers)
-		{
-			List<LibraryGame> games = new(entries.Count);
-			for(int i = 0; i < entries.Count; i++) {
-				games.Add(new LibraryGame(entries[i], covers[i]));
-			}
-			_libraryGames = games;
-			//Titles resolved for the previous scan belong to that scan's games.
-			_titles = new LibraryTitleBook();
-			_hasLibrary = true;
-			//The row is rebuilt from these entries, and it ends by filling the grid
-			//(#1034), so the two are never half-applied.
-			RebuildConsoleOptions();
-		}
 
 		//The library's own state, re-derived from the entries in hand after the
 		//query changes or a scan lands. The header's COUNT is deliberately not
