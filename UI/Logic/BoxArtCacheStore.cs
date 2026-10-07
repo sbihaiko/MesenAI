@@ -14,6 +14,11 @@ namespace Mesen.Logic
 	//    <cache>/<console tag>/<sha1>.title.jpg      a downloaded title screen
 	//    <cache>/<console tag>/<sha1>.miss           a recorded miss, timestamped
 	//
+	//A cover is written to `<image path>.tmp` and then renamed onto its final name,
+	//so the one file a reader can find is always a whole file and a crash mid-write
+	//leaves scratch that nothing serves (a truncated PNG with a valid signature,
+	//served forever, is the failure this avoids).
+	//
 	//The key is the console tag plus the ROM's SHA1 (seen-before: the cache is
 	//keyed by what the game *is*, never by its file name, so a renamed or moved
 	//ROM keeps its cover). The kind and the image format are in the file name so
@@ -22,6 +27,11 @@ namespace Mesen.Logic
 	internal static class BoxArtCacheStore
 	{
 		public const string MissSuffix = "miss";
+
+		//The scratch name a cover is written under before the rename that publishes
+		//it. It is not one of the four names Find looks for, so a file left behind by
+		//an interrupted write is never served as a hit.
+		public const string TmpSuffix = ".tmp";
 
 		private static readonly (BoxArtCoverKind Kind, BoxArtImageFormat Format)[] CandidateOrder = {
 			(BoxArtCoverKind.Boxart, BoxArtImageFormat.Png),
@@ -81,9 +91,15 @@ namespace Mesen.Logic
 		public static string? WriteImage(string folder, string sha1, BoxArtCoverKind kind, BoxArtImageFormat format, byte[] body)
 		{
 			string path = ImagePath(folder, sha1, kind, format);
+			string scratch = path + TmpSuffix;
 			try {
 				Directory.CreateDirectory(folder);
-				File.WriteAllBytes(path, body);
+				//The bytes land on a scratch name, and the cover appears in one
+				//rename: no reader ever sees a file that is still being written, so an
+				//interrupted download cannot leave a truncated image behind to be
+				//served as a hit forever.
+				File.WriteAllBytes(scratch, body);
+				File.Move(scratch, path, overwrite: true);
 				return path;
 			} catch(IOException) {
 				return null;

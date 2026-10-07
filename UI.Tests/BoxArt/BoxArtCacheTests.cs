@@ -131,6 +131,27 @@ namespace Mesen.Tests.BoxArt
 		}
 
 		[Fact]
+		public async Task A_leftover_tmp_file_is_never_served_as_a_cache_hit()
+		{
+			//What a crash between the write and the rename leaves behind: a scratch
+			//file holding a perfectly valid PNG.
+			string scratch = Path.Combine(ConsoleFolder, Sha1 + ".boxart.png.tmp");
+			Directory.CreateDirectory(ConsoleFolder);
+			File.WriteAllBytes(scratch, FakeImages.Png());
+
+			FakeBoxArtSender sender = FakeBoxArtSender.Images(FakeImages.Png());
+			BoxArtCover? cover = await Cache(sender).GetCover(BoxArtConsole.Nes, Sha1, Name);
+
+			Assert.NotNull(cover);
+			Assert.Equal(1, sender.RequestCount);
+			Assert.NotEqual(scratch, cover!.FilePath);
+			//The half-written file is not a cover, and the folder holds the cover and
+			//nothing else: the scratch name belongs to the store, which does not leave
+			//debris behind for the next reader to trip over.
+			Assert.Equal(new[] { cover.FilePath }, Directory.GetFiles(ConsoleFolder));
+		}
+
+		[Fact]
 		public async Task A_body_that_is_not_an_image_is_rejected()
 		{
 			FakeBoxArtSender sender = FakeBoxArtSender.Images(FakeImages.NotAnImage());
