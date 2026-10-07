@@ -18,9 +18,11 @@ namespace Mesen.HeadlessTests;
 //#952 (W-P15's picture, lit live on the W-P17 sheet): a synthetic pad goes
 //through ApplyPad - the host-free half of the sheet's poll, split from the
 //read so a test can hold the tester's list still - and the drawn key is read
-//back as pixels, not only as a class. Core-free: the sheet is hosted on its
-//own with the reads switched off (IsPaused answers false, so the poll never
-//reaches the host tester), which keeps it running on CI.
+//back as pixels, not only as a class. The sheet is hosted on its own with the
+//reads switched off (IsPaused answers false, so the poll never reaches the
+//host tester), but its constructor still wires EmuApi.IsPaused as the default
+//before the override, so the class joins the serial native-core collection.
+[Collection(NativeCoreCollection.Name)]
 public class ControllerSheetLiveHighlightTests
 {
 	private static readonly Color PlayTint = Color.Parse("#007AFF");
@@ -96,10 +98,11 @@ public class ControllerSheetLiveHighlightTests
 	public void W_P15_is_compared_on_its_setup_sheet()
 	{
 		Assert.Contains(PlayerWireframe.RegionsOf("W-P15"), r => r.Name == "setup sheet");
-		RgbFrame wireframe = PlayerWireframe.LoadScaled("W-P15", PlayerWireframe.WindowWidth, PlayerWireframe.WindowHeight);
-		IReadOnlyList<RegionResult> results = PlayerWireframe.Compare("W-P15", wireframe);
+		RgbFrame wireframe = RgbFrame.FromPng(PlayerRender.WireframePath("W-P15"));
+		RgbFrame window = PlayerWireframe.Window(wireframe, PlayerWireframe.WindowWidth, PlayerWireframe.WindowHeight);
+		IReadOnlyList<RegionResult> results = PlayerWireframe.Compare("W-P15", window, wireframe);
 		RegionResult sheet = results.Single(r => r.Region == "setup sheet");
 		Assert.True(sheet.Pass, string.Join(", ", sheet.Failures));
-		Assert.True(PlayerWireframe.DeltaE(sheet.RenderColor, Color.Parse("#FAFAFC")) < 2);
+		Assert.True(PlayerWireframe.DeltaE(sheet.RenderColor, Rgb.Parse("#FAFAFC")) < 2);
 	}
 }
