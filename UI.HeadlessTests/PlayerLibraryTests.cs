@@ -232,6 +232,13 @@ public class PlayerLibraryTests : IDisposable
 		Assert.Equal("Your library", model.RomPicker.HeaderText);
 		Assert.Contains("3 games", model.RomPicker.CountText);
 		Assert.True(window.FindNamed<ItemsControl>("RomPickerGrid").IsOnScreen(), "the grid is not on screen");
+
+		//And the header's own controls read as words: a key the locale files do
+		//not hold renders as GetViewLabel's [View:key] placeholder, which is a
+		//defect a player would see and no assertion about the layout would catch.
+		string browse = window.FindNamed<Button>("RomPickerBrowseFile").Content as string ?? "";
+		Assert.Contains("Browse a file", browse);
+		Assert.DoesNotContain("[", browse);
 	}
 
 	//#1032 (ADR-0264 Decision 3): the d-pad moves the ring across the grid, one
