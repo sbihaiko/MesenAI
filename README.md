@@ -50,7 +50,7 @@ Not included: SNES (incl. Super Game Boy), PC Engine, WonderSwan, ColecoVision.
 
 The channel is **built on demand** — `build.yml` on a pull request against `prod`, or a manual dispatch (ADR-0200, ADR-0203), never on a push to `main`. Code on `main` that has not been promoted is [built from source](docs/COMPILING.md).
 
-The current `ci-latest` was built from `prod` @ 3c2f113cd on 2026-10-07 and carries the Play / Remaster / Share / Classic workspaces, including the Player GUI work: the Settings strip (Display | Look | Audio | Controls | System), pad-only Play, and the cheats sheet with checked web lookup.
+The current `ci-latest` (published 2026-10-07) was built from `prod` @ 6ceb6f44e, whose tree equals `main` @ 3c2f113cd, and carries the Play / Remaster / Share / Classic workspaces, including the Player GUI work: the Settings strip (Display | Look | Audio | Controls | System), pad-only Play, and the cheats sheet with checked web lookup.
 
 ### Previous, signed build
 
