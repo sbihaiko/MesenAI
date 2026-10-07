@@ -375,31 +375,27 @@ namespace Mesen.Tests.Play
 		//game reached through its target are two rows here, not one. Resolving links
 		//is a disk read and belongs to the scan (#1032), which is where the grid's
 		//de-duplication will happen - this module must not claim it does it.
+		//Two spellings, no link: the rule under test is lexical, so it reads the same
+		//whether a link exists or not - and creating one needs a privilege Windows
+		//test hosts do not have by default.
 		[Fact]
 		public void A_game_reached_through_a_symlink_is_a_second_row()
 		{
-			string games = NewTempDir();
+			string games = Path.Combine(Path.GetTempPath(), "mesence-library-symlink-spelling");
 			string rom = Path.Combine(games, "contra.nes");
 			string link = Path.Combine(games, "contra-linked.nes");
-			File.WriteAllText(rom, "");
-			File.CreateSymbolicLink(link, rom);
-			try {
-				Assert.True(File.Exists(link), "the fixture needs a real link");
 
-				//The list too: the link is its own row, because the path is its own path.
-				LibraryFolderEdit edit = LibraryFolders.Add(
-					LibraryFolders.Add(new List<string>(), rom).Folders, link);
-				Assert.Equal(LibraryFolderChange.Added, edit.Change);
-				Assert.Equal(2, edit.Folders.Count);
+			//The list too: the link is its own row, because the path is its own path.
+			LibraryFolderEdit edit = LibraryFolders.Add(
+				LibraryFolders.Add(new List<string>(), rom).Folders, link);
+			Assert.Equal(LibraryFolderChange.Added, edit.Change);
+			Assert.Equal(2, edit.Folders.Count);
 
-				IReadOnlyList<string> union = LibraryFolders.Union(new[] {
-					new[] { rom },
-					new[] { link }
-				});
-				Assert.Equal(new[] { Path.GetFullPath(rom), Path.GetFullPath(link) }, union);
-			} finally {
-				Directory.Delete(games, true);
-			}
+			IReadOnlyList<string> union = LibraryFolders.Union(new[] {
+				new[] { rom },
+				new[] { link }
+			});
+			Assert.Equal(new[] { Path.GetFullPath(rom), Path.GetFullPath(link) }, union);
 		}
 
 		[Fact]
