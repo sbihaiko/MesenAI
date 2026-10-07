@@ -6,7 +6,8 @@ namespace Mesen.Logic
 	//exists, and this reads the database once one does:
 	//
 	//  - a hash the No-Intro table holds gives the database's own spelling of
-	//    the game, its tags stripped by NoIntroNameTable.CanonicalTitle. A
+	//    the game, its tags stripped by GameLibrary's own cleaner - the ONE
+	//    cleaner ADR-0264 Decision 7 asks for over both title sources. A
 	//    player sees "Castlevania" instead of "Castlevania (U) [!]" or
 	//    "castlevania-final-fixed.nes";
 	//  - EVERY other answer - a ROM the database does not list, a hash that
@@ -34,10 +35,13 @@ namespace Mesen.Logic
 		public static string Resolve(string cleanedTitle, string? sha1, NoIntroNameTable? table)
 		{
 			if(table != null && table.TryLookup(sha1, out NoIntroRomName rom)) {
-				//CanonicalTitle already keeps a name that is nothing but tags in
-				//its own spelling, so this is never an empty string unless the
+				//The scan's own cleaner, over this second source (ADR-0264
+				//Decision 7): parentheses AND brackets go, so a No-Intro name
+				//carrying a bracketed dump tag reads exactly as the same game
+				//named by its file. A name that is nothing but tags keeps its
+				//own spelling there, so this is never an empty string unless the
 				//cleaned title was one too.
-				string canonical = NoIntroNameTable.CanonicalTitle(rom.Name);
+				string canonical = GameLibrary.CleanCanonicalTitle(rom.Name);
 				if(canonical.Length > 0) {
 					return canonical;
 				}

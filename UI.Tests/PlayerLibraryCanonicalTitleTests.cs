@@ -136,6 +136,27 @@ namespace Mesen.Tests
 			Assert.Equal("Castlevania (U) [!]", title);
 		}
 
+		//ADR-0264 Decision 7: there are two title sources and **one** cleaner over
+		//both. A No-Intro name carries tags in brackets as well as in parentheses -
+		//the scene's dump names do - and the file name's own cleaner (GameLibrary,
+		//whose CleanTitle strips `(...)` and `[...]` alike) drops them all. A
+		//canonical name that kept its brackets would read one way while the same
+		//game named by its file read another, and Decision 4's search would match a
+		//tag word on the unmatched tile but not on the matched one.
+		[Fact]
+		public void A_bracket_tag_on_a_no_intro_name_is_stripped_like_one_on_a_file_name()
+		{
+			const string sha1 = "2222222222222222222222222222222222222222";
+			NoIntroNameTable table = TableOf(sha1 + "\tnes\tCastlevania (USA) [b]");
+
+			string title = CanonicalTitles.Resolve("castlevania", sha1, table);
+
+			Assert.Equal("Castlevania", title);
+			//The two sources are one cleaner, so they answer the same title for the
+			//same game - which is the whole of Decision 7's "one cleaner over both".
+			Assert.Equal(GameLibrary.CleanTitle("Castlevania (USA) [b].nes"), title);
+		}
+
 		//A name that is nothing but tags has no title in it. NoIntroNameTable's
 		//own rule says such a name keeps its own spelling, and that answer has to
 		//survive the composition: the tile must not read as an empty string.
