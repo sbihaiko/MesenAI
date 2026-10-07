@@ -572,9 +572,14 @@ public class PlayerLibraryTests : IDisposable
 
 		ManualResetEventSlim gate = new(false);
 		model.RomPicker.RunLibraryScanInline = false;
-		model.RomPicker.LibraryScanSource = (folders, lister) => {
+		//#1037: the seam is the streaming walk's, so the gate holds the whole
+		//scan the same way it held the one-shot one - and what it releases is
+		//handed over as the stream's one batch.
+		model.RomPicker.LibraryScanStreamSource = (folders, lister, onEntries) => {
 			gate.Wait(TimeSpan.FromSeconds(30));
-			return GameLibrary.Scan(folders, lister);
+			LibraryScanResult result = GameLibrary.Scan(folders, lister);
+			onEntries(result.Entries);
+			return result;
 		};
 
 		try {
