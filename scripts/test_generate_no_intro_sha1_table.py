@@ -16,6 +16,8 @@ Checks:
   AC-5 the committed scripts/no_intro_sha1.tsv.gz is well formed: format
        version, all seven console codes, 40-lowercase-hex keys, non-empty
        names, and a floor on the entry count a truncated regeneration fails.
+  AC-6 the NES DAT's headered `.nes` rom is dropped in favour of its headerless
+       `.unh` twin, so the emitted table holds only payload keys.
 
 Usage: python3 scripts/test_generate_no_intro_sha1_table.py
 No network: AC-1..AC-4 run on an in-memory fixture DAT, AC-5 on the file
@@ -40,6 +42,8 @@ SHA1_A = "1111111111111111111111111111111111111111"
 SHA1_B = "2222222222222222222222222222222222222222"
 SHA1_C = "3333333333333333333333333333333333333333"
 SHA1_D = "4444444444444444444444444444444444444444"
+SHA1_HEADERED = "5555555555555555555555555555555555555555"
+SHA1_PAYLOAD = "6666666666666666666666666666666666666666"
 
 #A clrmamepro/Logiqx DAT in the shape libretro-database mirrors: one game with
 #a single rom, one whose two roms are two sha1s of the same game name, and one
@@ -67,21 +71,49 @@ game (
 )
 """ % (SHA1_A, SHA1_B, SHA1_C, SHA1_D)
 
+#A game the NES DAT lists twice: one `.nes` rom hashed over the whole file
+#(iNES header included) and its `.unh` twin hashed over the payload. The two
+#hashes differ on purpose, so an assertion on them can actually fail.
+FIXTURE_DUPLICATE_DAT = """clrmamepro (
+\tname "Fixture - Test System"
+\tversion "2020.01.02"
+)
+
+game (
+\tname "Delta Dungeon (World)"
+\trom ( name "Delta Dungeon (World).nes" size 40976 crc EEEEEEEE md5 EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE sha1 %s )
+)
+game (
+\tname "Delta Dungeon (World)"
+\trom ( name "Delta Dungeon (World).unh" size 40960 crc FFFFFFFF md5 FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF sha1 %s )
+)
+""" % (SHA1_HEADERED, SHA1_PAYLOAD)
+
+
+def test_a_headered_nes_rom_is_dropped_in_favour_of_its_payload_twin():
+    source = gen.dat_source("nes", "Fixture - Test System",
+                            FIXTURE_DUPLICATE_DAT.encode("utf-8"))
+    table = gzip.decompress(gen.build_table([source])).decode("utf-8")
+    rows = [line.split("\t") for line in table.splitlines() if not line.startswith("#")]
+    assert rows == [[SHA1_PAYLOAD.lower(), "nes", "Delta Dungeon (World)"]], rows
+
 
 def test_parse_dat_keeps_every_rom_sha1_with_its_game_name():
     version, entries = gen.parse_dat(FIXTURE_DAT)
     assert version == "2020.01.02", version
     assert entries == (
-        (SHA1_A, "Alpha Quest (USA)"),
-        (SHA1_B, "Beta Racer (Europe) (Rev 1)"),
-        (SHA1_C, "Beta Racer (Europe) (Rev 1)"),
-        (SHA1_D, "Gamma Boy (Japan)"),
+        (SHA1_A, "Alpha Quest (USA)", "Alpha Quest (USA).nes"),
+        (SHA1_B, "Beta Racer (Europe) (Rev 1)",
+         "Beta Racer (Europe) (Rev 1).nes"),
+        (SHA1_C, "Beta Racer (Europe) (Rev 1)",
+         "Beta Racer (Europe) (Rev 1) [b].nes"),
+        (SHA1_D, "Gamma Boy (Japan)", "Gamma Boy (Japan).gb"),
     ), entries
 
 
 def test_a_rom_without_a_sha1_is_skipped_not_guessed():
     _, entries = gen.parse_dat(FIXTURE_DAT)
-    assert [sha1 for sha1, _ in entries].count(SHA1_D) == 1, entries
+    assert [sha1 for sha1, _, _ in entries].count(SHA1_D) == 1, entries
 
 
 def test_a_tab_or_newline_in_a_name_is_refused():
@@ -130,9 +162,11 @@ def test_build_table_output_is_pinned():
         "raw.githubusercontent.com/libretro/libretro-database)",
         "#licence\tlibretro-database repository: CC BY-SA 4.0 (its LICENSE file). "
         "The DATs are No-Intro's own data files, redistributed there.",
-        "#hash\tSHA-1 of the ROM payload, not of the file: for .nes, the bytes "
+        "#hash\tSHA-1 of the ROM payload, never of the file: for .nes, the bytes "
         "after the 16-byte iNES header and any 512-byte trainer, clamped to the "
-        "header-declared PRG+CHR size (ADR-0003, ADR-0039)",
+        "header-declared PRG+CHR size (ADR-0003, ADR-0039). The NES DAT's headered "
+        ".nes roms are dropped; only their headerless .unh twins are listed, so "
+        "every key is a payload hash",
         "#console\tnes\tFixture - Test System\t2020.01.02\t" + dat_sha256,
         SHA1_A.lower() + "\tnes\tAlpha Quest (USA)",
         SHA1_B.lower() + "\tnes\tBeta Racer (Europe) (Rev 1)",

@@ -38,10 +38,13 @@ namespace Mesen.Logic
 	//
 	//Keys are the SHA-1 of the ROM PAYLOAD, not of the file: for a `.nes` dump
 	//the 16-byte iNES header and any 512-byte trainer are skipped and the range
-	//is clamped to the header-declared PRG+CHR size (ADR-0003, ADR-0039). The
-	//caller computing the hash must follow the same contract - hashing the raw
-	//file silently matches nothing for headered NES dumps, and this table
-	//cannot tell that apart from a ROM the database does not know.
+	//is clamped to the header-declared PRG+CHR size (ADR-0003, ADR-0039). Every
+	//console is keyed the same way, and the table holds no whole-file key at
+	//all: the NES DAT's headered `.nes` rows are dropped by the generator, only
+	//their headerless `.unh` twins are listed, so one payload hash decides a
+	//lookup. The caller computing the hash must follow the same contract -
+	//hashing the raw file silently matches nothing for headered NES dumps, and
+	//this table cannot tell that apart from a ROM the database does not know.
 	//
 	//Host-free by construction (ADR-0123): BCL plus System.IO.Compression, so it
 	//dual-compiles into UI.Tests and the lookup is unit-tested without a window.

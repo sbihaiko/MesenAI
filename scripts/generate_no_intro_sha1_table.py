@@ -24,6 +24,12 @@ table can be keyed on it. A ROM with a header or trailing garbage is therefore
 hashed with the same rule at lookup time (the library slice, #1032/#1030) or it
 will not match -- hashing the raw file silently misses every headered NES dump.
 
+The NES DAT lists each dump TWICE: a `.nes` rom hashed over the whole file, iNES
+header included, and its `.unh` twin hashed over the payload. Only the `.unh`
+row is a key this app can ever produce, so `select_payload_roms` drops the
+headered row and the table stays keyed by payload SHA1 for every console -- a
+`.nes` row would be a dead key sitting beside the live one.
+
 TABLE FORMAT (v1), gzipped TSV, one line per ROM, sorted by sha1:
   `#mesen-no-intro-sha1-table<TAB>1`   format version; the C# reader refuses any other
   `#source<TAB>...` / `#licence<TAB>...` / `#hash<TAB>...`
@@ -31,8 +37,10 @@ TABLE FORMAT (v1), gzipped TSV, one line per ROM, sorted by sha1:
   `<sha1><TAB><console code><TAB><No-Intro game name>`
 Keys are 40 lowercase hex digits (comparison is case-insensitive on the reading
 side); console codes are `nes`, `gb`, `gbc`, `gba`, `sms`, `sg1000`, `gg` -- the
-same set as the app's RomConsole. `gzip.compress(..., mtime=0)` keeps the file
-byte-identical across runs, so a regeneration that changes nothing is not a diff.
+same set as the app's RomConsole. Every key is a payload hash on every console,
+so no line has to be interpreted differently per console. `gzip.compress(...,
+mtime=0)` keeps the file byte-identical across runs, so a regeneration that
+changes nothing is not a diff.
 
 Usage: python3 scripts/generate_no_intro_sha1_table.py [--check]
   --check  do not write; exit 1 if the committed table differs from a fresh build
@@ -72,9 +80,15 @@ CONSOLE_CODES: tuple[str, ...] = tuple(code for code, _ in CONSOLES)
 
 _SHA1 = re.compile(r"\bsha1\s+([0-9a-fA-F]{40})\b")
 _GAME_NAME = re.compile(r'^\s*name\s+"([^"]*)"', re.M)
+_ROM_BLOCK = re.compile(r"^\s*rom\s*\(", re.M)
 _DAT_VERSION = re.compile(r'^\s*version\s+"([^"]*)"', re.M)
 _GAME_BLOCK = re.compile(r"^game\s*\(", re.M)
 _XML_SHAPE = re.compile(r"<(?:datafile|game)\b")
+
+#Rom file names whose bytes the app never hashes whole. No-Intro's NES DAT
+#carries each dump as a headered `.nes` rom and a headerless `.unh` rom, of the
+#same game and with different hashes; ADR-0003/ADR-0039 hash the `.unh` bytes.
+HEADERED_ROM_SUFFIXES: frozenset[str] = frozenset({".nes"})
 
 
 @dataclasses.dataclass(frozen=True)
@@ -92,12 +106,15 @@ def dat_url(dat_name: str) -> str:
     return f"{DAT_BASE_URL}/{urllib.parse.quote(dat_name)}.dat"
 
 
-def parse_dat(text: str) -> tuple[str, tuple[tuple[str, str], ...]]:
-    """-> (DAT version, ((sha1, game name), ...)) in file order.
+def parse_dat(text: str) -> tuple[str, tuple[tuple[str, str, str], ...]]:
+    """-> (DAT version, ((sha1, game name, rom name), ...)) in file order.
 
     The game name is the DAT's `<game> name`, never the rom's file name: the
     player is shown a game, and the rom name carries dump-level noise
-    ("(Unl)", "[b]") the game name does not."""
+    ("(Unl)", "[b]") the game name does not. The rom name is kept anyway,
+    because it is the only thing that says whether the hashed bytes include an
+    iNES header -- `select_payload_roms` reads it. It is None for a rom entry
+    that declares none (`<rom>` names are optional in the format)."""
     if _XML_SHAPE.search(text):
         raise ValueError(
             "this DAT is in the XML shape (<datafile>/<game>), not the "
@@ -106,7 +123,7 @@ def parse_dat(text: str) -> tuple[str, tuple[tuple[str, str], ...]]:
     if version_match is None:
         raise ValueError("no clrmamepro `version \"...\"` line in this DAT")
 
-    entries: list[tuple[str, str]] = []
+    entries: list[tuple[str, str, str]] = []
     for block in _GAME_BLOCK.split(text)[1:]:
         name_match = _GAME_NAME.search(block)
         if name_match is None:
@@ -114,11 +131,38 @@ def parse_dat(text: str) -> tuple[str, tuple[tuple[str, str], ...]]:
         name = name_match.group(1)
         if "\t" in name or "\n" in name or "\r" in name:
             raise ValueError(f"game name holds a tab or a newline: {name!r}")
-        for sha1 in _SHA1.findall(block):
-            #A rom that declares no sha1 is skipped, never completed with a
-            #guess: a wrong key would hand the player another game's title.
-            entries.append((sha1.upper(), name))
+        for rom in _ROM_BLOCK.split(block)[1:]:
+            #A rom declares its own `name` in the same shape a game does.
+            rom_match = _GAME_NAME.search(rom)
+            rom_name = rom_match.group(1) if rom_match is not None else None
+            for sha1 in _SHA1.findall(rom):
+                #A rom that declares no sha1 is skipped, never completed with a
+                #guess: a wrong key would hand the player another game's title.
+                entries.append((sha1.upper(), name, rom_name))
     return version_match.group(1), tuple(entries)
+
+
+def select_payload_roms(
+        entries: tuple[tuple[str, str, str], ...]) -> tuple[tuple[str, str], ...]:
+    """-> the (sha1, game name) rows whose hash the app can reproduce.
+
+    Drops a rom whose file name marks it as a headered dump
+    (`HEADERED_ROM_SUFFIXES`), because the app hashes the payload
+    (ADR-0003, ADR-0039) and a headered row is a key no lookup ever produces.
+    A rom whose name the DAT does not declare is kept: dropping what cannot be
+    classified would lose a game the table could still match."""
+    return tuple((sha1, name) for sha1, name, rom_name in entries
+                 if rom_name is None
+                 or Path(rom_name).suffix.lower() not in HEADERED_ROM_SUFFIXES)
+
+
+def dat_source(code: str, dat_name: str, raw: bytes) -> DatSource:
+    """Parse one fetched DAT into the record the table is built from, keeping
+    only the payload rows."""
+    version, entries = parse_dat(raw.decode("utf-8", errors="replace"))
+    return DatSource(code, dat_name, version,
+                     hashlib.sha256(raw).hexdigest(),
+                     select_payload_roms(entries))
 
 
 def build_table(sources: list[DatSource]) -> bytes:
@@ -129,9 +173,11 @@ def build_table(sources: list[DatSource]) -> bytes:
         "raw.githubusercontent.com/libretro/libretro-database)",
         "#licence\tlibretro-database repository: CC BY-SA 4.0 (its LICENSE file). "
         "The DATs are No-Intro's own data files, redistributed there.",
-        "#hash\tSHA-1 of the ROM payload, not of the file: for .nes, the bytes "
+        "#hash\tSHA-1 of the ROM payload, never of the file: for .nes, the bytes "
         "after the 16-byte iNES header and any 512-byte trainer, clamped to the "
-        "header-declared PRG+CHR size (ADR-0003, ADR-0039)",
+        "header-declared PRG+CHR size (ADR-0003, ADR-0039). The NES DAT's headered "
+        ".nes roms are dropped; only their headerless .unh twins are listed, so "
+        "every key is a payload hash",
     ]
     for source in sources:
         lines.append(f"#console\t{source.code}\t{source.dat_name}\t"
@@ -166,10 +212,10 @@ def collect() -> list[DatSource]:
     sources: list[DatSource] = []
     for code, dat_name in CONSOLES:
         raw = fetch_dat(dat_name)
-        version, entries = parse_dat(raw.decode("utf-8", errors="replace"))
-        sources.append(DatSource(code, dat_name, version,
-                                 hashlib.sha256(raw).hexdigest(), entries))
-        print(f"  {code}: {len(entries)} roms (dat {version})", file=sys.stderr)
+        source = dat_source(code, dat_name, raw)
+        sources.append(source)
+        print(f"  {code}: {len(source.entries)} roms (dat {source.version})",
+              file=sys.stderr)
     return sources
 
 

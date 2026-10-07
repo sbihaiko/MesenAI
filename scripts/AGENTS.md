@@ -513,7 +513,11 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   libretro-database repository mirrors (CC BY-SA 4.0; names and hashes
   only, no artwork). Keys follow the ADR-0003 / ADR-0039 payload contract,
   so the iNES header and trainer are excluded — hashing the raw file
-  matches nothing. The artifact is committed and embedded by `UI/UI.csproj`
+  matches nothing. Every console is keyed by a payload hash and no line
+  has to be read differently per console: the NES DAT lists each dump
+  twice, as a headered `.nes` rom and a headerless `.unh` twin, and the
+  generator keeps only the `.unh` row. The artifact is committed and
+  embedded by `UI/UI.csproj`
   (and by `UI.Tests.csproj`, so `Mesen.Logic.NoIntroNameTable` is tested
   against the real file); `python3
   scripts/test_generate_no_intro_sha1_table.py` pins the format on a

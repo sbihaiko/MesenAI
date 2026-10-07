@@ -131,9 +131,10 @@ namespace Mesen.Tests.Play
 		//both UI.csproj and UI.Tests.csproj, read through the app's own loader.
 		//The goldens are observed output of the generator (ADR-0003's own rule
 		//for a hash golden), one per console, so a regeneration that loses or
-		//renames a console fails here.
+		//renames a console fails here. The NES golden is the `.unh` payload
+		//hash: the generator drops the DAT's headered `.nes` row.
 		[Theory]
-		[InlineData("33d23c2f2cfa4c9efec87f7bc1321ce3ce6c89bd", RomConsole.Nes, "Super Mario Bros. (World)", "Super Mario Bros.")]
+		[InlineData("facee9c577a5262dbe33ac4930bb0b58c8c037f7", RomConsole.Nes, "Super Mario Bros. (World)", "Super Mario Bros.")]
 		[InlineData("74591cc9501af93873f9a5d3eb12da12c0723bbc", RomConsole.GameBoy, "Tetris (World) (Rev 1)", "Tetris")]
 		[InlineData("f2f52230b536214ef7c9924f483392993e226cfb", RomConsole.GameBoyColor, "Pokemon - Crystal Version (USA, Europe) (Rev 1)", "Pokemon - Crystal Version")]
 		[InlineData("41cb23d8dccc8ebd7c649cd8fbb58eeace6e2fdc", RomConsole.GameBoyAdvance, "Pokemon - FireRed Version (USA, Europe)", "Pokemon - FireRed Version")]
@@ -144,7 +145,7 @@ namespace Mesen.Tests.Play
 		{
 			NoIntroNameTable table = NoIntroNameTable.LoadEmbedded()!;
 
-			Assert.True(table.Count > 20000, "the committed table looks truncated: " + table.Count);
+			Assert.True(table.Count > 17000, "the committed table looks truncated: " + table.Count);
 			Assert.True(table.TryLookup(sha1, out NoIntroRomName rom), sha1 + " is not in the committed table");
 			Assert.Equal(console, rom.Console);
 			Assert.Equal(name, rom.Name);
