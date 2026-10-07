@@ -619,6 +619,12 @@
          its objects.githubusercontent.com redirect), the same file R.1's CI fetch
          reads; CommunityReplayCatalogFetcher loads it by this LogicalName. -->
     <EmbeddedResource Include="../scripts/replay_host_allowlist.json" LogicalName="Mesen.replay_host_allowlist.json" />
+    <!-- #1038: the generated No-Intro `SHA1 -> console + name` table
+         (scripts/generate_no_intro_sha1_table.py), read by
+         Mesen.Logic.NoIntroNameTable through this LogicalName. Embedded, never
+         loaded from a repo-relative path: a published app has no scripts/ tree,
+         the same rule ADR-0138 §41 set for the allow-lists above. -->
+    <EmbeddedResource Include="../scripts/no_intro_sha1.tsv.gz" LogicalName="Mesen.no_intro_sha1.tsv.gz" />
   </ItemGroup>
   <ItemGroup>
     <AvaloniaXaml Update="Controls\FirmwareSelect.axaml">
