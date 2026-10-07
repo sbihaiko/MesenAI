@@ -10,6 +10,11 @@ evidence that the new job cannot repeat that:
     when that is the skip reason;
   * a run with no TRX, no passing case, no PNG, a W-P PNG without its
     `.wireframe.md`, or a PNG older than the run fails;
+  * a run missing an expected W-P render or its report (a case deleted,
+    renamed out of `*RenderTests`, or a run that stopped before writing it)
+    fails, and the pinned expected set covers every committed baseline;
+  * a run whose TRX summary is not `Completed`, or whose counters show a case
+    that did not pass (a host abort mid-run leaves no row for the rest), fails;
   * a run of real, fresh renders with their reports passes;
   * the committed `.github/workflows/render-gate.yml` holds the ADR-0263
     contract: one ubuntu job, pull_request path-filtered to the UI, the
@@ -43,7 +48,9 @@ def load_check():
     return module
 
 
-def trx(*results: tuple[str, str, str]) -> str:
+def trx(*results: tuple[str, str, str], summary: str = "Completed", total: int | None = None) -> str:
+    passed = sum(1 for _, outcome, _ in results if outcome == "Passed")
+    total = len(results) if total is None else total
     rows = []
     for name, outcome, message in results:
         info = f"<Output><ErrorInfo><Message>{message}</Message></ErrorInfo></Output>" if message else ""
@@ -52,7 +59,9 @@ def trx(*results: tuple[str, str, str]) -> str:
         '<?xml version="1.0" encoding="utf-8"?>'
         '<TestRun xmlns="http://microsoft.com/schemas/VisualStudio/TeamTest/2010">'
         f'<Times creation="{RUN_START}" start="{RUN_START}" finish="{RUN_START}" />'
-        f"<Results>{''.join(rows)}</Results></TestRun>"
+        f"<Results>{''.join(rows)}</Results>"
+        f'<ResultSummary outcome="{summary}"><Counters total="{total}" executed="{total}" passed="{passed}" /></ResultSummary>'
+        "</TestRun>"
     )
 
 
@@ -71,9 +80,25 @@ OTHER_SKIPPED = trx(
 )
 NOTHING_RAN = trx()
 FAILED = trx(("Mesen.HeadlessTests.PlayerThemeRenderTests.PlayWorkspace", "Failed", "tint drifted"))
+ABORTED = trx(
+    ("Mesen.HeadlessTests.PlayerThemeRenderTests.PlayWorkspace", "Passed", ""),
+    ("Mesen.HeadlessTests.ShareThemeRenderTests.ShareWorkspace", "Passed", ""),
+    summary="Aborted",
+)
+# Two rows written before the host died; the summary still counts the third.
+UNREPORTED = trx(
+    ("Mesen.HeadlessTests.PlayerThemeRenderTests.PlayWorkspace", "Passed", ""),
+    ("Mesen.HeadlessTests.ShareThemeRenderTests.ShareWorkspace", "Passed", ""),
+    total=3,
+)
+NO_SUMMARY = PASSED.replace(PASSED[PASSED.index("<ResultSummary"):PASSED.index("</TestRun>")], "")
+
+# The W-P renders a case set expects (verify_run's `expected`); the real run
+# uses check.EXPECTED_WIREFRAME_RENDERS.
+EXPECTED = {"W-P1"}
 
 
-def run_case(check, trx_text: str | None, files: dict[str, int]) -> list[str]:
+def run_case(check, trx_text: str | None, files: dict[str, int], expected: set[str] = EXPECTED) -> list[str]:
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
         trx_path = root / "render.trx"
@@ -86,7 +111,7 @@ def run_case(check, trx_text: str | None, files: dict[str, int]) -> list[str]:
             path.write_bytes(b"x")
             stamp = RUN_START_EPOCH + offset
             os.utime(path, (stamp, stamp))
-        return check.verify_run(trx_path, renders)
+        return check.verify_run(trx_path, renders, expected)
 
 
 FRESH_PAIR = {"W-P1.png": 30, "W-P1.wireframe.md": 30, "remaster-recent.png": 31}
@@ -103,6 +128,10 @@ RUN_CASES = [
     ("a W-P PNG without its wireframe report", PASSED, {"W-P1.png": 30}, "W-P1.wireframe.md"),
     ("a report without its PNG", PASSED, {"W-P1.png": 30, "W-P1.wireframe.md": 30, "W-P2.wireframe.md": 30}, "W-P2.png"),
     ("a PNG older than the run (committed, not fresh)", PASSED, {"W-P1.png": -600, "W-P1.wireframe.md": 30}, "older than the run"),
+    ("an expected W-P render was never written", PASSED, {"remaster-recent.png": 31}, "W-P1.png was not rendered"),
+    ("the TRX summary is not Completed (host abort)", ABORTED, FRESH_PAIR, "Aborted"),
+    ("the TRX counts a case with no passing row", UNREPORTED, FRESH_PAIR, "2 of 3"),
+    ("the TRX has no ResultSummary", NO_SUMMARY, FRESH_PAIR, "ResultSummary"),
 ]
 
 
@@ -141,6 +170,22 @@ def main() -> int:
         else:
             print(f"ok   [{label}]")
 
+    # A renamed or deleted W-P case must fail the real gate, so the pinned set
+    # must be non-empty and hold every baseline committed for the drift check.
+    committed = {p.stem for p in (REPO_ROOT / "UI.Tests" / "Theme" / "PlayerRenders").rglob("W-P*.png")}
+    pinned = set(check.EXPECTED_WIREFRAME_RENDERS)
+    if not pinned or not committed <= pinned:
+        print(f"FAIL [pinned W-P set]: {sorted(committed - pinned)} committed but not expected (pinned: {sorted(pinned)})")
+        failures += 1
+    else:
+        print(f"ok   [pinned W-P set holds every committed baseline ({len(pinned)} renders)]")
+    got = run_case(check, PASSED, FRESH_PAIR, pinned)
+    if not any("W-P2.png was not rendered" in line for line in got):
+        print(f"FAIL [default expected set]: a run with only W-P1 must miss W-P2, got {got}")
+        failures += 1
+    else:
+        print("ok   [the default expected set fails a run that rendered only W-P1]")
+
     got = workflow_failures(check)
     if got:
         print(f"FAIL [committed render-gate.yml]: {got}")
@@ -155,7 +200,7 @@ def main() -> int:
         else:
             print(f"ok   [workflow: {label}]")
 
-    total = len(RUN_CASES) + 1 + len(WORKFLOW_MUTATIONS)
+    total = len(RUN_CASES) + 3 + len(WORKFLOW_MUTATIONS)
     if failures:
         print(f"FAIL: {failures} of {total} case(s) did not hold")
         return 1

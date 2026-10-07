@@ -12,13 +12,17 @@ happen:
                         probe NativeCore.cs makes - and fails when either
                         does not work, before any test runs.
   verify TRX RENDERS    reads the test step's TRX and the renders folder and
-                        fails on: no TRX, any render case not `Passed`
+                        fails on: no TRX, a TRX summary that is not
+                        `Completed` or counts a case that did not pass (a host
+                        abort leaves no row for the cases after it), any
+                        render case not `Passed`
                         (skipped = `NotExecuted`, naming the core when that is
                         the skip reason), no passing case, no PNG, a `W-P*`
                         PNG without its `<name>.wireframe.md` (PlayerRender.Save
                         writes one per W-P render, #951) or a report without
-                        its PNG, and a PNG older than the run (committed, not
-                        fresh).
+                        its PNG, an expected W-P render (EXPECTED_WIREFRAME_RENDERS)
+                        missing its PNG or report, and a PNG older than the run
+                        (committed, not fresh).
   workflow [PATH]       checks that the committed workflow still holds the
                         ADR-0263 contract (path filter, cancelled superseded
                         runs, one ubuntu job, the two calls above, an upload
@@ -56,6 +60,16 @@ REQUIRED_PATHS = [
     "scripts/checks/verify_render_gate.py",
 ]
 
+# Every W-P render the *RenderTests cases write with a wireframe report
+# (PlayerRender.Save, #951), as the Linux run of 2026-10-07 wrote them. Pinned
+# so a deleted case, one renamed out of `*RenderTests`, or a run that stopped
+# before writing it fails the gate instead of leaving it green on what did run.
+# Adding a W-P render case means adding its name here.
+EXPECTED_WIREFRAME_RENDERS = (
+    "W-P1", "W-P2", "W-P4", "W-P5", "W-P6", "W-P7", "W-P8", "W-P10", "W-P11",
+    "W-P13", "W-P13-confirm", "W-P14", "W-P15", "W-P15-pill", "W-P16",
+)
+
 # A PNG may predate the TRX's start by this much (filesystem/clock rounding).
 FRESHNESS_SLACK_SECONDS = 2.0
 
@@ -70,11 +84,27 @@ def _run_start(root: ET.Element) -> float | None:
     return datetime.fromisoformat(stamp).timestamp()
 
 
-def verify_run(trx_path: Path, renders: Path) -> list[str]:
+def _summary_failures(root: ET.Element) -> list[str]:
+    summary = root.find(f"{TRX_NS}ResultSummary")
+    if summary is None:
+        return ["the TRX has no ResultSummary: the test run did not finish"]
+    failures = []
+    outcome = summary.get("outcome", "?")
+    if outcome != "Completed":
+        failures.append(f"the TRX summary outcome is {outcome}, not Completed")
+    counters = summary.find(f"{TRX_NS}Counters")
+    total = int(counters.get("total", "0")) if counters is not None else 0
+    passed = int(counters.get("passed", "0")) if counters is not None else 0
+    if total != passed:
+        failures.append(f"the TRX counters show {passed} of {total} case(s) passed")
+    return failures
+
+
+def verify_run(trx_path: Path, renders: Path, expected=EXPECTED_WIREFRAME_RENDERS) -> list[str]:
     if not trx_path.is_file():
         return [f"no TRX at {trx_path}: the render tests never reported (did the test step run?)"]
     root = ET.parse(trx_path).getroot()
-    failures = []
+    failures = _summary_failures(root)
     passed = 0
     for result in root.iter(f"{TRX_NS}UnitTestResult"):
         name = result.get("testName", "?")
@@ -96,6 +126,9 @@ def verify_run(trx_path: Path, renders: Path) -> list[str]:
     reports = {p.name[: -len(".wireframe.md")] for p in renders.glob("*.wireframe.md")} if renders.is_dir() else set()
     if not pngs:
         failures.append(f"no PNG in {renders}: the artifact would be empty")
+    for stem in sorted(expected):
+        if stem not in pngs:
+            failures.append(f"{stem}.png was not rendered: its case is gone, renamed out of *RenderTests, or never ran")
     for stem in sorted(pngs):
         if stem.startswith("W-P") and stem not in reports:
             failures.append(f"{stem}.png has no {stem}.wireframe.md next to it")
