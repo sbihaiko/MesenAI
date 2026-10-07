@@ -101,6 +101,21 @@ public class PlayFolderHandoffCoreTests : IDisposable
 		Assert.Equal(new[] { Path.Combine(ConfigManager.HomeFolder, "EnhancementPacks") }, _launched);
 	}
 
+	//#987: the artist's workspace beside the ROM (ADR-0049), made on demand.
+	[AvaloniaFact]
+	public void Open_sibling_folder_in_enhancement_packs_hands_over_the_games_sibling_folder()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		string sibling = Path.Combine(_folder, "Contra");
+		EnhancementPacksViewModel packs = new() { FolderLauncher = _launched.Add };
+		packs.SiblingFolder = sibling;
+
+		packs.OpenSiblingFolder();
+
+		Assert.Equal(new[] { sibling }, _launched);
+		Assert.True(Directory.Exists(Path.Combine(sibling, "textures")));
+	}
+
 	[AvaloniaFact]
 	public void The_no_feed_dialog_opens_the_release_page_only_on_ok()
 	{
