@@ -595,7 +595,8 @@ namespace Mesen.Windows
 			private bool ApplyValue(PadNavAction action)
 			{
 				if(_openPopup is not null && !_openPopup.IsDropDownOpen) {
-					//Closed by something else (a pointer, the sheet going away).
+					//Closed by something else (a pointer, the sheet going away:
+					//#983, a ComboBox closes itself once hidden or detached).
 					_openPopup = null;
 				}
 				Control? target = _openPopup ?? _window.FocusManager?.GetFocusedElement() as Control;
@@ -617,8 +618,18 @@ namespace Mesen.Windows
 					case PadValueVerb.Walk when target is ComboBox combo:
 						//The row is only highlighted (focused, so the ring shows it);
 						//the value is written by the commit alone, so Back can leave it.
-						_walk = PlayPadValueRules.Walk(_walk, combo.ItemCount, answer.Delta);
-						(combo.ContainerFromIndex(_walk) as Control)?.Focus(NavigationMethod.Directional);
+						//#983: a virtualized list realizes only the rows in view, so
+						//the next row is scrolled in first and the walk lands on it
+						//only if it is then shown.
+						int next = PlayPadValueRules.Walk(_walk, combo.ItemCount, answer.Delta);
+						if(next >= 0) {
+							combo.ScrollIntoView(next);
+						}
+						Control? row = next >= 0 ? combo.ContainerFromIndex(next) as Control : null;
+						_walk = PlayPadValueRules.Land(_walk, next, row is not null && row.IsEffectivelyVisible);
+						if(_walk == next) {
+							row?.Focus(NavigationMethod.Directional);
+						}
 						break;
 					case PadValueVerb.Commit when target is ComboBox combo:
 						if(_walk >= 0) {
