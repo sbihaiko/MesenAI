@@ -387,6 +387,11 @@ public class PlayerThemeSettingsRenderTests : IDisposable
 
 			Bitmap frame = PlayerRender.Capture(window);
 			PlayerRender.Save(frame, "W-P15");
+			//#952 AC2: W-P15 is gated like PlayerThemeRenderTests' renders - every
+			//region passes except the deviations PlayerWireframe names for W-P15.
+			IReadOnlyList<RegionResult> results = PlayerWireframe.Compare("W-P15", PlayerRender.Rgb(frame), RgbFrame.FromPng(PlayerRender.WireframePath("W-P15")));
+			IReadOnlyList<string> violations = PlayerWireframe.Gate("W-P15", results, PlayerWireframe.KnownDeviationsOf("W-P15"));
+			Assert.True(violations.Count == 0, string.Join(Environment.NewLine, violations));
 			Point inside = sheet.TranslatePoint(new Point(12, 12), window)!.Value;
 			PlayerRender.AssertPixel(OverlayCard, frame, (int)inside.X, (int)inside.Y + 30);
 		} finally {

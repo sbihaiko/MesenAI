@@ -241,6 +241,18 @@ namespace Mesen.Tests.Theme
 			Assert.False(focus.Ratchet);
 		}
 
+		//#952: W-P15 is in the wireframe comparison with its own region, the setup
+		//sheet (render_gui_wireframes.py's `pb`, minus WIN's origin), and the
+		//wireframe taken as its own render passes it - so the crop lands on the sheet.
+		[Fact]
+		public void W_P15_is_compared_on_its_setup_sheet()
+		{
+			Assert.Contains(PlayerWireframe.RegionsOf("W-P15"), r => r.Name == "setup sheet");
+			RegionResult sheet = Region(PlayerWireframe.Compare("W-P15", WindowOf("W-P15"), Wireframe("W-P15")), "setup sheet");
+			Assert.True(sheet.Pass, string.Join(", ", sheet.Failures));
+			Assert.True(PlayerWireframe.DeltaE(sheet.RenderColor, Rgb.Parse("#FAFAFC")) < 2);
+		}
+
 		private static RgbFrame CommittedRender(string wId) => RgbFrame.FromPng(Path.Combine(CommittedRenders, wId + ".png"));
 
 		//#974: a fresh headless render is held to its committed copy region by
