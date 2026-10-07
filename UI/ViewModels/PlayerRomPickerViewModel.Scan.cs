@@ -80,6 +80,15 @@ namespace Mesen.ViewModels
 		//game - but only when the ring was never in the grid to begin with, or
 		//the move is the sheet taking the ring out of the player's hands.
 		private bool _tileTookRing;
+		//Chunks of a big batch that were posted and have not landed yet. The scan
+		//is not over while one is on its way: the finish waits for the last of them,
+		//or it would stop the wait and settle the ring over a half-filled grid.
+		private int _pendingChunks;
+		//The end of a scan that never found its restore put the ring on the first
+		//tile (see FinishLibraryStream). The focus arbiter asks this to know that
+		//bump is the sheet's fallback and not a claim over a ring the player has
+		//since moved to the header (PlayPadNavigationWiring).
+		public bool IsFinishFallback { get; private set; }
 
 		//A batch is merged into the grid in chunks this large, the rest posted at
 		//Background priority: one folder holding thousands of ROMs is one batch,
@@ -100,6 +109,23 @@ namespace Mesen.ViewModels
 			_libraryGames.Clear();
 			ClearTiles();
 			TilesRevision++;
+		}
+
+		//A scan the player has left stops reading the library: closing the sheet or
+		//stepping into the browser ends it here, and nobody has to come back for the
+		//walk to stop (Decision 9: bounded).
+		partial void OnIsVisibleChanged(bool value)
+		{
+			if(!value) {
+				_scanCancellation?.Cancel();
+			}
+		}
+
+		partial void OnModeChanged(RomPickerMode value)
+		{
+			if(value != RomPickerMode.Library) {
+				_scanCancellation?.Cancel();
+			}
 		}
 
 		//A restore is in flight: the scan has not reached the game the player left
@@ -154,6 +180,8 @@ namespace Mesen.ViewModels
 			//arrives as the player's choice (see IsRestorePending).
 			_restoreTargetPath = LastFocusedTilePath;
 			_tileTookRing = false;
+			_pendingChunks = 0;
+			IsFinishFallback = false;
 
 			ResetLibraryGrid();
 			//The library has folders and is being read, so the box owns the empty
@@ -243,7 +271,15 @@ namespace Mesen.ViewModels
 			for(int start = BatchChunkSize; start < batch.Count; start += BatchChunkSize) {
 				int from = start;
 				int count = Math.Min(BatchChunkSize, batch.Count - from);
-				Dispatcher.UIThread.Post(() => InsertEntries(generation, batch, covers, from, count), DispatcherPriority.Background);
+				_pendingChunks++;
+				Dispatcher.UIThread.Post(() => {
+					//A chunk of a scan that was left behind counts for nothing here:
+					//the counter is the current scan's.
+					if(_scanGeneration.IsCurrent(generation)) {
+						_pendingChunks--;
+					}
+					InsertEntries(generation, batch, covers, from, count);
+				}, DispatcherPriority.Background);
 			}
 		}
 
@@ -340,10 +376,18 @@ namespace Mesen.ViewModels
 			}
 			//The wait is this object's and goes whatever happens next, even if the
 			//scan threw: a moving bar that never stops is worse than no bar.
+			if(_pendingChunks > 0) {
+				//Behind the chunks still queued, which are at Background priority
+				//too: the last of them lands first, and the grid is whole when the
+				//wait goes.
+				Dispatcher.UIThread.Post(() => FinishLibraryStream(generation, result), DispatcherPriority.Background);
+				return;
+			}
 			IsScanning = false;
 			if(_restoreTargetPath.Length > 0) {
 				_restoreTargetPath = "";
 				if(!_tileTookRing && Tiles.Count > 0 && !HasQuery) {
+					IsFinishFallback = true;
 					TilesRevision++;
 				}
 			}

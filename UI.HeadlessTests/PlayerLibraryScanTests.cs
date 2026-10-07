@@ -6,7 +6,9 @@ using System.Linq;
 using System.Threading;
 using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
+using Avalonia.Input;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using Mesen.Config;
 using Mesen.Interop;
 using Mesen.Logic;
@@ -541,6 +543,164 @@ public class PlayerLibraryScanTests : IDisposable
 		Assert.Equal("Game 0000", model.RomPicker.Tiles[0].Title);
 		Assert.Equal("Game 1199", model.RomPicker.Tiles[Total - 1].Title);
 		Assert.NotNull(window);
+	}
+
+	//#1037 review finding 1 on #1056: the scan is not over while a chunk of its
+	//last batch is still on its way. The game the player left on sits PAST the
+	//first chunk of one big folder, so a finish that ran ahead of the chunks would
+	//stop the indicator over a half-filled grid and hand the ring to the first
+	//tile - whose focus report then overwrites the very path being restored.
+	[AvaloniaFact]
+	public void The_scan_is_not_over_until_the_last_chunk_of_a_huge_batch_has_landed()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		const int Total = 1200;
+		const int Remembered = 900;
+
+		LibraryEntry[] huge = Enumerable.Range(0, Total)
+			.Select(i => Entry(Path.Combine(_folder, $"Game {i:D4}.nes"), RomConsole.Nes, $"Game {i:D4}"))
+			.ToArray();
+		string remembered = huge[Remembered].Path;
+
+		LibraryScanResult Scan(IReadOnlyList<string> folders, FolderLister list, Action<IReadOnlyList<LibraryEntry>> onBatch)
+		{
+			onBatch(huge);
+			return new LibraryScanResult(huge, 1, false);
+		}
+
+		//The first visit knows one game only: the one the player ends up on.
+		LibraryScanResult OneGame(IReadOnlyList<string> folders, FolderLister list, Action<IReadOnlyList<LibraryEntry>> onBatch)
+		{
+			onBatch(new[] { huge[Remembered] });
+			return new LibraryScanResult(new[] { huge[Remembered] }, 1, false);
+		}
+
+		(MainWindow window, MainWindowViewModel model) = OpenLibrary(OneGame, inline: true);
+		WaitFor(() => FocusedTilePath(window) == remembered, $"the sheet did not open on its one game ({Focused(window)})");
+		Press(window, PadNavAction.Back);
+		Pump();
+		Assert.False(model.RomPicker.IsVisible, "B did not close the sheet");
+		Assert.Equal(remembered, model.RomPicker.LastFocusedTilePath);
+
+		model.RomPicker.LibraryScanStreamSource = Scan;
+		model.RomPicker.RunLibraryScanInline = true;
+		PressOnly(window, PadNavAction.Confirm);
+
+		//The open's own turn is over and the first chunk is in; the rest is not.
+		Assert.True(model.RomPicker.Tiles.Count < Total, "one UI turn took the whole folder");
+		Assert.True(model.RomPicker.IsScanning, "the scan reported itself over with chunks still on the way");
+		Assert.Equal(remembered, model.RomPicker.LastFocusedTilePath);
+
+		WaitFor(() => model.RomPicker.Tiles.Count == Total, "the rest of the folder never reached the grid");
+		WaitFor(() => !model.RomPicker.IsScanning, "the scan's wait never cleared");
+		Assert.Equal(remembered, model.RomPicker.LastFocusedTilePath);
+		WaitFor(() => FocusedTilePath(window) == remembered,
+			$"the sheet reopened on {Focused(window)} instead of the game the player left on");
+	}
+
+	//#1037 review finding 2 on #1056: a restore that never lands - the remembered
+	//file is gone - ends with the sheet owing the player a game under the ring,
+	//but only when the ring is still where the sheet itself parked it. A player who
+	//walked it to Back meanwhile keeps it there.
+	[AvaloniaFact]
+	public void A_restore_that_never_lands_does_not_pull_the_ring_off_the_back_button()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		string contra = Path.Combine(_folder, "Contra (U) [!].nes");
+		string metroid = Path.Combine(_folder, "Metroid (USA).nes");
+		string tetris = Path.Combine(_folder, "Tetris (World).gb");
+
+		LibraryScanResult ThreeGames(IReadOnlyList<string> folders, FolderLister list, Action<IReadOnlyList<LibraryEntry>> onBatch)
+		{
+			LibraryEntry[] all = {
+				Entry(contra, RomConsole.Nes, "Contra"),
+				Entry(metroid, RomConsole.Nes, "Metroid"),
+				Entry(tetris, RomConsole.GameBoy, "Tetris")
+			};
+			onBatch(all);
+			return new LibraryScanResult(all, 1, false);
+		}
+
+		(MainWindow window, MainWindowViewModel model) = OpenLibrary(ThreeGames, inline: true);
+		WaitFor(() => FocusedTilePath(window) == contra, $"the sheet did not open on its first game ({Focused(window)})");
+		Press(window, PadNavAction.Right);
+		Press(window, PadNavAction.Right);
+		Assert.Equal(tetris, FocusedTilePath(window));
+		Press(window, PadNavAction.Back);
+		Pump();
+		Assert.False(model.RomPicker.IsVisible, "B did not close the sheet");
+
+		//The game is gone from the library: the restore will never land.
+		using ManualResetEventSlim release = new(false);
+		LibraryScanResult TwoGames(IReadOnlyList<string> folders, FolderLister list, Action<IReadOnlyList<LibraryEntry>> onBatch)
+		{
+			LibraryEntry[] two = { Entry(contra, RomConsole.Nes, "Contra"), Entry(metroid, RomConsole.Nes, "Metroid") };
+			onBatch(two);
+			release.Wait(TimeSpan.FromSeconds(30));
+			return new LibraryScanResult(two, 1, false);
+		}
+		model.RomPicker.LibraryScanStreamSource = TwoGames;
+		model.RomPicker.RunLibraryScanInline = false;
+
+		try {
+			Press(window, PadNavAction.Confirm);
+			Pump();
+			WaitFor(() => model.RomPicker.Tiles.Count == 2, "the held scan never showed its games");
+			WaitFor(() => InHeader(window), $"the ring did not wait in the header ({Focused(window)})");
+
+			//The player walks the ring to Back and the scan ends under it.
+			Button back = window.GetVisualDescendants().OfType<Button>().First(b => b.Name == "RomPickerBack");
+			back.Focus(NavigationMethod.Directional);
+			Pump();
+			Assert.Equal("RomPickerBack", (window.FocusManager?.GetFocusedElement() as Control)?.Name);
+
+			release.Set();
+			WaitFor(() => !model.RomPicker.IsScanning, "the scan's wait never cleared");
+			Pump();
+			Assert.Equal("RomPickerBack", (window.FocusManager?.GetFocusedElement() as Control)?.Name);
+		} finally {
+			release.Set();
+		}
+	}
+
+	//#1037 review finding 3 on #1056: a scan the player has LEFT stops reading the
+	//library. Closing the sheet is leaving it - nobody has to come back for the
+	//walk to stop, and a walk that unzips covers during a game is the cost.
+	[AvaloniaFact]
+	public void Closing_the_sheet_stops_the_scan_without_a_reopen()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+
+		int listings = 0;
+		bool stop = false;
+		LibraryScanResult EndlessScan(IReadOnlyList<string> folders, FolderLister list, Action<IReadOnlyList<LibraryEntry>> onBatch)
+		{
+			while(!Volatile.Read(ref stop)) {
+				list(_folder);
+				Interlocked.Increment(ref listings);
+				Thread.Sleep(5);
+			}
+			return new LibraryScanResult(Array.Empty<LibraryEntry>(), 0, false);
+		}
+
+		(MainWindow window, MainWindowViewModel model) = OpenLibrary(EndlessScan, inline: false);
+
+		try {
+			WaitFor(() => Volatile.Read(ref listings) > 3, "the scan never started reading the library");
+			Press(window, PadNavAction.Back);
+			Pump();
+			Assert.False(model.RomPicker.IsVisible, "B did not close the sheet");
+
+			//Nobody reopens it. The walk must still stop at its next listing.
+			Thread.Sleep(100);
+			int afterClose = Volatile.Read(ref listings);
+			Thread.Sleep(300);
+			Pump();
+			Assert.Equal(afterClose, Volatile.Read(ref listings));
+		} finally {
+			Volatile.Write(ref stop, true);
+			Pump();
+		}
 	}
 
 	//#1037: a scan that a newer one replaced describes nothing. Its own answer
