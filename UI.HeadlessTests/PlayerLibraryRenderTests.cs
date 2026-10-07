@@ -6,6 +6,7 @@ using System.Linq;
 using System.Threading;
 using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
+using Avalonia.Media.Imaging;
 using Avalonia.Threading;
 using Mesen.Config;
 using Mesen.Interop;
@@ -149,6 +150,49 @@ public class PlayerLibraryRenderTests : IDisposable
 		return root;
 	}
 
+	//#1032: the render gate the review found missing. PlayerRender.Save only
+	//*writes* the wireframe report, and a failure inside it is logged rather
+	//than thrown, so before this the W-P19 frame was captured and never
+	//compared - a wrong picture kept the suite green. This is the wiring the
+	//other render-gated wireframes use (PlayerThemeRenderTests
+	//.AssertWireframeRegions): compare the regions against the wireframe, gate
+	//the deviations the render is known to carry, and fail on what is left.
+	private static void AssertMatchesWireframe(Bitmap frame, string wId, IReadOnlyList<KnownDeviation> known)
+	{
+		string wireframe = PlayerRender.WireframePath(wId);
+		Assert.True(File.Exists(wireframe), $"{wId} has no wireframe at {wireframe}, so there is nothing to compare the render against");
+		RgbFrame fresh = PlayerRender.Rgb(frame);
+		IReadOnlyList<RegionResult> results = PlayerWireframe.Compare(wId, fresh, RgbFrame.FromPng(wireframe));
+		List<string> violations = PlayerWireframe.Gate(wId, results, known).ToList();
+		Assert.True(violations.Count == 0, string.Join(Environment.NewLine, violations));
+	}
+
+	//What this render is known to differ from W-P19 on, each with the cause that
+	//makes it a known one. Their home is PlayerWireframe.Known, beside the other
+	//renders' entries; they are built here because this file is the one the
+	//slice that owns W-P19 edits. The two content kinds ratchet - their cause is
+	//layout, so they must keep failing until the slices that close them land,
+	//and the gate says so the day they stop. The status line's ink box is the
+	//P1-P4 port chips every render draws and no wireframe does (#951), the
+	//fixture kind W-P1, W-P2 and W-P4 already tolerate. Off macOS the title
+	//bar's ink box moves because the shell bar is not inset for the traffic
+	//lights (#968), the host deviation the shell's own render gate carries.
+	private static IReadOnlyList<KnownDeviation> W_P19Deviations()
+	{
+		List<KnownDeviation> known = new() {
+			new("content", PlayerWireframe.InkBox,
+				"the tracer's sheet: the search field and the console filter of #1034 and #1035 are not in it", true),
+			new("content", PlayerWireframe.TextLines,
+				"the tracer's sheet: one ink band where the wireframe has ten, the same missing header", true),
+			new("status line", PlayerWireframe.InkBox,
+				"the P1-P4 port chips the wireframe does not draw", false),
+		};
+		if(!OperatingSystem.IsMacOS()) {
+			known.Add(new("title bar", PlayerWireframe.InkBox, "no traffic-light inset off macOS", false));
+		}
+		return known;
+	}
+
 	//The wireframe's own picture, rendered: the header, the grid of vertical
 	//console-coloured tiles, and the title and console tag under each.
 	[AvaloniaFact]
@@ -180,6 +224,8 @@ public class PlayerLibraryRenderTests : IDisposable
 		Assert.Contains("Master System", texts);
 		Assert.DoesNotContain("Castlevania (U) [!].nes", texts);
 
-		PlayerRender.Save(PlayerRender.Capture(window), "W-P19");
+		Bitmap frame = PlayerRender.Capture(window);
+		PlayerRender.Save(frame, "W-P19");
+		AssertMatchesWireframe(frame, "W-P19", W_P19Deviations());
 	}
 }
