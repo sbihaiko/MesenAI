@@ -161,6 +161,30 @@ namespace Mesen.Services
 			}
 		}
 
+		//#938 (W-P16, ADR-0244): the player added the file a pack waited for.
+		//The install runs again for the loaded game, now with the file, and the
+		//completed pack applies in place - no ROM reload to re-resolve it first,
+		//no power cycle after. The same switch and gate as a load's auto-install;
+		//a deferred run is the gate holder's ExitGate, which applies by power cycle.
+		public static void InstallWithAddedFile()
+		{
+			if(!ConfigManager.Config.EnhancementPacks.AutoInstallCommunityPacks) {
+				EmuApi.WriteLogEntry("[CommunityPack] added file not installed: AutoInstallCommunityPacks off");
+				return;
+			}
+			if(!_installGate.TryEnterOrDefer()) {
+				EmuApi.WriteLogEntry("[CommunityPack] added file deferred: a previous install or Restore is still in flight");
+				return;
+			}
+			try {
+				CommunityPackLoadTarget load = CommunityPackInstallCoordinator.CaptureLoad();
+				_ = Task.Run(() => RunAsync(load, userRequested: false, keepPlace: true));
+			} catch(Exception ex) {
+				EmuApi.WriteLogEntry("[CommunityPack] added file not installed: reading the loaded game threw: " + ex);
+				ExitGate();
+			}
+		}
+
 		//#736: Play's community-pack offer (CommunityPackOfferRule) for the
 		//loaded ROM - the catalog row matched like the auto-install matches
 		//(No-Intro SHA-1, then the ADR-0145/0146 same-game fallback), read from
@@ -210,7 +234,7 @@ namespace Mesen.Services
 			}
 		}
 
-		private static async Task RunAsync(CommunityPackLoadTarget load, bool userRequested)
+		private static async Task RunAsync(CommunityPackLoadTarget load, bool userRequested, bool keepPlace = false)
 		{
 			string romSha1 = "";
 			try {
@@ -296,7 +320,7 @@ namespace Mesen.Services
 				if(userRequested && outcome.Status == CommunityPackInstallStatus.Installed) {
 					ChooseRequestedPack(fetched.Entry, outcome.ContainerName, load.RomSha1);
 				}
-				Surface(outcome, load);
+				Surface(outcome, load, keepPlace);
 			} catch(Exception ex) {
 				RaiseFinished(false, false);
 				ClearAttempt(romSha1);
@@ -333,7 +357,7 @@ namespace Mesen.Services
 			}
 		}
 
-		private static void Surface(CommunityPackInstallOutcome outcome, CommunityPackLoadTarget load)
+		private static void Surface(CommunityPackInstallOutcome outcome, CommunityPackLoadTarget load, bool keepPlace)
 		{
 			switch(outcome.Status) {
 				case CommunityPackInstallStatus.Installed:
@@ -346,7 +370,7 @@ namespace Mesen.Services
 						Notify(notice);
 					}
 					NotifyPendingDeps(outcome.ContainerName, outcome.PendingDeps, load.RomSha1, load.OpenGeneration);
-					ApplyInstalledPack(load);
+					ApplyInstalledPack(load, keepPlace);
 					break;
 
 				case CommunityPackInstallStatus.Failed:
@@ -381,7 +405,12 @@ namespace Mesen.Services
 		//Continue to resume a save), is left alone.
 		//Public for UI.HeadlessTests/CommunityPackApplyTests; the production
 		//caller is Surface, after an Installed outcome.
-		public static void ApplyInstalledPack(CommunityPackLoadTarget installedFor)
+		//#938 (W-P16, ADR-0244): keepPlace applies the pack through the P.9 swap
+		//(LoadRomHelper.ApplyPackChange) instead - the game keeps its place where
+		//PackChangePolicy allows it and power-cycles where it does not.
+		//KeepingPlaceApplied is that swap's background work, for headless tests.
+		public static Task KeepingPlaceApplied { get; private set; } = Task.CompletedTask;
+		public static void ApplyInstalledPack(CommunityPackLoadTarget installedFor, bool keepPlace = false)
 		{
 			Dispatcher.UIThread.Post(() => {
 				CommunityPackLoadTarget current = CommunityPackInstallCoordinator.ReadCurrentLoad();
@@ -389,6 +418,11 @@ namespace Mesen.Services
 					EmuApi.WriteLogEntry("[CommunityPack] not power-cycling: the game was opened again or changed since the install started (was " +
 						installedFor.RomSha1 + " open #" + installedFor.OpenGeneration + ", now " + current.RomSha1 + " open #" + current.OpenGeneration + ")");
 					Notify("Community pack installed - reload the game to apply");
+					return;
+				}
+				if(keepPlace) {
+					EmuApi.WriteLogEntry("[CommunityPack] applying the completed pack in place (ADR-0244)");
+					KeepingPlaceApplied = LoadRomHelper.ApplyPackChange(MainWindowViewModel.Instance.RomInfo.ConsoleType, PowerCycleGame);
 					return;
 				}
 				EmuApi.WriteLogEntry("[CommunityPack] power-cycling to apply newly installed pack");
