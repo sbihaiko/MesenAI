@@ -1264,7 +1264,14 @@ def library_tile(c, x, y, w, h, title, console, seed, kind="art", focus=False):
         c.rrect((x + w - 26, y + 8, x + w - 8, y + 26), 5, fill=CARD)
         c.icon("play", x + w - 17, y + 17, 11, TINT["play"])
     label = title
-    while c.tw(label, 12.5, 590) > w and len(label) > 4:
+    while len(label) > 4:
+        # The label carries an ellipsis as soon as it is truncated, so the loop
+        # measures the candidate it is about to draw, ellipsis included:
+        # measuring the bare title let a long one overflow the tile by exactly
+        # the ellipsis advance (#1058).
+        drawn = label if label == title else label + "…"
+        if c.tw(drawn, 12.5, 590) <= w:
+            break
         label = label[:-2]
     c.text(x, y + h + 15, label if label == title else label + "…", 12.5, 590,
            TEXT if focus else TEXT, "lm")
