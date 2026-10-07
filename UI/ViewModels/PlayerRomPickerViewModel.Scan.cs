@@ -124,6 +124,8 @@ namespace Mesen.ViewModels
 		{
 			if(!value) {
 				_scanCancellation?.Cancel();
+				StopCanonicalTitles();
+				CancelCovers();
 			}
 		}
 
@@ -131,6 +133,8 @@ namespace Mesen.ViewModels
 		{
 			if(value != RomPickerMode.Library) {
 				_scanCancellation?.Cancel();
+				StopCanonicalTitles();
+				CancelCovers();
 			}
 		}
 
@@ -428,6 +432,10 @@ namespace Mesen.ViewModels
 			TruncatedText = result.Truncated
 				? ResourceHelper.GetMessage("RomPickerLibraryTruncated", GameLibrary.MaxEntries)
 				: "";
+			//#1038: the grid is complete and readable NOW - the tiles carry the
+			//cleaned file names the scan gave them - and the canonical titles
+			//arrive from here as the background pass resolves them.
+			StartCanonicalTitles(generation);
 		}
 	}
 }

@@ -116,34 +116,11 @@ namespace Mesen.ViewModels
 			pass?.Cancel();
 		}
 
-		//The sheet closing is one of the three ways the pass ends: a player who
-		//leaves the library leaves no hash walk behind them, whatever the scan's own
-		//generation says. Hooked to the property rather than written into every
-		//caller - Play, Back, Hide, and whatever closes the sheet next - because
-		//the state is what the rule is about.
-		partial void OnIsVisibleChanged(bool value)
-		{
-			if(!value) {
-				StopCanonicalTitles();
-				CancelCovers();
-			}
-		}
-
-		//The second way: the sheet's OTHER surface (#1038 review finding 4). *Browse
-		//a file…* leaves the library without closing the sheet, so IsVisible stays
-		//true and no new scan has started - and the walk would go on hashing the
-		//library behind a player who is now in the browser, every batch of it thrown
-		//away by the `Mode != Library` guard in PostTitles, while the browser's own
-		//scan wants the same disk. Hooked to Mode for the same reason as IsVisible:
-		//the state is the rule, so every way of leaving the library is covered by the
-		//one hook rather than by whoever remembers to call it.
-		partial void OnModeChanged(RomPickerMode value)
-		{
-			if(value != RomPickerMode.Library) {
-				StopCanonicalTitles();
-				CancelCovers();
-			}
-		}
+		//The sheet closing and the player stepping into *Browse a file…* are two of
+		//the three ways the pass ends (#1038 review finding 4): StopCanonicalTitles is
+		//called from the one OnIsVisibleChanged / OnModeChanged hook in
+		//PlayerRomPickerViewModel.Scan.cs, beside the scan's own cancellation, because
+		//a partial method has a single body and the state is what the rule is about.
 
 		//The pass, started by the scan that filled the grid. Called once per scan
 		//and only from that scan's own apply turn, so two passes never race for
@@ -172,7 +149,7 @@ namespace Mesen.ViewModels
 			//list captured here would be stale by the first keystroke (review
 			//finding 1 on #1055). What it resolves goes into the view-model's own
 			//titles, and the grid is filled from those.
-			IReadOnlyList<LibraryGame> games = _libraryGames;
+			IReadOnlyList<LibraryGame> games = _libraryGames.ToArray();
 			CancellationTokenSource pass = new();
 			_titlePass = pass;
 			CancellationToken token = pass.Token;
