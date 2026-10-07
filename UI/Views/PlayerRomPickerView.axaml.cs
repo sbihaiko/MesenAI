@@ -1,5 +1,6 @@
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.Markup.Xaml;
@@ -119,10 +120,17 @@ namespace Mesen.Views
 		//actually visible" - a tile the pad has reached is being looked at whatever the
 		//layout says, so it is asked about here too, and nothing else in the library
 		//ever is.
-		private void OnTileFocus(object? sender, RoutedEventArgs e)
+		//
+		//#1037 (ADR-0264 Decision 1): the same event is also the game the player is
+		//on, so the sheet can reopen on it. The event, not the click: the arbiter
+		//putting the ring on a tile is the player being on it too, and the tile the
+		//ring left when the sheet closed is exactly the one this has to remember.
+		//One GotFocus attribute binds one handler, so both reactions live here.
+		private void OnTileFocused(object? sender, FocusChangedEventArgs e)
 		{
 			if(sender is Control { DataContext: PlayerLibraryTile tile }) {
 				Model?.TileReached(tile);
+				Model?.RememberFocus(tile);
 			}
 		}
 

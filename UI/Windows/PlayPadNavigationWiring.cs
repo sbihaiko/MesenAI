@@ -342,19 +342,33 @@ namespace Mesen.Windows
 				if(search is not null && (search.IsFocused || ReferenceEquals(KeyboardFieldForTest(window), search))) {
 					return search;
 				}
-				return RomPickerFirstTile(window) ?? Named(window, "RomPickerBrowseFile") ?? Named(window, "RomPickerBack");
+				//#1037 picks the tile; the CALLER named the game, because the
+				//path lives on the view-model and this walks the tree. The
+				//fallback chain is #1060's: a grid with no tile at all - no
+				//library folder yet, or folders the scan answered nothing for -
+				//lands on the control its empty sentence names, and Back stays
+				//the last resort, being the one control the sheet always has.
+				return RomPickerTile(window, model.RomPicker.LastFocusedTilePath)
+					?? Named(window, "RomPickerBrowseFile") ?? Named(window, "RomPickerBack");
 			}
 			return RomPickerFirstRow(window) ?? Named(window, "RomPickerBack");
 		}
 
-		//The grid's first tile. The items are found by their own data context -
-		//the same way the rows are - so a rebuild that reorders the grid moves
-		//the ring to whatever leads it now.
-		private static Control? RomPickerFirstTile(MainWindow window)
+		//The tile the ring lands on. The items are found by their own data
+		//context - the same way the rows are - so a rebuild that reorders the
+		//grid moves the ring to whatever leads it now.
+		//
+		//#1037 (ADR-0264 Decision 1): the game the player was on leads, so the
+		//sheet REOPENS on it rather than on whatever the scan happened to list
+		//first. A path the grid no longer holds - the file was moved, the folder
+		//left the library - falls back to the first tile, which is also where a
+		//sheet that has never been opened lands.
+		private static Control? RomPickerTile(MainWindow window, string? path = null)
 		{
 			IEnumerable<Button> tiles = (Named(window, "RomPickerGrid") as ItemsControl)?.GetVisualDescendants().OfType<Button>()
 				?? Enumerable.Empty<Button>();
-			return tiles.FirstOrDefault(b => b.DataContext is PlayerLibraryTile);
+			return tiles.FirstOrDefault(b => b.DataContext is PlayerLibraryTile tile && tile.Path.Length > 0 && tile.Path == path)
+				?? tiles.FirstOrDefault(b => b.DataContext is PlayerLibraryTile);
 		}
 
 		private static Control? RomPickerFirstRow(MainWindow window)
@@ -412,8 +426,10 @@ namespace Mesen.Windows
 				//The tile the player left, not the first one: Down undoes Up - and
 				//only while that tile is one the grid still draws (a rebuild
 				//replaced its container, and the old one is attached no longer).
+				//#1037: the fallback is the tile the sheet would reopen on, which
+				//is the first tile when the player has focused nothing yet.
 				return (lastTile is { IsEffectivelyVisible: true } ? lastTile : null)
-					?? RomPickerFirstTile(window) ?? Named(window, "RomPickerBack");
+					?? RomPickerTile(window) ?? Named(window, "RomPickerBack");
 			}
 			return null;
 		}
