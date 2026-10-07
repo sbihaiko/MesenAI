@@ -134,6 +134,36 @@ namespace Mesen.Tests.Play
 			}
 		}
 
+		//A `.rgd` is written the moment the game is opened, and the screenshot is
+		//added to it afterwards: the newest entry for a ROM path can name the path
+		//and hold no Screenshot.png at all. The tile then keeps the older game's own
+		//screenshot instead of falling back to the generic cover - the newest entry
+		//*with a cover* wins, which is not the same as the newest entry.
+		[Fact]
+		public void A_newer_recent_file_without_a_screenshot_falls_back_to_an_older_one()
+		{
+			string folder = NewTempFolder();
+			try {
+				byte[] cover = { 0x89, 0x50, 0x4E, 0x47, 6, 6, 6 };
+				string rom = Path.Combine(folder, "roms", "Contra (USA).nes");
+
+				//The older file is the one with the picture; the newer one records the
+				//same path with no Screenshot.png. Timestamps are set explicitly, so
+				//only the fallback - not the filesystem's own ordering - can find it.
+				string newerFile = WriteRecent(folder, "newer-no-shot", RomInfo(rom), null);
+				string olderFile = WriteRecent(folder, "older-with-shot", RomInfo(rom), cover);
+				DateTime olderAt = new(2026, 1, 2, 3, 4, 5, DateTimeKind.Utc);
+				File.SetLastWriteTimeUtc(newerFile, olderAt.AddHours(1));
+				File.SetLastWriteTimeUtc(olderFile, olderAt);
+
+				RecentCoverIndex index = new(folder, StringComparison.Ordinal);
+
+				Assert.Equal(cover, index.FindCover(rom));
+			} finally {
+				Directory.Delete(folder, true);
+			}
+		}
+
 		//#1035: the `.rgd` is named after the ROM's basename, and the Core keeps one
 		//archive per name, shared by every folder - playing /B/Game.nes overwrites
 		//the `Game.rgd` the index recorded for /A/Game.nes. The ROM path and the

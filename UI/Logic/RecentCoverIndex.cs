@@ -26,17 +26,24 @@ namespace Mesen.Logic;
 //index recorded, and a cover read apart from the identity it is checked
 //against can be the other game's.
 //
+//A path can hold several entries, and the newest one is only the first to be
+//asked: the Core writes the `.rgd` as the game opens and adds Screenshot.png to
+//it afterwards, so the latest archive for a path can name it and hold no
+//screenshot at all. The lookup walks the candidates newest-first and answers
+//with the newest one that actually has a cover, so an older play's picture is
+//not masked by a newer entry that has none.
+//
 //Host-free (ADR-0123): no Avalonia, no core, no ConfigManager, no window. It
 //reads files and returns bytes, so the library's cover choice is unit-tested
 //without a host. A corrupt or incomplete entry is ignored - never a throw,
 //never a partial image: the tile keeps its generic cover.
 public sealed class RecentCoverIndex
 {
-	//One indexed `.rgd`: the file, and when it was last written. The stamp decides
-	//which entry a ROM path resolves to when two entries name the same path.
+	//One indexed `.rgd`: the file, and when it was last written. The stamp orders
+	//the entries that name the same ROM path, newest first.
 	private readonly record struct RecentEntry(string File, DateTime WrittenAt);
 
-	private readonly Dictionary<string, RecentEntry> _recentFileByRomPath;
+	private readonly Dictionary<string, List<RecentEntry>> _recentFilesByRomPath;
 	private readonly Dictionary<string, byte[]> _coverByRomPath = new(StringComparer.Ordinal);
 
 	//The case rule a path comparison follows on this machine: Windows and macOS
@@ -54,7 +61,7 @@ public sealed class RecentCoverIndex
 
 	public RecentCoverIndex(string? recentGamesFolder, StringComparison pathComparison)
 	{
-		_recentFileByRomPath = new Dictionary<string, RecentEntry>(StringComparer.FromComparison(pathComparison));
+		_recentFilesByRomPath = new Dictionary<string, List<RecentEntry>>(StringComparer.FromComparison(pathComparison));
 		foreach(string recentFile in RecentFiles(recentGamesFolder)) {
 			string? romPath = FullPath(ReadRomPath(recentFile));
 			if(romPath == null) {
@@ -64,10 +71,14 @@ public sealed class RecentCoverIndex
 			//collection.zip both record the archive's path. The later play is the
 			//later file, so the later timestamp wins - never the file name, since
 			//the order Directory.GetFiles hands files over is unspecified.
-			RecentEntry candidate = new(recentFile, LastWriteTimeUtc(recentFile));
-			if(!_recentFileByRomPath.TryGetValue(romPath, out RecentEntry current) || candidate.WrittenAt > current.WrittenAt) {
-				_recentFileByRomPath[romPath] = candidate;
+			if(!_recentFilesByRomPath.TryGetValue(romPath, out List<RecentEntry>? candidates)) {
+				candidates = new List<RecentEntry>();
+				_recentFilesByRomPath[romPath] = candidates;
 			}
+			candidates.Add(new RecentEntry(recentFile, LastWriteTimeUtc(recentFile)));
+			//Newest first, so the lookup tries them in the order they were played
+			//and the first one that actually holds a screenshot answers.
+			candidates.Sort(static (a, b) => b.WrittenAt.CompareTo(a.WrittenAt));
 		}
 	}
 
@@ -77,27 +88,35 @@ public sealed class RecentCoverIndex
 	public byte[]? FindCover(string? romPath)
 	{
 		string? full = FullPath(romPath);
-		if(full == null || !_recentFileByRomPath.TryGetValue(full, out RecentEntry entry)) {
+		if(full == null || !_recentFilesByRomPath.TryGetValue(full, out List<RecentEntry>? candidates)) {
 			return null;
 		}
 		if(_coverByRomPath.TryGetValue(full, out byte[]? cached)) {
 			return cached;
 		}
-		//The path and the screenshot come out of one read of the file, and the path
-		//is checked before the bytes are handed over: an archive a namesake
-		//overwrote since the index was built records another game, so its screenshot
-		//is not this ROM's cover, and nothing is cached under this path.
-		(string? recordedPath, byte[]? cover) = ReadEntry(entry.File);
-		string? recorded = FullPath(recordedPath);
-		if(cover == null || recorded == null || !_recentFileByRomPath.Comparer.Equals(full, recorded)) {
-			return null;
+		//Candidates come newest-first. The newest entry is not always the one with
+		//a picture: the Core writes the `.rgd` as the game opens and adds
+		//Screenshot.png to it afterwards, so the latest archive for a path can name
+		//it and hold no screenshot at all. A candidate that does not answer is
+		//skipped, and the next one - a game played earlier - is asked instead.
+		foreach(RecentEntry candidate in candidates) {
+			//The path and the screenshot come out of one read of the file, and the
+			//path is checked before the bytes are handed over: an archive a namesake
+			//overwrote since the index was built records another game, so its
+			//screenshot is not this ROM's cover, and nothing is cached under this path.
+			(string? recordedPath, byte[]? cover) = ReadEntry(candidate.File);
+			string? recorded = FullPath(recordedPath);
+			if(cover == null || recorded == null || !_recentFilesByRomPath.Comparer.Equals(full, recorded)) {
+				continue;
+			}
+			//A tile is drawn many times; the zip is opened once. Only a hit is
+			//cached, so an indexed `.rgd` that has no screenshot yet is read again on
+			//the next lookup. A `.rgd` this index does not know about is not reached
+			//at all - recreate the index to see it.
+			_coverByRomPath[full] = cover;
+			return cover;
 		}
-		//A tile is drawn many times; the zip is opened once. Only a hit is cached,
-		//so an indexed `.rgd` that has no screenshot yet is read again on the next
-		//lookup. A `.rgd` this index does not know about is not reached at all -
-		//recreate the index to see it.
-		_coverByRomPath[full] = cover;
-		return cover;
+		return null;
 	}
 
 	//The `.rgd` files directly inside the Recent folder. A folder that is absent,
