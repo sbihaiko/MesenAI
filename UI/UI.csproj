@@ -49,8 +49,8 @@
 		<DefineConstants></DefineConstants>
 	</PropertyGroup>
 	<PropertyGroup>
-		<CFBundleName>Mesen</CFBundleName> <!-- Also defines .app file name -->
-		<!-- Kept as-is on purpose (#1018): it also names the .app, release archives and README download links, so renaming is a packaging change. -->
+		<!-- CFBundleName/CFBundleDisplayName kept as-is on purpose (#1018): CFBundleName also defines the .app file name, release archives and README download links, so renaming is a packaging change. -->
+		<CFBundleName>Mesen</CFBundleName>
 		<CFBundleDisplayName>Mesen</CFBundleDisplayName>
 		<CFBundleIdentifier>ca.mesen</CFBundleIdentifier>
 		<CFBundleVersion>1.0.0</CFBundleVersion>

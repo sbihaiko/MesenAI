@@ -7,28 +7,30 @@ using Xunit;
 
 namespace Mesen.HeadlessTests;
 
-//#1018: InitAppMenu reorders the macOS app menu; About first, Settings… next. Quit is Avalonia's own
-//item, added only when the platform exports the menu; the headless platform
-//never does, so Quit-last is not observable here (see the PR body). Runs the real private InitAppMenu on a real App.
-//It drives InitAppMenu on a throwaway `new App()` and does NOT cover the OnFrameworkInitializationCompleted call
-//under OperatingSystem.IsMacOS(), which is not drivable headless.
+//#1018: InitAppMenu reorders the macOS app menu: About first, Settings… next, Avalonia's own items
+//(Services… Quit) after them with Quit last. Avalonia adds those items when the platform exports the
+//menu, which the headless platform never does, so the test seeds the app menu with a fake Quit and a
+//separator before invoking the real private InitAppMenu on a throwaway `new App()`.
+//It does NOT cover the OnFrameworkInitializationCompleted call under OperatingSystem.IsMacOS(),
+//which is not drivable headless.
 public class AppMenuOrderTests
 {
 	[AvaloniaFact]
-	public void InitAppMenu_puts_About_first_Settings_next()
+	public void InitAppMenu_puts_About_and_Settings_above_the_existing_items_with_Quit_last()
 	{
 		App app = new();
+		NativeMenu seeded = new();
+		seeded.Items.Add(new NativeMenuItemSeparator());
+		seeded.Items.Add(new NativeMenuItem("Quit"));
+		NativeMenu.SetMenu(app, seeded);
+
 		typeof(App).GetMethod("InitAppMenu", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(app, null);
 
 		NativeMenu? menu = NativeMenu.GetMenu(app);
 		Assert.NotNull(menu);
 		//The separator is itself a NativeMenuItem subclass, so the order is read off all items.
 		string?[] headers = menu!.Items.OfType<NativeMenuItem>().Select(i => i.Header).ToArray();
-		//Relative order only: the platform or Avalonia may append items after these.
-		Assert.True(headers.Length >= 3, "expected at least About, separator and Settings…");
-		Assert.Equal(Message("DoorMenuAbout"), headers[0]);
-		Assert.Equal("-", headers[1]);
-		Assert.Equal(Message("DoorMenuSettings"), headers[2]);
+		Assert.Equal(new string?[] { Message("DoorMenuAbout"), "-", Message("DoorMenuSettings"), "-", "Quit" }, headers);
 	}
 
 	//ResourceHelper is internal to the UI assembly, so it is reached by reflection, like InitAppMenu above.
