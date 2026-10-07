@@ -421,12 +421,12 @@ namespace Mesen.ViewModels
 			Recordings = (_project?.Recordings ?? Array.Empty<RemasterRecording>()).Reverse().Select(RemasterRecordingRow.From).ToList();
 			RefreshShapesSeen();
 
+			RefreshWrongGame(s);
 			Record = Control(s.Record);
 			RecordFromTas = Control(s.RecordFromTas);
 			LetTheAiPlay = Control(s.LetTheAiPlay);
 			PrepareFigures = Control(s.PrepareFigures);
 			BuildAndShow = Control(s.BuildAndShow);
-			RefreshWrongGame(s);
 			PaintText = ResourceHelper.GetMessage(_project?.HasKit == true ? "RemasterKitReady" : "RemasterKitNotYet");
 
 			RefreshTiles();
@@ -504,7 +504,9 @@ namespace Mesen.ViewModels
 				: latest == null ? "" : ResourceHelper.GetMessage("RemasterRecordingsLatest", latest.Detail.Length > 0 ? latest.Title + " · " + latest.Detail : latest.Title);
 		}
 
-		private static RemasterControlViewModel Control(RemasterControl c) => new(c.Enabled, c.Enabled ? "" : Reason(c.Reason));
+		//#984 (rule 10): with the wrong game the row above says it once, so the
+		//controls stay disabled without repeating a reason under each.
+		private RemasterControlViewModel Control(RemasterControl c) => new(c.Enabled, c.Enabled || IsWrongGame ? "" : Reason(c.Reason));
 
 		private static string Reason(RemasterReason reason) => reason == RemasterReason.None ? "" : ResourceHelper.GetMessage("RemasterReason" + reason);
 
