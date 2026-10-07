@@ -21,7 +21,6 @@ namespace Mesen.ViewModels
 		public static string BoxArtFolder => Path.Combine(ConfigManager.HomeFolder, "BoxArt");
 
 		private static BoxArtCache? _boxArtCache;
-		private static bool _boxArtCacheOn;
 		private static RomHashCache? _romHashes;
 
 		//One tile's cover, or null when there is none to draw. Called by the sheet
@@ -33,33 +32,36 @@ namespace Mesen.ViewModels
 				.ConfigureAwait(false);
 		}
 
-		//The cache reads the switch when it is built, and it is rebuilt when the
-		//switch moves - so the Settings › System row takes effect on the next tile
-		//rather than on the next launch. The switch's own meaning is the cache's
-		//(`DownloadEnabled`): off is no request at all, not a quieter one, and a cover
-		//already on the player's disk is still served, because reading their disk is
-		//not a request (ADR-0265 section 8).
-		private static BoxArtCache Cache()
-		{
-			bool enabled = ConfigManager.Config.Preferences.DownloadBoxArt;
-			if(_boxArtCache is null || _boxArtCacheOn != enabled) {
-				_boxArtCache = new BoxArtCache(BoxArtFetcher.Send, BoxArtFolder, new BoxArtCacheOptions {
-					DownloadEnabled = enabled
-				});
-				_boxArtCacheOn = enabled;
-			}
-			return _boxArtCache;
-		}
+		//ONE cache, for the whole session, and the switch is read through it rather
+		//than into it: `BoxArtCacheOptions.DownloadEnabled` is the preference itself,
+		//asked on every call, so the Settings › System row takes effect on the next
+		//tile with no rebuild. Rebuilding is what this deliberately does not do - a
+		//second instance carries its own semaphore and its own in-flight table, so
+		//the four requests the first one still has running would be joined by four
+		//more (ADR-0265 section 4's ceiling is the cache's, and the app has one), and
+		//one game could be paid for twice.
+		//
+		//The switch's own meaning is the cache's: off is no request at all, not a
+		//quieter one, and a cover already on the player's disk is still served,
+		//because reading their disk is not a request (ADR-0265 section 8).
+		private static BoxArtCache Cache() => _boxArtCache ??= new BoxArtCache(BoxArtFetcher.Send, BoxArtFolder, new BoxArtCacheOptions {
+			DownloadEnabled = () => ConfigManager.Config.Preferences.DownloadBoxArt
+		});
 
 		private static RomHashCache Hashes() => _romHashes ??= new RomHashCache(Path.Combine(BoxArtFolder, "hashes"));
 
-		//The SHA1 -> No-Intro name table (#1038). **It is not on this branch**, and
-		//this is the one seam between the shipped chain and the art collection: with
-		//no name there is nothing to ask for, so a tile whose dump the table does not
-		//know falls straight to its generic cover rather than having a name guessed
-		//from its file (ADR-0265 section 3, ADR-0003). Until the table lands, no
-		//request is made at all - which is that rule taken literally rather than a
-		//shortcut: this is where it plugs in, and nothing else has to move.
-		private static string? NoIntroName(string sha1) => null;
+		//The SHA1 -> No-Intro name table (#1038/#1041), read from the artifact the
+		//app's own assembly ships and kept after the first use
+		//(`NoIntroNameTable.Embedded`). This is the seam between the shipped chain
+		//and the art collection, and it is live: a dump the table knows answers the
+		//console and the database's own name for it, and a dump it does not know
+		//falls straight to its generic cover rather than having a name guessed from
+		//its file (ADR-0265 section 3, ADR-0003).
+		//
+		//The record travels whole rather than as a bare name because the console is
+		//part of the key the collection is asked under (ADR-0265 section 6), and the
+		//table is the only thing that knows it: BoxArtLibrary drops an answer filed
+		//under another machine rather than asking the wrong repository for it.
+		private static NoIntroRomName? NoIntroName(string sha1) => NoIntroNameTable.ForSha1(sha1);
 	}
 }

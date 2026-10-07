@@ -1,7 +1,11 @@
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
+using Avalonia.Layout;
 using Avalonia.Markup.Xaml;
+using Avalonia.VisualTree;
 using Mesen.ViewModels;
+using System.Collections.Generic;
 
 namespace Mesen.Views
 {
@@ -38,11 +42,43 @@ namespace Mesen.Views
 			}
 		}
 
-		//#1039 (ADR-0265 section 4): the covers are asked for lazily, for the tiles
-		//the player can actually see, and the ring is how this sheet knows where the
-		//player is looking - the pad moves the real focus (ADR-0256 Decision 3), so
-		//a tile scrolled past the window is still asked about the moment it is
-		//reached, and nothing else in the library ever is.
+		//#1039 (ADR-0265 section 4): the covers are asked for lazily and only for the
+		//tiles the sheet is showing. WHO those are is a question about layout, so it is
+		//answered here rather than guessed at in the view-model: every container the
+		//WrapPanel has realized is measured against the ScrollViewer's viewport, and
+		//the tiles that intersect it are handed over. This fires on the layout that
+		//fills the grid and again on every scroll, so a tile below the fold is asked
+		//about the moment it comes into view.
+		//
+		//The ring is the second way in: the pad moves the real focus (ADR-0256 Decision
+		//3), and OnTileFocus below asks about whatever it reaches, in case a tile is
+		//reached before its layout has settled.
+		private void OnGridShowing(object? sender, EffectiveViewportChangedEventArgs e)
+		{
+			if(sender is not ItemsControl grid || Model is not { } model) {
+				return;
+			}
+			if(grid.FindAncestorOfType<ScrollViewer>() is not { } sheet) {
+				return;
+			}
+
+			//The viewport is a rectangle in the content's own coordinates, which is
+			//what a container's Bounds are measured in - the WrapPanel sits at the
+			//content's origin and the containers sit in the panel.
+			Rect viewport = new(sheet.Offset.X, sheet.Offset.Y, sheet.Viewport.Width, sheet.Viewport.Height);
+			List<PlayerLibraryTile> showing = new();
+			for(int i = 0; i < model.Tiles.Count; i++) {
+				if(grid.ContainerFromIndex(i) is Control { } container && container.Bounds.Intersects(viewport)) {
+					showing.Add(model.Tiles[i]);
+				}
+			}
+			model.AskVisible(showing);
+		}
+
+		//#1039 (ADR-0265 section 4): the ring is the other half of "the tiles that are
+		//actually visible" - a tile the pad has reached is being looked at whatever the
+		//layout says, so it is asked about here too, and nothing else in the library
+		//ever is.
 		private void OnTileFocus(object? sender, RoutedEventArgs e)
 		{
 			if(sender is Control { DataContext: PlayerLibraryTile tile }) {

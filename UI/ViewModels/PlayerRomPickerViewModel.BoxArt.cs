@@ -17,7 +17,7 @@ namespace Mesen.ViewModels
 	//scan and every tile draws its generic console-coloured cover straight away -
 	//the sheet never waits on a network (ADR-0265 section 9) - and the covers are
 	//asked for separately, one call per tile, for the tiles that are actually on
-	//screen: the window that fits the sheet when the grid lands, plus every tile the
+	//screen: the tiles the view reports as showing (AskVisible), plus every tile the
 	//ring reaches afterwards. Nothing else in the library is ever asked about, so a
 	//twenty-thousand-ROM scan costs its first screenful and stops there.
 	//
@@ -27,14 +27,6 @@ namespace Mesen.ViewModels
 	//offline, a 404, a ROM the table does not know - simply keeps its generic cover.
 	public partial class PlayerRomPickerViewModel
 	{
-		//How many tiles the sheet shows at once, and therefore how many covers are
-		//asked for when the grid lands before the player has touched anything.
-		//W-P19's sheet is 1000 px wide and its tile is 112 px with a 12 px gap, so
-		//eight fit across, and three rows of 153 px fit in the 620 px sheet: this is
-		//that block. It is a number of REQUESTS, not a rule about art - a tile
-		//outside the window is asked for the moment the ring reaches it.
-		public const int CoverWindow = 24;
-
 		//One tile's downloaded cover, or null when there is none to show. The app
 		//wires this to the box-art cache (see MainWindowViewModel); a test injects a
 		//fake and drives the sheet without a network, and a null source - the
@@ -67,23 +59,36 @@ namespace Mesen.ViewModels
 		}
 
 		//The grid was rebuilt: the tiles of the previous scan are gone from the tree
-		//with their containers, so their images can go too - and the new tiles are
-		//the ones to ask about, as far as the window reaches.
+		//with their containers, so their images can go too. WHO is asked about is not
+		//decided here - a tile is asked about when the sheet is showing it, and that
+		//is the view's to say (AskVisible below).
 		private void TilesReplaced(object? sender, NotifyCollectionChangedEventArgs e)
 		{
 			if(e.Action == NotifyCollectionChangedAction.Reset) {
 				ReleaseCovers();
 				_coversAsked.Clear();
+			}
+		}
+
+		//The tiles the sheet is showing, handed in by the view (PlayerRomPickerView):
+		//the ones whose realized controls intersect the ScrollViewer's viewport, which
+		//is what "visible" means here and the only thing that answers ADR-0265 section
+		//4's "for the tiles that are actually visible".
+		//
+		//A number could not stand in for this. The sheet shows whatever its own width,
+		//its header and the player's screen leave it - about seven columns of 124 px
+		//and two and a half rows in the 1000 px sheet, not the eight-by-three a
+		//constant would guess - so a fixed count either asks about tiles below the fold
+		//or leaves tiles on screen art-less until the ring happens to reach them. The
+		//same call is harmless to repeat: a tile already asked about is not asked again
+		//(_coversAsked), which is what lets the view call it on every layout.
+		public void AskVisible(IReadOnlyList<PlayerLibraryTile> tiles)
+		{
+			if(!IsVisible || Mode != RomPickerMode.Library) {
 				return;
 			}
-			if(e.NewItems is null) {
-				return;
-			}
-			for(int i = 0; i < e.NewItems.Count; i++) {
-				int index = e.NewStartingIndex < 0 ? i : e.NewStartingIndex + i;
-				if(index < CoverWindow && e.NewItems[i] is PlayerLibraryTile tile) {
-					Ask(tile);
-				}
+			for(int i = 0; i < tiles.Count; i++) {
+				Ask(tiles[i]);
 			}
 		}
 

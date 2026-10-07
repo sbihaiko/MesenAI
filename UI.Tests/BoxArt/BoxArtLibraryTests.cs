@@ -62,7 +62,12 @@ namespace Mesen.Tests.BoxArt
 
 		private LibraryEntry Entry() => new(_rom, RomConsole.Nes, "Contra");
 
-		private BoxArtLibrary Library(FakeBoxArtSender sender, Func<string, string?> names, BoxArtCacheOptions? options = null) =>
+		//The table's answer, in the shape the seam answers in: the name AND the
+		//console the table filed the dump under (ADR-0265 section 6 keys the
+		//collection by both).
+		private static readonly NoIntroRomName Rom = new(RomConsole.Nes, Name);
+
+		private BoxArtLibrary Library(FakeBoxArtSender sender, Func<string, NoIntroRomName?> names, BoxArtCacheOptions? options = null) =>
 			new(new BoxArtCache(sender.Send, _cache.FullName, options), new RomHashCache(_hashes.FullName), names);
 
 		//The SHA-1 the collection is keyed by, read from the same contract the
@@ -104,7 +109,7 @@ namespace Mesen.Tests.BoxArt
 			string cached = await CacheBoxArt();
 			FakeBoxArtSender sender = FakeBoxArtSender.Images(FakeImages.Png());
 
-			BoxArtCover? cover = await Library(sender, _ => Name).GetCover(Entry(), CancellationToken.None);
+			BoxArtCover? cover = await Library(sender, _ => Rom).GetCover(Entry(), CancellationToken.None);
 
 			Assert.NotNull(cover);
 			Assert.Equal(BoxArtCoverKind.Boxart, cover!.Kind);
@@ -119,7 +124,7 @@ namespace Mesen.Tests.BoxArt
 		{
 			FakeBoxArtSender sender = FakeBoxArtSender.Images(FakeImages.Png(), FakeImages.Jpeg());
 
-			BoxArtCover? cover = await Library(sender, _ => Name).GetCover(Entry(), CancellationToken.None);
+			BoxArtCover? cover = await Library(sender, _ => Rom).GetCover(Entry(), CancellationToken.None);
 
 			Assert.NotNull(cover);
 			Assert.Equal(BoxArtCoverKind.Boxart, cover!.Kind);
@@ -138,13 +143,51 @@ namespace Mesen.Tests.BoxArt
 			Assert.EndsWith("/Contra (USA).png", Uri.UnescapeDataString(request.AbsolutePath));
 		}
 
+		//#1039 review (ADR-0265 section 6): the table's answer carries the console it
+		//filed the dump under, and the collection is keyed by console PLUS SHA-1 - "a
+		//Game Boy game never answers for a Game Gear one". A hit filed under another
+		//machine is the wrong game's name, so it is dropped whole: asking for it would
+		//query the wrong repository and the 404 that came back would be written down
+		//as "this collection has no cover" under the tile's own console, for thirty
+		//days (section 7).
+		[Fact]
+		public async Task A_hit_filed_under_another_console_is_dropped_rather_than_asked_for_or_recorded()
+		{
+			FakeBoxArtSender sender = FakeBoxArtSender.Images(FakeImages.Png());
+			NoIntroRomName otherMachine = new(RomConsole.GameGear, Name);
+
+			BoxArtCover? cover = await Library(sender, _ => otherMachine).GetCover(Entry(), CancellationToken.None);
+
+			Assert.Null(cover);
+			//Not the wrong repository asked: nothing was asked at all.
+			Assert.Equal(0, sender.RequestCount);
+			//And no miss was written: the collection was never given the chance to
+			//answer about this game, so it must not be remembered as one that has no
+			//cover (the record outlives the mistake by MissExpiry).
+			Assert.Empty(Directory.GetFiles(_cache.FullName, "*.miss", SearchOption.AllDirectories));
+		}
+
+		//The same answer, filed under the console the tile IS for, is still asked for:
+		//the rule above drops the wrong record, not every record.
+		[Fact]
+		public async Task A_hit_filed_under_this_tiles_own_console_is_still_asked_for()
+		{
+			FakeBoxArtSender sender = FakeBoxArtSender.Images(FakeImages.Png());
+
+			BoxArtCover? cover = await Library(sender, _ => new NoIntroRomName(RomConsole.Nes, Name))
+				.GetCover(Entry(), CancellationToken.None);
+
+			Assert.NotNull(cover);
+			Assert.Equal(1, sender.RequestCount);
+		}
+
 		[Fact]
 		public async Task A_console_the_collection_does_not_carry_is_asked_for_nothing()
 		{
 			FakeBoxArtSender sender = FakeBoxArtSender.Images(FakeImages.Png());
 			LibraryEntry unknown = new(_rom, RomConsole.Unknown, "Contra");
 
-			BoxArtCover? cover = await Library(sender, _ => Name).GetCover(unknown, CancellationToken.None);
+			BoxArtCover? cover = await Library(sender, _ => Rom).GetCover(unknown, CancellationToken.None);
 
 			Assert.Null(cover);
 			Assert.Equal(0, sender.RequestCount);
@@ -156,7 +199,7 @@ namespace Mesen.Tests.BoxArt
 			FakeBoxArtSender sender = FakeBoxArtSender.Images(FakeImages.Png());
 			LibraryEntry gone = new(Path.Combine(_root.FullName, "deleted.nes"), RomConsole.Nes, "Contra");
 
-			BoxArtCover? cover = await Library(sender, _ => Name).GetCover(gone, CancellationToken.None);
+			BoxArtCover? cover = await Library(sender, _ => Rom).GetCover(gone, CancellationToken.None);
 
 			Assert.Null(cover);
 			Assert.Equal(0, sender.RequestCount);
@@ -166,9 +209,9 @@ namespace Mesen.Tests.BoxArt
 		public async Task With_the_switch_off_a_known_name_still_makes_no_request()
 		{
 			FakeBoxArtSender sender = FakeBoxArtSender.Images(FakeImages.Png());
-			BoxArtCacheOptions off = new() { DownloadEnabled = false };
+			BoxArtCacheOptions off = new() { DownloadEnabled = static () => false };
 
-			BoxArtCover? cover = await Library(sender, _ => Name, off).GetCover(Entry(), CancellationToken.None);
+			BoxArtCover? cover = await Library(sender, _ => Rom, off).GetCover(Entry(), CancellationToken.None);
 
 			Assert.Null(cover);
 			//Not a lighter request, not a quieter one: none at all (ADR-0265
@@ -181,9 +224,9 @@ namespace Mesen.Tests.BoxArt
 		{
 			string cached = await CacheBoxArt();
 			FakeBoxArtSender sender = FakeBoxArtSender.Images(FakeImages.Png());
-			BoxArtCacheOptions off = new() { DownloadEnabled = false };
+			BoxArtCacheOptions off = new() { DownloadEnabled = static () => false };
 
-			BoxArtCover? cover = await Library(sender, _ => Name, off).GetCover(Entry(), CancellationToken.None);
+			BoxArtCover? cover = await Library(sender, _ => Rom, off).GetCover(Entry(), CancellationToken.None);
 
 			//Reading the player's own disk is not a request (ADR-0265 section 8),
 			//so turning the switch off never throws away art they already have.

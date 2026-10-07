@@ -23,16 +23,19 @@ namespace Mesen.Logic
 	{
 		private readonly BoxArtCache _cache;
 		private readonly RomHashCache _hashes;
-		private readonly Func<string, string?> _nameOf;
+		private readonly Func<string, NoIntroRomName?> _romOf;
 
-		//`noIntroName` is the SHA1 -> name table (#1038). It answers null for a dump
-		//it does not know, and that null is the whole answer: no request is made for
-		//a game the collection cannot be asked about by name.
-		public BoxArtLibrary(BoxArtCache cache, RomHashCache hashes, Func<string, string?> noIntroName)
+		//`noIntroRom` is the SHA1 -> name table (#1038/#1041), and its answer is the
+		//whole record the table filed - the console the dump belongs to as well as
+		//the name. It answers null for a dump it does not know, and that null is the
+		//whole answer: no request is made for a game the collection cannot be asked
+		//about by name. The console travels with the name because the two are read
+		//together or not at all (see the check in GetCover below).
+		public BoxArtLibrary(BoxArtCache cache, RomHashCache hashes, Func<string, NoIntroRomName?> noIntroRom)
 		{
 			_cache = cache ?? throw new ArgumentNullException(nameof(cache));
 			_hashes = hashes ?? throw new ArgumentNullException(nameof(hashes));
-			_nameOf = noIntroName ?? throw new ArgumentNullException(nameof(noIntroName));
+			_romOf = noIntroRom ?? throw new ArgumentNullException(nameof(noIntroRom));
 		}
 
 		//The cover for one tile, or null when there is none to draw. Never throws:
@@ -62,15 +65,23 @@ namespace Mesen.Logic
 				return null;
 			}
 
-			string? name = _nameOf(sha1);
-			if(string.IsNullOrEmpty(name)) {
+			//The table keys its rows by the dump AND files each one under the console
+			//it belongs to, and ADR-0265 section 6 keys the collection the same way:
+			//"a Game Boy game never answers for a Game Gear one". So the answer is
+			//dropped whole when the console it was filed under is not this tile's -
+			//not turned into a name, because that name would be asked for in the
+			//WRONG machine's repository and the 404 that came back would be written
+			//down as "this collection has no cover": a thirty-day bad answer for a
+			//game the collection may well have.
+			NoIntroRomName? rom = _romOf(sha1);
+			if(rom is not { } match || string.IsNullOrEmpty(match.Name) || match.Console != entry.Console) {
 				return null;
 			}
 
 			//The cache is the last word on all of it: the switch (off means no
 			//request at all, but a cover already on the disk is still served), the
 			//remembered miss, the two collections in order, and the ceiling.
-			return await _cache.GetCover(console, sha1, name, cancellationToken).ConfigureAwait(false);
+			return await _cache.GetCover(console, sha1, match.Name, cancellationToken).ConfigureAwait(false);
 		}
 	}
 }

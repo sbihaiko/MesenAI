@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
 using Avalonia.Interactivity;
@@ -150,7 +151,7 @@ public class PlayerLibraryBoxArtTests : IDisposable
 	//The chain the app builds (MainWindowViewModel.BoxArt), with the transport
 	//swapped for a fake: the cache, the SHA-1 cache and the name table are the
 	//shipped ones, in temp folders.
-	private BoxArtLibrary Chain(RecordingSender sender, Func<string, string?> names, BoxArtCacheOptions? options = null) =>
+	private BoxArtLibrary Chain(RecordingSender sender, Func<string, NoIntroRomName?> names, BoxArtCacheOptions? options = null) =>
 		new(new BoxArtCache(sender.Send, _covers, options), new RomHashCache(_hashes), names);
 
 	//The SHA-1 the collection is keyed by, read from the contract the shipped chain
@@ -204,7 +205,7 @@ public class PlayerLibraryBoxArtTests : IDisposable
 		(MainWindow window, MainWindowViewModel model) = ShowFirstRunHome();
 		//The name table knows this ROM, so the chain COULD ask for it: the request
 		//count below is about the cover on the disk, not about a missing name.
-		BoxArtLibrary library = Chain(sender, sha1 => string.Equals(sha1, Sha1(rom), StringComparison.OrdinalIgnoreCase) ? "Game 00 (USA)" : null);
+		BoxArtLibrary library = Chain(sender, sha1 => string.Equals(sha1, Sha1(rom), StringComparison.OrdinalIgnoreCase) ? new NoIntroRomName(RomConsole.Nes, "Game 00 (USA)") : null);
 		model.RomPicker.BoxArtCoverSource = library.GetCover;
 
 		OpenLibrary(window, model);
@@ -241,7 +242,7 @@ public class PlayerLibraryBoxArtTests : IDisposable
 		RecordingSender sender = new() { Fails = true };
 		List<string> asked = new();
 		(MainWindow window, MainWindowViewModel model) = ShowFirstRunHome();
-		model.RomPicker.BoxArtCoverSource = Counting(asked, Chain(sender, _ => "Game 00 (USA)").GetCover);
+		model.RomPicker.BoxArtCoverSource = Counting(asked, Chain(sender, _ => new NoIntroRomName(RomConsole.Nes, "Game 00 (USA)")).GetCover);
 
 		OpenLibrary(window, model);
 
@@ -281,25 +282,60 @@ public class PlayerLibraryBoxArtTests : IDisposable
 		RecordingSender sender = new();
 		List<string> asked = new();
 		(MainWindow window, MainWindowViewModel model) = ShowFirstRunHome();
-		model.RomPicker.BoxArtCoverSource = Counting(asked, Chain(sender, _ => "Game 00 (USA)").GetCover);
+		model.RomPicker.BoxArtCoverSource = Counting(asked, Chain(sender, _ => new NoIntroRomName(RomConsole.Nes, "Game 00 (USA)")).GetCover);
 
 		OpenLibrary(window, model);
-		WaitFor(() => AskedPaths(asked).Length >= PlayerRomPickerViewModel.CoverWindow,
-			$"the sheet never asked about the tiles it can show (asked {AskedPaths(asked).Length})");
+		WaitFor(() => AskedPaths(asked).Length > 0, "the sheet never asked about the tiles it can show");
 		//A settling wait, so a request that was going to be made has been made before
-		//the count below is read as final.
+		//the set below is read as final.
 		Thread.Sleep(200);
 		Pump();
 
 		//The grid itself is whole - the window is a fetch rule, not a scan rule.
 		Assert.Equal(40, model.RomPicker.Tiles.Count);
-		//The tiles that fit the sheet, and only those: the asks arrive on the threads
-		//that serve them, so they are compared as the SET they are rather than in the
-		//order they happened to land in.
-		string[] inWindow = model.RomPicker.Tiles.Take(PlayerRomPickerViewModel.CoverWindow).Select(t => t.Path).ToArray();
+
+		//The tiles the sheet is SHOWING, measured off the rendered tree rather than
+		//from any rule of the view-model's (see OnScreenTilePaths): this is the real
+		//layout, so a count that happened to match a constant while asking about the
+		//wrong tiles would not pass here.
+		string[] onScreen = OnScreenTilePaths(window);
+		//If every tile fitted the sheet there would be nothing left for the rule to
+		//exclude, and this case would prove nothing at all.
+		Assert.True(onScreen.Length < model.RomPicker.Tiles.Count,
+			$"all {onScreen.Length} tiles fit the sheet, so nothing was left off screen to check");
+		Assert.True(onScreen.Length > 0, "no tile is on screen at all");
+
+		//Those tiles, and only those: the asks arrive on the threads that serve them,
+		//so they are compared as the SET they are rather than in the order they
+		//happened to land in.
 		string[] wasAsked = AskedPaths(asked).Distinct().ToArray();
-		Assert.Equal(PlayerRomPickerViewModel.CoverWindow, wasAsked.Length);
-		Assert.Equal(inWindow.OrderBy(p => p, StringComparer.Ordinal), wasAsked.OrderBy(p => p, StringComparer.Ordinal));
+		Assert.Equal(onScreen.OrderBy(p => p, StringComparer.Ordinal), wasAsked.OrderBy(p => p, StringComparer.Ordinal));
+	}
+
+	//The tiles the sheet is showing, read off the realized controls: a tile is on
+	//screen when the control it was realized into, translated into the ScrollViewer's
+	//own coordinates, meets that ScrollViewer's rectangle. This is deliberately not
+	//the measurement the view itself makes (content coordinates against the scroll
+	//offset, in PlayerRomPickerView.axaml.cs) - a case that reproduced the rule under
+	//test would pass by agreeing with it.
+	private static string[] OnScreenTilePaths(MainWindow window)
+	{
+		ItemsControl grid = window.FindNamed<ItemsControl>("RomPickerGrid");
+		ScrollViewer sheet = grid.FindAncestorOfType<ScrollViewer>()
+			?? throw new XunitException("the grid is in no ScrollViewer, so nothing here is scrollable");
+		Rect sheetRect = new Rect(sheet.Bounds.Size);
+
+		List<string> showing = new();
+		foreach(Control container in grid.GetRealizedContainers()) {
+			if(container.DataContext is not PlayerLibraryTile tile) {
+				continue;
+			}
+			if(container.TranslatePoint(new Point(0, 0), sheet) is { } corner
+				&& new Rect(corner, container.Bounds.Size).Intersects(sheetRect)) {
+				showing.Add(tile.Path);
+			}
+		}
+		return showing.ToArray();
 	}
 
 	//The same source, with what it was asked for written down: the asks are the
@@ -335,7 +371,8 @@ public class PlayerLibraryBoxArtTests : IDisposable
 		(MainWindow window, MainWindowViewModel model) = ShowFirstRunHome();
 		//The name table knows every ROM here, so a request is what the chain would
 		//make if the switch did not stop it.
-		model.RomPicker.BoxArtCoverSource = Chain(sender, _ => "Game 00 (USA)", new BoxArtCacheOptions { DownloadEnabled = false }).GetCover;
+		model.RomPicker.BoxArtCoverSource = Chain(sender, _ => new NoIntroRomName(RomConsole.Nes, "Game 00 (USA)"),
+			new BoxArtCacheOptions { DownloadEnabled = static () => false }).GetCover;
 
 		OpenLibrary(window, model);
 		//Long enough for the whole window to have been asked about.

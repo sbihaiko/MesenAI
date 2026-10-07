@@ -164,7 +164,7 @@
 							</ListBox.ItemTemplate>
 						</ListBox>
 						<ScrollViewer HorizontalScrollBarVisibility="Disabled" AllowAutoHide="False" Margin="0 14 0 0">
-							<ItemsControl Name="RomPickerGrid" ItemsSource="{Binding Tiles}" XYFocus.NavigationModes="Enabled">
+							<ItemsControl Name="RomPickerGrid" ItemsSource="{Binding Tiles}" XYFocus.NavigationModes="Enabled" EffectiveViewportChanged="OnGridShowing">
 								<ItemsControl.ItemsPanel>
 									<ItemsPanelTemplate>
 										<WrapPanel Orientation="Horizontal" />

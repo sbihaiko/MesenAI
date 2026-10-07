@@ -93,7 +93,7 @@ namespace Mesen.Logic
 				return cached;
 			}
 
-			if(!_options.DownloadEnabled) {
+			if(!_options.DownloadEnabled()) {
 				return null;
 			}
 

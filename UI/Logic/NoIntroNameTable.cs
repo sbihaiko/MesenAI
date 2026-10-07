@@ -70,6 +70,28 @@ namespace Mesen.Logic
 			_bySha1 = bySha1;
 		}
 
+		//The table THIS assembly ships, read once on first use and kept (#1039).
+		//Lazy on purpose: the artifact holds 17867 rows and most sessions never open
+		//the library, so nothing pays for reading it until a tile asks for a name.
+		//The null is a real answer and is kept like any other - an assembly that
+		//carries no table must not go looking for one again on every tile.
+		//
+		//This is the seam the box-art chain is wired to: a caller that answers names
+		//from here is answering from the shipped artifact, and a caller that did not
+		//have it would make the whole chain a no-op (no name, no request).
+		private static readonly Lazy<NoIntroNameTable?> _embedded = new(static () => LoadEmbedded());
+
+		public static NoIntroNameTable? Embedded => _embedded.Value;
+
+		//The whole of the app's own seam (#1039): the record the SHIPPED table files
+		//this SHA-1 under - the console and the database's own name - or null for a
+		//dump it does not know. Named here rather than left as a lambda at the call
+		//site because it is the one line the box-art chain turns on: a caller that
+		//answers names from anywhere else is not answering from the artifact the app
+		//ships, and a stub here makes every tile of the library art-less in silence.
+		public static NoIntroRomName? ForSha1(string sha1) =>
+			Embedded is { } table && table.TryLookup(sha1, out NoIntroRomName rom) ? rom : null;
+
 		//null when the assembly carries no table, so a caller (or a dual-compiled
 		//test run) gets a library of file names rather than a crash.
 		public static NoIntroNameTable? LoadEmbedded(Assembly? assembly = null)
