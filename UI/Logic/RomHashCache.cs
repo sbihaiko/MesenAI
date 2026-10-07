@@ -26,6 +26,21 @@ namespace Mesen.Logic
 	//contract the issue asks for, and it is also why the mtime is part of the key
 	//rather than the size alone: a patched ROM usually keeps its length.
 	//
+	//**The mtime in the key is the instant, not the reading of it.** The stamp is
+	//converted to UTC before it is used as a key component, so a caller that
+	//stat'ed the file with `File.GetLastWriteTime` (a Local kind) and one that
+	//used `FileInfo.LastWriteTimeUtc` (a Utc kind) key the same entry for the same
+	//moment; without that, the same ROM would be hashed twice by two callers whose
+	//clocks agree.
+	//
+	//**Each entry names the hashing contract that produced it.** The first line of
+	//an entry is the version of the byte-range rule (`HashingContract`, the rule
+	//ported at PayloadRange below); an
+	//entry written under any other version is a miss and is recomputed, because a
+	//hash is only worth keeping while the rule that produced it is the rule this
+	//build applies. That is the migration lever: change the rule, bump the line,
+	//and every stale entry retires itself.
+	//
 	//**A cache is never allowed to be a failure mode.** An entry that cannot be
 	//read, one whose numbers do not parse, a cache directory that cannot be
 	//written: each costs a recomputation and never an answer, and no exception from
@@ -38,6 +53,13 @@ namespace Mesen.Logic
 	//in the tests): this class knows nothing about where a player's files live.
 	public sealed class RomHashCache
 	{
+		//The version of the byte-range rule every entry in this file was written
+		//under (the contract documented at PayloadRange below), as the entry's own
+		//first line. An entry written by any other contract is a miss: the reader
+		//compares this literal, so a future rule bumps it and the old entries
+		//retire themselves instead of answering with a hash nobody may trust.
+		private const string HashingContract = "v1";
+
 		//The cache directory this instance reads and writes - the folder the caller
 		//resolved, never a repo-relative path.
 		private readonly string _cacheDirectory;
@@ -79,12 +101,26 @@ namespace Mesen.Logic
 		//would otherwise make this class ask the file system a second time. The two
 		//values key the cache; the bytes are still read from the path, so a size the
 		//caller got wrong cannot change what is hashed.
-		public Task<string> GetSha1Async(string romPath, RomConsole console, long size, DateTime lastWriteTimeUtc, CancellationToken cancellationToken = default) =>
-			Task.Run(() => GetOrCompute(romPath, size, lastWriteTimeUtc, cancellationToken), cancellationToken);
+		//
+		//`lastWriteTime` is read as the **instant** it names, whatever `Kind` it
+		//carries: `File.GetLastWriteTime` (Local) and `FileInfo.LastWriteTimeUtc`
+		//(Utc) of one moment are one key, so the two callers share an entry rather
+		//than each hashing the ROM. An `Unspecified` stamp is read as local time,
+		//which is what the .NET conversion does and what a stamp read off a clock
+		//without a zone means.
+		public Task<string> GetSha1Async(string romPath, RomConsole console, long size, DateTime lastWriteTime, CancellationToken cancellationToken = default) =>
+			Task.Run(() => GetOrCompute(romPath, size, lastWriteTime, cancellationToken), cancellationToken);
 
-		private string GetOrCompute(string romPath, long size, DateTime lastWriteTimeUtc, CancellationToken cancellationToken)
+		private string GetOrCompute(string romPath, long size, DateTime lastWriteTime, CancellationToken cancellationToken)
 		{
 			cancellationToken.ThrowIfCancellationRequested();
+
+			//The key's stamp, in the one form two clocks agree on: the UTC ticks of
+			//the instant. A Local and a Utc stamp of the same moment produce the same
+			//number here, and only here - this is the value an entry stores. The
+			//file's own stamp is already Utc (FileInfo.LastWriteTimeUtc), and
+			//ToUniversalTime on a Utc DateTime is that same value back.
+			long lastWriteTicks = lastWriteTime.ToUniversalTime().Ticks;
 
 			//The full path is the key, and the entry's own name is a hash of it: a
 			//ROM's name is arbitrary (a colon on one file system, a quote on the
@@ -92,13 +128,13 @@ namespace Mesen.Logic
 			//than a cache.
 			string entryPath = Path.Combine(_cacheDirectory, CacheEntryName(Path.GetFullPath(romPath)));
 
-			string? cached = ReadEntry(entryPath, size, lastWriteTimeUtc.Ticks);
+			string? cached = ReadEntry(entryPath, size, lastWriteTicks);
 			if(cached != null) {
 				return cached;
 			}
 
 			string sha1 = ComputeNoIntroSha1(romPath, cancellationToken);
-			WriteEntry(entryPath, size, lastWriteTimeUtc.Ticks, sha1);
+			WriteEntry(entryPath, size, lastWriteTicks, sha1);
 			return sha1;
 		}
 
@@ -202,23 +238,36 @@ namespace Mesen.Logic
 			Convert.ToHexString(SHA1.HashData(Encoding.UTF8.GetBytes(fullPath))) + ".sha1";
 
 		//The hash this path+size+mtime already has on disk, or null when there is
-		//none to trust. A truncated entry, a stamp that does not parse, a hash that is
-		//not 40 hex characters: all answered null, so the ROM is re-hashed rather
-		//than served a value nobody can vouch for.
+		//none to trust. The entry is, line by line:
+		//
+		//  HashingContract   the rule that produced the hash (a miss under any other)
+		//  size              the file's length in bytes
+		//  lastWriteTicks    the mtime, as UTC ticks
+		//  sha1              40 uppercase hex digits
+		//
+		//A truncated entry, a version line this build does not hash under, a stamp
+		//that does not parse, a hash that is not 40 hex characters: all answered
+		//null, so the ROM is re-hashed rather than served a value nobody can vouch
+		//for.
 		private static string? ReadEntry(string entryPath, long size, long lastWriteTicks)
 		{
 			try {
 				string[] lines = File.ReadAllLines(entryPath);
-				if(lines.Length < 3) {
+				if(lines.Length < 4) {
 					return null;
 				}
-				if(!long.TryParse(lines[0], NumberStyles.None, CultureInfo.InvariantCulture, out long cachedSize) || cachedSize != size) {
+				//The version line first, and read exactly: an entry from another
+				//contract is not a weaker hit, it is no hit at all.
+				if(!string.Equals(lines[0].Trim(), HashingContract, StringComparison.Ordinal)) {
 					return null;
 				}
-				if(!long.TryParse(lines[1], NumberStyles.None, CultureInfo.InvariantCulture, out long cachedTicks) || cachedTicks != lastWriteTicks) {
+				if(!long.TryParse(lines[1], NumberStyles.None, CultureInfo.InvariantCulture, out long cachedSize) || cachedSize != size) {
 					return null;
 				}
-				string sha1 = lines[2].Trim();
+				if(!long.TryParse(lines[2], NumberStyles.None, CultureInfo.InvariantCulture, out long cachedTicks) || cachedTicks != lastWriteTicks) {
+					return null;
+				}
+				string sha1 = lines[3].Trim();
 				return IsSha1(sha1) ? sha1 : null;
 			} catch(IOException) {
 				return null;
@@ -238,7 +287,8 @@ namespace Mesen.Logic
 				string scratch = entryPath + ".tmp";
 				File.WriteAllText(
 					scratch,
-					size.ToString(CultureInfo.InvariantCulture) + "\n"
+					HashingContract + "\n"
+						+ size.ToString(CultureInfo.InvariantCulture) + "\n"
 						+ lastWriteTicks.ToString(CultureInfo.InvariantCulture) + "\n"
 						+ sha1 + "\n");
 				File.Move(scratch, entryPath, overwrite: true);

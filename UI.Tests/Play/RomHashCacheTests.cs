@@ -181,6 +181,88 @@ namespace Mesen.Tests.Play
 		}
 
 		[Fact]
+		public async Task A_stamp_recorded_as_local_and_the_same_instant_recorded_as_utc_are_one_entry()
+		{
+			using Workspace workspace = new();
+			byte[] first = Bytes(0x2000, 0x2A);
+			byte[] second = Bytes(0x2000, 0xD5);
+			RomHashCache cache = workspace.NewCache();
+
+			//One moment in time, written down twice: once with a Local kind (the
+			//shape a caller that stat'ed the file with File.GetLastWriteTime has)
+			//and once with a Utc kind (what FileInfo.LastWriteTimeUtc yields). The
+			//two clocks name the same instant, so they must name the same entry.
+			DateTime local = Stamp.ToLocalTime();
+			DateTime utc = Stamp;
+			Assert.Equal(DateTimeKind.Local, local.Kind);
+			Assert.Equal(DateTimeKind.Utc, utc.Kind);
+
+			string localFirst = workspace.Write("local-first.nes", first);
+			Assert.Equal(Sha1Of(first), await cache.GetSha1Async(localFirst, RomConsole.Nes, first.Length, local));
+
+			//A hit answers with the hash of `first`; a miss reads the file again
+			//and answers with the hash of `second`.
+			File.WriteAllBytes(localFirst, second);
+			Assert.Equal(Sha1Of(first), await cache.GetSha1Async(localFirst, RomConsole.Nes, second.Length, utc));
+
+			//And the same the other way round.
+			string utcFirst = workspace.Write("utc-first.nes", second);
+			Assert.Equal(Sha1Of(second), await cache.GetSha1Async(utcFirst, RomConsole.Nes, second.Length, utc));
+
+			File.WriteAllBytes(utcFirst, first);
+			Assert.Equal(Sha1Of(second), await cache.GetSha1Async(utcFirst, RomConsole.Nes, first.Length, local));
+		}
+
+		[Fact]
+		public async Task An_entry_carrying_the_current_hashing_contract_version_is_reused()
+		{
+			using Workspace workspace = new();
+			byte[] first = Bytes(0x2000, 0x3C);
+			byte[] second = Bytes(0x2000, 0xC3);
+			string path = workspace.Write("versioned.nes", first);
+			RomHashCache cache = workspace.NewCache();
+
+			string original = await cache.GetSha1Async(path, RomConsole.Nes, first.Length, Stamp);
+
+			//Every entry names the hashing contract it was written under, on its
+			//first line, before the facts: a later contract has to be able to tell
+			//its own entries from an older run's, and a hash is only worth keeping
+			//while the rule that produced it is the rule this build applies.
+			string entry = Assert.Single(Directory.GetFiles(workspace.CacheDirectory));
+			Assert.Equal("v1", File.ReadAllLines(entry)[0]);
+
+			File.WriteAllBytes(path, second);
+			Assert.Equal(original, await cache.GetSha1Async(path, RomConsole.Nes, second.Length, Stamp));
+		}
+
+		[Fact]
+		public async Task An_entry_carrying_another_hashing_contract_version_is_a_miss()
+		{
+			using Workspace workspace = new();
+			byte[] first = Bytes(0x2000, 0x4D);
+			byte[] second = Bytes(0x2000, 0xD4);
+			string path = workspace.Write("stale-contract.nes", first);
+			RomHashCache cache = workspace.NewCache();
+
+			await cache.GetSha1Async(path, RomConsole.Nes, first.Length, Stamp);
+
+			//The same entry, relabelled with a contract this build does not hash
+			//under: every other field still matches the ROM, so only the version
+			//line can make it a miss.
+			string entry = Assert.Single(Directory.GetFiles(workspace.CacheDirectory));
+			string[] lines = File.ReadAllLines(entry);
+			lines[0] = "v0";
+			File.WriteAllLines(entry, lines);
+
+			File.WriteAllBytes(path, second);
+			Assert.Equal(Sha1Of(second), await cache.GetSha1Async(path, RomConsole.Nes, second.Length, Stamp));
+
+			//The miss is answered and repaired: the entry on disk is rewritten
+			//under the contract this build hashes with, so the next call reads it.
+			Assert.Equal("v1", File.ReadAllLines(entry)[0]);
+		}
+
+		[Fact]
 		public async Task A_cache_directory_that_cannot_be_written_still_yields_the_hash()
 		{
 			using Workspace workspace = new();
