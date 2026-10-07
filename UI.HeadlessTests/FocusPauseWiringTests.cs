@@ -33,6 +33,7 @@ public class FocusPauseWiringTests : IDisposable
 	private readonly bool _pauseInMenus = ConfigManager.Config.Preferences.PauseWhenInMenusAndConfig;
 	private readonly uint _speed = ConfigManager.Config.Emulation.EmulationSpeed;
 	private readonly string _folder = Path.Combine(Path.GetTempPath(), "mesen-967-" + Guid.NewGuid().ToString("N"));
+	private MainWindow? _window;
 
 	//The poll's polls: three of them at its 100 ms interval.
 	private static readonly TimeSpan SeveralPolls = TimeSpan.FromMilliseconds(400);
@@ -53,6 +54,14 @@ public class FocusPauseWiringTests : IDisposable
 		//CI has no native core (ADR-0131): the test skips, and Stop would turn
 		//the skip into a DllNotFoundException failure.
 		if(NativeCore.IsAvailable) {
+			//The window's focus poll is a DispatcherTimer: an open window would
+			//keep polling into the next test. Closing runs the exit path, which
+			//would release the process-global core the next test still needs.
+			if(_window != null) {
+				_window.ReleaseCore = () => { };
+				_window.SkipCloseConfirmation = true;
+				_window.Close();
+			}
 			EmuApi.Stop();
 			Dispatcher.UIThread.RunJobs();
 		}
@@ -75,7 +84,7 @@ public class FocusPauseWiringTests : IDisposable
 
 	//The focus seam goes in before the preference is on: in the headless
 	//lifetime the real one reports no active window, i.e. always in background.
-	private static (MainWindow Window, MainWindowViewModel Model, FakeFocus Focus) Show(UiMode mode, Workspace workspace)
+	private (MainWindow Window, MainWindowViewModel Model, FakeFocus Focus) Show(UiMode mode, Workspace workspace)
 	{
 		PreferencesConfig prefs = ConfigManager.Config.Preferences;
 		prefs.UiMode = mode;
@@ -85,6 +94,7 @@ public class FocusPauseWiringTests : IDisposable
 		prefs.PauseWhenInMenusAndConfig = false;
 
 		MainWindow window = new();
+		_window = window;
 		FakeFocus focus = new() { Active = window };
 		window.AppFocus = focus;
 		window.ShowStarted();
@@ -245,11 +255,17 @@ public class FocusPauseWiringTests : IDisposable
 		Assert.True(model.MainMenu.AutoPaused);
 
 		//The pause ends the wait (MainWindow.LoadWait, GamePaused) and W-P4 takes
-		//over: the card is gone, and the frame behind the scrim is the core's
-		//own capture taken after it - never an empty image in the picture's place.
+		//over: the card is gone. ADR-0254 Consequences: the pause came before the
+		//first picture, so the core's last frame is not one - W-P4 holds no
+		//frozen frame and its Image stays off screen, for as long as the paused
+		//game has not drawn that picture.
 		WaitFor(() => !loadCard.IsOnScreen() && !model.RecentGames.Visible, "the load card stayed up under W-P4");
 		Assert.Equal(PlayLoadWaitPhase.Idle, model.LoadWait.Phase);
-		Assert.Equal(frozen.IsOnScreen(), model.PausedGameFrame != null);
+		Assert.True(model.LoadWait.PictureCutShort, "the pause did not cut the load card short of the first picture");
+		PumpFor(SeveralPolls, () => {
+			Assert.Null(model.PausedGameFrame);
+			Assert.False(frozen.IsOnScreen(), "a frozen frame showed behind W-P4 before the game's first picture");
+		});
 
 		//Same way back as any focus pause in Play.
 		focus.Active = window;

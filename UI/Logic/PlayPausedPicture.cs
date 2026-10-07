@@ -20,18 +20,20 @@ public static class PlayFrozenFrame
 	//PlayGameLayer hides that picture for a surface: in the game view, with
 	//no home/slot grid over it. The software renderer already draws its last
 	//frame as an Avalonia image under the scrim, so it needs no copy.
-	public static bool Shows(bool gameViewVisible, bool recentsVisible, bool softwareFrame, bool surfaceOverGame)
+	//pictureOut is false while a pause that cut the load card short holds the
+	//game before its first picture (ADR-0254): there is no frame to stand in.
+	public static bool Shows(bool gameViewVisible, bool recentsVisible, bool softwareFrame, bool surfaceOverGame, bool pictureOut = true)
 	{
-		return gameViewVisible && !recentsVisible && !softwareFrame && surfaceOverGame;
+		return gameViewVisible && !recentsVisible && !softwareFrame && surfaceOverGame && pictureOut;
 	}
 
 	//Taken once when a surface first covers a loaded game (the core keeps the
 	//last frame while paused, so a later capture would be the same picture),
 	//dropped when nothing covers the game any more (it resumed) or the game is
 	//gone - a previous game's frame never shows behind the next one's sheets.
-	public static FrozenFrameStep Next(bool holding, bool surfaceOverGame, bool gameLoaded)
+	public static FrozenFrameStep Next(bool holding, bool surfaceOverGame, bool gameLoaded, bool pictureOut = true)
 	{
-		bool wanted = surfaceOverGame && gameLoaded;
+		bool wanted = surfaceOverGame && gameLoaded && pictureOut;
 		if(wanted && !holding) {
 			return FrozenFrameStep.Capture;
 		}
