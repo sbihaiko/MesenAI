@@ -155,7 +155,7 @@ public class PlayRomPickerRenderTests : IDisposable
 		Pump();
 
 		AssertSheetIsUp(window, model);
-		PlayerRomPickerRow suggestion = Assert.Single(model.RomPicker.Rows.Where(r => r.Path == lib));
+		PlayerRomPickerRow suggestion = Assert.Single(model.RomPicker.Rows, r => r.Path == lib);
 		Assert.Equal(RomPickerRowKind.Folder, suggestion.Kind);
 		Assert.Equal(model.RomPicker.Rows[^1], suggestion);
 		//The line is gone: the scan is done, and the state on screen is the answer.
@@ -217,7 +217,7 @@ public class PlayRomPickerRenderTests : IDisposable
 		Pump();
 
 		AssertSheetIsUp(window, model);
-		PlayerRomPickerRow action = Assert.Single(model.RomPicker.Rows.Where(r => r.Kind == RomPickerRowKind.Action));
+		PlayerRomPickerRow action = Assert.Single(model.RomPicker.Rows, r => r.Kind == RomPickerRowKind.Action);
 		Assert.Equal(model.RomPicker.Rows[0], action);
 		Assert.Contains("nes", model.RomPicker.PathText);
 		Assert.False(window.FindNamed<TextBlock>("RomPickerEmpty").IsOnScreen());
@@ -243,7 +243,7 @@ public class PlayRomPickerRenderTests : IDisposable
 		Pump();
 		model.RomPicker.Choose(model.RomPicker.Rows.First(r => r.Label == "nes"));
 		Pump();
-		model.RomPicker.Choose(Assert.Single(model.RomPicker.Rows.Where(r => r.Kind == RomPickerRowKind.Action)));
+		model.RomPicker.Choose(Assert.Single(model.RomPicker.Rows, r => r.Kind == RomPickerRowKind.Action));
 		Pump();
 
 		AssertSheetIsUp(window, model);
@@ -281,7 +281,7 @@ public class PlayRomPickerRenderTests : IDisposable
 		AssertSheetIsUp(window, model);
 		WaitFor(() => (window.FocusManager?.GetFocusedElement() as Control)?.Name == "RomPickerBack",
 			"an empty folder did not send the ring to Back");
-		Assert.Single(model.RomPicker.Rows.Where(r => r.Kind == RomPickerRowKind.Action));
+		Assert.Single(model.RomPicker.Rows, r => r.Kind == RomPickerRowKind.Action);
 		Assert.True(model.RomPicker.EmptyText.Length > 0, "the empty folder says nothing");
 		//Nothing openable, so the action row is the whole list.
 		Assert.DoesNotContain(model.RomPicker.Rows, r => r.Kind != RomPickerRowKind.Action);
