@@ -228,37 +228,41 @@ namespace Mesen.Utilities
 			}
 		}
 
-		private static bool IsPatchFile(string filename)
+		//The leading bytes DropRoute tells a patch by; short or unreadable = none.
+		private static byte[] ReadHeader(string filename)
 		{
 			using(FileStream? stream = FileHelper.OpenRead(filename)) {
-				if(stream != null) {
-					byte[] header = new byte[5];
-					stream.ReadExactly(header, 0, 5);
-					if(header[0] == 'P' && header[1] == 'A' && header[2] == 'T' && header[3] == 'C' && header[4] == 'H') {
-						return true;
-					} else if((header[0] == 'U' || header[0] == 'B') && header[1] == 'P' && header[2] == 'S' && header[3] == '1') {
-						return true;
-					}
+				if(stream == null) {
+					return Array.Empty<byte>();
 				}
+				byte[] header = new byte[DropRoute.HeaderLength];
+				int read = stream.ReadAtLeast(header, header.Length, throwOnEndOfStream: false);
+				return header[..read];
 			}
-			return false;
+		}
+
+		//#953: the routing is DropRoute's (pinned in UI.Tests); this reads the
+		//file and runs the answer.
+		public static DropAction Route(string? filename)
+		{
+			bool exists = !string.IsNullOrEmpty(filename) && File.Exists(filename);
+			return DropRoute.Decide(filename, exists, exists ? ReadHeader(filename!) : Array.Empty<byte>(), EmuApi.IsRunning());
 		}
 
 		public static void LoadFile(string filename)
 		{
-			if(File.Exists(filename)) {
-				string ext = Path.GetExtension(filename).ToLowerInvariant();
-				if(IsPatchFile(filename)) {
-					LoadPatchFile(filename);
-				} else if(ext == "." + FileDialogHelper.MesenSaveStateExt) {
-					EmuApi.LoadStateFile(filename);
-				} else if(EmuApi.IsRunning() && (ext == "." + FileDialogHelper.MesenMovieExt || ext == "." + FileDialogHelper.BizHawkMovieExt || ext == "." + FileDialogHelper.GbaHawkMovieExt)) {
-					RecordApi.MoviePlay(filename);
-				} else {
-					LoadRom(filename);
-				}
-			} else {
-				DisplayMessageHelper.DisplayMessage("Error", ResourceHelper.GetMessage("FileNotFound", filename));
+			Run(Route(filename), filename);
+		}
+
+		public static void Run(DropAction action, string filename)
+		{
+			switch(action) {
+				case DropAction.Ignore: break;
+				case DropAction.FileNotFound: DisplayMessageHelper.DisplayMessage("Error", ResourceHelper.GetMessage("FileNotFound", filename)); break;
+				case DropAction.ApplyPatch: LoadPatchFile(filename); break;
+				case DropAction.LoadState: EmuApi.LoadStateFile(filename); break;
+				case DropAction.PlayMovie: RecordApi.MoviePlay(filename); break;
+				default: LoadRom(filename); break;
 			}
 		}
 

@@ -42,6 +42,9 @@ namespace Mesen.ViewModels
 		private bool _suppressPreferenceApply;
 
 		public string PacksFolder => ConfigManager.EnhancementPackFolder;
+		//#953: Open Folder's hand-off to the file manager. A seam so a test can
+		//see the folder handed over without launching anything.
+		public Action<string> FolderLauncher { get; set; } = ApplicationHelper.OpenFolder;
 
 		public EnhancementPacksViewModel()
 		{
@@ -170,11 +173,7 @@ namespace Mesen.ViewModels
 		private void OpenFolder(string folder)
 		{
 			if(Directory.Exists(folder)) {
-				System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo() {
-					FileName = folder + Path.DirectorySeparatorChar,
-					UseShellExecute = true,
-					Verb = "open"
-				});
+				FolderLauncher(folder);
 			}
 		}
 
