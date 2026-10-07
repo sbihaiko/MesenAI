@@ -518,6 +518,76 @@ public class PlayerLibraryCanonicalTitlesTests : IDisposable
 		Assert.Same(selected, (window.FocusManager?.GetFocusedElement() as Control)?.DataContext);
 	}
 
+	//#1055 review finding 1: with a query on, a batch of renames must not rebuild
+	//the filtered grid. Both games still match "o" after the rename and keep their
+	//place, so the only honest number of collection notifications is none - a
+	//Clear/Add per batch drops every container, and the cover under it, for
+	//nothing. The tiles on screen stay the same objects.
+	[AvaloniaFact]
+	public void A_query_on_does_not_rebuild_the_filtered_grid_when_a_rename_changes_nothing_it_shows()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+
+		TaskCompletionSource<bool> held = new();
+		(_, _, PlayerRomPickerViewModel picker) = ShowLibrary(async (path, _, _) => {
+			await held.Task;
+			return Path.GetFileName(path).StartsWith("Contra", StringComparison.Ordinal) ? KnownSha1 : UnknownSha1;
+		}, KnownSha1 + "\tnes\tContra II - The Alien Wars");
+
+		picker.SearchQuery = "o";
+		Pump();
+		PlayerLibraryTile[] before = picker.Tiles.ToArray();
+		Assert.Equal(2, before.Length);
+
+		int notifications = 0;
+		picker.Tiles.CollectionChanged += (_, _) => notifications++;
+		held.SetResult(true);
+
+		WaitFor(() => picker.Tiles.Any(t => t.Title == "Contra II - The Alien Wars"),
+			$"the filtered grid never took the canonical title (titles=[{Titles(picker)}])");
+		Settle(400);
+
+		Assert.Equal(0, notifications);
+		Assert.True(before.SequenceEqual(picker.Tiles), "the filtered grid replaced tiles it had no reason to replace");
+	}
+
+	//#1055 review finding 2: with a query on the ring is NOT always on the box -
+	//the player can have stepped down into the filtered grid. A canonical title
+	//that re-sorts that grid rebuilds its containers, and the ring has to go back
+	//to the GAME the player was on.
+	[AvaloniaFact]
+	public void A_canonical_title_that_reorders_a_filtered_grid_carries_the_ring_with_its_game()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+
+		const string ZeldaSha1 = "4444444444444444444444444444444444444444";
+		TaskCompletionSource<bool> held = new();
+		(MainWindow window, _, PlayerRomPickerViewModel picker) = ShowLibrary(async (path, _, _) => {
+			await held.Task;
+			return Path.GetFileName(path).StartsWith("Contra", StringComparison.Ordinal) ? ZeldaSha1 : UnknownSha1;
+		}, ZeldaSha1 + "\tnes\tZelda II - The Adventure of Link (USA)");
+
+		picker.SearchQuery = "o";
+		Pump();
+		Assert.Equal(new[] { "Contra", "Metroid" }, picker.Tiles.Select(t => t.Title).ToArray());
+
+		PlayerLibraryTile selected = picker.Tiles[0];
+		Button? selectedButton = TileButton(window, selected);
+		Assert.NotNull(selectedButton);
+		selectedButton!.Focus();
+		Pump();
+		Assert.True(selectedButton.IsFocused, $"the case never got the ring onto a tile (focusTile={picker.FocusTile?.Title})");
+
+		held.SetResult(true);
+
+		WaitFor(() => picker.Tiles.Select(t => t.Title).SequenceEqual(new[] { "Metroid", "Zelda II - The Adventure of Link" }),
+			$"the filtered grid never re-sorted by the canonical titles (titles=[{Titles(picker)}])");
+		Pump();
+
+		Assert.Same(selected, picker.Tiles[1]);
+		Assert.Same(selected, (window.FocusManager?.GetFocusedElement() as Control)?.DataContext);
+	}
+
 	//#1038 review finding 4 (ADR-0264 Decision 9): a zipped game is an entry of the
 	//library, and its archive path is what the grid holds - but RomHashCache hashes
 	//the bytes of the file it is handed (ADR-0003's No-Intro payload range is a

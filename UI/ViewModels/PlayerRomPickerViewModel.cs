@@ -11,6 +11,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace Mesen.ViewModels
@@ -127,9 +128,9 @@ namespace Mesen.ViewModels
 		//The generation the next unit of scan work carries. Called both when a
 		//scan starts and when the surface it reads is reset: either way every
 		//scan already in flight is left behind by it.
-		public int Next() => ++_current;
+		public int Next() => Interlocked.Increment(ref _current);
 
-		public bool IsCurrent(int generation) => generation == _current;
+		public bool IsCurrent(int generation) => generation == Volatile.Read(ref _current);
 	}
 
 	//#845 (ADR-0256 Decision 9): the in-app ROM picker, which is what the Play

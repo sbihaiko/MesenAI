@@ -270,12 +270,8 @@ namespace Mesen.ViewModels
 						tile.Title = title;
 					}
 				}
-				//The query is asked of the title the player reads, and that title
-				//just changed: with a query on, the grid is re-derived from the
-				//view-model's games (ADR-0264 Decisions 4 and 7).
-				if(HasQuery) {
-					FillTiles();
-				}
+				//A query that is on is NOT re-asked per batch (review finding 1 on
+				//#1055): the grid is re-derived once, when the walk is over (PostOrder).
 			});
 		}
 
@@ -307,11 +303,12 @@ namespace Mesen.ViewModels
 				if(!ReferenceEquals(_libraryGames, captured)) {
 					return;
 				}
-				//A library already in this order has nothing to be told. This is the
-				//common case - a library of file names the table does not know keeps
-				//the order the scan gave it - and it has to stay free: a rebuild
-				//drops the ring off the game the player is on for no reason at all.
-				if(SameOrder(ordered)) {
+				//A library already in this order has nothing to be told - unless a
+				//query is on, which is asked of titles that may have changed under it.
+				//This is the common case - a library of file names the table does not
+				//know keeps the order the scan gave it - and it has to stay free: a
+				//rebuild drops the ring off the game the player is on for no reason.
+				if(!HasQuery && SameOrder(ordered)) {
 					return;
 				}
 				//The order is changed in the view-model's games, and the grid is put
@@ -320,21 +317,41 @@ namespace Mesen.ViewModels
 				//would put back tiles the query had dropped and covers the rebuild
 				//had released (review finding 1 on #1055). The tiles are the same
 				//objects, so a container and the ring on it are reordered and not
-				//rebuilt, and a query that is on stays on.
+				//rebuilt. With a query on, the games it keeps are asked ONCE here, of
+				//the titles the walk resolved; a game that starts to match gets a
+				//tile and one that stops matching loses it.
 				_libraryGames = ordered;
+				IEnumerable<LibraryGame> kept = HasQuery
+					? _titles.Search(ordered, g => g.Entry, SearchQuery)
+					: ordered;
 				List<PlayerLibraryTile> shown = new(Tiles.Count);
-				foreach(LibraryGame game in ordered) {
+				foreach(LibraryGame game in kept) {
 					if(_tileByPath.TryGetValue(game.Entry.Path, out PlayerLibraryTile? tile)) {
 						shown.Add(tile);
+					} else if(HasQuery) {
+						shown.Add(TileFor(game.Entry, game.Cover));
 					}
 				}
+				if(shown.SequenceEqual(Tiles)) {
+					return;
+				}
+				//Whether the ring was inside the grid, read before the rebuild.
+				bool ringInGrid = FocusTile != null && Tiles.Contains(FocusTile);
 				Tiles.ReplaceAll(shown);
+				if(HasQuery) {
+					HashSet<string> paths = new(shown.Select(t => t.Path), StringComparer.Ordinal);
+					foreach(string gone in _tileByPath.Keys.Where(path => !paths.Contains(path)).ToList()) {
+						_tileByPath.Remove(gone);
+					}
+					UpdateEmptyResult();
+				}
 				//The rebuilt containers took the ring with them; this is the same
-				//bump ApplyLibraryScan makes, for the same reason - except with a
-				//query on, where the ring is on the box (see FillTiles' closing
-				//comment). The ring then goes back to the GAME the player selected:
-				//see PlayPadNavigationWiring.RomPickerFocusTarget.
-				if(!HasQuery) {
+				//bump ApplyLibraryScan makes, for the same reason - except when the
+				//ring is on the search box (a query on and no tile focused), where
+				//re-claiming would take the focus off the field the player is typing
+				//in (see FillTiles' closing comment). The ring then goes back to the
+				//GAME the player selected: see PlayPadNavigationWiring.RomPickerFocusTarget.
+				if(!HasQuery || ringInGrid) {
 					TilesRevision++;
 				}
 			});
