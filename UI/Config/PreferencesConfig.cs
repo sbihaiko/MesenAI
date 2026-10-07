@@ -122,6 +122,18 @@ namespace Mesen.Config
 		[ObservableProperty] public partial string ScreenshotFolder { get; set; } = "";
 		[ObservableProperty] public partial string WaveFolder { get; set; } = "";
 
+		//#1036 (ADR-0264 Decision 8): the folders "Your library" scans. `GameFolder`
+		//above is the app's old single folder and seeds this list on first run
+		//(LibraryFolders.Seed), after which the list is the one source of truth - the
+		//picker's folder is not read again.
+		//
+		//Null and empty are two different states, and the difference is the whole
+		//point: `null` means the preference was never seeded, `[]` means the player
+		//emptied it. Only `null` seeds, so a folder the player removed cannot come
+		//back on the next start. `[]` is also what the sheet shows as its named empty
+		//state, so an emptied library stays emptied.
+		[ObservableProperty] public partial List<string>? LibraryFolders { get; set; } = null;
+
 		public PreferencesConfig()
 		{
 		}
