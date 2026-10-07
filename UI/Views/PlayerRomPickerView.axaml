@@ -142,7 +142,7 @@
 						The words are the view-model's (and so come from the locale
 						files), which is what keeps a segment and a tile's console tag
 						from ever disagreeing about what a machine is called.-->
-						<ListBox Name="RomPickerConsoleFilter" Classes="segmented" DockPanel.Dock="Top" Margin="0 14 0 0"
+						<ListBox Name="RomPickerConsoleFilter" SelectionMode="AlwaysSelected" Classes="segmented" DockPanel.Dock="Top" Margin="0 14 0 0"
 							ItemsSource="{Binding ConsoleOptions}" SelectedItem="{Binding SelectedConsoleOption, Mode=TwoWay}">
 							<ListBox.ItemTemplate>
 								<DataTemplate x:DataType="vm:PlayerConsoleFilterOption">

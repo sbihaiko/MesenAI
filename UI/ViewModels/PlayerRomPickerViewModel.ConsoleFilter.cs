@@ -60,13 +60,6 @@ namespace Mesen.ViewModels
 		//already answers `Unknown` for "this file names no console").
 		[ObservableProperty] public partial PlayerConsoleFilterOption? SelectedConsoleOption { get; set; }
 
-		//The search narrowing this filter composes with (Decision 4 beside
-		//Decision 5): the search box is its own slice, and it publishes its match
-		//rule here rather than replacing the grid, so the two narrow the SAME
-		//view at once. Null is "nothing typed yet", which is the sheet's own
-		//opening state.
-		public Func<LibraryEntry, bool>? SearchNarrowing { get; set; }
-
 		//What the row's selection means, for a caller that wants the console
 		//rather than the segment. Null is `All`.
 		public RomConsole? SelectedConsole => SelectedConsoleOption?.Console;
@@ -77,9 +70,18 @@ namespace Mesen.ViewModels
 		//grid did not.
 		partial void OnSelectedConsoleOptionChanged(PlayerConsoleFilterOption? value)
 		{
-			if(!_rebuildingConsoleOptions) {
-				RebuildLibraryTiles();
+			if(_rebuildingConsoleOptions) {
+				return;
 			}
+			//The row's two-way selection reads null when the pointer clears it,
+			//and null means All: the grid would show everything while no segment
+			//is lit. The first segment comes back instead, so the row and the
+			//grid keep agreeing (Decision 5).
+			if(value is null && ConsoleOptions.Count > 0) {
+				SelectedConsoleOption = ConsoleOptions[0];
+				return;
+			}
+			RebuildLibraryTiles();
 		}
 
 		//#1034 (ADR-0264 Decision 3): LB/RB, one option per press, wrapping at
@@ -101,15 +103,6 @@ namespace Mesen.ViewModels
 				? LibraryConsoleFilter.Previous(options, SelectedConsole)
 				: LibraryConsoleFilter.Next(options, SelectedConsole);
 			SelectedConsoleOption = ConsoleOptions.FirstOrDefault(option => option.Console == selected) ?? ConsoleOptions.FirstOrDefault();
-		}
-
-		//#1034 (ADR-0264 Decision 5): the search box's own re-run. The slice that
-		//owns the query calls this after it changes, and the grid narrows by the
-		//console filter AND the query at once - the composition is the module's
-		//(`Apply` takes both), never a choice between them.
-		public void ReapplyLibraryFilter()
-		{
-			RebuildLibraryTiles();
 		}
 
 		//The empty state, and the way back into the library: nothing to filter,
@@ -180,10 +173,10 @@ namespace Mesen.ViewModels
 			if(!IsVisible || Mode != RomPickerMode.Library) {
 				return;
 			}
+			//TilesRevision is not bumped here: the arbiter answers a bump by
+			//reclaiming focus, which a cycle, a click or a query must not do (the
+			//search box keeps the ring). The scan path bumps its own.
 			FillTiles();
-			//The rebuilt tiles are new containers, so whatever the arbiter had
-			//the ring on went with the old ones - the same bump the scan makes.
-			TilesRevision++;
 		}
 
 		//The word a segment draws. `All` is the sheet's own string (it is not a
