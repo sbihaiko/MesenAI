@@ -276,6 +276,11 @@ public static class WorkspaceMenu
 		return groups;
 	}
 
+	//W-S2 (#1007): the shortcut Play's Fullscreen row prints - macOS's own
+	//⌃⌘F, and the platform rule's Ctrl elsewhere (as the switcher's ⌘1 /
+	//Ctrl+1). MainWindow handles the same keys.
+	public static string FullscreenShortcut(bool isMacOS) => isMacOS ? "⌃⌘F" : "Ctrl+F";
+
 	//Reset · Power Cycle, then the console items the loaded game uses.
 	private static IReadOnlyList<MenuEntry> PlayConsoleGroup(GameCapabilities game)
 	{

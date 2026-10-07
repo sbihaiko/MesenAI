@@ -186,7 +186,10 @@ namespace Mesen.ViewModels
 					ActionType = ActionType.TakeScreenshot,
 					DynamicText = Label("DoorMenuScreenshot")
 				},
-				MenuEntry.Fullscreen => new MainMenuAction(EmulatorShortcut.ToggleFullscreen) { ActionType = ActionType.Fullscreen },
+				MenuEntry.Fullscreen => new MainMenuAction(EmulatorShortcut.ToggleFullscreen) {
+					ActionType = ActionType.Fullscreen,
+					CustomShortcutText = () => WorkspaceMenu.FullscreenShortcut(IsMacOS)
+				},
 				MenuEntry.ReloadPackImages => WithLabel(GetReloadPackImagesItem(), "DoorMenuReloadPackImages"),
 				MenuEntry.MusicRecorder => WithLabel(GetMusicRecorderMenu(wnd), "DoorMenuRecordMusic"),
 				MenuEntry.EnhancementPacks => WithLabel(GetEnhancementPacksItem(wnd), "DoorMenuEnhancementPacks"),

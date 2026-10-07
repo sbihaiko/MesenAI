@@ -1139,6 +1139,14 @@ namespace Mesen.Windows
 				return;
 			}
 
+			//#1007, W-S2: the Fullscreen row prints ⌃⌘F (Ctrl+F off macOS), so those keys toggle it.
+			KeyModifiers fullscreenModifiers = OperatingSystem.IsMacOS() ? KeyModifiers.Control | KeyModifiers.Meta : KeyModifiers.Control;
+			if(e.Key == Key.F && e.KeyModifiers == fullscreenModifiers) {
+				ToggleFullscreen();
+				e.Handled = true;
+				return;
+			}
+
 			if(OperatingSystem.IsMacOS()) {
 				//Keyhandler handles key internally on macOS
 				return;
