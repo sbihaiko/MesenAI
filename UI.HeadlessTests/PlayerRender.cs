@@ -86,6 +86,17 @@ internal static class PlayerRender
 	//#974: the render UI.Tests gates on CI in place of a fresh one.
 	public static string CommittedRenderPath(string wId) => Path.Combine(RepoFolder("UI.Tests", "Theme", "PlayerRenders"), wId + ".png");
 
+	//#968: the committed render a fresh one drifts against on this host. CI
+	//renders on Linux only and macOS renders locally (ADR-0191), and the two
+	//lay the shell bar out differently (ShellTitleBar.ExtendsIntoTitleBar
+	//insets it for the traffic lights on macOS only), so each host holds its own
+	//baseline at full tolerance: macOS the UI.Tests one above, any other host
+	//the copy under linux/ that the render-gate job's player-renders artifact
+	//refreshes.
+	public static string DriftBaselinePath(string wId) => OperatingSystem.IsMacOS()
+		? CommittedRenderPath(wId)
+		: Path.Combine(RepoFolder("UI.Tests", "Theme", "PlayerRenders", "linux"), wId + ".png");
+
 	private static string RepoFolder(params string[] parts)
 	{
 		string relative = Path.Combine(parts);

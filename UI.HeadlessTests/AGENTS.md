@@ -137,4 +137,8 @@ core, so `UI.Tests` gates the committed renders in
 `UI.Tests/Theme/PlayerRenders/` instead; re-commit a render there when its
 screen changes. `PlayerThemeRenderTests` also holds each fresh render to its
 committed copy region by region (`PlayerWireframe.Drift`, #974) and fails
-locally with "re-commit the render" when one drifts.
+with "re-commit the render" when one drifts. The copy is per host
+(`PlayerRender.DriftBaselinePath`, #968): macOS drifts against
+`UI.Tests/Theme/PlayerRenders/`, any other host (the Linux render-gate job,
+ADR-0191, ADR-0263) against `UI.Tests/Theme/PlayerRenders/linux/`, refreshed
+from that job's `player-renders` artifact.

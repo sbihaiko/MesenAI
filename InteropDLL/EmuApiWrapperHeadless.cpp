@@ -10,6 +10,7 @@
 #include "Core/NES/BaseNesPpu.h"
 #include "Core/NES/BaseMapper.h"
 #include "Core/NES/NesMemoryManager.h"
+#include "Core/NES/INesMemoryHandler.h"
 #include "Core/NES/NesTypes.h"
 #include "Utilities/StringUtilities.h"
 
@@ -38,6 +39,44 @@ static ScreenshotCapture _headlessCaptureInfo;
 //ADR-0167: the last capture taken by HeadlessCaptureHud, same one-buffer-at-a-
 //time rule as _headlessCapture above.
 static vector<uint32_t> _headlessHudCapture;
+
+//ADR-0245 Decision 4 as amended by #934: see HeadlessWatchNesRamReads.
+//Registered for reads of one address only, so WriteRam is never reached; it
+//is still the internal RAM's own write so a caller widening the ranges
+//cannot turn it into a dropped write.
+class NesReadHitCounter : public INesMemoryHandler
+{
+private:
+	uint8_t* _ram;
+	uint16_t _address;
+	int32_t _compare;
+
+public:
+	uint32_t Reads = 0;
+	uint32_t Hits = 0;
+
+	NesReadHitCounter(uint8_t* ram, uint16_t address, int32_t compare) : _ram(ram), _address(address), _compare(compare) {}
+
+	void GetMemoryRanges(MemoryRanges& ranges) override
+	{
+		ranges.SetAllowOverride();
+		ranges.AddHandler(MemoryOperation::Read, _address);
+	}
+
+	uint8_t ReadRam(uint16_t addr) override
+	{
+		uint8_t value = _ram[addr & 0x7FF];
+		Reads++;
+		if(_compare < 0 || value == _compare) {
+			Hits++;
+		}
+		return value;
+	}
+
+	uint8_t PeekRam(uint16_t addr) override { return _ram[addr & 0x7FF]; }
+	void WriteRam(uint16_t addr, uint8_t value) override { _ram[addr & 0x7FF] = value; }
+};
+static vector<unique_ptr<NesReadHitCounter>> _readHitCounters;
 
 static HeadlessInputProvider* GetHeadlessInput()
 {
@@ -238,6 +277,49 @@ extern "C"
 		}
 		_emu->Unlock();
 		return ram != nullptr;
+	}
+
+	//ADR-0245 Decision 4 as amended by #934: arm a counter of the emulated
+	//CPU's reads of one internal-RAM bus address, and zero it. A NES RAM cheat
+	//is a CPU read intercept (NesMemoryManager::Read -> ApplyCheat), so "the
+	//game read the cheated byte" is evidence only a read on that path can give.
+	//The counter is a read handler registered over that one address
+	//(RegisterIODevice, allowOverride): NesMemoryManager::Read calls ReadRam,
+	//while DebugRead calls PeekRam and HeadlessReadNesRam copies the RAM array,
+	//so debugger and probe reads cannot count by construction. Not the
+	//debugger's MemoryAccessCounter: attaching a debugger stops a session run
+	//from parking on its target frame (see the sprite-layer read below).
+	//A hit is a read whose raw byte meets 'compare' (-1: every read), the
+	//condition under which CheatManager::ApplyCheat substitutes the value.
+	//Handlers stay alive for the process: the memory manager keeps raw pointers
+	//to them, and a second watch only overrides the address it names.
+	DllExport bool __stdcall HeadlessWatchNesRamReads(uint16_t address, int32_t compare)
+	{
+		if(address >= 0x0800 || compare > 0xFF) {
+			return false;
+		}
+		_emu->Lock();
+		NesConsole* nes = dynamic_cast<NesConsole*>(_emu->GetConsole().get());
+		NesMemoryManager* memory = nes ? nes->GetMemoryManager() : nullptr;
+		if(memory) {
+			_readHitCounters.push_back(std::make_unique<NesReadHitCounter>(memory->GetInternalRam(), address, compare));
+			memory->RegisterIODevice(_readHitCounters.back().get());
+		}
+		_emu->Unlock();
+		return memory != nullptr;
+	}
+
+	//Reads and hits since the last HeadlessWatchNesRamReads; false when none.
+	DllExport bool __stdcall HeadlessGetNesRamReadHits(uint32_t* reads, uint32_t* hits)
+	{
+		if(_readHitCounters.empty() || !reads || !hits) {
+			return false;
+		}
+		_emu->Lock();
+		*reads = _readHitCounters.back()->Reads;
+		*hits = _readHitCounters.back()->Hits;
+		_emu->Unlock();
+		return true;
 	}
 
 	//ADR-0169: read a NES run's sprite layer straight off the console - OAM and
