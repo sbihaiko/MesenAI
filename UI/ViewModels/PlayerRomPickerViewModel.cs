@@ -35,15 +35,20 @@ namespace Mesen.ViewModels
 	//is chosen here and only here. The palette is the wireframe's own
 	//(scripts/render_gui_wireframes.py, CONSOLE_TINT), so a render of this sheet
 	//and W-P19 agree on what a Game Boy game looks like.
-	public class PlayerLibraryTile
+	public partial class PlayerLibraryTile
 	{
-		public PlayerLibraryTile(LibraryEntry entry, string consoleName)
+		//`cover` is the library module's answer for this entry (ADR-0264 Decision
+		//6): the art the entry already carries, or the screenshot the player's
+		//Recent list holds for it (#1035). The tile draws it and decides nothing -
+		//the priority is GameLibraryCover's, and this side only turns the answer
+		//into a brush.
+		public PlayerLibraryTile(LibraryEntry entry, string consoleName, LibraryCoverPick cover)
 		{
 			Path = entry.Path;
 			Title = entry.Title;
 			Console = entry.Console;
 			ConsoleName = consoleName;
-			Cover = ConsoleCover(entry.Console);
+			(Cover, ShowsTitleOnCover, CoverArt) = TileCover(entry, cover);
 		}
 
 		public string Path { get; }
@@ -341,7 +346,9 @@ namespace Mesen.ViewModels
 			CountText = "";
 			TruncatedText = "";
 			EmptyText = "";
-			Tiles.Clear();
+			//The grid is going: the pictures the previous visit decoded go back
+			//with it (#1035).
+			ClearTiles();
 			TilesRevision++;
 			//Nothing to browse, so the searching line belongs to no state: it is
 			//set below, by the scan that is actually about to run.
@@ -541,14 +548,18 @@ namespace Mesen.ViewModels
 			//here: the posting thread cannot know what the UI thread did while
 			//the scan ran.
 			int generation = _scanGeneration.Next();
+			//The Recent folder is read here, on the UI thread, and carried into
+			//the scan: ConfigManager is not a background thread's to read, and the
+			//`*.rgd` files it names are.
+			string? recentGamesFolder = ConfigManager.RecentGamesFolder;
 			if(RunLibraryScanInline || RunScanInline) {
-				ApplyLibraryScan(ScanLibrary(_folders), generation);
+				ApplyLibraryScan(ScanLibraryWithCovers(_folders, recentGamesFolder), generation);
 				return;
 			}
 			IReadOnlyList<string> folders = _folders;
 			Task.Run(() => {
-				LibraryScanResult result = ScanLibrary(folders);
-				Dispatcher.UIThread.Post(() => ApplyLibraryScan(result, generation));
+				LibraryScanPayload payload = ScanLibraryWithCovers(folders, recentGamesFolder);
+				Dispatcher.UIThread.Post(() => ApplyLibraryScan(payload, generation));
 			});
 		}
 
@@ -564,9 +575,11 @@ namespace Mesen.ViewModels
 		}
 
 		//One scan's answer into the grid. The entries are the module's, in the
-		//module's order (by title, Decision 1); this only carries them across and
-		//says what the header reads.
-		private void ApplyLibraryScan(LibraryScanResult result, int generation)
+		//module's order (by title, Decision 1), and the covers came off the same
+		//scan in the same order; this carries both across and says what the header
+		//reads. The only work left here is the tile's own - decoding a screenshot
+		//into a bitmap, which is an Avalonia object and belongs to this thread.
+		private void ApplyLibraryScan(LibraryScanPayload payload, int generation)
 		{
 			//First, before anything is written - not even the searching line. A
 			//scan the player has already left behind answers about a folder the
@@ -577,6 +590,7 @@ namespace Mesen.ViewModels
 			if(!_scanGeneration.IsCurrent(generation)) {
 				return;
 			}
+			LibraryScanResult result = payload.Result;
 			//A scan that landed after the player left the library - a B press, a
 			//step into *Browse a file…* - belongs to no surface: the browser's
 			//own rows must not be replaced by a grid nobody is looking at, and
@@ -590,9 +604,10 @@ namespace Mesen.ViewModels
 			//#1060: a scan that answered no game is a named state that names the next
 			//step, not a blank grid. The rule is PlayRomPicker's; this is the lookup.
 			EmptyText = LibraryEmptyText(PlayRomPicker.LibraryEmptyMessageId(_folders.Count, result.Entries.Count));
-			Tiles.Clear();
-			foreach(LibraryEntry entry in result.Entries) {
-				Tiles.Add(new PlayerLibraryTile(entry, ConsoleName(entry.Console)));
+			ClearTiles();
+			for(int i = 0; i < result.Entries.Count; i++) {
+				LibraryEntry entry = result.Entries[i];
+				Tiles.Add(TileFor(entry, payload.Covers[i]));
 			}
 			CountText = ResourceHelper.GetMessage("RomPickerLibraryCount",
 				CountLabel(result.Entries.Count, "RomPickerGameOne", "RomPickerGameMany"),

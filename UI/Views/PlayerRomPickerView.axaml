@@ -125,7 +125,7 @@
 										<Button Classes="library-tile" Click="OnPlayTile">
 											<StackPanel>
 												<Border Name="TileCover" Classes="library-cover" Background="{Binding Cover}" Width="104" Height="139" CornerRadius="8">
-													<TextBlock Classes="library-cover-title" Text="{Binding Title}" Margin="8" VerticalAlignment="Center" />
+													<TextBlock Classes="library-cover-title" Text="{Binding Title}" Margin="8" VerticalAlignment="Center" IsVisible="{Binding ShowsTitleOnCover}" />
 												</Border>
 												<TextBlock Classes="library-title" Text="{Binding Title}" />
 												<TextBlock Classes="library-console" Text="{Binding ConsoleName}" />
