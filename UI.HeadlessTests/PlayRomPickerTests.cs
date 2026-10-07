@@ -516,7 +516,7 @@ public class PlayRomPickerTests : IDisposable
 			"the scan's suggestion never landed on the roots");
 
 		//It is a row below the known roots, a place the pad can walk into.
-		PlayerRomPickerRow suggestion = Assert.Single(model.RomPicker.Rows.Where(r => r.Path == lib));
+		PlayerRomPickerRow suggestion = Assert.Single(model.RomPicker.Rows, r => r.Path == lib);
 		Assert.Equal(RomPickerRowKind.Folder, suggestion.Kind);
 		int index = model.RomPicker.Rows.IndexOf(suggestion);
 		for(int i = 0; i < index; i++) {
@@ -574,7 +574,7 @@ public class PlayRomPickerTests : IDisposable
 		WaitFor(() => FocusedRow(window) == "MesenAI's games folder",
 			$"the picker did not open on its roots ({Focused(window)})");
 
-		PlayerRomPickerRow row = Assert.Single(model.RomPicker.Rows.Where(r => r.Path == lib));
+		PlayerRomPickerRow row = Assert.Single(model.RomPicker.Rows, r => r.Path == lib);
 		Assert.Equal(RomPickerRowKind.Folder, row.Kind);
 		//Below the known roots, never above them.
 		Assert.Equal(model.RomPicker.Rows[^1], row);
@@ -774,7 +774,7 @@ public class PlayRomPickerTests : IDisposable
 		Pump();
 		Assert.True(model.RomPicker.IsVisible, "the picker did not open, so this case would prove nothing");
 
-		PlayerRomPickerRow root = Assert.Single(model.RomPicker.Rows.Where(r => r.Path == "/"));
+		PlayerRomPickerRow root = Assert.Single(model.RomPicker.Rows, r => r.Path == "/");
 		Assert.Equal("This computer", root.Label);
 		//Still the last of the fixed roots: the discovered ones follow it.
 		Assert.Equal(model.RomPicker.Rows[^1], root);
@@ -806,13 +806,13 @@ public class PlayRomPickerTests : IDisposable
 			model.RomPicker.Choose(model.RomPicker.Rows.First(r => r.Label == "nes"));
 			Pump();
 
-			PlayerRomPickerRow action = Assert.Single(model.RomPicker.Rows.Where(r => r.Kind == RomPickerRowKind.Action));
+			PlayerRomPickerRow action = Assert.Single(model.RomPicker.Rows, r => r.Kind == RomPickerRowKind.Action);
 			Button button = window.FindNamed<ItemsControl>("RomPickerList")
 				.GetVisualDescendants().OfType<Button>()
 				.Single(b => ReferenceEquals(b.DataContext, action));
 
 			PathIcon[] icons = button.GetVisualDescendants().OfType<PathIcon>().ToArray();
-			PathIcon drawn = Assert.Single(icons.Where(i => i.IsEffectivelyVisible));
+			PathIcon drawn = Assert.Single(icons, i => i.IsEffectivelyVisible);
 			//By identity, not by ToString: both resources parse to a StreamGeometry
 			//whose ToString is the same word for every geometry in the app, so a
 			//string comparison here passes whatever is drawn.

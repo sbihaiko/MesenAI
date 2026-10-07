@@ -68,7 +68,7 @@ public class PlayerSettingsTabsTests
 
 		//The Advanced tab list is not there; neither are OK/Cancel - the hint
 		//and Done take their place (rule 10, W-P8's five elements).
-		Assert.Empty(window.FindAll<TabControl>().Where(t => t.Name == "AdvancedSettingsTabs"));
+		Assert.DoesNotContain(window.FindAll<TabControl>(), t => t.Name == "AdvancedSettingsTabs");
 		Assert.True(window.FindNamed<Button>("btnPlayerSettingsDone").IsOnScreen());
 		Assert.Equal("Everything else: Classic › Settings", window.FindNamed<TextBlock>("lblPlayerSettingsEverythingElse").Text);
 		Assert.DoesNotContain(window.FindAll<Button>().Where(b => b.IsOnScreen()), b => b.Content as string is "OK" or "Cancel");
@@ -84,7 +84,7 @@ public class PlayerSettingsTabsTests
 		List<TabItem> tabs = window.FindNamed<TabControl>("AdvancedSettingsTabs").Items.Cast<TabItem>().ToList();
 		Assert.Equal(ConfigWindowTabOrder.Tabs.Length, tabs.Count);
 		Assert.All(tabs, tab => Assert.True(tab.IsOnScreen()));
-		Assert.Empty(window.FindAll<TabControl>().Where(t => t.Name == "PlayerSettingsTabs"));
+		Assert.DoesNotContain(window.FindAll<TabControl>(), t => t.Name == "PlayerSettingsTabs");
 	}
 
 	//#910: the sheet on Window (Display) with an injected window state, so the
