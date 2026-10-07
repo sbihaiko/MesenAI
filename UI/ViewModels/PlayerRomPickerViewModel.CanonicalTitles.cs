@@ -86,9 +86,17 @@ namespace Mesen.ViewModels
 		private readonly Lazy<RomHashCache> _romHashes =
 			new(() => new RomHashCache(Path.Combine(ConfigManager.HomeFolder, "RomHashes")));
 
+		//The session's one RomHashCache when the app wired it (MainWindowViewModel
+		//hands the box-art session's), so a dump the titles pass hashed is not read
+		//again for its cover (review finding 1 on PR #1057). Without a provider the
+		//picker keeps its own, over the same folder.
+		public Func<RomHashCache>? RomHashCacheProvider { get; set; }
+
+		public RomHashCache RomHashCache => RomHashCacheProvider?.Invoke() ?? _romHashes.Value;
+
 		private Task<string> DefaultRomHashSource(string path, RomConsole console, CancellationToken cancellationToken)
 		{
-			return _romHashes.Value.GetSha1Async(path, console, cancellationToken);
+			return RomHashCache.GetSha1Async(path, console, cancellationToken);
 		}
 
 		//The pass running NOW, and the one thing that can stop it. Kept beside the

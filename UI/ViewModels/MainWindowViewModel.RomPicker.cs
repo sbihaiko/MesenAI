@@ -28,6 +28,7 @@ namespace Mesen.ViewModels
 					//is one - one call per visible tile, through the box-art cache
 					//(MainWindowViewModel.BoxArt).
 					_romPicker.BoxArtCoverSource = BoxArtCoverFor;
+					_romPicker.RomHashCacheProvider = () => BoxArtHashes;
 				}
 				return _romPicker;
 			}

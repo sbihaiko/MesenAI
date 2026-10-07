@@ -26,7 +26,13 @@ namespace Mesen.ViewModels
 			() => new BoxArtCache(BoxArtFetcher.Send, BoxArtFolder, new BoxArtCacheOptions {
 				DownloadEnabled = () => ConfigManager.Config.Preferences.DownloadBoxArt
 			}),
-			() => new RomHashCache(Path.Combine(BoxArtFolder, "hashes")));
+			() => new RomHashCache(BoxArtHashFolder));
+
+		//The same folder the picker's titles pass always used: one hash cache per
+		//session, not a second one under BoxArt.
+		public static string BoxArtHashFolder => Path.Combine(ConfigManager.HomeFolder, "RomHashes");
+
+		public static RomHashCache BoxArtHashes => _session.Hashes;
 
 		//One tile's cover, or null when there is none to draw. Called by the sheet
 		//off the UI thread, once per tile it is showing (ADR-0265 section 4).

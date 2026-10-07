@@ -132,9 +132,17 @@ namespace Mesen.ViewModels
 				if(cover is null || token.IsCancellationRequested) {
 					return;
 				}
+				//Decoded here, on the worker, at the size the tile draws: the UI
+				//thread only receives the finished small bitmap.
+				Bitmap? image = BoxArtBitmap.Decode(cover.FilePath);
+				if(image is null) {
+					return;
+				}
 				Dispatcher.UIThread.Post(() => {
-					if(!token.IsCancellationRequested) {
-						tile.ShowArt(cover);
+					if(token.IsCancellationRequested) {
+						image.Dispose();
+					} else {
+						tile.ShowArt(cover.Kind, image);
 						if(!_coversDrawn.Contains(tile)) {
 							_coversDrawn.Add(tile);
 						}
@@ -205,20 +213,14 @@ namespace Mesen.ViewModels
 		//cover never appears out of nowhere under the player's ring.
 		public double ArtOpacity => _art is null ? 0 : 1;
 
-		//Hand the tile its downloaded cover. A file the decoder refuses leaves the
-		//tile generic rather than blank: a cover that cannot be read is the same
-		//thing to the player as one that was never downloaded.
-		internal void ShowArt(BoxArtCover cover)
+		//Hand the tile its downloaded cover, already decoded (BoxArtBitmap.Decode,
+		//on the worker). A file the decoder refuses never gets here and leaves the
+		//tile generic rather than blank.
+		internal void ShowArt(BoxArtCoverKind kind, IImage image)
 		{
-			IImage image;
-			try {
-				image = new Bitmap(cover.FilePath);
-			} catch(Exception) {
-				return;
-			}
 			ReleaseArt();
 			_art = image;
-			_downloaded = cover.Kind;
+			_downloaded = kind;
 			Raise(nameof(Art), nameof(HasArt), nameof(ShowsTitle), nameof(DownloadedCover), nameof(ArtOpacity));
 		}
 
