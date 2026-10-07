@@ -61,6 +61,7 @@ public sealed class PlayLoadWait
 	private int _phase;
 	private int _frames;
 	private int _ticket;
+	private bool _cutShort;
 
 	public PlayLoadWaitPhase Phase => (PlayLoadWaitPhase)Volatile.Read(ref _phase);
 	public bool IsActive => Phase != PlayLoadWaitPhase.Idle;
@@ -69,6 +70,10 @@ public sealed class PlayLoadWait
 	public PlayLoadWaitKind Kind { get; private set; }
 	//Which wait this is: every Begin/BeginReload takes a new one.
 	public int Ticket => Volatile.Read(ref _ticket);
+	//ADR-0254: a pause (or stop, or timeout) ended the picture wait before the
+	//first picture, and the game has not drawn it since. The core's last frame
+	//is then not a picture, so nothing may stand in for one.
+	public bool PictureCutShort => Volatile.Read(ref _cutShort) && Volatile.Read(ref _frames) < FramesUntilShown;
 
 	//Where the card can be seen: Player mode's Play workspace, the same place
 	//the home stays through an open.
@@ -95,6 +100,7 @@ public sealed class PlayLoadWait
 			GameName = gameName ?? "";
 			OpenGeneration = openGeneration;
 			Kind = kind;
+			Volatile.Write(ref _cutShort, false);
 			Volatile.Write(ref _frames, 0);
 			SetPhase(PlayLoadWaitPhase.Opening);
 			return Interlocked.Increment(ref _ticket);
@@ -165,6 +171,10 @@ public sealed class PlayLoadWait
 	public bool OnFrameDone()
 	{
 		if(Volatile.Read(ref _phase) != (int)PlayLoadWaitPhase.WaitingForPicture) {
+			//A wait cut short still counts toward its picture once resumed.
+			if(Volatile.Read(ref _cutShort) && Volatile.Read(ref _frames) < FramesUntilShown) {
+				Interlocked.Increment(ref _frames);
+			}
 			return false;
 		}
 		if(Interlocked.Increment(ref _frames) != FramesUntilShown) {
@@ -194,6 +204,7 @@ public sealed class PlayLoadWait
 			if(Phase != PlayLoadWaitPhase.WaitingForPicture || (openGeneration != null && openGeneration != OpenGeneration)) {
 				return false;
 			}
+			Volatile.Write(ref _cutShort, true);
 			SetPhase(PlayLoadWaitPhase.Idle);
 			return true;
 		}

@@ -57,6 +57,16 @@ namespace Mesen.Tests.Play
 		{
 			Assert.Equal(FrozenFrameStep.Keep, PlayFrozenFrame.Next(false, true, false));
 		}
+
+		//ADR-0254: a pause that cut the load card short came before the game's
+		//first picture, so the core's last frame is not one - W-P4 sits over
+		//no frozen frame rather than an empty image in the picture's place.
+		[Fact]
+		public void Before_the_first_picture_nothing_is_captured_or_shown()
+		{
+			Assert.Equal(FrozenFrameStep.Keep, PlayFrozenFrame.Next(false, true, true, pictureOut: false));
+			Assert.False(PlayFrozenFrame.Shows(true, false, false, true, pictureOut: false));
+		}
 	}
 
 	//"Seguir o render" (2026-10-03): a sheet opened from W-P4 leaves the card
