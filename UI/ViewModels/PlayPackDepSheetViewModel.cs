@@ -2,9 +2,9 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using Mesen.Localization;
 using Mesen.Logic;
 using Mesen.Services;
+using Mesen.Utilities;
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.IO;
 using System.Security.Cryptography;
 using System.Threading.Tasks;
@@ -158,13 +158,7 @@ namespace Mesen.ViewModels
 
 		//#953: Show Folder's hand-off to the file manager. A seam so a test can
 		//see the drop folder handed over without launching anything.
-		public Action<string> FolderLauncher { get; set; } = RevealFolder;
-
-		private static void RevealFolder(string folder)
-		{
-			string opener = OperatingSystem.IsWindows() ? "explorer.exe" : (OperatingSystem.IsMacOS() ? "open" : "xdg-open");
-			Process.Start(new ProcessStartInfo(opener) { ArgumentList = { folder } })?.Dispose();
-		}
+		public Action<string> FolderLauncher { get; set; } = ApplicationHelper.OpenFolder;
 
 		public void ShowFolder()
 		{

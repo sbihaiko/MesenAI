@@ -255,7 +255,7 @@
 										<TextBlock Text="{l:Translate btnRecordWhileIPlay}" />
 									</StackPanel>
 								</Button>
-								<TextBlock Classes="reason secondary" Text="{Binding Record.Reason}" IsVisible="{Binding Record.HasReason}" />
+								<TextBlock Name="RemasterRecordReason" Classes="reason secondary" Text="{Binding Record.Reason}" IsVisible="{Binding Record.HasReason}" />
 							</StackPanel>
 							<StackPanel Spacing="3" Classes="action">
 								<Button Name="RemasterTasButton" Classes="secondary" Content="{l:Translate btnRecordFromTas}" IsEnabled="{Binding RecordFromTas.IsEnabled}" />

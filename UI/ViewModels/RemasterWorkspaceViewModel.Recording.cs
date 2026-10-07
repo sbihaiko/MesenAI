@@ -184,9 +184,9 @@ namespace Mesen.ViewModels
 		public Func<IEnumerable<string>> RecentRoms { get; set; } = ConfiguredRecentRoms;
 		public Func<string?> GamesFolder { get; set; } = ConfiguredGamesFolder;
 
-		private void RefreshWrongGame(RemasterScreenState s)
+		private void RefreshWrongGame(bool wrongGame)
 		{
-			IsWrongGame = s.View == RemasterView.Project && s.Record.Reason == RemasterReason.NotThisProjectsGame;
+			IsWrongGame = wrongGame;
 			WrongGameText = IsWrongGame ? Reason(RemasterReason.NotThisProjectsGame) : "";
 		}
 
