@@ -146,6 +146,21 @@ namespace Mesen.Logic
 		{
 			string key = $"{consoleTag}/{sha1}";
 			while(true) {
+				//The caller's cancellation is read before a download is created, joined
+				//or started, and read again on every turn of this loop: a tile that was
+				//already given up on when it asked - the sheet closed between handing it
+				//the token and the call - must not be the reason a request goes out or a
+				//cover is written. Waiting on the answer is not enough on its own: a
+				//download that answers at once completes before the wait observes the
+				//token, and the tile would be handed a cover it must not have, plus a
+				//request the player paid for and cannot see (ADR-0265 section 4: fetching
+				//follows the tiles that are actually visible). Nothing is recorded on the
+				//way out either, which is section 7's rule for a cancelled call - the
+				//attempt is not definitive, so GetCover writes no miss.
+				if(cancellationToken.IsCancellationRequested) {
+					return new BoxArtAttempt(null, false);
+				}
+
 				SharedDownload shared;
 				if(_downloads.TryGetValue(key, out SharedDownload? running)) {
 					if(!running.TryJoin()) {

@@ -185,6 +185,32 @@ namespace Mesen.Tests.BoxArt
 		}
 
 		[Fact]
+		public async Task A_call_that_arrives_already_cancelled_asks_for_nothing_and_writes_nothing()
+		{
+			FakeBoxArtSender sender = FakeBoxArtSender.Images(FakeImages.Png());
+			BoxArtCache cache = Cache(sender);
+
+			//The sheet closed between handing the tile its token and the tile asking,
+			//and the download slot is free, so neither the ceiling nor a download
+			//already under way stands between this call and the collection.
+			using CancellationTokenSource cancellation = new();
+			cancellation.Cancel();
+
+			Assert.Null(await cache.GetCover(BoxArtConsole.Nes, Sha1, Name, cancellation.Token));
+
+			//ADR-0265 section 4: fetching is driven by the tiles that are actually
+			//visible. A tile the caller has already given up on is not one of them, so
+			//the collection is never asked and nothing lands in the player's own cache -
+			//a cover written for a tile nobody is looking at is a request the player
+			//paid for and cannot see.
+			Assert.Equal(0, sender.RequestCount);
+			string[] written = Directory.Exists(ConsoleFolder)
+				? Directory.GetFiles(ConsoleFolder)
+				: Array.Empty<string>();
+			Assert.Empty(written);
+		}
+
+		[Fact]
 		public async Task An_oversized_streamed_body_is_cut_at_the_cap_and_rejected()
 		{
 			//A collection streaming far more than the cap will ever allow.
