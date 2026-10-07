@@ -1129,6 +1129,42 @@ namespace Mesen.Windows
 			return true;
 		}
 
+		//#1007, W-S2: the Fullscreen row prints ⌃⌘F (Ctrl+F off macOS), so those keys
+		//toggle it - WorkspaceMenu.IsFullscreenShortcut is the rule behind both.
+		//This stays a hard-coded key (not a secondary ToggleFullscreen binding in
+		//PreferencesConfig) because that path cannot carry it: AddShortcut only seeds
+		//a default for an action that has no entry yet, so every existing
+		//settings.json would never get it; the second slot is user-editable, so it
+		//is not a non-removable default; and the bindings are evaluated by the Core
+		//from raw key state, where the ⌘ half of ⌃⌘F has no portable key name.
+		//So it yields to what the configurable system owns: the focused menu, a
+		//focused text input, and a Ctrl+F the user bound to another shortcut.
+		private bool ProcessFullscreenShortcut(KeyEventArgs e)
+		{
+			if(!WorkspaceMenu.IsFullscreenShortcut(e.Key.ToString(), (ShortcutModifiers)(int)e.KeyModifiers, OperatingSystem.IsMacOS())) {
+				return false;
+			}
+			if(_focusInMenu || TopLevel.GetTopLevel(this)?.FocusManager?.GetFocusedElement() is TextBox || IsCtrlFBoundElsewhere()) {
+				return false;
+			}
+			ToggleFullscreen();
+			e.Handled = true;
+			return true;
+		}
+
+		private static bool IsCtrlFBoundElsewhere()
+		{
+			UInt16 f = InputApi.GetKeyCode("F");
+			UInt16[] ctrls = { InputApi.GetKeyCode("Left Ctrl"), InputApi.GetKeyCode("Right Ctrl") };
+			return ConfigManager.Config.Preferences.ShortcutKeys.Any(info => info.Shortcut != EmulatorShortcut.ToggleFullscreen && (IsCtrlF(info.KeyCombination, f, ctrls) || IsCtrlF(info.KeyCombination2, f, ctrls)));
+		}
+
+		private static bool IsCtrlF(KeyCombination combo, UInt16 f, UInt16[] ctrls)
+		{
+			UInt16[] keys = { combo.Key1, combo.Key2, combo.Key3 };
+			return keys.Count(k => k != 0) == 2 && keys.Contains(f) && keys.Any(k => ctrls.Contains(k));
+		}
+
 		private void OnPreviewKeyDown(object? sender, KeyEventArgs e)
 		{
 			if(_testModeEnabled && e.KeyModifiers == KeyModifiers.Alt && ProcessTestModeShortcuts(e.Key)) {
@@ -1136,6 +1172,10 @@ namespace Mesen.Windows
 			}
 
 			if(ProcessWorkspaceShortcut(e)) {
+				return;
+			}
+
+			if(ProcessFullscreenShortcut(e)) {
 				return;
 			}
 

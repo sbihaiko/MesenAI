@@ -2239,6 +2239,7 @@
 		<Message ID="PlayerToolSheetTitleVideoRecord">Record Video</Message>
 		<Message ID="PlayerToolSheetTitleBarcode">Insert Barcode</Message>
 		<Message ID="DoorMenuPowerCycle">Power Cycle</Message>
+		<Message ID="DoorMenuToolsHint">Disk, coin and tape items appear when the game uses them.</Message>
 		<Message ID="DoorMenuScreenshot">Screenshot</Message>
 		<Message ID="DoorMenuReloadPackImages">Reload Pack Images</Message>
 		<Message ID="DoorMenuEnhancementPacks">Enhancement Packs</Message>

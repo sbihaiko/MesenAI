@@ -151,6 +151,9 @@ namespace Mesen.ViewModels
 				}
 				items.AddRange(group.Select(GetDoorItem));
 			}
+			if(WorkspaceMenu.HasToolsHint(door)) {
+				items.Add(new ContextMenuHint() { Text = ResourceHelper.GetMessage("DoorMenuToolsHint") });
+			}
 			DoorMenuItems = items;
 			return true;
 		}
@@ -186,7 +189,10 @@ namespace Mesen.ViewModels
 					ActionType = ActionType.TakeScreenshot,
 					DynamicText = Label("DoorMenuScreenshot")
 				},
-				MenuEntry.Fullscreen => new MainMenuAction(EmulatorShortcut.ToggleFullscreen) { ActionType = ActionType.Fullscreen },
+				MenuEntry.Fullscreen => new MainMenuAction(EmulatorShortcut.ToggleFullscreen) {
+					ActionType = ActionType.Fullscreen,
+					CustomShortcutText = () => WorkspaceMenu.FullscreenShortcut(IsMacOS)
+				},
 				MenuEntry.ReloadPackImages => WithLabel(GetReloadPackImagesItem(), "DoorMenuReloadPackImages"),
 				MenuEntry.MusicRecorder => WithLabel(GetMusicRecorderMenu(wnd), "DoorMenuRecordMusic"),
 				MenuEntry.EnhancementPacks => WithLabel(GetEnhancementPacksItem(wnd), "DoorMenuEnhancementPacks"),
