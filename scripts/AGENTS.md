@@ -511,7 +511,15 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   versioned `SHA1 -> console + No-Intro name` table the flat game library
   looks a ROM up in (#1038, spec #1030), from the No-Intro DATs the
   libretro-database repository mirrors (CC BY-SA 4.0; names and hashes
-  only, no artwork). Keys follow the ADR-0003 / ADR-0039 payload contract,
+  only, no artwork). That licence and its attribution are a recorded
+  decision, not a comment: **ADR-0266** (`docs/adr/gui/`) states the
+  source URL, the licence as verified from the repository's own `LICENSE`,
+  what share-alike asks of the derived table, and where the attribution
+  appears — the table's own `#source`/`#licence` header lines (so it
+  travels inside the embedded resource), the notice committed beside it,
+  `no_intro_sha1.NOTICE.md`, and the in-app credits
+  (`AboutInfo.Libraries()`). Edit either header line only together with the
+  ADR and the notice. Keys follow the ADR-0003 / ADR-0039 payload contract,
   so the iNES header and trainer are excluded — hashing the raw file
   matches nothing. Every console is keyed by a payload hash and no line
   has to be read differently per console: the NES DAT lists each dump

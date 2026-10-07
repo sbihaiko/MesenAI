@@ -9,11 +9,18 @@ from raw.githubusercontent.com (the host is already on the pack allow-list,
 ADR-0138 §41). One DAT per console; the console order below is also the order
 that decides which console owns a sha1 two DATs both list.
 
-LICENCE. libretro-database is licensed CC BY-SA 4.0 (its `LICENSE` file,
-"Attribution-ShareAlike 4.0 International"); the DATs inside it are No-Intro's
-own data files, which No-Intro publishes for free redistribution. The generated
-table carries that attribution and licence in its own header, and holds names
-and hashes only -- no artwork, no publisher asset, is redistributed.
+LICENCE. libretro-database carries CC BY-SA 4.0 (`LICENSE`,
+https://github.com/libretro/libretro-database/blob/master/LICENSE,
+"Attribution-ShareAlike 4.0 International"; read 2026-10-07). The DATs inside it
+declare no licence field of their own, and No-Intro states none for them, so the
+repository's licence is the one that governs the bytes read here -- the earlier
+claim that No-Intro publishes them "for free redistribution" had no source and
+is withdrawn. The table this script writes is Adapted Material under that
+licence, so it is offered under CC BY-SA 4.0 in turn: its own `#source` and
+`#licence` lines carry the attribution, the licence name and its URI, so a copy
+that leaves this repository still carries them, and `no_intro_sha1.NOTICE.md`
+sits beside it as the human-readable notice. It holds names and hashes only --
+no ROM bytes, no artwork, no publisher asset, is redistributed. See ADR-0266.
 
 HASH CONTRACT. Every key is the SHA-1 of the ROM *payload*, not of the file
 (ADR-0003, ADR-0039, MEP-v1 §4): for a `.nes` file with the `NES\\x1A` magic,
@@ -169,10 +176,16 @@ def build_table(sources: list[DatSource]) -> bytes:
     """Render and gzip the versioned table. Byte-identical for equal input."""
     lines = [
         f"#mesen-no-intro-sha1-table\t{FORMAT_VERSION}",
-        "#source\tNo-Intro DATs mirrored by libretro-database (metadat/no-intro, "
-        "raw.githubusercontent.com/libretro/libretro-database)",
-        "#licence\tlibretro-database repository: CC BY-SA 4.0 (its LICENSE file). "
-        "The DATs are No-Intro's own data files, redistributed there.",
+        "#source\tNo-Intro DATs, mirrored by libretro-database at metadat/no-intro "
+        "(https://github.com/libretro/libretro-database)",
+        "#licence\tCC BY-SA 4.0 -- libretro-database's own licence "
+        "(https://github.com/libretro/libretro-database/blob/master/LICENSE); the "
+        "DATs are No-Intro's data files, mirrored there. This table is Adapted "
+        "Material (7 systems, rows reduced to payload sha1 + console + game name, "
+        "the NES DAT's headered .nes rows dropped) and is offered under the same "
+        "licence. Attribution and the licence's URI travel with it; see ADR-0266 "
+        "and scripts/no_intro_sha1.NOTICE.md. Names and hashes only -- no ROM "
+        "bytes, no artwork",
         "#hash\tSHA-1 of the ROM payload, never of the file: for .nes, the bytes "
         "after the 16-byte iNES header and any 512-byte trainer, clamped to the "
         "header-declared PRG+CHR size (ADR-0003, ADR-0039). The NES DAT's headered "

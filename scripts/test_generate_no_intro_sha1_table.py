@@ -11,6 +11,8 @@ Checks:
        naming the shape, not silently parsed as empty.
   AC-3 build_table's output is pinned byte for byte (header lines, the
        `#console` provenance line, rows sorted by sha1) and is deterministic.
+       The pin is taken through `dat_source`, so parsing, the `.nes` filter and
+       the rendering are pinned as one output rather than row by row.
   AC-4 a sha1 two consoles both claim is written once, for the first console
        in the generator's own order.
   AC-5 the committed scripts/no_intro_sha1.tsv.gz is well formed: format
@@ -48,6 +50,12 @@ SHA1_PAYLOAD = "6666666666666666666666666666666666666666"
 #A clrmamepro/Logiqx DAT in the shape libretro-database mirrors: one game with
 #a single rom, one whose two roms are two sha1s of the same game name, and one
 #whose second rom declares no sha1 at all.
+#
+#The rom names are the ones the real DATs use: a `.unh` (or any non-headered)
+#name is a payload rom and is kept, a `.nes` name is a headered dump and is
+#dropped. Beta Racer is the one `.nes`/`.unh` pair -- its `.unh` row survives
+#and its `.nes` row does not -- so the filter is exercised through the same
+#build_table call the pin asserts on, not by a hand-built entry list.
 FIXTURE_DAT = """clrmamepro (
 \tname "Fixture - Test System"
 \tdescription "Fixture - Test System"
@@ -57,12 +65,12 @@ FIXTURE_DAT = """clrmamepro (
 
 game (
 \tname "Alpha Quest (USA)"
-\trom ( name "Alpha Quest (USA).nes" size 40960 crc 11111111 md5 AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA sha1 %s )
+\trom ( name "Alpha Quest (USA).unh" size 40944 crc 11111111 md5 AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA sha1 %s )
 )
 game (
 \tname "Beta Racer (Europe) (Rev 1)"
-\trom ( name "Beta Racer (Europe) (Rev 1).nes" size 65536 crc 22222222 md5 BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB sha1 %s )
-\trom ( name "Beta Racer (Europe) (Rev 1) [b].nes" size 65536 crc 33333333 md5 CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC sha1 %s )
+\trom ( name "Beta Racer (Europe) (Rev 1).unh" size 65536 crc 22222222 md5 BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB sha1 %s )
+\trom ( name "Beta Racer (Europe) (Rev 1) [b].nes" size 65552 crc 33333333 md5 CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC sha1 %s )
 )
 game (
 \tname "Gamma Boy (Japan)"
@@ -102,9 +110,9 @@ def test_parse_dat_keeps_every_rom_sha1_with_its_game_name():
     version, entries = gen.parse_dat(FIXTURE_DAT)
     assert version == "2020.01.02", version
     assert entries == (
-        (SHA1_A, "Alpha Quest (USA)", "Alpha Quest (USA).nes"),
+        (SHA1_A, "Alpha Quest (USA)", "Alpha Quest (USA).unh"),
         (SHA1_B, "Beta Racer (Europe) (Rev 1)",
-         "Beta Racer (Europe) (Rev 1).nes"),
+         "Beta Racer (Europe) (Rev 1).unh"),
         (SHA1_C, "Beta Racer (Europe) (Rev 1)",
          "Beta Racer (Europe) (Rev 1) [b].nes"),
         (SHA1_D, "Gamma Boy (Japan)", "Gamma Boy (Japan).gb"),
@@ -151,25 +159,41 @@ def _fixture_source(code="nes", entries=None):
 
 
 #Pinned byte for byte: the header carries the format version the C# reader
-#checks, the source and the licence the ticket requires the script to record,
+#checks, the source and the licence the ticket requires the script to record
+#(with the ADR-0266 citation so a reader of the artifact can find the record),
 #the ADR-0003 byte-range note, and one provenance line per DAT.
+#
+#The fixture goes through `dat_source` -- parse, the `.nes` filter and the
+#rendering -- so this one assertion fails if any of the three regresses. Feeding
+#hand-built DatSource entries here would leave `select_payload_roms` and
+#`parse_dat`'s field order checked only by the single-row tests above.
 def test_build_table_output_is_pinned():
-    dat_sha256 = hashlib.sha256(FIXTURE_DAT.encode("utf-8")).hexdigest()
-    table = gen.build_table([_fixture_source()])
+    source = gen.dat_source("nes", "Fixture - Test System",
+                            FIXTURE_DAT.encode("utf-8"))
+    table = gen.build_table([source])
     expected = "\n".join([
         "#mesen-no-intro-sha1-table\t1",
-        "#source\tNo-Intro DATs mirrored by libretro-database (metadat/no-intro, "
-        "raw.githubusercontent.com/libretro/libretro-database)",
-        "#licence\tlibretro-database repository: CC BY-SA 4.0 (its LICENSE file). "
-        "The DATs are No-Intro's own data files, redistributed there.",
+        "#source\tNo-Intro DATs, mirrored by libretro-database at metadat/no-intro "
+        "(https://github.com/libretro/libretro-database)",
+        "#licence\tCC BY-SA 4.0 -- libretro-database's own licence "
+        "(https://github.com/libretro/libretro-database/blob/master/LICENSE); the "
+        "DATs are No-Intro's data files, mirrored there. This table is Adapted "
+        "Material (7 systems, rows reduced to payload sha1 + console + game name, "
+        "the NES DAT's headered .nes rows dropped) and is offered under the same "
+        "licence. Attribution and the licence's URI travel with it; see ADR-0266 "
+        "and scripts/no_intro_sha1.NOTICE.md. Names and hashes only -- no ROM "
+        "bytes, no artwork",
         "#hash\tSHA-1 of the ROM payload, never of the file: for .nes, the bytes "
         "after the 16-byte iNES header and any 512-byte trainer, clamped to the "
         "header-declared PRG+CHR size (ADR-0003, ADR-0039). The NES DAT's headered "
         ".nes roms are dropped; only their headerless .unh twins are listed, so "
         "every key is a payload hash",
-        "#console\tnes\tFixture - Test System\t2020.01.02\t" + dat_sha256,
+        "#console\tnes\tFixture - Test System\t2020.01.02\t" + source.sha256,
+        #Sorted by sha1: A (1111...), B (2222...), then Gamma Boy's D (4444...).
+        #SHA1_C is absent -- Beta Racer's `.nes` row was dropped.
         SHA1_A.lower() + "\tnes\tAlpha Quest (USA)",
         SHA1_B.lower() + "\tnes\tBeta Racer (Europe) (Rev 1)",
+        SHA1_D.lower() + "\tnes\tGamma Boy (Japan)",
         "",
     ])
     assert gzip.decompress(table).decode("utf-8") == expected
