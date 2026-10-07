@@ -65,7 +65,7 @@ public static class PlayerWireframe
 		["W-P15"] = new WireframeRegion[] { new("setup sheet", new LogicalBox(320, 120, 460, 440)) },
 	};
 
-	//The regions PlayerThemeRenderTests' renders are known to differ on, each
+	//The regions the gated W-P renders are known to differ on, each
 	//held to the failure kind its layout cause produces (Gate). Shared by the
 	//headless gate on fresh renders and UI.Tests' gate on the committed ones.
 	private static readonly Dictionary<string, KnownDeviation[]> Known = new() {
@@ -103,7 +103,25 @@ public static class PlayerWireframe
 			new("grouped rows", TextLines, "card ~38 px low", true),
 			new("grouped rows", InkBox, "card ~38 px low", false),
 		},
+		//#952: the render is the bare setup sheet over the flat HUD background,
+		//with no Player chrome around it, so the chrome rows are fixture. The
+		//sheet sits ~36 px below the wireframe's (centred in the whole window),
+		//so the region crops it differently: 10 text lines where the wireframe,
+		//the reference, has 11. Colour and ink box stay gated on the sheet.
+		["W-P15"] = new KnownDeviation[] {
+			new("title bar", InkBox, NoChrome, false),
+			new("title bar", TextLines, NoChrome, false),
+			new("content", Colour, NoChrome, false),
+			new("content", InkBox, NoChrome, false),
+			new("content", TextLines, NoChrome, false),
+			new("status line", Colour, NoChrome, false),
+			new("status line", InkBox, NoChrome, false),
+			new("status line", TextLines, NoChrome, false),
+			new("setup sheet", TextLines, "sheet ~36 px low: 10 lines, the wireframe's 11", true),
+		},
 	};
+
+	private const string NoChrome = "bare sheet over the HUD background, no Player chrome";
 
 	private const string Chips = "the P1-P4 port chips the wireframe does not draw";
 
