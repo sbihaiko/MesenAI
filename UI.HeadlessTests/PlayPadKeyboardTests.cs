@@ -333,9 +333,10 @@ public class PlayPadKeyboardTests : IDisposable
 	}
 
 	//#994 review 4: the pad losing authority (here, to the load card)
-	//cancels the keyboard, so the pad never comes back editing a stale field.
+	//closes the keyboard, so the pad never comes back editing a stale field;
+	//#1001 review 4: what was typed is kept, not reverted.
 	[AvaloniaFact]
-	public void Losing_pad_authority_cancels_the_keyboard()
+	public void Losing_pad_authority_closes_the_keyboard_keeping_the_draft()
 	{
 		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
 		(MainWindow window, MainWindowViewModel model) = ShowCheats(new());
@@ -357,7 +358,7 @@ public class PlayPadKeyboardTests : IDisposable
 
 		Assert.Null(PlayPadNavigationWiring.KeyboardForTest(window));
 		Assert.False(PanelShown(window), "the keyboard stayed on screen after the pad lost authority");
-		Assert.Equal("contra", search.Text);
+		Assert.Equal("contrax", search.Text);
 	}
 
 	private static string? DraftShown(MainWindow window)

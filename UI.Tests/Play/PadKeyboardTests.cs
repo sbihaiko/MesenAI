@@ -189,4 +189,26 @@ public class PadKeyboardTests
 	{
 		Assert.Equal(shape, PadKeyboard.ShapeOf(masked, codeClass));
 	}
+
+	//#1001 review 4: the pad losing authority mid-entry (a stray key or mouse
+	//event) keeps what the player typed - a code is never silently reverted.
+	[Fact]
+	public void Losing_pad_authority_keeps_the_typed_draft()
+	{
+		PadKeyboard keyboard = new(PadKeyboardShape.Code, "SX");
+		Type(keyboard, "AP");
+
+		Assert.Equal("SXAP", keyboard.TextOnLeave(PadKeyboardLeave.AuthorityLost));
+	}
+
+	//The field going away or the focus moving elsewhere is still a cancel.
+	[Fact]
+	public void The_field_going_away_or_the_focus_moving_gives_back_the_original_value()
+	{
+		PadKeyboard keyboard = new(PadKeyboardShape.Code, "SX");
+		Type(keyboard, "AP");
+
+		Assert.Equal("SX", keyboard.TextOnLeave(PadKeyboardLeave.FieldGone));
+		Assert.Equal("SX", keyboard.TextOnLeave(PadKeyboardLeave.FocusMoved));
+	}
 }

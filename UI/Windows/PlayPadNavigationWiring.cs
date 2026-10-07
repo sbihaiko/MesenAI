@@ -466,14 +466,21 @@ namespace Mesen.Windows
 				//press and step the menu the instant it appeared.
 				_previous = new HashSet<ushort>(pressed);
 
-				//ADR-0262: a field that went away under its keyboard (the sheet
-				//closed by something else) takes the keyboard with it, as a cancel.
-				//#994 review 4: so does the focus leaving the field (a mouse click)
-				//or the pad losing authority, or the pad would come back editing a
-				//field it no longer holds - and the focus is left where it went.
-				if(_keyboardField is TextBox keyboardField
-					&& (!keyboardField.IsEffectivelyVisible || !authority || !ReferenceEquals(_window.FocusManager?.GetFocusedElement(), keyboardField))) {
-					CloseKeyboard(cancel: true, refocus: false);
+				//ADR-0262 Decision 4: a field that went away under its keyboard
+				//(the sheet closed by something else) or the focus leaving it (a
+				//mouse click) closes the keyboard as a cancel; the pad losing
+				//authority closes it keeping the draft. Either way the pad never
+				//comes back editing a field it no longer holds, and the focus is
+				//left where it went.
+				if(_keyboardField is TextBox keyboardField && _keyboard is not null) {
+					PadKeyboardLeave? leave = !keyboardField.IsEffectivelyVisible ? PadKeyboardLeave.FieldGone
+						: !authority ? PadKeyboardLeave.AuthorityLost
+						: !ReferenceEquals(_window.FocusManager?.GetFocusedElement(), keyboardField) ? PadKeyboardLeave.FocusMoved
+						: null;
+					if(leave is PadKeyboardLeave why) {
+						keyboardField.Text = _keyboard.TextOnLeave(why);
+						CloseKeyboard(cancel: false, refocus: false);
+					}
 				}
 
 				if(action != PadNavAction.None) {
