@@ -382,6 +382,12 @@ namespace Mesen.ViewModels
 			//scan). FinishLibraryStream is the only caller that has an answer to give.
 			EmptyText = LibraryEmptyText(PlayRomPicker.LibraryEmptyMessageId(_folders.Count, null));
 			if(_folders.Count == 0) {
+				//No stream starts here, so no finish will ever clear the wait of
+				//the one this replaced: its finish is for a generation that is
+				//gone. The rebuild ends that wait itself.
+				_scanCancellation?.Cancel();
+				IsScanning = false;
+				_pendingChunks = 0;
 				return;
 			}
 			StartLibraryStream();

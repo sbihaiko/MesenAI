@@ -334,7 +334,8 @@ namespace Mesen.ViewModels
 				return;
 			}
 			//The first games to arrive are the ones the ring has been waiting for:
-			//the sheet opened with nothing to play, so it is holding Back, and this
+			//the sheet opened with nothing to play, so the ring waits in the header
+			//(Back while a restore is pending, else Browse a file…), and this
 			//is the revision that moves it onto a game. Later batches do not bump
 			//it - the player may already be walking the grid, and a claim per
 			//folder would pull the ring back out of their hands.

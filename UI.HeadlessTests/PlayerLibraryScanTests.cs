@@ -374,6 +374,9 @@ public class PlayerLibraryScanTests : IDisposable
 			//sheet is going to open on.
 			Assert.Equal(tetris, model.RomPicker.LastFocusedTilePath);
 			Assert.NotEqual(contra, FocusedTilePath(window));
+			//The sheet parks the ring on Back - not on Browse a file…, which a
+			//press would turn into leaving the library the player waits on.
+			Assert.Equal("RomPickerBack", (window.FocusManager?.GetFocusedElement() as Control)?.Name);
 
 			//The rest of the library lands, and the sheet lands on the game the
 			//player was on rather than on whatever sorted first.
@@ -381,6 +384,53 @@ public class PlayerLibraryScanTests : IDisposable
 			WaitFor(() => FocusedTilePath(window) == tetris,
 				$"the sheet opened on {Focused(window)} instead of the game the player left on");
 			Assert.Equal(tetris, model.RomPicker.LastFocusedTilePath);
+		} finally {
+			release.Set();
+		}
+	}
+
+	//A scan still walking when the player closes the sheet and reopens it on a
+	//library that has no folder any more (the drive was unplugged): the old
+	//walk's finish is for a generation that is gone, so the wait must be ended
+	//by the reopen itself or the bar spins over the empty state forever.
+	[AvaloniaFact]
+	public void Reopening_with_no_library_folder_ends_the_wait_of_the_scan_in_flight()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		string contra = Path.Combine(_folder, "Contra (U) [!].nes");
+
+		using ManualResetEventSlim release = new(false);
+		LibraryScanResult HeldScan(IReadOnlyList<string> folders, FolderLister list, Action<IReadOnlyList<LibraryEntry>> onBatch)
+		{
+			LibraryEntry entry = Entry(contra, RomConsole.Nes, "Contra");
+			onBatch(new[] { entry });
+			release.Wait(TimeSpan.FromSeconds(30));
+			return new LibraryScanResult(new[] { entry }, 1, false);
+		}
+
+		(MainWindow window, MainWindowViewModel model) = OpenLibrary(HeldScan, inline: false);
+
+		try {
+			WaitFor(() => model.RomPicker.Tiles.Count == 1, $"the first batch never reached the grid ({Focused(window)})");
+			Assert.True(model.RomPicker.IsScanning, "the scan is over, so this case proves nothing about the wait");
+
+			Press(window, PadNavAction.Back);
+			Pump();
+			Assert.False(model.RomPicker.IsVisible, "B did not close the sheet");
+
+			model.RomPicker.LibraryFolderSource = () => Array.Empty<string>();
+			Press(window, PadNavAction.Confirm);
+			Pump();
+			Assert.True(model.RomPicker.IsVisible, "the pad's Confirm did not reopen the sheet");
+
+			Assert.False(model.RomPicker.IsScanning, "a library with no folder is still waiting on a scan");
+			Assert.False(window.FindNamed<ProgressBar>("RomPickerScanProgress").IsOnScreen(),
+				"the scan's indicator spins over a library with no folder");
+
+			//The old walk finishing late changes nothing on the new surface.
+			release.Set();
+			Pump();
+			Assert.False(model.RomPicker.IsScanning);
 		} finally {
 			release.Set();
 		}
@@ -601,9 +651,9 @@ public class PlayerLibraryScanTests : IDisposable
 	//#1037 review finding 2 on #1056: a restore that never lands - the remembered
 	//file is gone - ends with the sheet owing the player a game under the ring,
 	//but only when the ring is still where the sheet itself parked it. A player who
-	//walked it to Back meanwhile keeps it there.
+	//walked it to another header control meanwhile keeps it there.
 	[AvaloniaFact]
-	public void A_restore_that_never_lands_does_not_pull_the_ring_off_the_back_button()
+	public void A_restore_that_never_lands_does_not_pull_the_ring_off_a_header_control_the_player_chose()
 	{
 		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
 		string contra = Path.Combine(_folder, "Contra (U) [!].nes");
@@ -648,16 +698,16 @@ public class PlayerLibraryScanTests : IDisposable
 			WaitFor(() => model.RomPicker.Tiles.Count == 2, "the held scan never showed its games");
 			WaitFor(() => InHeader(window), $"the ring did not wait in the header ({Focused(window)})");
 
-			//The player walks the ring to Back and the scan ends under it.
-			Button back = window.GetVisualDescendants().OfType<Button>().First(b => b.Name == "RomPickerBack");
+			//The player walks the ring to Browse a file… (the sheet parked it on Back) and the scan ends under it.
+			Button back = window.GetVisualDescendants().OfType<Button>().First(b => b.Name == "RomPickerBrowseFile");
 			back.Focus(NavigationMethod.Directional);
 			Pump();
-			Assert.Equal("RomPickerBack", (window.FocusManager?.GetFocusedElement() as Control)?.Name);
+			Assert.Equal("RomPickerBrowseFile", (window.FocusManager?.GetFocusedElement() as Control)?.Name);
 
 			release.Set();
 			WaitFor(() => !model.RomPicker.IsScanning, "the scan's wait never cleared");
 			Pump();
-			Assert.Equal("RomPickerBack", (window.FocusManager?.GetFocusedElement() as Control)?.Name);
+			Assert.Equal("RomPickerBrowseFile", (window.FocusManager?.GetFocusedElement() as Control)?.Name);
 		} finally {
 			release.Set();
 		}
@@ -761,9 +811,9 @@ public class PlayerLibraryScanTests : IDisposable
 	//#1037 review finding 1 on #1056: the remembered game landing is a claim for
 	//the ring, and like the end of a scan it is the sheet finishing what it
 	//promised - not a hand taken off a ring the player has since moved. A player
-	//who walked to Back while the restore was pending keeps it there.
+	//who walked to Browse a file… while the restore was pending keeps it there.
 	[AvaloniaFact]
-	public void The_remembered_game_landing_does_not_steal_a_ring_the_player_put_on_Back()
+	public void The_remembered_game_landing_does_not_steal_a_ring_the_player_put_on_Browse_a_file()
 	{
 		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
 		string contra = Path.Combine(_folder, "Contra (U) [!].nes");
@@ -808,18 +858,18 @@ public class PlayerLibraryScanTests : IDisposable
 			Pump();
 			WaitFor(() => model.RomPicker.Tiles.Count == 2, $"the first batch never reached the grid ({Focused(window)})");
 
-			//The restore is pending and the player walks the ring to Back.
-			Button back = window.GetVisualDescendants().OfType<Button>().First(b => b.Name == "RomPickerBack");
+			//The restore is pending and the player walks the ring to Browse a file… (the sheet parked it on Back).
+			Button back = window.GetVisualDescendants().OfType<Button>().First(b => b.Name == "RomPickerBrowseFile");
 			back.Focus(NavigationMethod.Directional);
 			Pump();
-			Assert.Equal("RomPickerBack", (window.FocusManager?.GetFocusedElement() as Control)?.Name);
+			Assert.Equal("RomPickerBrowseFile", (window.FocusManager?.GetFocusedElement() as Control)?.Name);
 
 			//The remembered game arrives under it.
 			release.Set();
 			WaitFor(() => model.RomPicker.Tiles.Count == 3, "the last batch never reached the grid");
 			WaitFor(() => !model.RomPicker.IsScanning, "the scan's wait never cleared");
 			Pump();
-			Assert.Equal("RomPickerBack", (window.FocusManager?.GetFocusedElement() as Control)?.Name);
+			Assert.Equal("RomPickerBrowseFile", (window.FocusManager?.GetFocusedElement() as Control)?.Name);
 		} finally {
 			release.Set();
 		}

@@ -330,6 +330,9 @@ namespace Mesen.Windows
 		//that is the control the empty sentence names as the next step, and Back
 		//leaves the sheet instead of taking it. Back stays the last resort: it is
 		//the one control the sheet always has.
+		//The header control the sheet itself parked the ring on while a restore waits.
+		private static Control? _romPickerParked;
+
 		private static Control? RomPickerFocusTarget(MainWindow window, MainWindowViewModel model)
 		{
 			if(model.RomPicker.Mode == RomPickerMode.Library) {
@@ -346,9 +349,20 @@ namespace Mesen.Windows
 				//remembered game landing, are the sheet's own claims, not a claim
 				//over the ring - a player who walked it to Back or the search box
 				//while the scan ran keeps it there.
+				//The ring is the player's when it is on a header control other than
+				//the one the sheet parked it on, whichever control that is.
+				Control? focused = window.FocusManager?.GetFocusedElement() as Control;
 				if((model.RomPicker.IsFinishFallback || model.RomPicker.IsRestoreLanding)
-					&& (window.FocusManager?.GetFocusedElement() as Control)?.Name is "RomPickerBack" or "RomPickerSearch") {
-					return window.FocusManager?.GetFocusedElement() as Control;
+					&& focused is not null && focused.DataContext is not PlayerLibraryTile
+					&& focused.Name?.StartsWith("RomPicker") == true && !ReferenceEquals(focused, _romPickerParked)) {
+					return focused;
+				}
+				//A restore still waiting on its game parks the ring on Back, never on
+				//*Browse a file…*: pressing that one would leave the library the
+				//player is waiting on.
+				_romPickerParked = model.RomPicker.IsRestorePending ? Named(window, "RomPickerBack") : null;
+				if(_romPickerParked is not null && RomPickerTile(window, model.RomPicker.LastFocusedTilePath, true) is null) {
+					return _romPickerParked;
 				}
 				//#1037 picks the tile; the CALLER named the game, because the
 				//path lives on the view-model and this walks the tree. The
