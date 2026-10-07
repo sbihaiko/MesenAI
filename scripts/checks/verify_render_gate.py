@@ -74,6 +74,20 @@ EXPECTED_WIREFRAME_RENDERS = (
     "W-P14", "W-P15", "W-P15-pill", "W-P16",
 )
 
+# Wireframes drawn into docs/media/gui-redesign/ whose render case has not
+# landed yet. **Nothing in this module reads this constant**: verify_run and
+# verify_core work off EXPECTED_WIREFRAME_RENDERS alone. It is the pinned
+# exemption list that scripts/test_verify_render_gate.py reads, so that test
+# expects a wireframe drawn without a render case instead of failing on it —
+# and the same test asserts this set and EXPECTED_WIREFRAME_RENDERS stay
+# disjoint, so the exemption cannot survive into the run the ticket lands.
+# ADR-0264 Decision 12 draws W-P19 and W-P19b with
+# scripts/render_gui_wireframes.py *before* the sheet they picture exists; PRD
+# row L.1 (#1032) builds it and moves W-P19 up into EXPECTED_WIREFRAME_RENDERS,
+# and L.2 (#1033) does the same for W-P19b. Pinned like that set is: a
+# wireframe drawn without an entry in one of the two still fails.
+WIREFRAMES_AWAITING_RENDER_CASE = ("W-P19", "W-P19b")
+
 # A PNG may predate the TRX's start by this much (filesystem/clock rounding).
 FRESHNESS_SLACK_SECONDS = 2.0
 
