@@ -109,12 +109,13 @@
 		<!--W-P19 is a near-full-window sheet: the grid is the point, and eight
 		columns of vertical tiles need the width a 480 px column does not have.
 		#1078: the width is LibrarySheetFit's (host-free, UI.Tests) rather than a
-		fixed 1000 - a window narrower than 1000 plus the two 24 px margins used
-		to get a sheet wider than itself, centred, with both of its edges cut off
-		by the window. The rule caps it at the wireframe's own width; MaxWidth
-		repeats that cap so the sheet is never wider than the target picture even
-		before the first layout pass answers.-->
-		<Border Name="PlayerRomPickerSheet" Classes="sheet" Classes.library="{Binding IsLibraryMode}" MaxWidth="1000" MaxHeight="620" HorizontalAlignment="Center" Margin="0 24">
+		fixed 1000 - a window narrower than the sheet used to get a sheet wider
+		than itself, centred, with both of its edges cut off by the window. The
+		rule caps it at the wireframe's own 1100 px and at the window; MaxWidth
+		repeats the 1100 px cap so the sheet is never wider than the target
+		picture even before the first layout pass answers. The Margin is vertical
+		only: horizontally the sheet is bounded by the window itself.-->
+		<Border Name="PlayerRomPickerSheet" Classes="sheet" Classes.library="{Binding IsLibraryMode}" MaxWidth="1100" MaxHeight="620" HorizontalAlignment="Center" Margin="0 24">
 			<DockPanel>
 				<!--The header: the sheet's one heading, which reads as the library's
 				own when the library is up (Decision 8: what it is, then how much it

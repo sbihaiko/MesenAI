@@ -31,10 +31,10 @@ namespace Mesen.Views
 
 		private PlayerRomPickerViewModel? Model => DataContext as PlayerRomPickerViewModel;
 
-		//#1078 (ADR-0264 Decision 12): the sheet's width is the wireframes' 1000 px
-		//when the window has room and the window's own width, minus its margins,
-		//when it does not. Fixed at 1000, a non-maximized window narrower than the
-		//sheet drew it wider than itself - centred, so the window cut both edges and
+		//#1078 (ADR-0264 Decision 12): the sheet's width is W-P19's 1100 px when
+		//the window has room and the window's own width when it does not. Fixed at
+		//1000, a non-maximized window narrower than the sheet drew it wider than
+		//itself - centred, so the window cut both edges and
 		//the header, the console filter, the first grid column and *Browse a file…*
 		//were all partly outside it. The arithmetic is LibrarySheetFit's (host-free,
 		//UI.Tests asserts it); this is the crossing, and the backdrop is where the

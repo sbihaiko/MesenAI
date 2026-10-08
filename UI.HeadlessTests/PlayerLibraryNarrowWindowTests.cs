@@ -22,10 +22,10 @@ namespace Mesen.HeadlessTests;
 //column was cut at the left and *Browse a file…* at the right. The rule is
 //LibrarySheetFit's (host-free, UI.Tests); this is the crossing - that the view
 //applies it, so every header control and the first grid column sit inside the
-//window at a width the wireframes' 1000 px sheet does not fit in.
+//window at a width W-P19's own 1100 px sheet does not fit in.
 //
 //The wide case is here too, as the no-regression half: with room, the sheet is
-//still the wireframe's own 1000 px.
+//W-P19's own 1100 px.
 [Collection(NativeCoreCollection.Name)]
 public class PlayerLibraryNarrowWindowTests : IDisposable
 {
@@ -222,7 +222,7 @@ public class PlayerLibraryNarrowWindowTests : IDisposable
 		(MainWindow window, MainWindowViewModel _) = OpenLibrary(1400);
 
 		Control sheet = Named(window, "PlayerRomPickerSheet");
-		Assert.Equal(1000, sheet.Bounds.Width, 0.5);
+		Assert.Equal(1100, sheet.Bounds.Width, 0.5);
 		AssertInsideHorizontally(window, "PlayerRomPickerSheet");
 	}
 }
