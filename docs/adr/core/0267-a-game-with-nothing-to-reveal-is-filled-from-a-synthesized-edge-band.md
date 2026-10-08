@@ -110,7 +110,9 @@ cheapest first.*
   height (256×192 at 8:7 is ≈1.52 and needs ≈21 columns per side; the 224-line mode the VDP can
   also select needs ≈46 — against the NES's 64 per side and the GB's 48), so N follows the frame's own
   height rather than being one constant; the HD path, the recorder and
-  the capture tools see a wider frame. Two edits must land together, or the switch and the core
+  the capture tools see a wider frame — and the SMS HD-pack path, whose pixel and provenance buffers
+  are hard-coded to 256 wide today, has to be sized from the frame it is handed instead (C2b), or the
+  composer indexes past them. Two edits must land together, or the switch and the core
   disagree: the new source feeds `WidescreenFallback::SupportsWidescreen` (which
   `NesWidescreenSupport::Reveals` reads), and `WidescreenSupportRule.ConsoleHasSideMap` — the
   app-side predicate that disables the switch before the game even runs — has to admit a console
@@ -156,7 +158,13 @@ cheapest first.*
   `scripts/core_unit_tests.cpp` — the state map, the band's rows, and the art-over-band order —
   plus `WidescreenSupportRuleTests.cs` in `UI.Tests/Play/` for the switch state a banded console
   now reports, and `UI.HeadlessTests/PlaySheetsViewTests.cs` for the switch and its reason on the
-  sheet. C2's "synthesized" mark and C1's chain position are pinned by the first of these.
+  sheet. C2's "synthesized" mark and C1's chain position are pinned by the first of these. C2b needs a
+  host-free case of its own, and it has to be over a *pure* unit rather than the VDP: `SmsVdp.cpp` is
+  not in the core unit-test link set, which is why the `W253b:` family pins the Game Gear Reveal as
+  `SmsWidescreenReveal`'s arithmetic instead. So the same shape applies — the HD grid's width taken
+  from the frame's own width (never a constant), and the band column's synthesized provenance — plus a
+  bounds assertion that the stride the composer walks is the grid's own width, which is exactly the
+  read that overruns today. The composer over a real extended SMS frame is the C4 wiring case.
 - **Option D — a per-game user override.** Leave the switch enabled everywhere, demote the reason
   to a hint, and let the player turn widescreen on for any game. Cost: ADR-0253 §4's per-ROM
   memory becomes advisory and the switch can no longer be trusted as "this game has a mode"; and
@@ -173,7 +181,14 @@ promise to SMS mean something.
 revisited (§4's early-disable clause) and §6.1's WideScrn row updated. Slice plan for C:
 **C1** the edge-band source and its position in `WidescreenFallback::ApplyChain`, with the
 `W253C:`-family host-free tests; **C2** `SmsVdp` emitting the extra columns and the "synthesized"
-mark; **C3** §3/§4's rule (`WidescreenFallback::SupportsWidescreen`, `WidescreenSupportRule`) and
+mark; **C2b** the SMS HD-pack path sized to the frame it is handed — the RGB555 pixel buffer and the
+`HdTilePixelInfo` provenance grid allocated from the frame's own width instead of the hard-coded 256,
+and the band columns' provenance synthesized there (no BG tile, no sprite tile, and the repeated edge
+pixel's own color, so the composer takes its plain-color path at the pack's scale rather than being
+asked for a tile the VDP never drew), with the host-free coverage named above. C2b cannot land after
+C2: `SmsHdTileVideoFilter::AcceptsExtendedFrame()` already answers true for the SMS, so the widened
+frame reaches the composer the moment C2 ships, and the buffers have to be able to hold it — see
+Consequences; **C3** §3/§4's rule (`WidescreenFallback::SupportsWidescreen`, `WidescreenSupportRule`) and
 the reworded reason string; **C4** the wiring tests, in `UI.HeadlessTests/PlaySheetsViewTests.cs`;
 **C5** the MEP **v2.0** §5.5 wording that admits a host-synthesized edge band — a *major* bump
 under MEP-v1's Versioning line ("a semantic change = major"), since C relaxes a normative
@@ -204,16 +219,39 @@ under MEP-v1's Versioning line ("a semantic change = major"), since C relaxes a 
   row's basis and stores the side tiles in `HdScreenInfo::SideTiles`, and `HdNesPack::Process`
   draws them through the pack's per-pixel pipeline (`<tile>` rules, fallback tiles, **HD
   conditions**, grayscale/emphasis) at the pack's scale, with `<widescreen>` art filling the seam.
-  C's SMS band takes the same route, so widened side pixels keep the same HD-condition processing
-  as any other pixel and a pack's rules for them are not skipped. What stays at the standard width
+  What stays at the standard width
   is only the **recorder/capture cell grid**: `ScreenTiles` remain 256×240 and recorded captures
   stay keyed to the standard-width cell positions (ADR-0236), exactly as W.4 held — no existing
   pack rule and no ADR-0236 cell mask moves.
+
+  **The SMS HD path is the one place C has to widen a buffer, and it is not optional.** The SMS band
+  is made of the picture's own pixels, so — unlike the NES — there is no side *tile* to draw and no
+  `<tile>` rule for the band to key on; but the pixels still go through `SmsHdTileVideoFilter`, and
+  that composer's buffers are sized for the frame the VDP hands it. Today the invariant holds by
+  construction: `SmsVdp::SetHdPack` allocates the `HdTilePixelInfo` grid as `256 * 240`,
+  `ProcessHdPackPixel` writes it at `Scanline * 256 + GetVisiblePixelIndex()`, the emitted
+  `RenderedFrame` is built `256 × 240` with `frame.Data` pointing at that same grid, and
+  `SmsHdTileVideoFilter::AcceptsExtendedFrame()` answers true *because* the grid is as wide as the
+  frame — the Game Gear precedent it cites keeps `Width = 256` precisely since its Reveal drops an
+  overscan crop instead of adding columns. C breaks that equality: its frame is `256 + 2N` wide, and
+  `HdTileVideoFilter::ApplyFilter` takes its stride from the frame (`inWidth = _baseFrameInfo.Width`)
+  and indexes the provenance grid and the pixel buffer alike as `srcY * inWidth + srcX`. A C-sized
+  frame over a 256-wide grid therefore reads past both allocations — the loop still runs `srcY` up to
+  the frame's height and `srcX` up to the extended width — and the GB subclass's refusal of extended
+  frames (which exists for exactly this stride mismatch) does not cover the SMS, whose subclass
+  accepts them. So C2b is not cleanup: it sizes both buffers from the frame's own width and writes
+  the band's synthesized provenance, and it lands with C2, because the widened frame and the widened
+  grid have to arrive together. That is also why the band renders rather than vanishing under a pack:
+  its provenance carries no tile and the edge pixel's own color, so the composer draws the color the
+  VDP produced, scaled, instead of a null replacement.
 - **The stretch is not removed by any option.** `VideoAspectRatio.Widescreen` remains a setting
   Player Settings' Display tab offers; only B and C change what the Enhancements switch *means* on
   a console with no side map.
-- **Traps.** `SmsVdp` is an upstream-owned file (ADR-0163), so C's edits stay behind the
-  frame-width contract and the standard path stays bit-identical. The reason line is a resource id
+- **Traps.** `SmsVdp` is an upstream-owned file (ADR-0163), so C's edits — including C2b's buffer
+  sizing, which lives in the same file — stay behind the frame-width contract and the standard path
+  stays bit-identical. Sizing those buffers from the frame means an SMS frame with *no* extra columns
+  still gets exactly today's 256-wide grid, so nothing changes for a standard frame or for a Game
+  Gear Reveal. The reason line is a resource id
   (`EnhancementsWidescreenUnavailable`), so B's and C's rewording is a localization change, not a
   code change — and `WidescreenSupportRule.UnavailableReasonKey` is the one id both the sheet and
   §4's toast read, so they can never drift apart by accident.
