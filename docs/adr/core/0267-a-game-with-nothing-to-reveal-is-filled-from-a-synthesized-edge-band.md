@@ -1,12 +1,12 @@
-# ADR-0267: A game with nothing to reveal is filled from a synthesised edge band, not left with a disabled switch
+# ADR-0267: A game with nothing to reveal is filled from a synthesized edge band, not left with a disabled switch
 
 - Status: proposed 2026-10-08 — an open either/or (options A–D below), awaiting the owner's pick.
-  Nothing here is implemented, and the current behaviour is *not* a bug: see Context. Every option
+  Nothing here is implemented, and the current behavior is *not* a bug: see Context. Every option
   amends ADR-0253 §1/§3/§4; options B and C also add one source to that ADR's fallback chain, and
   option A instead corrects ADR-0253 §2 in place (a refinement, not a reversal, so no superseded
   line is owed either way). **Option C additionally amends ADR-0253 §2**: its SMS per-console
   scope line ("Reveal is offered but has no map columns to show, so it always uses the fallback")
-  is replaced by the synthesised band, and its Reveal-source contract is widened so that extended
+  is replaced by the synthesized band, and its Reveal-source contract is widened so that extended
   columns no longer imply revealed map columns. See Decision, Option C.
 - Date: 2026-10-08
 - Related: issue #1082; ADR-0253 (the Reveal and its fallback chain — §1 the one switch, §2 the
@@ -50,7 +50,7 @@ the SMS.
   `RomInfo.ConsoleType` and `RomFormat.GameGear`. 19 cases in
   `UI.Tests/Play/WidescreenSupportRuleTests.cs` and
   `Widescreen_switch_is_disabled_with_its_reason_when_the_game_cannot_use_it` in
-  `UI.HeadlessTests/PlaySheetsViewTests.cs` pin the current behaviour and pass.
+  `UI.HeadlessTests/PlaySheetsViewTests.cs` pin the current behavior and pass.
 
 So this is not a bug to fix. The gap the report exposes is in the product:
 
@@ -89,7 +89,7 @@ cheapest first.*
   point at the Display setting.
 - **Option B — the switch applies the fill.** Keep the Widescreen switch *enabled* for a console
   with no side map (and, for consistency, for a game the measurement settled as unsupported), and
-  let turning it on apply `VideoAspectRatio.Widescreen` — the pre-ADR-0253 behaviour, already
+  let turning it on apply `VideoAspectRatio.Widescreen` — the pre-ADR-0253 behavior, already
   implemented in `AspectRatioMath`. The one-line reason is reworded from "nothing to show beside
   the picture" to a fill wording (for example "Nothing to reveal beside the picture; widescreen
   will only stretch it"), so the switch never claims a Reveal it does not have. Cost: re-admits
@@ -97,11 +97,11 @@ cheapest first.*
   the default; changes `WidescreenSupportRule` (§4's "disabled at once" becomes "enabled, fills")
   and its 19 pinned cases; one new resource string. This is the smallest change that answers the
   report as written.
-- **Option C — a synthesised edge band, revealed like real columns. *Recommended.*** The SMS VDP
+- **Option C — a synthesized edge band, revealed like real columns. *Recommended.*** The SMS VDP
   emits its line `2N` columns wider — §2's frame-width arithmetic, unchanged — where the extra
   pixels of a scanline repeat the nearest real column of that same scanline. Those rows are marked
-  in the per-row side-fill map (`RenderedFrame::ExtendedSideFill`) as *synthesised*, and
-  Decision 3's chain gains one ordered source: pack art → **synthesised edge band** → border →
+  in the per-row side-fill map (`RenderedFrame::ExtendedSideFill`) as *synthesized*, and
+  Decision 3's chain gains one ordered source: pack art → **synthesized edge band** → border →
   black. §3's "never on their own" clause is amended to admit the edge band as a mode, while a
   static border and plain black stay fill-ins: the band is made of the picture's own pixels, per
   row, so it tracks the game; a border image and black do not. Cost: real work in `SmsVdp`
@@ -122,7 +122,7 @@ cheapest first.*
 
   - **The per-console scope entry.** §2 currently reads "SMS/SG-1000: Reveal is offered but has no
     map columns to show, so it always uses the fallback (decision 3)." Under C that entry becomes:
-    SMS/SG-1000 has no map columns to reveal, so its extended columns are *synthesised* by the VDP
+    SMS/SG-1000 has no map columns to reveal, so its extended columns are *synthesized* by the VDP
     from the picture's own edge pixels. The claim "always uses the fallback" is dropped — the band
     is produced where the pixels are made, like every other console's Reveal, and only what the
     band leaves unstated (nothing, in the plain case) falls through to Decision 3.
@@ -140,7 +140,7 @@ cheapest first.*
   step must not skip it). The map is therefore expanded to a per-row, per-side source state:
 
   - `none` — nothing is there; the border layer and then black may fill it (today's unfilled).
-  - `synthesised` — the VDP put the band's repeated edge pixels there. Pack art may overwrite it;
+  - `synthesized` — the VDP put the band's repeated edge pixels there. Pack art may overwrite it;
     the border layer must not, and black must not.
   - `game-or-art` — real content: revealed map columns, or pack art already applied. Nothing
     overwrites it (today's filled).
@@ -148,7 +148,7 @@ cheapest first.*
   Fixing `game-or-art` as the only state that the art step skips keeps §3's "pack art comes first"
   order intact while letting the band lose to it. The resolution order for one side of one row is
   **pack art → edge band → border → black**, resolved on this state, in
-  `WidescreenFallback::ApplyChain`: the art step writes over `none` and `synthesised`; the band
+  `WidescreenFallback::ApplyChain`: the art step writes over `none` and `synthesized`; the band
   survives wherever the art left it; `VideoRenderer::CompositeBorder` fills only what is still
   `none`; black is what "still `none`" renders as.
 
@@ -156,7 +156,7 @@ cheapest first.*
   `scripts/core_unit_tests.cpp` — the state map, the band's rows, and the art-over-band order —
   plus `WidescreenSupportRuleTests.cs` in `UI.Tests/Play/` for the switch state a banded console
   now reports, and `UI.HeadlessTests/PlaySheetsViewTests.cs` for the switch and its reason on the
-  sheet. C2's "synthesised" mark and C1's chain position are pinned by the first of these.
+  sheet. C2's "synthesized" mark and C1's chain position are pinned by the first of these.
 - **Option D — a per-game user override.** Leave the switch enabled everywhere, demote the reason
   to a hint, and let the player turn widescreen on for any game. Cost: ADR-0253 §4's per-ROM
   memory becomes advisory and the switch can no longer be trusted as "this game has a mode"; and
@@ -172,9 +172,12 @@ promise to SMS mean something.
 **If C or B is accepted it is a new PRD slice** in Part B §8, after W.7, with W.5's switch state
 revisited (§4's early-disable clause) and §6.1's WideScrn row updated. Slice plan for C:
 **C1** the edge-band source and its position in `WidescreenFallback::ApplyChain`, with the
-`W253C:`-family host-free tests; **C2** `SmsVdp` emitting the extra columns and the "synthesised"
+`W253C:`-family host-free tests; **C2** `SmsVdp` emitting the extra columns and the "synthesized"
 mark; **C3** §3/§4's rule (`WidescreenFallback::SupportsWidescreen`, `WidescreenSupportRule`) and
-the reworded reason string; **C4** the wiring tests, in `UI.HeadlessTests/PlaySheetsViewTests.cs`.
+the reworded reason string; **C4** the wiring tests, in `UI.HeadlessTests/PlaySheetsViewTests.cs`;
+**C5** the MEP **v2.0** §5.5 wording that admits a host-synthesized edge band — a *major* bump
+under MEP-v1's Versioning line ("a semantic change = major"), since C relaxes a normative
+`MUST NOT`, and it must land with or before C2 or the host ships against its own published spec.
 
 ## Consequences
 
@@ -182,14 +185,30 @@ the reworded reason string; **C4** the wiring tests, in `UI.HeadlessTests/PlaySh
   are known unsupported before the game runs, so the switch is disabled at once" is replaced by a
   mode for those consoles; with A, §2's SMS sentence must be corrected in place so it stops
   promising a fallback §3 forbids.
-- **MEP-v1 §5.5 needs a sentence if C is picked.** The section says hosts "MUST NOT synthesize
-  widescreen art on their own". That rule is about a host inventing a pack section's authored
-  content; an edge band derived per row from the picture's own pixels is not authored art, but the
-  distinction has to be written down, or the next reader reads C as a spec violation. No spec
-  version bump is otherwise needed — C adds no pack section and no manifest field.
-- **The standard frame stays the gate.** ADR-0162's accuracy suite compares the switch-off output
-  unchanged; C's extra columns are presentation only and must stay out of the HD conditions, the
-  captures and the recorder's tiles exactly as W.1's do (ADR-0236).
+- **MEP-v1 §5.5 needs a revision if C is picked, and that revision is a *major* bump.** The
+  section says hosts "MUST NOT synthesize widescreen art on their own". That rule is about a host
+  inventing a pack section's authored content; an edge band derived per row from the picture's own
+  pixels is not authored art, but the permission has to be written down, or the next reader reads
+  C as a spec violation. Writing it down relaxes a normative `MUST NOT`, and MEP-v1's own
+  **Versioning** line is explicit: *"semver — new optional field = minor; semantic change =
+  major"*. Relaxing what a host is forbidden to do is a semantic change, not a new optional field,
+  so it requires a **major bump to v2.0**. C adds no pack section and no manifest field — the bump
+  is owed for the normative relaxation alone, and this ADR does not amend the spec. C therefore
+  carries two deliverables: the code slices below, and the MEP **v2.0** §5.5 wording that admits a
+  host-synthesized edge band while keeping the ban on synthesized *art*. Landing C without that
+  revision leaves a host that follows C in violation of the published spec.
+- **The standard frame stays the gate, but the widened sides still go through the HD pipeline.**
+  ADR-0162's accuracy suite compares the switch-off output unchanged, and the standard path stays
+  bit-identical. The extra columns are *not* exempted from pack processing: ADR-0253 **W.4**
+  already settled that for the NES — with Reveal on and an HD pack loaded, `HdNesPpu` captures each
+  row's basis and stores the side tiles in `HdScreenInfo::SideTiles`, and `HdNesPack::Process`
+  draws them through the pack's per-pixel pipeline (`<tile>` rules, fallback tiles, **HD
+  conditions**, grayscale/emphasis) at the pack's scale, with `<widescreen>` art filling the seam.
+  C's SMS band takes the same route, so widened side pixels keep the same HD-condition processing
+  as any other pixel and a pack's rules for them are not skipped. What stays at the standard width
+  is only the **recorder/capture cell grid**: `ScreenTiles` remain 256×240 and recorded captures
+  stay keyed to the standard-width cell positions (ADR-0236), exactly as W.4 held — no existing
+  pack rule and no ADR-0236 cell mask moves.
 - **The stretch is not removed by any option.** `VideoAspectRatio.Widescreen` remains a setting
   Player Settings' Display tab offers; only B and C change what the Enhancements switch *means* on
   a console with no side map.
