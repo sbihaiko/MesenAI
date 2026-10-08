@@ -44,11 +44,26 @@ public:
 	//IKeyManager in this codebase keeps (Core/Shared/Interfaces/IKeyManager.h).
 	static constexpr uint16_t KeyCodeCount = 0x205;
 
-	AliasedKeyState() { Reset(); }
+	AliasedKeyState()
+	{
+		//Only construction starts the table empty - and it is the one moment the
+		//table is the class's to write. From here on it is the backend's (Reset,
+		//below, leaves it standing), which is why the memset below is not in Reset.
+		memset(_map, 0, sizeof(_map));
+		Reset();
+	}
 
+	//Drops every key this state holds, published and per-host-code alike.
+	//
+	//It does NOT touch the host-code table: the backend fills that once, right
+	//after constructing this object (MacOSKeyManager's SetMapping loop over its
+	//own _keyCodeMap), and never fills it again. A host that clears the key state
+	//on a window-focus change or on entering a menu is clearing held keys, not
+	//unmapping its keyboard - a Reset() that zeroed _map too left every host code
+	//unmapped for the rest of the process, so no host key was ever published
+	//again (#1097). The table belongs to the backend, not to the state.
 	void Reset()
 	{
-		memset(_map, 0, sizeof(_map));
 		memset(_rawDown, 0, sizeof(_rawDown));
 		memset(_downCount, 0, sizeof(_downCount));
 	}

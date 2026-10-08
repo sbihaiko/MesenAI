@@ -6698,6 +6698,39 @@ namespace
 			"BlocoO.6: a repeated key-down of one host key still needs only one release");
 	}
 
+	//#1097: the macOS backend calls Reset() from ResetKeyState(), which the host
+	//runs on every window-activation change and on entering a menu - and it is the
+	//only place besides its own constructor that asks for a reset. The table is
+	//not the state's to clear: MacOSKeyManager fills its 128 rows once, right after
+	//construction, and never refills them, so a Reset() that also zeroed _map left
+	//every host key unmapped for the rest of the process, and no game key, shortcut
+	//or overlay binding published again. The rule: Reset() drops the key state and
+	//the counters and leaves the host-code table standing.
+	void TestResetKeepsTheHostCodeTable()
+	{
+		AliasedKeyState state;
+		state.SetMapping(1, 44);   //S
+		state.SetMapping(36, 6);   //Return
+
+		//What Reset() is for: nothing stays held across it, whatever was down.
+		state.SetKeyState(1, true);
+		Check(state.IsPressed(44), "BlocoO.6: a host key published before the reset is held");
+		state.Reset();
+		Check(!state.IsPressed(44), "BlocoO.6: Reset drops the key that was held (#1097)");
+		Check(state.GetPressedKeys().empty(), "BlocoO.6: ...and reports none pressed");
+
+		//The counters are cleared with it: the next key-down is a first key-down,
+		//not a repeat of one the reset already dropped, so it publishes.
+		Check(state.SetKeyState(1, true),
+			"BlocoO.6: a host key still publishes after Reset - the table survives it (#1097)");
+		Check(state.IsPressed(44), "BlocoO.6: ...and the code it names reads pressed");
+
+		//Both halves of a shared code still answer, so the table is whole and not
+		//just the one row that happened to be exercised above.
+		Check(state.SetKeyState(36, true), "BlocoO.6: ...and so does a second row of the table");
+		Check(state.IsPressed(6), "BlocoO.6: ...publishing its own code");
+	}
+
 	//A binding may name pad keys from two families at once, and no single pad can
 	//answer it: the button bytes are only buttons inside their own family, so an
 	//XInput pad holding buttons 7 and 4 must not stand in for a binding written as
@@ -17736,6 +17769,7 @@ TestW6TheFiltersAcceptTheExtendedFrame();
 	TestThePadsButtonOrderIsPerBackend();
 	TestAHostCodeTheTableCannotNamePublishesNoKey();
 	TestASharedCodeStaysDownUntilItsLastHostCodeIsReleased();
+	TestResetKeepsTheHostCodeTable();
 	TestPadRuleLeavesTheKeyboardAndMouseExact();
 
 	TestSheetStableScreensCollapseRepeats();
