@@ -37,7 +37,7 @@ namespace Mesen.ViewModels
 		private List<PlaySelectRomRow> _all = new();
 		private TaskCompletionSource<PlaySelectRomRow?>? _request;
 
-		//The picked row, or null when the sheet was cancelled or dismissed.
+		//The picked row, or null when the sheet was canceled or dismissed.
 		public Task<PlaySelectRomRow?> Request(string archiveName, IReadOnlyList<ArchiveRomEntry> entries)
 		{
 			_request?.TrySetResult(null);

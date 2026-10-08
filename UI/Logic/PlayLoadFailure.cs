@@ -30,7 +30,7 @@ public static class PlayLoadFailure
 		return knownGameExtension ? LoadFailureCause.Damaged : LoadFailureCause.NotAGame;
 	}
 
-	//A load that stopped because the user cancelled W-P13 is not a broken file:
+	//A load that stopped because the user canceled W-P13 is not a broken file:
 	//the status line already says which BIOS the game needs.
 	public static bool ShowsAlert(bool biosPromptCancelled) => !biosPromptCancelled;
 

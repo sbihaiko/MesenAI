@@ -438,7 +438,7 @@ namespace MesenSheets
 		}
 	}
 
-	//How many of the four NES colour indexes a tile's 64 pixels actually use.
+	//How many of the four NES color indexes a tile's 64 pixels actually use.
 	static uint32_t DistinctColorCount(const SheetTileKey& tile)
 	{
 		bool used[4] = {};
@@ -453,7 +453,7 @@ namespace MesenSheets
 		return (uint32_t)(used[0] + used[1] + used[2] + used[3]);
 	}
 
-	//A glyph: every drawn tile of the cell uses at most 2 colour indexes
+	//A glyph: every drawn tile of the cell uses at most 2 color indexes
 	//(ADR-0153 §3). Shapes the lookup cannot resolve carry no pixels, so they
 	//neither prove nor disprove the test.
 	static bool IsFontCell(const MetatileKey& key, const TileLookup& lookup)
@@ -605,8 +605,8 @@ namespace MesenSheets
 
 	//ADR-0153 §3 (amended): a rare cell is noise only when it belongs nowhere.
 	//A bush seen once but ringed by sand is scene; a stray "GAME OVER" is not.
-	//The neighbour must be a *common* scene cell (Count > 1), which is what
-	//"ringed by sand" means. Accepting any scene neighbour would rescue every
+	//The neighbor must be a *common* scene cell (Count > 1), which is what
+	//"ringed by sand" means. Accepting any scene neighbor would rescue every
 	//singleton - inside a full 30x32 screen every metatile has one - and the
 	//noise budget would read 0% on every game instead of measuring anything.
 	//"Scene" here is the provisional classification, which does not depend on

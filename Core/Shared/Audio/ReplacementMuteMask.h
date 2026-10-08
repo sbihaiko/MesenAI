@@ -9,7 +9,7 @@
 //
 //One bit per melodic/DMC channel index: 0 Square1, 1 Square2, 2 Triangle,
 //3 Noise, 4 DMC. Expansion channels (FDS, MMC5, VRC6, VRC7, Namco163,
-//Sunsoft5B) have no bit and always pass, matching pre-item-9 behaviour.
+//Sunsoft5B) have no bit and always pass, matching pre-item-9 behavior.
 //
 //This header deliberately depends on nothing: the mixer must not pull in
 //Core/Shared/Audio/ChannelRoleClassifier (ADR-0133 rejects coupling the mixer

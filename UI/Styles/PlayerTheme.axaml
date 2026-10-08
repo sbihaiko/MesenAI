@@ -12,7 +12,7 @@
 	Player workspace host and the Player chrome (shell bar, status line) carry
 	in Player mode only. Classic windows, dialogs, the debugger and Advanced
 	mode never match, and keep UI/Styles/MesenStyles.xaml exactly as it is
-	(UI.HeadlessTests/PlayerThemeScopeTests). The component catalogue and
+	(UI.HeadlessTests/PlayerThemeScopeTests). The component catalog and
 	usage is in UI/AGENTS.md ("Player theme").-->
 
 	<Styles.Resources>
@@ -33,7 +33,7 @@
 		<Color x:Key="PlayerTintTextRemasterColor">#963CC8</Color>
 		<Color x:Key="PlayerTintTextShareColor">#248A3D</Color>
 
-		<!-- Colours the renderer draws as literals -->
+		<!-- Colors the renderer draws as literals -->
 		<Color x:Key="PlayerBarBackgroundColor">#FAFAFB</Color>
 		<Color x:Key="PlayerBarSeparatorColor">#DEDEE2</Color>
 		<Color x:Key="PlayerStatusSeparatorColor">#E2E2E6</Color>
@@ -196,7 +196,7 @@
 		<BoxShadows x:Key="PlayerShadowOverlay">0 12 26 0 #6E000000</BoxShadows>
 		<BoxShadows x:Key="PlayerShadowMenu">0 6 14 0 #50000000</BoxShadows>
 		<!-- ring (spread, no blur) + near halo + wide bloom. The two halos are
-		     the same colour as the ring, at 35% and 18% alpha, so the glow reads
+		     the same color as the ring, at 35% and 18% alpha, so the glow reads
 		     as one light rather than as a ring with fuzz on it. -->
 		<BoxShadows x:Key="PlayerFocusRing">0 0 0 2 #7FB0FF, 0 0 10 2 #593C7BE6, 0 0 22 7 #2E3C7BE6</BoxShadows>
 		<!-- The same light, turned inward, for controls a parent clips and which
@@ -204,7 +204,7 @@
 		<BoxShadows x:Key="PlayerFocusGlowInset">inset 0 0 0 2 #7FB0FF, inset 0 0 14 3 #2E3C7BE6</BoxShadows>
 
 		<!-- Icons: filled glyphs in a 20 x 20 box, drawn like the renderer's
-		     Canvas.icon(); use with PathIcon (Foreground = colour). -->
+		     Canvas.icon(); use with PathIcon (Foreground = color). -->
 		<StreamGeometry x:Key="PlayerIconPlay">M4.5,2 L4.5,18 L18,10 Z</StreamGeometry>
 		<StreamGeometry x:Key="PlayerIconRemaster">M4.27,18.27 L1.73,15.73 L12.73,4.73 L15.27,7.27 Z M13.5,1.5 L18.5,6.5 L16.5,8.5 L11.5,3.5 Z M0.6,17.4 a2.2,2.2 0 1 1 4.4,0 a2.2,2.2 0 1 1 -4.4,0 Z</StreamGeometry>
 		<StreamGeometry x:Key="PlayerIconPencil">M3.2,18.6 L1.4,16.8 L13.6,4.6 L15.4,6.4 Z M14.6,3.6 L16.2,2 L18,3.8 L16.4,5.4 Z</StreamGeometry>
@@ -646,7 +646,7 @@
 	<!-- ============================================================ surfaces -->
 	<!-- card: white, hairline, soft shadow, radius 12 (.hero: 16). sheet: the
 	     modal surface over a dimmed workspace, radius 14. overlay-card: W-P4's
-	     pause panel, radius 18. Each sets its own text colour (#716): TEXT on a
+	     pause panel, radius 18. Each sets its own text color (#716): TEXT on a
 	     light surface, whatever the app theme. -->
 	<Style Selector=".player Border.card">
 		<Setter Property="Background" Value="{StaticResource PlayerCardBrush}" />
@@ -945,7 +945,7 @@
 	<Style Selector=".player ComboBox.popup:focus-visible /template/ Border#Background, .player c|EnumComboBox.popup ComboBox#Dropdown:focus-visible /template/ Border#Background">
 		<Setter Property="BoxShadow" Value="{StaticResource PlayerFocusRing}" />
 	</Style>
-	<!-- Disabled: the render's greyed field (W-P10 Smoothing), no stepper. -->
+	<!-- Disabled: the render's grayed field (W-P10 Smoothing), no stepper. -->
 	<Style Selector=".player ComboBox.popup:disabled, .player c|EnumComboBox.popup ComboBox#Dropdown:disabled">
 		<Setter Property="Opacity" Value="1" />
 		<Setter Property="Background" Value="{StaticResource PlayerDisabledFieldBrush}" />
@@ -961,7 +961,7 @@
 
 	<!-- ============================================================ segmented tab strip -->
 	<!-- <TabControl Classes="segmented">: the renderer's segmented() as a tab
-	     strip - a centred FILL track (radius 8) of 96 px segments, narrowing
+	     strip - a centered FILL track (radius 8) of 96 px segments, narrowing
 	     together when the strip has more tabs than 96 px each can hold, the
 	     selected one white (radius 6, soft shadow), the page below. -->
 	<Style Selector=".player TabControl.segmented">
@@ -1240,7 +1240,7 @@
 		</Style>
 
 		<!-- hud: the dark pill over the game (W-R2), radius 12, white text. A
-		     `primary hud` button is the grey Stop. -->
+		     `primary hud` button is the gray Stop. -->
 		<Style Selector=".player Border.hud">
 			<Setter Property="Background" Value="{StaticResource PlayerHudBrush}" />
 			<Setter Property="CornerRadius" Value="{StaticResource PlayerRadiusCard}" />
@@ -1260,7 +1260,7 @@
 
 	<!-- ============================================================ play sheets -->
 	<!-- Shared by the Play sheets W-P5 … W-P16 (and the Save states slot grid).
-	     A sheet is <Border Classes="sheet"> centred over the dimmed game (the
+	     A sheet is <Border Classes="sheet"> centered over the dimmed game (the
 	     edge-flow sheets put it on a Panel.scrim, which also takes a drop). -->
 	<Style Selector=".player Panel.scrim">
 		<Setter Property="Background" Value="{StaticResource PlayerScrimBrush}" />

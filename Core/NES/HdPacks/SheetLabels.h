@@ -12,7 +12,7 @@
 //reader can tell it from a human's name and let the human's win (ADR-0183 §5:
 //a names.json caption beats it in every reader).
 //
-//Deterministic and stable: the inputs are the serialised fields themselves,
+//Deterministic and stable: the inputs are the serialized fields themselves,
 //so two saves of one recording produce the same labels, and a label never
 //depends on anything the sidecar does not also state.
 //

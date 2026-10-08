@@ -461,7 +461,7 @@ namespace Mesen.Logic
 
 		//--- writing the MEP-ized output (ADR-0147) ---------------------------
 
-		//The stamp that makes an output folder recognisably ours on the next
+		//The stamp that makes an output folder recognizably ours on the next
 		//install: DecideOutputFolderHandling above refuses a non-empty folder
 		//without it, so a folder that carries content and no stamp is read as the
 		//user's own work.

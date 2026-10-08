@@ -184,7 +184,7 @@
 				<!--"Sim, quadro congelado" (2026-10-03): the native picture is hidden
 				under W-P4 and its sheets (PlayGameLayer), so the frame the game
 				stopped on stands in for it, blurred like W-P4's render, in the live
-				picture's box (SoftwareRenderer.Width/Height, centred and unrounded
+				picture's box (SoftwareRenderer.Width/Height, centered and unrounded
 				like the native renderer) so nothing jumps.-->
 				<Image
 					Name="PausedGameFrame"
@@ -364,7 +364,7 @@
 				</Border>
 
 				<!--#716 / ADR-0249: the sheets the overlay opens are light sheets
-				(Border.sheet, W-P5 … W-P11) with their own text colour, so they need
+				(Border.sheet, W-P5 … W-P11) with their own text color, so they need
 				no Dark theme scope any more. PlaySheetsContrastTests checks every
 				text's contrast under both app themes.-->
 				<!--G.4 (W-P7, was P.7 §6.1): the Enhancements sheet.-->

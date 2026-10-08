@@ -1,6 +1,6 @@
 //ADR-0153 §6: screen-based and continuous stitching. Port of the 2026-09-04
 //spike (scripts/spike_tile_sheets.py: shift_match, stitch, shift_match_x,
-//stitch_continuous), with one behavioural change the ADR asks for: a cut in the
+//stitch_continuous), with one behavioral change the ADR asks for: a cut in the
 //continuous stitcher starts a new map instead of leaving a gap in the old one.
 //F9.8 adds the rule the spike never had: a screen joins a map only on positive
 //adjacency evidence, and a recording that produces none produces no map.
@@ -830,10 +830,10 @@ namespace MesenSheets
 		//How the palette plane is read (ADR-0159 amendment). An unknown id - no
 		//cell drawn there, a caller that carries no palette evidence at all,
 		//or a recording past the id space - is evidence of nothing, so it reads
-		//as "the colours may well be the same" on both sides of the rule: the
+		//as "the colors may well be the same" on both sides of the rule: the
 		//candidate stays eligible and the rival stays counted. That is the same
 		//degradation as an out-of-range capturedIndex - back to the pre-amendment
-		//behaviour, never to no anchors and never to an anchor the evidence does
+		//behavior, never to no anchors and never to an anchor the evidence does
 		//not support.
 		bool PaletteMayMatch(const GridFrame& screen, const GridFrame& other, uint32_t row, uint32_t col)
 		{

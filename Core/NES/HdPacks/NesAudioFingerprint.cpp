@@ -210,7 +210,7 @@ void NesAudioReplacer::OnFrame(const ApuState& apu)
 
 //F5.4g Block C item 9 (ADR-0133): compute the per-channel replacement mute
 //mask from the ChannelRoleClassifier. Default 0x0F mutes Square1..Noise
-//(today's behaviour); a melodic channel flagged SFX (stable, hysteresis-held
+//(today's behavior); a melodic channel flagged SFX (stable, hysteresis-held
 //by the classifier) has its bit cleared so it passes dry. DMC and expansion
 //channels have no bit and always play. Degraded modes leave 0x0F untouched:
 //with EnhancedAudio or SFX separation off the classifier never flags anything,

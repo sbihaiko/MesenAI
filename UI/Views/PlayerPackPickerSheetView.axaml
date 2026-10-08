@@ -15,7 +15,7 @@
 	stores the per-ROM preference (P.3) and applies it; Cancel/Esc plays
 	un-enhanced and asks again next launch. The last row is "No pack"
 	(PlayerPackChoice.NoPackRow): it stores PackPreferenceResolver.NoPack,
-	which the core honours (MepPackManager::PreferenceAllowsPack).-->
+	which the core honors (MepPackManager::PreferenceAllowsPack).-->
 	<!--ADR-0249 (W-P5): a light sheet - option cards (RadioButton.option),
 	the 👍 count at the card's top right, Cancel and Use This Pack.-->
 	<Border

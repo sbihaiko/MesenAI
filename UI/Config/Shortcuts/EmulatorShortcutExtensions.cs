@@ -10,7 +10,7 @@ namespace Mesen.Config.Shortcuts
 	//dual-compiles into UI.Tests and has to name the actions it filters (ADR-0255
 	//slice 4's EXTRA BUTTONS section), so the enum has to be reachable from there
 	//- and these methods reach ConfigManager and InputApi, which is exactly what
-	//cannot. Behaviour is unchanged; only the file boundary moved.
+	//cannot. Behavior is unchanged; only the file boundary moved.
 	public static class EmulatorShortcutExtensions
 	{
 		public static KeyCombination? GetShortcutKeys(this EmulatorShortcut shortcut)

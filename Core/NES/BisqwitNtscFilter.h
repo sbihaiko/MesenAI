@@ -59,6 +59,6 @@ public:
 	//ADR-0253 W.6: the signal generator, the decoded row and the per-row phase
 	//correction all take the width of the frame the filter was handed, so a
 	//widescreen Reveal frame is decoded whole instead of being cropped to its
-	//standard centre (BaseVideoFilter::AcceptsExtendedFrame)
+	//standard center (BaseVideoFilter::AcceptsExtendedFrame)
 	bool AcceptsExtendedFrame() override { return true; }
 };

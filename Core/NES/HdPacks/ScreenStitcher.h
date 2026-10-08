@@ -29,7 +29,7 @@ namespace MesenSheets
 	//something the anchor did not already say (kStitchBandLead) - the second
 	//test is what a screen made mostly of one backdrop tile cannot fake.
 	//A direct A-to-B border overlap is *not*
-	//accepted as a second, independent path: screen mode places neighbours a
+	//accepted as a second, independent path: screen mode places neighbors a
 	//whole screen apart, so two screens that genuinely share a column band are
 	//not a screen step apart at all, and honouring such a link would place the
 	//candidate at a geometry this model cannot express.

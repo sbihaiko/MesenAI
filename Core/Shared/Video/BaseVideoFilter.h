@@ -66,7 +66,7 @@ public:
 	//ADR-0253: whether this filter decodes a frame of any width, so a
 	//widescreen Reveal frame (RenderedFrame::ExtendedColumns > 0) can be
 	//handed to it whole. A filter that assumes the console's standard width
-	//(the NES NTSC filters) gets the standard centre instead - VideoDecoder
+	//(the NES NTSC filters) gets the standard center instead - VideoDecoder
 	//crops it. W.6 widens those filters.
 	virtual bool AcceptsExtendedFrame() { return false; }
 

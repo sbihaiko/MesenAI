@@ -23,7 +23,7 @@
 	lights. The roles have no effect when the client area is not extended.-->
 	<!--ADR-0249: in Player mode MainWindow gives this bar the `player` class,
 	and the bar follows W-S1's render: light chrome with a hairline, a tinted
-	badge, the 15 px semibold name and a grey ⋯. The classic look stays the
+	badge, the 15 px semibold name and a gray ⋯. The classic look stays the
 	default here (these styles sit closer than PlayerTheme.axaml, so both live
 	in this file).-->
 	<UserControl.Resources>
@@ -302,7 +302,7 @@
 		<Style Selector=":is(UserControl).player TextBlock.switcher-glyph, :is(UserControl).player TextBlock.switcher-checkmark">
 			<Setter Property="IsVisible" Value="False" />
 		</Style>
-		<!--ADR-0250 (W-S3): Classic's badge is grey with the gear.-->
+		<!--ADR-0250 (W-S3): Classic's badge is gray with the gear.-->
 		<Style Selector=":is(UserControl).player Border.switcher-badge.classic">
 			<Setter Property="Background" Value="{StaticResource PlayerGrayBrush}" />
 		</Style>

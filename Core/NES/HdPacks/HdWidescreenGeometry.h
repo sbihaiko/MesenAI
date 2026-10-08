@@ -7,14 +7,14 @@
 //coordinates the HD pack pipeline speaks, and how wide the HD frame gets once
 //they are part of it.
 //
-//The picture keeps its own coordinates: a centre pixel is still (0,0)-(255,239)
+//The picture keeps its own coordinates: a center pixel is still (0,0)-(255,239)
 //for every `<tile>` rule, `<background>` bound and condition, so what a pack
 //draws over the 256-px picture is what it drew before the Reveal existed. The
 //extra columns live *outside* that box - the left side is x = -64..-1 and the
 //right side x = 256..319 - so widening the picture never renumbers a pixel the
 //pack already knows about, and a rule that reads a position can tell "not in the
 //picture" (IsPicturePixel) from "in it" instead of wrapping onto an unrelated
-//centre pixel.
+//center pixel.
 //
 //Host-free on purpose: scripts/core_unit_tests.cpp drives it with the same fake
 //mapper the W.1 cases use.
@@ -34,7 +34,7 @@ namespace HdWidescreenColumns
 
 	//Whether (x, y) is a pixel of the 256x240 picture - the only pixels a pack's
 	//own rules were written for. A rule that reads a position at a side pixel
-	//gets `false` rather than a wrap-around read of some unrelated centre pixel:
+	//gets `false` rather than a wrap-around read of some unrelated center pixel:
 	//the failure mode is no improvement (the ROM's own tile draws), never a hole.
 	inline bool IsPicturePixel(int32_t x, int32_t y)
 	{
@@ -42,7 +42,7 @@ namespace HdWidescreenColumns
 	}
 
 	//The picture-relative x of column `column` (0..ExtraColumns-1) of one side.
-	//Left: -64..-1, right: 256..319. The centre's own coordinates never move.
+	//Left: -64..-1, right: 256..319. The center's own coordinates never move.
 	inline int32_t ExtraColumnX(bool right, uint32_t column)
 	{
 		return right ? (int32_t)(PictureWidth + column) : (int32_t)column - (int32_t)ExtraColumns;
@@ -74,7 +74,7 @@ namespace HdWidescreenColumns
 
 	//The HD frame a pack has to fill, once the Reveal's sides are part of it.
 	//The sides are added around the picture and the overscan keeps cropping the
-	//picture exactly as it does today, so the centre of an extended HD frame is
+	//picture exactly as it does today, so the center of an extended HD frame is
 	//the frame the pack would have produced without the Reveal - and a recorded
 	//`<background>` and ADR-0236's cell mask, both written against 256 px, keep
 	//meaning what they meant. What that costs is a seam of overscan.Left/Right

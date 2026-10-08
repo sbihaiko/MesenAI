@@ -106,7 +106,7 @@ namespace MesenSheets
 	}
 
 	//How much of a cell is drawn at all: pixels that are not its most common
-	//colour. The alias budget is a share of *this*, not of the cell area - with
+	//color. The alias budget is a share of *this*, not of the cell area - with
 	//an area budget every sparse metatile falls into whichever near-empty cell
 	//came first, and it does: Ninja Gaiden collapsed 465 vocabulary entries to
 	//37 cells with one of them swallowing 335 of them.
@@ -139,7 +139,7 @@ namespace MesenSheets
 				continue;
 			}
 			//Compare the four channels, so a pixel that is merely a shade off
-			//costs less than a pixel that is a different colour entirely.
+			//costs less than a pixel that is a different color entirely.
 			for(int shift = 0; shift < 32; shift += 8) {
 				if(((a[i] >> shift) & 0xFF) != ((b[i] >> shift) & 0xFF)) {
 					diff++;
@@ -685,7 +685,7 @@ namespace MesenSheets
 	}
 
 	//ADR-0170 §1 (F9.19): see SheetRender.h. Everything hard about a pose was
-	//decided by BuildPoses - the clustering, the normalisation, the sets-equal
+	//decided by BuildPoses - the clustering, the normalization, the sets-equal
 	//identity, the thresholds and the cap - so this is a transcription, and it
 	//deliberately stays one: no field here is computed, because a number the
 	//serializer derives is a number the unit tests cannot reach.

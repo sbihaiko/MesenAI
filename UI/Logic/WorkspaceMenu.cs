@@ -179,7 +179,7 @@ public sealed record GameCapabilities(bool FdsDisk = false, bool VsSystem = fals
 public static class WorkspaceMenu
 {
 	//Decision 4: the Super Game Boy viewers keep both entries, the second set
-	//labelled "(Game Boy)" so the same name never appears twice.
+	//labeled "(Game Boy)" so the same name never appears twice.
 	public const string SuperGameBoyViewerHint = "Game Boy";
 
 	private static readonly MenuEntry[] ClassicFile = {

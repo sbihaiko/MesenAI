@@ -5,7 +5,7 @@
 //the capture tools that measure it.
 //
 //W.1 put the extra columns in the frame behind a contract and left every tool
-//that assumes 256 px on the decoder's standard-centre crop
+//that assumes 256 px on the decoder's standard-center crop
 //(BaseVideoFilter::AcceptsExtendedFrame). W.6 makes those tools width-driven
 //instead. Host-free on purpose: every number here is asserted in
 //scripts/core_unit_tests.cpp without an Emulator, and the shipping code calls
@@ -23,7 +23,7 @@ namespace WidescreenFrameFlow
 	//------------------------------------------------------------------------
 
 	//Which columns of a capture are the standard picture: the `standardWidth`
-	//columns centred in a `frameWidth`-wide frame, i.e. `(frameWidth -
+	//columns centered in a `frameWidth`-wide frame, i.e. `(frameWidth -
 	//standardWidth) / 2` in from either edge. The extra columns are
 	//presentation only (ADR-0253 §2), so a capture of an extended frame is
 	//compared against a frame drawn with the switch off on this region and
@@ -32,14 +32,14 @@ namespace WidescreenFrameFlow
 	//The caller names the *standard* width it expects - the console's own,
 	//times whatever scale filter ran - rather than the number of extra columns,
 	//because that is the half of the arithmetic it knows and the function does
-	//not. It also makes "there is no centre here" a real answer instead of an
+	//not. It also makes "there is no center here" a real answer instead of an
 	//assumption: a capture no wider than the standard picture (a standard
 	//frame), one narrower than it, and one whose extra columns do not split
-	//evenly all have no centre.
+	//evenly all have no center.
 	//
-	//This answers "is there a centre of this width in this capture", not "is
+	//This answers "is there a center of this width in this capture", not "is
 	//this capture an extended frame": a frame widened by an NTSC filter also
-	//has an arithmetic centre, and it is not the picture. A tool that must only
+	//has an arithmetic center, and it is not the picture. A tool that must only
 	//measure extended frames still checks the frame's shape itself.
 	struct Centre
 	{
@@ -61,8 +61,8 @@ namespace WidescreenFrameFlow
 		return { extra / 2, standardWidth };
 	}
 
-	//Copies that centre out of a `width` x `height` capture, row by row. False
-	//(and `out` cleared) for a capture whose centre does not exist, so a
+	//Copies that center out of a `width` x `height` capture, row by row. False
+	//(and `out` cleared) for a capture whose center does not exist, so a
 	//standard capture is refused rather than read as if it were extended.
 	inline bool ExtractCentre(const uint32_t* pixels, uint32_t width, uint32_t height, uint32_t standardWidth, std::vector<uint32_t>& out)
 	{
@@ -122,7 +122,7 @@ namespace WidescreenFrameFlow
 			return inWidth == 0 ? 1.0 : (double)BlitOutputWidth(inWidth) / inWidth;
 		}
 
-		//Bisqwit's decoder carries the colour subcarrier as 8 NTSC samples per
+		//Bisqwit's decoder carries the color subcarrier as 8 NTSC samples per
 		//frame pixel, so a row's signal is 8 samples for every pixel of the
 		//frame it was handed.
 		constexpr int32_t SignalsPerPixel = 8;

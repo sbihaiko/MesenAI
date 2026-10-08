@@ -15,7 +15,7 @@
 	adjacency.json the hint says to record again and the button is disabled
 	(rule 4). Esc closes it.-->
 	<!--ADR-0249 (W-R7): in Player mode a light 460 px sheet over the scrim -
-	an 18 px title, the body, the hint in the secondary colour, Cancel and
+	an 18 px title, the body, the hint in the secondary color, Cancel and
 	Open Composer (with its arrow) at 32 px. Advanced keeps the dark card.-->
 	<UserControl.Styles>
 		<Style Selector="Border#RemasterComposeCard">

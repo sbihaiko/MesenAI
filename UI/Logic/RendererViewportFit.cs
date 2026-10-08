@@ -31,7 +31,7 @@ public readonly struct RendererViewport
 	public uint RealHeight { get; init; }
 
 	//What is left over on each axis, in logical units, split evenly between the
-	//two bands the picture is centred in. Pillarbox = vertical bands on the
+	//two bands the picture is centered in. Pillarbox = vertical bands on the
 	//left/right; letterbox = horizontal bands on the top/bottom. Exactly one of
 	//the two is non-zero for a picture that does not match the panel's shape.
 	public double PillarboxWidth { get; init; }

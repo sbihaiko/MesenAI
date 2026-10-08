@@ -157,7 +157,7 @@ void OggMixer::MixFaded(IOggSource* source, int16_t* out, uint32_t sampleCount, 
 
 	uint32_t rampCount = samplesLeft < sampleCount ? samplesLeft : sampleCount;
 	//Rounded, not truncated: the endpoints are the only place the ramp is
-	//quantised to 8 bits, so half an LSB of error is worth the +0.5.
+	//quantized to 8 bits, so half an LSB of error is worth the +0.5.
 	uint8_t volumeStart = (uint8_t)(_bgmVolume * factor(samplesLeft) + 0.5);
 	uint8_t volumeEnd = (uint8_t)(_bgmVolume * factor(samplesLeft - rampCount) + 0.5);
 	source->ApplySamples(out, rampCount, volumeStart, volumeEnd);
