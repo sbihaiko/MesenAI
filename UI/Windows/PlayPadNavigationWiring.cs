@@ -119,9 +119,22 @@ namespace Mesen.Windows
 
 		//The field the open keyboard types into, or null - #1062: the claim that
 		//keeps the ring on the search box asks for a keyboard bound to THAT box.
-		public static TextBox? KeyboardFieldForTest(MainWindow window)
+		//#1064: this is the shipping reader, and it is private on purpose. The
+		//claim in RomPickerFocusTarget is not test code, so it may not reach a
+		//*ForTest door - a seam production leans on is load-bearing and can no
+		//longer be moved by the refactor it exists to allow. The public
+		//KeyboardFieldForTest below delegates here, which is what keeps the
+		//headless suite's door open onto the same answer.
+		private static TextBox? KeyboardField(MainWindow window)
 		{
 			return Installed.TryGetValue(window, out Bridge? bridge) ? bridge.KeyboardField : null;
+		}
+
+		//The headless suite's door onto the same answer. It adds nothing of its
+		//own: whatever a case reads here is what the ring's claim read (#1064).
+		public static TextBox? KeyboardFieldForTest(MainWindow window)
+		{
+			return KeyboardField(window);
 		}
 
 		//The header control the sheet parked this window's ring on while a restore
@@ -362,7 +375,7 @@ namespace Mesen.Windows
 				//over it. The claim keeps the ring where it is rather than taking the
 				//query away mid-word.
 				Control? search = Named(window, "RomPickerSearch");
-				if(search is not null && (search.IsFocused || ReferenceEquals(KeyboardFieldForTest(window), search))) {
+				if(search is not null && (search.IsFocused || ReferenceEquals(KeyboardField(window), search))) {
 					return search;
 				}
 				//#1037: the end of a scan whose restore never landed, and the
