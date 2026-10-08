@@ -298,7 +298,12 @@ namespace Mesen.ViewModels
 				BeginLibraryVisit();
 				ResetConsoleFilter();
 				ClearTiles();
-				HeaderText = ResourceHelper.GetMessage("RomPickerLibraryTitle");
+				//#1069 (ADR-0264 Decision 8): the header is the COUNTED one on an
+				//empty library too - "0 games in 0 folders" is the same sentence the
+				//scan fills in, and it is the answer to why the grid below is empty.
+				//The plain sheet title is not: it names no library and counts nothing.
+				HeaderText = ResourceHelper.GetMessage(
+					LibraryFolders.HeaderResourceId(0, _folders.Count), 0, _folders.Count);
 				SearchingText = "";
 				TruncatedText = "";
 				EmptyText = ResourceHelper.GetMessage("RomPickerLibraryNoFolders");

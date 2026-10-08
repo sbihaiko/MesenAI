@@ -399,6 +399,13 @@ namespace Mesen.ViewModels
 			//scan). FinishLibraryStream is the only caller that has an answer to give.
 			EmptyText = LibraryEmptyText(PlayRomPicker.LibraryEmptyMessageId(_folders.Count, null));
 			if(_folders.Count == 0) {
+				//#1069 (ADR-0264 Decision 8): no scan is coming to write the header,
+				//and the header of a library with no folder is still the counted one
+				//- "0 games in 0 folders". The plain sheet title set above is the
+				//one state the counted sentence never reaches, which is exactly the
+				//state that has to explain itself.
+				HeaderText = ResourceHelper.GetMessage(
+					LibraryFolders.HeaderResourceId(0, _folders.Count), 0, _folders.Count);
 				//No stream starts here, so no finish will ever clear the wait of
 				//the one this replaced: its finish is for a generation that is
 				//gone. The rebuild ends that wait itself.
