@@ -63,7 +63,7 @@ because no source says it:
 - The acceptance matrix destroys arithmetic as a test: of ten `AAAA?` codes
   (`?` = `A`..`J`) **only `AAAAB` is accepted** (it arms round 16), while
   `AAAAA` computes 16 and is refused. No password in the profile is
-  synthesized; all are published.
+  synthesised; all are published.
 - Read-back is taken from the nametable mirror, **not** from `$0502`–`$0506`:
   the accepted branch consumes the array, so a session whose array closes as
   `AABAB` has `BBAAB` on screen.

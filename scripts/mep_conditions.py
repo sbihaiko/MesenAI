@@ -1119,7 +1119,7 @@ def inherited_variants(raw_variants):
         by_cond.setdefault(cond, list(rest))
     if any(c for c in by_cond) and "" not in by_cond:
         # Recorder always writes the bare twin after each [condition] rule;
-        # synthesize it from the first conditional's trailing fields when the
+        # synthesise it from the first conditional's trailing fields when the
         # key source lost it (or a hand-edited manifest omitted it).
         by_cond[""] = list(next(v for c, v in by_cond.items() if c))
     # Conditionals first, bare twin last — matches HdPackBuilder's order and
@@ -1136,7 +1136,7 @@ def cell_condition(cell):
       and the crop emits `[name]` plus the ADR-0189 §3 bare twin (#256).
     - `(name, True)` — ADR-0198 §1 (F12.7): the crop carries *exactly* one
       rule, `[name]`, or the bare unconditional rule when `name` is empty. No
-      inherited sibling, no synthesized twin. A legacy manifest keys one
+      inherited sibling, no synthesised twin. A legacy manifest keys one
       pattern at several crops, one per condition, and any extra rule emitted
       from this crop would draw the other crops' art.
     """

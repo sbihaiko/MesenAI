@@ -117,8 +117,8 @@ in the slice plan below. **The §2 amendment is owed with C, not before it.**
   point at the Display setting.
 - **Option B — the switch applies the fill. *Accepted as stage 1 (2026-10-08); implemented by a
   separate PR.*** Keep the Widescreen switch *enabled* for a console
-  with no side map (and, for consistency, for a game the measurement settled as unsupported), and
-  let turning it on apply `VideoAspectRatio.Widescreen` — the pre-ADR-0253 behavior, already
+  with no side map, and let turning it on apply `VideoAspectRatio.Widescreen` — the pre-ADR-0253
+  behavior, already
   implemented in `AspectRatioMath`. The one-line reason is reworded from "nothing to show beside
   the picture" to a fill wording (for example "Nothing to reveal beside the picture; widescreen
   will only stretch it"), so the switch never claims a Reveal it does not have. Cost: re-admits
@@ -223,9 +223,9 @@ C2: `SmsHdTileVideoFilter::AcceptsExtendedFrame()` already answers true for the 
 frame reaches the composer the moment C2 ships, and the buffers have to be able to hold it — see
 Consequences; **C3** §3/§4's rule (`WidescreenFallback::SupportsWidescreen`, `WidescreenSupportRule`) and
 the reworded reason string; **C4** the wiring tests, in `UI.HeadlessTests/PlaySheetsViewTests.cs`;
-**C5** the MEP **v2.0** §5.5 wording that admits a host-synthesized edge band — a *major* bump
-under MEP-v1's Versioning line ("a semantic change = major"), since C relaxes a normative
-`MUST NOT`, and it must land with or before C2 or the host ships against its own published spec.
+**C5** the MEP §5.5 wording that admits a host-synthesized edge band — it must land with or before
+C2 or the host ships against its own published spec, and **the MEP version declaration is decided
+in a follow-up before stage C** (#1090; this ADR names no version number and weighs no bump).
 
 ## Consequences
 
@@ -235,18 +235,18 @@ under MEP-v1's Versioning line ("a semantic change = major"), since C relaxes a 
   dead SMS sentence, the one promising a fallback §3 forbids, stays as accepted until stage 2 (C)
   replaces it. If C is ever dropped, correcting that sentence in place — option A's edit — becomes
   the piece still owed, and the ADR register would then hold a §2 clause no option of record amends.
-- **MEP-v1 §5.5 needs a revision if C is picked, and that revision is a *major* bump.** The
+- **MEP-v1 §5.5 needs a revision if C is picked, and the version it lands under is deferred.** The
   section says hosts "MUST NOT synthesize widescreen art on their own". That rule is about a host
   inventing a pack section's authored content; an edge band derived per row from the picture's own
   pixels is not authored art, but the permission has to be written down, or the next reader reads
-  C as a spec violation. Writing it down relaxes a normative `MUST NOT`, and MEP-v1's own
-  **Versioning** line is explicit: *"semver — new optional field = minor; semantic change =
-  major"*. Relaxing what a host is forbidden to do is a semantic change, not a new optional field,
-  so it requires a **major bump to v2.0**. C adds no pack section and no manifest field — the bump
-  is owed for the normative relaxation alone, and this ADR does not amend the spec. C therefore
-  carries two deliverables: the code slices below, and the MEP **v2.0** §5.5 wording that admits a
-  host-synthesized edge band while keeping the ban on synthesized *art*. Landing C without that
-  revision leaves a host that follows C in violation of the published spec.
+  C as a spec violation. Writing it down relaxes a normative `MUST NOT`, so the revision is a
+  semantic change rather than a new optional field — but **the MEP version declaration is decided
+  in a follow-up before stage C** (filed as #1090), and this ADR names no version number and weighs
+  no bump. C adds
+  no pack section and no manifest field, and this ADR does not amend the spec. C therefore carries
+  two deliverables: the code slices below, and the §5.5 wording that admits a host-synthesized edge
+  band while keeping the ban on synthesized *art*. Landing C without that revision leaves a host
+  that follows C in violation of the published spec.
 - **The standard frame stays the gate, but the widened sides still go through the HD pipeline.**
   ADR-0162's accuracy suite compares the switch-off output unchanged, and the standard path stays
   bit-identical. The extra columns are *not* exempted from pack processing: ADR-0253 **W.4**
