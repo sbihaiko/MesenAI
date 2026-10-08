@@ -90,7 +90,7 @@ Proposed contract for Block C item 9:
 
 ## Alternatives
 
-- **Keep the boolean, do the split elsewhere** (e.g. re-synthesise SFX from the
+- **Keep the boolean, do the split elsewhere** (e.g. re-synthesize SFX from the
   Enhanced Audio engine while the APU stays fully muted) — rejected: the raw
   APU SFX are the correct sound; ADR-0052 item 2 routes SFX "dry (or raw APU)".
 - **Mixer consults the classifier directly** — rejected: couples

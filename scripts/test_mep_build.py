@@ -1536,7 +1536,7 @@ def condition_fallback_twin_tests(root: Path):
     folder, _v, cells = make_sheet_folder(root, "cond-fallback", sprite_sheet=True)
     # Key source: one tile under a spriteNearby condition, with its bare twin
     # (recorder order). A second tile under a condition only — build must
-    # synthesise the missing twin.
+    # synthesize the missing twin.
     key0, key1 = tile_hex(0), tile_hex(1)
     # HdPackLoader: <condition>name,spriteNearby,dx,dy,tileData,palette
     lines = ["<ver>107", "<scale>2", "<system>nes",
@@ -1561,9 +1561,9 @@ def condition_fallback_twin_tests(root: Path):
     else:
         fail(f"#256: key0 missing cond/bare twin: cond={has_cond} bare={has_bare}")
     if has_cond1 and has_bare1:
-        ok("#256: a conditional-only key source still gets a synthesised bare twin")
+        ok("#256: a conditional-only key source still gets a synthesized bare twin")
     else:
-        fail(f"#256: key1 missing synthesised bare twin: cond={has_cond1} bare={has_bare1}")
+        fail(f"#256: key1 missing synthesized bare twin: cond={has_cond1} bare={has_bare1}")
 
 
 def authored_condition_round_trip_tests(root: Path):

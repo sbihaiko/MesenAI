@@ -74,7 +74,7 @@
     "                 with the cursor back on the first slot. The last two letters",
     "                 are therefore constrained by something this profile does NOT",
     "                 derive, which is why every password here is a published one and",
-    "                 none is synthesised. The constraint is not one string per round",
+    "                 none is synthesized. The constraint is not one string per round",
     "                 either: round 1 accepts both BBAAB and the Super BBAJI, and",
     "                 round 112 both EECJJ and EECFG.",
     "  continue       after the bell the menu returns with the round armed and the",

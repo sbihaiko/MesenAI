@@ -288,7 +288,7 @@ pad press is reduced to one navigation intent in a single place next to
 **How it moves the focus is decided with the user, 2026-10-04**: not the wording
 this ADR first carried. Translating pad events into synthetic keyboard events
 was rejected on measurement: no code in the app has ever set a
-`NavigationMethod`, and there is no evidence a synthesised `KeyEventArgs` drives
+`NavigationMethod`, and there is no evidence a synthesized `KeyEventArgs` drives
 Avalonia 12's focus navigation — a mechanism that cannot be proven from a
 headless test is the wrong foundation for the one path a keyboard-less cabinet
 depends on. The bridge calls the focus engine directly

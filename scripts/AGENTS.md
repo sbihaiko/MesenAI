@@ -787,7 +787,7 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   longer equals the twin). A twin pixel already at alpha 0 is skipped, so
   a second build over its own output is byte-identical. Verification:
   `test_mep_build.py` (`backdrop_*`, `index_keyed_*` tests). Every `[condition]` rule from the key source keeps its
-  unconditional fallback twin in the rebuilt `hires.txt` (synthesised when
+  unconditional fallback twin in the rebuilt `hires.txt` (synthesized when
   the source omitted it) so a condition miss still shows the painted art
   (#256 / ADR-0189 §3). A painted sprite sheet whose cells lose to another
   sheet fails the build with an ownership error instead of a silent
