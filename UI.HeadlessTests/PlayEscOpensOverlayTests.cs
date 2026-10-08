@@ -355,6 +355,46 @@ public class PlayEscOpensOverlayTests : IDisposable
 		Assert.False(window.IsPauseCardActive());
 	}
 
+	//#1080: on macOS the native key monitor is what publishes a key to the core,
+	//and it hands the overlay's own press to this window instead - so a press this
+	//window does not answer has to be handed back, or the arms the core owns lose
+	//the key. Advanced (the classic menu/IDE GUI) is the plain case: there is no
+	//Player overlay arm at all there (UiEsc answers None), so the press belongs to
+	//the core's own shortcut path and nothing else.
+	//
+	//This is the macOS branch of OnPreviewKeyDown, which a headless run on macOS
+	//takes - the branch that published nothing at all before this change.
+	//
+	//What the hand-back itself does cannot be seen from here: a headless build has
+	//no key manager at all (the same limit PlayPadNavigationTests states), so
+	//InputApi.SetKeyState is a no-op and InputApi.GetPressedKeys answers an empty
+	//set no matter what the window hands over - measured, not assumed: pressing Esc
+	//through the window and calling SetKeyState directly both leave that set empty.
+	//The routing decision the fix is about is pinned where it lives, host-free, in
+	//scripts/core_unit_tests.cpp (Bloco U) over Core/Shared/KeyMonitorRouting.h.
+	//
+	//So what this case pins is the half the window owns: with no Player arm the
+	//window does not answer the overlay key, and nothing on the Player surfaces
+	//moves for it. The Player cases above are the other side of the same branch.
+	[AvaloniaFact]
+	public void The_overlay_key_is_not_answered_by_the_window_when_the_ui_has_no_arm_for_it()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model, _) = ShowRunningGame();
+		ConfigManager.Config.Preferences.UiMode = UiMode.Advanced;
+		Dispatcher.UIThread.RunJobs();
+
+		bool handled = false;
+		window.AddHandler(InputElement.KeyDownEvent, (_, e) => handled = e.Handled, RoutingStrategies.Bubble, true);
+
+		window.KeyPressQwerty(PhysicalKey.Escape, RawInputModifiers.None);
+		Dispatcher.UIThread.RunJobs();
+
+		Assert.False(handled, "the window answered the overlay key with no Player arm for it (#1080)");
+		Assert.False(model.IsPlayerOverlayVisible);
+		Assert.False(window.IsPauseCardActive());
+	}
+
 	//#1080: the default binding is bare Esc, so a press carrying Ctrl is a different
 	//press - the modified Esc the player bound to something else must not be
 	//swallowed by the overlay's arm.

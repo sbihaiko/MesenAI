@@ -114,6 +114,13 @@ namespace Mesen.Windows
 		//press still being held.
 		private readonly HashSet<UInt16> _keysAnsweredInTheUi = new();
 
+		//#1080: the overlay keys this window handed back to the core and the core
+		//has not seen released. On macOS the native monitor is what publishes a key
+		//to the emulator, and it hands the overlay's own press to this window
+		//instead, so a press this window does not answer has to go back the way it
+		//came - and its release with it, or the core would hold the key down.
+		private readonly HashSet<UInt16> _overlayKeysHandedBackToTheCore = new();
+
 		//ADR-0254: the focus pause opened W-P4, so the automatic resume waits for
 		//the player's Esc instead of firing the moment the window comes forward.
 		private bool _focusPausedWithOverlay;
@@ -1190,7 +1197,28 @@ namespace Mesen.Windows
 			}
 
 			if(OperatingSystem.IsMacOS()) {
-				//Keyhandler handles key internally on macOS
+				//Keyhandler handles key internally on macOS - except the overlay's own
+				//press, which the monitor hands to this window instead
+				//(MacOSKeyManager + KeyMonitorRouting, #1080), because on macOS that
+				//monitor is the only path a host key has into the emulator and this
+				//arm is the one that answers it.
+				//
+				//A press this window did not answer is not the core's yet either: the
+				//Remaster, Share and Classic arms are still the core's shortcut
+				//handler's, and it is the only path that ever answered them - so the
+				//press goes back the way it came. Not while the keyboard is in a menu
+				//or a text box, though: there the key is that control's, and the core
+				//must not act on the press the control is keeping (the same rule
+				//HandleEscInTheUi applies, and the reason TheKeyboardIsSomewhereElse
+				//is asked once for both).
+				//
+				//Only the overlay's own press can be handed back. Every other key on
+				//macOS is published by the monitor before this handler sees it, and
+				//Command chords are the app's, so the game's input path is untouched.
+				if(IsTheOverlayKey(e) && !TheKeyboardIsSomewhereElse()) {
+					_overlayKeysHandedBackToTheCore.Add(e.GetKeyCode());
+					InputApi.SetKeyState(e.GetKeyCode(), true);
+				}
 				return;
 			}
 
@@ -1343,6 +1371,14 @@ namespace Mesen.Windows
 
 			if(OperatingSystem.IsMacOS()) {
 				//Keyhandler handles key internally on macOS
+				//
+				//#1080: except the release of an overlay key this window handed back
+				//to the core - the monitor handed the press over, so nothing else
+				//ends it there, and a key left down would answer its next press as
+				//the same one.
+				if(e.Key != Key.None && _overlayKeysHandedBackToTheCore.Remove(e.GetKeyCode())) {
+					InputApi.SetKeyState(e.GetKeyCode(), false);
+				}
 				return;
 			}
 
@@ -1384,6 +1420,9 @@ namespace Mesen.Windows
 				//no KeyUp here, and a key left in the set would answer its next
 				//press as a repeat. The window is not holding anything it answered.
 				_keysAnsweredInTheUi.Clear();
+				//...and the core is not holding anything this window handed it:
+				//ResetKeyState above dropped every key it had.
+				_overlayKeysHandedBackToTheCore.Clear();
 			}
 		}
 
