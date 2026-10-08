@@ -865,7 +865,15 @@ public class PlayerLibraryScanTests : IDisposable
 			Thread.Sleep(200);
 			Pump();
 			Assert.Contains("3 games", model.RomPicker.HeaderText);
-			Assert.Contains("2 folders", model.RomPicker.HeaderText);
+			//#1036 (ADR-0264 Decision 8): the header's folder count is the LIBRARY
+			//LIST's own row count, never the folders a scan happened to answer with.
+			//The list this fixture injects holds one folder while InstantScan above
+			//reports two, so the sentence that must stay put is the list's - a
+			//superseded walk writing "1 game in 1 folder" over it is exactly the
+			//failure this case is about, and the scan's own 2 is the number the
+			//header is not the scan's to take. The whole sentence is pinned, count
+			//and plural rule alike, so a weakened header cannot pass this quietly.
+			Assert.Equal("Your library · 3 games in 1 folder", model.RomPicker.HeaderText);
 		} finally {
 			release.Set();
 		}
