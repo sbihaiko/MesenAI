@@ -7,6 +7,9 @@ namespace Mesen.Tests.Play
 	//ADR-0253 §4 (slice W.5): the Enhancements sheet's Widescreen switch is the
 	//only control for the automatic mode, and it is shown disabled with a
 	//one-line reason when the loaded game cannot use any widescreen mode.
+	//ADR-0267 stage 1 (option B) narrows that: a console with no side map is not
+	//one of those games any more - its switch stays enabled and applies the
+	//Widescreen fill, with the reason reworded onto that fill.
 	public class WidescreenSupportRuleTests
 	{
 		private const string Sha1 = "0000000000000000000000000000000000000000";
@@ -29,20 +32,50 @@ namespace Mesen.Tests.Play
 		}
 
 		[Fact]
-		public void A_console_with_no_side_map_is_disabled_before_the_game_ever_runs()
+		public void A_console_with_no_side_map_keeps_the_switch_enabled_and_fills()
 		{
-			//ADR-0253 §4: SMS/SG-1000 have nothing beside the picture, so the
-			//switch is disabled at once, without waiting for a measurement.
-			Assert.False(WidescreenSupportRule.Switch(consoleHasSideMap: false, WidescreenSupport.Unknown, false).Enabled);
-			Assert.Equal(Reason, WidescreenSupportRule.Switch(false, WidescreenSupport.Unknown, false).ReasonKey);
+			//ADR-0267 stage 1 (option B): SMS/SG-1000 have nothing beside the
+			//picture, so there is no Reveal to offer - but the switch is not
+			//disabled for that. Turning it on applies the Widescreen fill
+			//(AspectRatioMath's 16:9, the pre-ADR-0253 behaviour), and the
+			//one-line reason names the fill instead of claiming a Reveal.
+			//ADR-0253 §4's "disabled at once" is what B amends.
+			WidescreenSwitchState state = WidescreenSupportRule.Switch(consoleHasSideMap: false, WidescreenSupport.Unknown, false);
+			Assert.True(state.Enabled);
+			Assert.Equal(Reason, state.ReasonKey);
+			//The fill is a real mode: what the player turns on is applied, and
+			//the saved preference still decides whether it is on.
+			Assert.True(WidescreenSupportRule.EffectiveWidescreen(savedOn: true, state));
+			Assert.False(WidescreenSupportRule.EffectiveWidescreen(savedOn: false, state));
+		}
+
+		[Fact]
+		public void An_sms_game_shows_the_switch_enabled_with_the_fill_reason()
+		{
+			//The per-console state the sheet reads (SwitchForLoadedGame), not
+			//just the boolean: an SMS game - the console of the report - keeps
+			//its switch usable, with the fill sentence under it.
+			WidescreenSwitchState state = WidescreenSupportRule.SwitchForLoadedGame(
+				ConsoleType.Sms, gameGear: false, WidescreenSupport.Unknown, hasWidescreenPackArt: false);
+			Assert.True(state.Enabled);
+			Assert.Equal(Reason, state.ReasonKey);
+
+			//A Game Gear keeps the same console's switch but reveals for real
+			//(§2: its 160-px screen is a window on the same map), so the fill
+			//sentence is not shown over it.
+			Assert.Equal("", WidescreenSupportRule.SwitchForLoadedGame(
+				ConsoleType.Sms, gameGear: true, WidescreenSupport.Unknown, hasWidescreenPackArt: false).ReasonKey);
 		}
 
 		[Fact]
 		public void Pack_art_enables_the_switch_even_where_the_console_cannot_reveal()
 		{
 			//ADR-0253 §3/§4: widescreen pack art is a mode of its own, and
-			//installing one re-enables the switch.
-			Assert.True(WidescreenSupportRule.Switch(consoleHasSideMap: false, WidescreenSupport.Unsupported, hasWidescreenPackArt: true).Enabled);
+			//installing one re-enables the switch. It is a real Reveal, so the
+			//fill sentence is not shown over it (ADR-0267 stage 1).
+			WidescreenSwitchState state = WidescreenSupportRule.Switch(consoleHasSideMap: false, WidescreenSupport.Unsupported, hasWidescreenPackArt: true);
+			Assert.True(state.Enabled);
+			Assert.Equal("", state.ReasonKey);
 		}
 
 		[Fact]
