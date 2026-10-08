@@ -105,10 +105,16 @@
 		</Style>
 	</UserControl.Styles>
 
-	<Panel Name="RomPickerBackdrop" Classes="scrim">
+	<Panel Name="RomPickerBackdrop" Classes="scrim" SizeChanged="OnBackdropSized">
 		<!--W-P19 is a near-full-window sheet: the grid is the point, and eight
-		columns of vertical tiles need the width a 480 px column does not have.-->
-		<Border Name="PlayerRomPickerSheet" Classes="sheet" Classes.library="{Binding IsLibraryMode}" Width="1000" MaxHeight="620" HorizontalAlignment="Center" Margin="0 24">
+		columns of vertical tiles need the width a 480 px column does not have.
+		#1078: the width is LibrarySheetFit's (host-free, UI.Tests) rather than a
+		fixed 1000 - a window narrower than 1000 plus the two 24 px margins used
+		to get a sheet wider than itself, centred, with both of its edges cut off
+		by the window. The rule caps it at the wireframe's own width; MaxWidth
+		repeats that cap so the sheet is never wider than the target picture even
+		before the first layout pass answers.-->
+		<Border Name="PlayerRomPickerSheet" Classes="sheet" Classes.library="{Binding IsLibraryMode}" MaxWidth="1000" MaxHeight="620" HorizontalAlignment="Center" Margin="0 24">
 			<DockPanel>
 				<!--The header: the sheet's one heading, which reads as the library's
 				own when the library is up (Decision 8: what it is, then how much it
@@ -128,11 +134,26 @@
 					header between them.-->
 					<Button Name="RomPickerBrowseFile" DockPanel.Dock="Right" Classes="secondary regular" Content="{l:Translate btnRomPickerBrowseFile}" Click="OnBrowseFile" IsVisible="{Binding IsLibrarySurfaceVisible}" />
 					<Button Name="RomPickerLibraryFolders" DockPanel.Dock="Right" Classes="secondary regular" Margin="0 0 8 0" Content="{l:Translate btnRomPickerLibraryFolders}" Click="OnLibraryFolders" IsVisible="{Binding IsLibrarySurfaceVisible}" />
+					<TextBlock Name="RomPickerTitle" Classes="sheet-heading" VerticalAlignment="Center" Text="{Binding SheetHeading}" />
+				</DockPanel>
+				<!--#1078: the search box and its Clear have their own row, under
+				the heading and over the console filter, which is W-P19's own header:
+				the count and the ways out are the first row there, and the search
+				sits on the row below with the filter. Inside the heading row (where
+				#1033 first put it) the box, Clear and the two buttons were four
+				fixed-width controls competing with the heading for one line: at a
+				window narrower than the wireframes' sheet the heading was the one
+				left with less room than its own text and drew out under the box.
+				Only the search box may shrink, so it is the one that does - a
+				header control is never smaller than the press it has to take.
+				#1033 (ADR-0264 Decision 4): this is still the library's search, and
+				Clear is still the way out of an empty result beside it. Hidden on
+				the browser, which is a folder walk and has nothing to search. Y puts
+				the ring here and opens ADR-0262's pad keyboard; typing here does the
+				same by hand, and the grid narrows either way.-->
+				<DockPanel DockPanel.Dock="Top" Margin="0 12 0 0" IsVisible="{Binding IsLibrarySurfaceVisible}">
 					<Button Name="RomPickerSearchClear" DockPanel.Dock="Right" Classes="secondary regular" Content="{l:Translate btnRomPickerSearchClear}" Click="OnClearSearch" IsVisible="{Binding ShowSearchClear}" />
-					<TextBox Name="RomPickerSearch" DockPanel.Dock="Right" Width="240" Margin="0 0 8 0" VerticalAlignment="Center" Text="{Binding SearchQuery}" PlaceholderText="{l:Translate lblRomPickerSearchPlaceholder}" IsVisible="{Binding IsLibrarySurfaceVisible}" />
-					<StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-						<TextBlock Name="RomPickerTitle" Classes="sheet-heading" Text="{Binding SheetHeading}" />
-					</StackPanel>
+					<TextBox Name="RomPickerSearch" MinWidth="140" MaxWidth="240" HorizontalAlignment="Left" Margin="0 0 8 0" VerticalAlignment="Center" Text="{Binding SearchQuery}" PlaceholderText="{l:Translate lblRomPickerSearchPlaceholder}" />
 				</DockPanel>
 				<TextBlock Classes="subhead secondary" DockPanel.Dock="Top" Text="{l:Translate lblRomPickerHint}" TextWrapping="Wrap" IsVisible="{Binding IsBrowseMode}" />
 				<!--The folder being shown. Hidden on the roots list, where the rows

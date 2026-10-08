@@ -31,6 +31,22 @@ namespace Mesen.Views
 
 		private PlayerRomPickerViewModel? Model => DataContext as PlayerRomPickerViewModel;
 
+		//#1078 (ADR-0264 Decision 12): the sheet's width is the wireframes' 1000 px
+		//when the window has room and the window's own width, minus its margins,
+		//when it does not. Fixed at 1000, a non-maximized window narrower than the
+		//sheet drew it wider than itself - centred, so the window cut both edges and
+		//the header, the console filter, the first grid column and *Browse a file…*
+		//were all partly outside it. The arithmetic is LibrarySheetFit's (host-free,
+		//UI.Tests asserts it); this is the crossing, and the backdrop is where the
+		//window's own size arrives - it is the sheet's container and nothing in the
+		//sheet can change it, so this never re-enters itself.
+		private void OnBackdropSized(object? sender, SizeChangedEventArgs e)
+		{
+			if(this.FindControl<Border>("PlayerRomPickerSheet") is { } sheet) {
+				sheet.Width = LibrarySheetFit.SheetWidth(e.NewSize.Width);
+			}
+		}
+
 		private void OnChoose(object? sender, RoutedEventArgs e)
 		{
 			if(sender is Control { DataContext: PlayerRomPickerRow row }) {
