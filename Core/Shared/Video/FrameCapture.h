@@ -28,7 +28,7 @@ struct ScreenshotCapture
 
 //Thickness, in pixels, of the uniform bands framing a capture: what
 //letterboxing (Top/Bottom) and pillarboxing (Left/Right) look like when
-//measured instead of looked at. Colour is the band colour, i.e. the capture's
+//measured instead of looked at. Color is the band color, i.e. the capture's
 //top-left pixel.
 struct FrameBorders
 {
@@ -38,7 +38,7 @@ struct FrameBorders
 	uint32_t Bottom = 0;
 	uint32_t Colour = 0;
 
-	//The whole capture is one colour - there is no picture to measure bands
+	//The whole capture is one color - there is no picture to measure bands
 	//around, so all four thicknesses are reported as 0. Assert on this
 	//separately: a blank capture usually means the run never reached a frame.
 	bool IsBlank = false;
@@ -59,8 +59,8 @@ namespace FrameCaptureMath
 	bool IsCaptureSizeValid(uint32_t width, uint32_t height, uint32_t bufferPixels, uint32_t& outPixelCount);
 
 	//Uniform band thicknesses around the picture, measured against the
-	//top-left pixel's colour. A row counts toward Top/Bottom only when every
-	//one of its pixels is that colour, and a column toward Left/Right on the
+	//top-left pixel's color. A row counts toward Top/Bottom only when every
+	//one of its pixels is that color, and a column toward Left/Right on the
 	//same rule over the full height. Bands never overlap: a uniform capture
 	//reports IsBlank instead.
 	FrameBorders MeasureBorders(const uint32_t* pixels, uint32_t width, uint32_t height);

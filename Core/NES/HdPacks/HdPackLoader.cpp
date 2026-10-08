@@ -21,7 +21,7 @@
 
 //Issue #302: every error still counts towards _errorCount (so the
 //"Loaded with N errors" total is unchanged), but only the first occurrence
-//of each distinct message reaches the log; the repeats are summarised once
+//of each distinct message reaches the log; the repeats are summarized once
 //at the end of the parse. See HdPackErrorDedupe.
 #define logError(y) LogError(y);
 #define checkConstraint(x, y) if(!(x)) { logError(y); return; }

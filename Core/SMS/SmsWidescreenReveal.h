@@ -63,11 +63,11 @@ namespace SmsWidescreenReveal
 	//It deliberately does not ask the VideoDecoder about the frame it is
 	//holding. A filter or the border layer that cannot take the wide frame
 	//(BaseVideoFilter::AcceptsExtendedFrame) makes the decoder keep the standard
-	//160-px centre, and that centre is exactly what the crop itself produces:
+	//160-px center, and that center is exactly what the crop itself produces:
 	//applying the crop again would cut into the picture and read past the end of
 	//the row. The Reveal is the crop being dropped, so both are decided here by
 	//RevealedColumns - the same call SmsVdp makes when it stamps the frame's
-	//ExtendedColumns - and the wide frame and the standard centre both come out
+	//ExtendedColumns - and the wide frame and the standard center both come out
 	//with no crop.
 	inline OverscanDimensions GameGearOverscan(OverscanDimensions configured, VideoAspectRatio setting)
 	{

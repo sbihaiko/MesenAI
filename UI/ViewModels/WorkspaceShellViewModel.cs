@@ -68,7 +68,7 @@ namespace Mesen.ViewModels
 			Refresh();
 		}
 
-		//The modifier printed grey on each switcher row: ⌘ on macOS, Ctrl elsewhere.
+		//The modifier printed gray on each switcher row: ⌘ on macOS, Ctrl elsewhere.
 		public string ShortcutHint(Workspace workspace)
 		{
 			int digit = WorkspaceShell.ShortcutDigit(workspace);

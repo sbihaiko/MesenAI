@@ -32,8 +32,8 @@ namespace MesenSheets
 	//---- pixels ------------------------------------------------------------
 
 	//Draws one 8x8 tile at (x, y) of dst, opaque (alpha 0xFF) on all four
-	//colour indexes - a transparent colour 0 would punch holes in a tree.
-	//`transparentIndex0` is the sprite case (F9.5): OAM colour 0 *is* the
+	//color indexes - a transparent color 0 would punch holes in a tree.
+	//`transparentIndex0` is the sprite case (F9.5): OAM color 0 *is* the
 	//backdrop, so a sprite cell drawn opaque would ship a box around the figure.
 	void RenderTile(const SheetTileKey& tile, NesPalette palette, SheetImage& dst, int32_t x, int32_t y, bool transparentIndex0 = false);
 
@@ -43,12 +43,12 @@ namespace MesenSheets
 	//Contact sheet of the given vocabulary indexes, `columns` per row, with a
 	//kSheetGutter-wide transparent gutter around and between cells. Fills
 	//outCells with each cell's sheet-pixel origin, count and context.
-	//transparentIndex0 punches out colour index 0 (the OAM backdrop) - the
+	//transparentIndex0 punches out color index 0 (the OAM backdrop) - the
 	//sprites.png vocabulary sheet (ADR-0153 §3, F9.16) ships on transparency
 	//exactly like a sprNNN group.
 	SheetImage BuildContactSheet(const Vocabulary& vocab, const std::vector<uint32_t>& indexes, const TileLookup& lookup, NesPalette palette, uint32_t columns, std::vector<SheetCell>& outCells, bool transparentIndex0 = false);
 
-	//Nearest-neighbour upscale by an integer factor. The sheet PNG ships at the
+	//Nearest-neighbor upscale by an integer factor. The sheet PNG ships at the
 	//pack scale so the artist paints on the canvas the pack renders at, while
 	//the sidecar JSON keeps 1x logical coordinates (ADR-0153 §4).
 	SheetImage Upscale(const SheetImage& source, uint32_t factor);
@@ -147,14 +147,14 @@ namespace MesenSheets
 	//filled; the caller owns SheetFile/ReferenceFile (WriteSheetFiles does).
 	bool BuildUnsortedSheet(size_t shapeCount, const std::set<ShapeId>& claimed, const TileLookup& lookup, NesPalette palette, SheetImage& outImage, SheetJsonDoc& outDoc);
 
-	//Serialises `doc` to the ADR-0153 §4 schema. `lookup` resolves each cell's
+	//Serializes `doc` to the ADR-0153 §4 schema. `lookup` resolves each cell's
 	//shapes into the exact hires.txt keys, so a crop maps back to tile entries
 	//with no guessing. Deterministic: same input, same bytes.
 	//`folds` (ADR-0230, F14.9) adds a `folds` list to every tile entry of a
 	//shape it names; null or empty writes the schema as it was.
 	std::string SerializeSheet(const SheetJsonDoc& doc, const TileLookup& lookup, const ShapeFolds* folds = nullptr);
 
-	//ADR-0164 §1 (F9.17): serialises the sheets/adjacency.json sidecar - the
+	//ADR-0164 §1 (F9.17): serializes the sheets/adjacency.json sidecar - the
 	//adjacency statistics the sheet inference measured, kept so an external
 	//composition editor can re-rank candidates under a lock without re-recording.
 	//The background block comes from `background` (counts, contexts, the complete
@@ -174,7 +174,7 @@ namespace MesenSheets
 	//by default (older callers, and packs that predate the field).
 	std::string SerializeAdjacency(const Vocabulary& background, const Vocabulary& sprites, const SpriteAdjacencyStats& stats, const TileLookup& lookup, const std::map<uint32_t, std::vector<ScreenSite>>& residentSites = {});
 
-	//ADR-0170 §1 (F9.19): serialises the sheets/poses.json sidecar - the
+	//ADR-0170 §1 (F9.19): serializes the sheets/poses.json sidecar - the
 	//distinct silhouettes BuildPoses segmented out of the OAM stream, which is
 	//the datum adjacency.json cannot carry (pairwise totals are a projection of
 	//the per-frame structure, and the projection cannot be inverted). `sprites`

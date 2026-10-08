@@ -16,7 +16,7 @@
 //- sprites, the OBJ window and every CPU-visible register stay on the
 //  original 240 px - this file never touches them;
 //- the standard 240x160 frame the PPU keeps (_currentBuffer, thumbnails, the
-//  debugger) is never written to: the centre of the extended frame is a copy
+//  debugger) is never written to: the center of the extended frame is a copy
 //  of it.
 //
 //What each console can put beside its picture is ADR-0253's table. On the
@@ -164,7 +164,7 @@ namespace GbaWidescreenReveal
 		//The row's two runs of extra columns, to be drawn by the caller.
 		bool RowSides(int16_t row, uint16_t*& left, uint16_t*& right);
 
-		//The extended frame (standard picture in the centre), or nullptr when
+		//The extended frame (standard picture in the center), or nullptr when
 		//this frame is standard. A row the frame never drew (a save state
 		//loaded mid-frame) gets the black fallback rather than last frame's.
 		const uint16_t* Finish(const uint16_t* standardFrame);

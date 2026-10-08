@@ -443,7 +443,7 @@ void HdPackBuilder::BuildObjectSheets(stringstream& tileRows)
 		cond->Name = condName;
 		//ignorePalette, always: a shape id is GetKey(true), so the evidence is
 		//palette-wildcarded and the condition has to be too, or the pair would
-		//stop matching itself the moment the game recoloured it. HD Pack
+		//stop matching itself the moment the game recolored it. HD Pack
 		//version 108+, which this builder writes.
 		cond->Initialize(south ? 0 : 8, south ? 8 : 0, target->PaletteColors, tileIndex, tileData, true);
 		_hdData.Conditions.push_back(unique_ptr<HdPackCondition>(cond));
@@ -842,7 +842,7 @@ void HdPackBuilder::DrawTile(HdPackTileInfo* tile, int tileNumber, uint32_t* png
 	}
 
 	if(_writeReferences) {
-		//Unfiltered twin (nearest neighbour) for the artist's reference sheet
+		//Unfiltered twin (nearest neighbor) for the artist's reference sheet
 		if(_origBuffer.size() != (size_t)pngWidth * pngWidth) {
 			_origBuffer.assign((size_t)pngWidth * pngWidth, 0xFFFF00FF);
 		}
@@ -975,8 +975,8 @@ void HdPackBuilder::RecordGridFrame(const uint8_t* internalRam, uint32_t interna
 	MesenSheets::GridFrame frame;
 	MesenSheets::LayOutGridRuns(_frameRuns, frame, [this](const HdPpuTileInfo& t) { return ShapeIdFor(t); }, [this](uint32_t c) { return PaletteIdFor(c); });
 
-	//De-duplicate on drawing *and* colours (ADR-0159 amendment): a frame that
-	//only recolours the screen is the evidence the anchor rule is missing, so
+	//De-duplicate on drawing *and* colors (ADR-0159 amendment): a frame that
+	//only recolors the screen is the evidence the anchor rule is missing, so
 	//it must not collapse into the previous frame's RepeatCount.
 	if(!_gridFrames.empty() && _gridFrames.back().FineX == frame.FineX && _gridFrames.back().SamePalettedCells(frame)) {
 		_gridFrames.back().RepeatCount++;
@@ -1131,9 +1131,9 @@ void HdPackBuilder::WriteGridDump(const string& path) const
 	}
 	std::vector<bool> emitted(_shapeTiles.size(), false);
 	//The shape ids above wildcard the palette on purpose (GetKey(true)), so a
-	//"K" line can only name the *first* colours a shape was ever drawn with. A
-	//consumer that has to place the cell under the colours it really had - a
-	//stage panorama, where a tile recoloured by a bank switch is a different
+	//"K" line can only name the *first* colors a shape was ever drawn with. A
+	//consumer that has to place the cell under the colors it really had - a
+	//stage panorama, where a tile recolored by a bank switch is a different
 	//piece of scenery - needs the per-cell palette plane the GridFrame already
 	//carries (ADR-0159 amendment). It is written here, as a fourth field on the
 	//cell line plus a "P" line interning each palette word on first sight; a
@@ -1226,7 +1226,7 @@ void HdPackBuilder::FlushSheetFiles()
 	MesenSheets::PaletteCellPlan plan = MesenSheets::PlanPaletteCells(_pendingSheets, _shapeTiles, drawn, _palette);
 	MesenSheets::TileLookup lookup = [this, &plan](MesenSheets::ShapeId id) { return id < _shapeTiles.size() ? &_shapeTiles[id] : plan.Variant(id); };
 	MesenSheets::FlushPendingSheets(_pendingSheets, plan, lookup, _palette, [&](const string& f, const string& b, const MesenSheets::SheetImage& i, const MesenSheets::SheetJsonDoc& d, const MesenSheets::ShapeFolds* folds) { WriteSheetOutputs(f, b, i, d, lookup, folds); });
-	MessageManager::Log("[HD Pack Builder] palette variants (ADR-0230): " + std::to_string(plan.Cells.size()) + " variant cells (" + std::to_string(plan.ColourwayKeys) + " colourway keys, " + std::to_string(plan.ResidualFoldKeys) + " residual folds), " + std::to_string(plan.ExactFoldKeys) + " exact folds, " + std::to_string(plan.UnplacedKeys) + " unplaced");
+	MessageManager::Log("[HD Pack Builder] palette variants (ADR-0230): " + std::to_string(plan.Cells.size()) + " variant cells (" + std::to_string(plan.ColourwayKeys) + " colorway keys, " + std::to_string(plan.ResidualFoldKeys) + " residual folds), " + std::to_string(plan.ExactFoldKeys) + " exact folds, " + std::to_string(plan.UnplacedKeys) + " unplaced");
 }
 
 //F9.1-F9.3 (ADR-0153): the whole sheet inference, once, at save time.
@@ -1511,7 +1511,7 @@ MesenSheets::Vocabulary HdPackBuilder::WriteSpriteSheets(const string& folder, c
 	MesenSheets::Vocabulary vocab = MesenSheets::BuildSpriteVocabulary(_oamFrames);
 	//ADR-0174 (issue #174): segmented here, before the first sprNNN is named,
 	//because every group sheet cites the poses its cells belong to. WritePoseFile
-	//serialises this same table rather than rebuilding it.
+	//serializes this same table rather than rebuilding it.
 	_poseStats = MesenSheets::BuildPoses(_oamFrames, vocab);
 
 	//Debug aid, sibling of MESEN_SHEET_GRID_DUMP: the retained OAM stream, self-
@@ -1561,7 +1561,7 @@ MesenSheets::Vocabulary HdPackBuilder::WriteSpriteSheets(const string& folder, c
 	//constant offset to another shape; a lone projectile, a pickup or a
 	//shape-changing explosion never joins a group and, before this sheet, had
 	//no front door but CHR order under textures/chr/. Same alias pass as the
-	//background contact sheets (one subject, one cell), same OAM colour-0
+	//background contact sheets (one subject, one cell), same OAM color-0
 	//punch-out as a group sheet.
 	{
 		vector<uint32_t> indexes;
@@ -1591,7 +1591,7 @@ MesenSheets::Vocabulary HdPackBuilder::WriteSpriteSheets(const string& folder, c
 	vector<MesenSheets::SheetGroup> groups = MesenSheets::BuildSprites(_oamFrames, vocab);
 	for(const MesenSheets::SheetGroup& group : groups) {
 		MesenSheets::SheetJsonDoc doc;
-		//OAM colour 0 is the backdrop, so a sprite cell is drawn with it punched
+		//OAM color 0 is the backdrop, so a sprite cell is drawn with it punched
 		//out - the figure ships on transparency, per ADR-0153 §3.
 		MesenSheets::SheetImage image = MesenSheets::RenderGroup(group, vocab, lookup, _palette, doc.Cells, true);
 		if(image.Width == 0) {
@@ -1687,7 +1687,7 @@ void HdPackBuilder::AttachSpriteNearbyConditions(const MesenSheets::SheetGroup& 
 		HdPackSpriteNearbyCondition* cond = new HdPackSpriteNearbyCondition();
 		cond->Name = baseName + "_n" + std::to_string(index++);
 		//ignorePalette (HD Pack 108+): the evidence is palette-wildcarded (GetKey(true)),
-		//or a figure would stop matching itself once recoloured. The palette field still
+		//or a figure would stop matching itself once recolored. The palette field still
 		//states an observation (issue #415): the anchor's commonest OAM palette, never its
 		//first-seen art's, which may be a background one; no OAM palette, no condition.
 		cond->Initialize((int32_t)(plan.Dx * (int32_t)unit), (int32_t)(plan.Dy * (int32_t)unit),
@@ -1779,7 +1779,7 @@ void HdPackBuilder::WritePoseFile(const string& folder, const MesenSheets::Vocab
 	}
 	//ADR-0174: WriteSpriteSheets already segmented the stream over this same
 	//vocabulary - every sprNNN cites the poses its cells belong to - so this
-	//serialises that table instead of clustering 4096 frames a second time.
+	//serializes that table instead of clustering 4096 frames a second time.
 	const MesenSheets::PoseStats& stats = _poseStats;
 	string json = MesenSheets::SerializePoses(spriteVocab, stats);
 	ofstream out(FolderUtilities::CombinePath(folder, "poses.json"), ios::out);
@@ -1853,7 +1853,7 @@ void HdPackBuilder::CaptureScreen()
 		//candidate the grid does not hold is one whose stability cannot be read.
 		//"Flat" is MesenSheets::IsFlatTileData (Codex review, PR #379), the same
 		//predicate FlatShapePlane/AppendFlatAnchorCells use, not "all 16 bytes
-		//identical": a 0x55-striped tile is detail; solid colour-1/2 is a probe.
+		//identical": a 0x55-striped tile is detail; solid color-1/2 is a probe.
 		if(MesenSheets::IsFlatTileData(run.Tile.TileData) || (run.Y & 7) != 0 || run.X + 8 > 256) {
 			continue;
 		}

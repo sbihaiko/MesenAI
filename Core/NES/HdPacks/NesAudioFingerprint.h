@@ -9,7 +9,7 @@ struct HdPackData;
 
 //F5.3 (ADR-0047) NES glue for the audio fingerprints: APU state -> NoteFrame,
 //the bootstrap recorder (writes auto/audio/) and the run-time replacer that
-//starts/stops the OGG of a recognised track through the HD audio device.
+//starts/stops the OGG of a recognized track through the HD audio device.
 class NesAudioFingerprint
 {
 public:
@@ -58,7 +58,7 @@ public:
 	}
 };
 
-//Recognises tracks and drives the replacement OGG (+ APU mute)
+//Recognizes tracks and drives the replacement OGG (+ APU mute)
 class NesAudioReplacer
 {
 private:

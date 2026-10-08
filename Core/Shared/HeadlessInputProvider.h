@@ -31,7 +31,7 @@ class Emulator;
 //binding itself, which only a real core can exercise.
 //
 //Prior art: zerkz/MesenCE's Core/Shared/InputOverrideProvider.{h,cpp} (GPLv3,
-//same licence as this tree) - the IInputProvider shape, resolving buttons by
+//same license as this tree) - the IInputProvider shape, resolving buttons by
 //name through GetKeyNameAssociations(), overlaying instead of replacing, and
 //the GameLoaded re-registration. This version differs where it matters for
 //F9.14: it holds the whole script in absolute frame numbers rather than one

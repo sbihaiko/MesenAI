@@ -89,7 +89,7 @@ namespace MesenSheets
 	//shapes are inside an inferred object, it held over at least minFrames
 	//accumulated frames, and it accounts for at least minProb of the frames each
 	//of its two shapes appeared in - read in BOTH directions, so a merely common
-	//shape never becomes everyone's neighbour. Returns indexes into `edges`, in
+	//shape never becomes everyone's neighbor. Returns indexes into `edges`, in
 	//input order.
 	std::vector<size_t> SelectTileNearby(const std::vector<TileAdjacency>& edges, uint32_t minFrames, double minProb);
 

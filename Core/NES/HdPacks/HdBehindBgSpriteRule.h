@@ -4,7 +4,7 @@
 
 //ADR-0224 (F12.15). A pack that carries the tag line below asks HdNesPack to
 //keep a behind-background sprite visible where the ROM's own background pixel
-//is colour 0, even when a layer-2 (priority 20-29) <background> covers that
+//is color 0, even when a layer-2 (priority 20-29) <background> covers that
 //pixel - the hardware's rule, which a recorded screen (ADR-0050, rebuilt from
 //background tiles alone) otherwise paints over. It is a tag rather than an
 //<options> token because HdPackLoader::ProcessOptionTag counts an unknown
@@ -30,7 +30,7 @@ namespace HdBehindBgSpriteRule
 	//opaque behind-background sprite drew here (lowestBgSprite is 999 until
 	//one with SpriteColorIndex != 0 is seen - the right test, since a
 	//transparent sprite pixel must not block the background), the ROM's
-	//background pixel is colour 0 (never the HD tile's alpha), and a layer-2
+	//background pixel is color 0 (never the HD tile's alpha), and a layer-2
 	//background actually changed the pixel. Without the opt-in the answer is
 	//always false, which is what keeps every other pack byte-identical.
 	inline bool KeepsBehindBgSprite(bool packOptedIn, int lowestBgSprite, uint8_t bgColorIndex, bool layer2Painted)

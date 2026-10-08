@@ -42,7 +42,7 @@ public static class ControllerSheetRemap
 	//GetKeyNames() is "UDLR12P" (SmsController.h), so button 1 is the field the
 	//core reads as B and button 2 the one it reads as A, and the classic page's
 	//own view draws Mapping.B as "1" and Mapping.A as "2" (SmsControllerView.axaml).
-	//A row labelled "1" has to write the field the console calls button 1, or the
+	//A row labeled "1" has to write the field the console calls button 1, or the
 	//player binds a button they did not pick - which is what both surfaces did
 	//before this rule was shared (found in review).
 	public static string ControlLabel(ConsoleType console, SetupButton button)

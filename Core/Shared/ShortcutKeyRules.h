@@ -74,7 +74,7 @@ namespace ShortcutKeyRules
 	//every direction no shortcut's spare binding names, including every direction
 	//of a config that never used this feature - and then `hostRatio` stands
 	//exactly as the caller wrote it. This is the core twin of
-	//PadAxisAction.ThresholdRatio, and it is what makes "zero behaviour change
+	//PadAxisAction.ThresholdRatio, and it is what makes "zero behavior change
 	//for anyone who has not bound an axis" a rule rather than a promise.
 	inline double AxisThresholdRatio(int32_t thresholdUnits, double hostRatio)
 	{
@@ -237,7 +237,7 @@ namespace ShortcutKeyRules
 
 	//The probe for one pad: a pad key asks that pad's own button, every other key
 	//asks the host. For the block the binding was written in this is the code
-	//exactly as written, which is what keeps a one-pad setup on the behaviour it
+	//exactly as written, which is what keeps a one-pad setup on the behavior it
 	//always had.
 	//
 	//A bound pad key from *another* family is not shifted onto this block: the

@@ -168,7 +168,7 @@ void NesDefaultVideoFilter::OnBeforeApplyFilter()
 	//With no console there is nothing to ask, and a state carries no PPU model of
 	//its own, so the filter's own default stands: a thumbnail rendered while no
 	//game is loaded uses the default palette, and a state written by a Vs. System
-	//or PlayChoice PPU shows those colours wrong. That is a smaller wrong than the
+	//or PlayChoice PPU shows those colors wrong. That is a smaller wrong than the
 	//one it replaces (the crash), it cannot arise while that game is loaded - the
 	//console is there and is asked - and the preview path has no other source for
 	//the model to offer.

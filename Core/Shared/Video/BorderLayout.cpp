@@ -34,7 +34,7 @@ void BorderLayout::ApplyDefaultViewportIfMissing()
 	if(HasViewport()) {
 		return;
 	}
-	//Default 4:3 area inside a (16:9) canvas: full height, centred horizontally
+	//Default 4:3 area inside a (16:9) canvas: full height, centered horizontally
 	ViewportHeight = CanvasHeight;
 	ViewportWidth = (uint32_t)(((uint64_t)CanvasHeight * 4) / 3);
 	ViewportX = (CanvasWidth > ViewportWidth) ? (int32_t)((CanvasWidth - ViewportWidth) / 2) : 0;
@@ -77,7 +77,7 @@ BorderRect BorderLayout::CanvasRectOnOutput(uint32_t outputWidth, uint32_t outpu
 		r.Height = outputHeight;
 		return r;
 	}
-	//Fit: largest canvas-aspect rect inside the output, centred.
+	//Fit: largest canvas-aspect rect inside the output, centered.
 	//Compare aspects via cross-multiplication to stay in integers.
 	uint64_t outByCanvasH = (uint64_t)outputWidth * CanvasHeight;
 	uint64_t canvasByOutH = (uint64_t)CanvasWidth * outputHeight;
@@ -279,9 +279,9 @@ void BorderCompositeExtendedFrame(uint32_t* dst, const uint32_t* backdrop, const
 	}
 	uint32_t standardWidth = srcWidth - 2 * extendedColumns;
 
-	//The centre 256 px go into the viewport exactly as the non-extended path
+	//The center 256 px go into the viewport exactly as the non-extended path
 	//draws them, but from a column offset inside each row (the frame's rows are
-	//srcWidth apart, the centre starts `extendedColumns` in).
+	//srcWidth apart, the center starts `extendedColumns` in).
 	ClampedSpan span = ClampViewport(layout);
 	if(span.Empty()) {
 		return;

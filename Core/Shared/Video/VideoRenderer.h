@@ -73,7 +73,7 @@ private:
 	BorderLayout _borderLayout;
 	vector<uint32_t> _borderPixels;
 	vector<uint32_t> _borderBackdrop; //BorderPrepareBackdrop, once per load
-	vector<uint32_t> _borderSxLut;    //per-frame nearest-neighbour column LUT
+	vector<uint32_t> _borderSxLut;    //per-frame nearest-neighbor column LUT
 	vector<uint32_t> _compositeBuffer;
 	RenderedFrame _compositedFrame;
 

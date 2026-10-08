@@ -30,7 +30,7 @@ public:
 
 	//ADR-0253 slice W.2: the GB filter reads its input at _baseFrameInfo.Width,
 	//so it takes a Reveal frame as-is. The NTSC filter is a fixed-size resample
-	//of the standard picture, so it keeps only the centre.
+	//of the standard picture, so it keeps only the center.
 	bool AcceptsExtendedFrame() override { return !_applyNtscFilter; }
 
 	void ApplyFilter(uint16_t* ppuOutputBuffer) override;

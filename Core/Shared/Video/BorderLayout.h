@@ -60,7 +60,7 @@ struct BorderLayout
 	bool HasViewport() const { return ViewportWidth > 0 && ViewportHeight > 0; }
 
 	//ADR-0149 §1 heuristic: 4:3 area, full canvas height, horizontally
-	//centred inside the (typically 16:9) canvas. Only applied when the
+	//centered inside the (typically 16:9) canvas. Only applied when the
 	//viewport is missing/invalid, so an authored viewport always wins.
 	void ApplyDefaultViewportIfMissing();
 
@@ -87,7 +87,7 @@ struct BorderLayout
 //Alpha 255 returns src verbatim, alpha 0 returns dst verbatim.
 uint32_t BorderBlendOver(uint32_t dst, uint32_t src);
 
-//Nearest-neighbour copy of the srcWidth x srcHeight game frame into the
+//Nearest-neighbor copy of the srcWidth x srcHeight game frame into the
 //layout's viewport on a CanvasWidth x CanvasHeight `dst` surface. Viewport
 //pixels outside the canvas are skipped (clamping); canvas pixels outside the
 //viewport are left untouched. `sxLut` is caller-owned scratch (one source x
@@ -116,7 +116,7 @@ void BorderCompositeFrame(uint32_t* dst, const uint32_t* border, const BorderLay
 
 //ADR-0253 §3 (slice W.3): composites a widescreen Reveal's extended frame.
 //`src` is `srcWidth` px wide with `extendedColumns` extra columns on each side
-//(RenderedFrame::ExtendedColumns); its centre `srcWidth - 2 * extendedColumns`
+//(RenderedFrame::ExtendedColumns); its center `srcWidth - 2 * extendedColumns`
 //columns go into the viewport exactly as BorderCompositePrepared draws them, and
 //each side run is drawn immediately beside the viewport at the same pixel scale
 //- but only where `sideFill` says the game filled that row's side (one byte per

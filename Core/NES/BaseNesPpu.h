@@ -181,7 +181,7 @@ public:
 	virtual void Run(uint64_t runTo) = 0;
 
 	//ADR-0234 (issue #505): one dot's sprite-pixel contender, from
-	//NesPpu::GetPixelColor - the winning shifter's colour, the background pixel
+	//NesPpu::GetPixelColor - the winning shifter's color, the background pixel
 	//under it and that shifter's priority bit, on a dot the PPU can draw a
 	//sprite on at all. Empty here and in every PPU but the recorder's
 	//(HdBuilderPpu overrides it), so the emulation path pays nothing for it:

@@ -46,7 +46,7 @@ class HdNesPpu final : public NesPpu<HdNesPpu>
 	//PPU keeps (NesWidescreenPpu.h), latched at the same point, so both paths
 	//answer alike. The HD renderer draws the sides at the pack's scale from
 	//HdScreenInfo::SideTiles; this buffer is what every other consumer of the
-	//frame sees (and what the border layer crops the centre out of).
+	//frame sees (and what the border layer crops the center out of).
 	NesWidescreenPpu::State _widescreen;
 
 public:

@@ -9,7 +9,7 @@
 namespace HdTileDecode
 {
 	//Game Boy 2bpp: one row is two bytes, bit 7 = leftmost pixel, `low` is
-	//the colour's bit 0 plane and `high` its bit 1 plane. Writes 8 colour
+	//the color's bit 0 plane and `high` its bit 1 plane. Writes 8 color
 	//indexes (0..3) to `out`.
 	static inline void Decode2bppRow(uint8_t low, uint8_t high, uint8_t out[8])
 	{
@@ -19,7 +19,7 @@ namespace HdTileDecode
 	}
 
 	//SMS/GG 4bpp planar: one row is four consecutive plane bytes (plane 0
-	//first), bit 7 = leftmost pixel. Writes 8 colour indexes (0..15) to `out`.
+	//first), bit 7 = leftmost pixel. Writes 8 color indexes (0..15) to `out`.
 	static inline void Decode4bppPlanarRow(const uint8_t* planes, uint8_t out[8])
 	{
 		for(int x = 0; x < 8; x++) {

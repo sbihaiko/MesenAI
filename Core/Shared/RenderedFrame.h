@@ -20,7 +20,7 @@ struct RenderedFrame
 	FrameFlags Flags = FrameFlags::None;
 	//ADR-0253 (frame-width contract): how many of Width's columns on EACH side
 	//are extra, drawn beside the console's standard picture by a widescreen
-	//Reveal. 0 = a standard frame. The standard picture is the centre
+	//Reveal. 0 = a standard frame. The standard picture is the center
 	//Width - 2 * ExtendedColumns columns, bit-identical to what the console
 	//sends with the switch off.
 	uint32_t ExtendedColumns = 0;

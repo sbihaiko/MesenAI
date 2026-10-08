@@ -38,6 +38,6 @@ public:
 
 	//ADR-0253 W.6: nes_ntsc_blit walks whatever width it is given, so a
 	//widescreen Reveal frame is filtered whole instead of being cropped to its
-	//standard centre (BaseVideoFilter::AcceptsExtendedFrame)
+	//standard center (BaseVideoFilter::AcceptsExtendedFrame)
 	bool AcceptsExtendedFrame() override { return true; }
 };

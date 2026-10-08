@@ -127,7 +127,7 @@ namespace Mesen.Debugger.Utilities
 					return;
 
 				case ConsoleNotificationType.BeforeGameLoad:
-					//Suspend all other events until game load is done (or cancelled)
+					//Suspend all other events until game load is done (or canceled)
 					_loadingGame = true;
 
 					//Run any pending UI calls (and wait for them to complete)

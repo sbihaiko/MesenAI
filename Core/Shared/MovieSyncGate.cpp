@@ -370,7 +370,7 @@ std::vector<MovieSyncFinding> MovieSyncGate::Evaluate(const std::vector<MovieSyn
 	//--- Rule 3b: the same counter, read at every sampled frame -------------
 	//The total is one number: the run's distinct-shape count at the last frame.
 	//The trace is that same number at every sampled frame, for the same two
-	//runs and the same cost, and it is the extra information that localises a
+	//runs and the same cost, and it is the extra information that localizes a
 	//partial desync. A run that is really being driven keeps meeting material
 	//the game has not drawn yet; a run that has died into GAME OVER and the
 	//attract loop is back in the state class the movie-less console occupies

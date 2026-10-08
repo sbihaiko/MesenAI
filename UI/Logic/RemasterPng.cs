@@ -7,7 +7,7 @@ namespace Mesen.Logic;
 
 //G.7 (PRD Part B §13.5.3 W-R1/W-R5): the "Painted" badge of a tile is the
 //same measurement scripts/mep_build.py makes before it lets a cell claim a
-//key - the picture against its `*.orig.png` twin, upscaled nearest-neighbour
+//key - the picture against its `*.orig.png` twin, upscaled nearest-neighbor
 //(`_EditedProbe`). The reader mirrors `_png_pixels`: 8-bit RGB or RGBA,
 //non-interlaced; anything else is "cannot tell", never a guess either way.
 public sealed record RemasterPixels(int Width, int Height, int Channels, byte[] Data)
@@ -20,7 +20,7 @@ public static class RemasterPng
 	private static readonly byte[] Signature = { 0x89, (byte)'P', (byte)'N', (byte)'G', 0x0D, 0x0A, 0x1A, 0x0A };
 
 	//Null when the file is missing, is not a PNG, or is a form this reader
-	//does not decode (palette, grey, 16-bit, interlaced) - as mep_build.
+	//does not decode (palette, gray, 16-bit, interlaced) - as mep_build.
 	public static RemasterPixels? Read(string path)
 	{
 		byte[] data;

@@ -174,7 +174,7 @@ private:
 	//MesenSheets::IsFlatTileData - the same per-plane predicate
 	//FlatShapePlane uses - not "all 16 bytes identical": a 0x55-striped tile
 	//is a candidate here (correctly, per ADR-0221/ADR-0223's "empty" is a
-	//uniform colour, not a uniform byte pattern), and a solid colour-1/2
+	//uniform color, not a uniform byte pattern), and a solid color-1/2
 	//tile (all-0xFF or all-0x00 per plane) goes to the probe pool instead of
 	//the rarity ranking, at the margin from CaptureScreen's own predicate
 	//fix (Codex review, PR #379).
@@ -308,7 +308,7 @@ private:
 	uint32_t _spriteGroupCount = 0;
 	//ADR-0174 (issue #174): the poses, segmented once. WriteSpriteSheets needs
 	//them before it names a sprNNN sheet (each one cites the figures its cells
-	//belong to) and WritePoseFile serialises the same table, so the O(n^2)
+	//belong to) and WritePoseFile serializes the same table, so the O(n^2)
 	//per-frame clustering must not run twice over a 4096-frame stream.
 	MesenSheets::PoseStats _poseStats;
 	void RecordOamFrame();
@@ -413,7 +413,7 @@ private:
 	void RecordGridFrame(const uint8_t* internalRam, uint32_t internalRamSize);
 	MesenSheets::ShapeId ShapeIdFor(const HdPpuTileInfo& tile);
 	//ADR-0159 amendment: PaletteColors -> the per-cell palette id the grid
-	//stream carries, so a variant that only recolours an anchor cell is
+	//stream carries, so a variant that only recolors an anchor cell is
 	//visible at save time (the shape ids above wildcard the palette).
 	unordered_map<uint32_t, MesenSheets::PaletteId> _paletteIds;
 	MesenSheets::PaletteId PaletteIdFor(uint32_t paletteColors);
@@ -433,8 +433,8 @@ private:
 	//ADR-0197 §3 - once per retained frame, on its first repeat), and
 	//"<x> <y> <shape> <palette id>" places a cell. The fourth
 	//cell field and the "P" lines are the per-cell palette plane (F9.24): the
-	//shape ids wildcard the palette, so without it a recoloured tile reads as
-	//the colours it was *first* seen with. A reader that predates them parses
+	//shape ids wildcard the palette, so without it a recolored tile reads as
+	//the colors it was *first* seen with. A reader that predates them parses
 	//the first three fields unchanged.
 	void WriteGridDump(const string& path) const;
 	HdPackTileInfo* FindObjectArt(uint32_t shapeHash, std::map<uint32_t, HdPackTileInfo*>& bestByShape);

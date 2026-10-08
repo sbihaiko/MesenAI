@@ -61,7 +61,7 @@ namespace Mesen.Logic
 		}
 
 		//#693: the packs the player can choose among - the enabled ones. The
-		//core never renders a disabled pack and the resolver never honours a
+		//core never renders a disabled pack and the resolver never honors a
 		//preference for one, so offering it stored a choice that reopened the
 		//picker on every load. Filter before Resolve, so a disabled container
 		//cannot swallow an enabled copy in the §5 content_id merge either.

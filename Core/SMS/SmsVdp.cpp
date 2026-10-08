@@ -807,7 +807,7 @@ void SmsVdp::ProcessSpriteEvaluation()
 	}
 
 	if(_evalCounter == 0xFF) {
-		//Sprite evaluation was cancelled by a sprite with Y=$D0)
+		//Sprite evaluation was canceled by a sprite with Y=$D0)
 		return;
 	}
 
