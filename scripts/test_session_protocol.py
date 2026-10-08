@@ -10,7 +10,7 @@ on stdout, and that it exits 0 whether it is told `quit` or just loses stdin.
 The ROM is the synthetic NROM `scripts/gen_synthetic_nrom.py` writes - an
 infinite loop, no copyrighted data - so this runs anywhere the tool is built.
 The game logic is irrelevant here: every request below is answered before the
-console's behaviour matters.
+console's behavior matters.
 
 Run:  python3 scripts/test_session_protocol.py
 """

@@ -134,7 +134,7 @@ def check_nested_zip_over_cap(tmp: Path):
     if "textures/hires.txt" in brief:
         fail("classify brief inflated the over-cap nested zip")
         return
-    ok("nested-zip fallback honours the cap in mep_lint (error) and classify_pack_brief (noted, not inflated)")
+    ok("nested-zip fallback honors the cap in mep_lint (error) and classify_pack_brief (noted, not inflated)")
 
 
 def main() -> int:

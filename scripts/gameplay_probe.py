@@ -14,7 +14,7 @@ legitimately captures few, near-identical screens: that proxy flags Ninja Gaiden
 screen" is equally true of a stuck menu and of a run that died at 1-1.
 
 Calibration: over 86 packs from three recording runs of the same 30-ROM library
-the four clauses flag 17 of 20 hand-labelled menu-only recordings with zero
+the four clauses flag 17 of 20 hand-labeled menu-only recordings with zero
 false alarms. The three misses share one shape - a password/option screen that
 is itself tiled wallpaper (Punch-Out!!, Mega Man 2, Dr. Mario). The blind spot
 on the other side is a non-scrolling game with a small active area (a board

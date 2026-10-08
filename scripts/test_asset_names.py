@@ -126,7 +126,7 @@ def test_an_empty_or_extensionless_name_is_refused():
     check(_refuses(".png", "no stem"), "a bare extension is refused")
     check(_refuses("usr000", "does not end in `.png`"),
           "a name with no extension is refused: Photoshop generates nothing "
-          "for a layer it does not recognise")
+          "for a layer it does not recognize")
 
 
 def test_a_case_only_collision_is_caught_across_the_folder_not_the_name():

@@ -88,7 +88,7 @@ ARMS = {
     # ADR-0253: the WideScrn switch. The frame is 384 px wide, so the arm is
     # compared on its centre 256 columns (`capture centre:`), which the Reveal
     # must leave bit-identical to the vanilla frame.
-    "widescreen": {"install": None, "flags": ("widescreen",), "layer": "NES widescreen Reveal (centre 256 px)",
+    "widescreen": {"install": None, "flags": ("widescreen",), "layer": "NES widescreen Reveal (center 256 px)",
                    "compare": "centre"},
 }
 
@@ -133,8 +133,8 @@ def parse_capture(stdout):
 
 
 def compared_capture(capture, mode):
-    """The capture an arm is compared on. `mode` "centre" (ADR-0253's
-    widescreen arm) swaps in the standard centre of the extended frame, and
+    """The capture an arm is compared on. `mode` "center" (ADR-0253's
+    widescreen arm) swaps in the standard center of the extended frame, and
     fails when the run printed none - a widescreen arm whose frame was never
     extended compared nothing new."""
     if mode != "centre":
@@ -255,7 +255,7 @@ def rom_verdict(rom, actual_sha1, require_rom, checked, expected_sha1=SUITE_FILE
     are frame numbers read off that exact file, so another build puts them on
     other screens and every arm is compared at the wrong ones, silently green.
 
-    Without the flag both are today's behaviour: the first is the SKIP line and
+    Without the flag both are today's behavior: the first is the SKIP line and
     exit 0, the second is a warning note beside a run that proceeds. `checked`
     is every path the search looked in, so the failure can name them.
     """

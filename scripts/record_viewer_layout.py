@@ -54,7 +54,7 @@ RECONSTRUCTION_SUBTITLE = "rebuilt from the captured layers"
 RECONSTRUCTION_NOTE = (
     "Reconstruction: rebuilt from OAM + nametables — same priority as the PPU "
     "(front sprites, behind sprites only through a backdrop pixel, mask bits "
-    "honoured), but it cannot see a frame's 8-sprites-per-scanline overflow or "
+    "honored), but it cannot see a frame's 8-sprites-per-scanline overflow or "
     "a mid-frame scroll split, so a sprite here may still differ from the "
     "composite.")
 
@@ -114,7 +114,7 @@ def clamp_zoom(zoom, max_zoom=MAX_ZOOM):
 
 def fit_zoom(frame_w, frame_h, avail_w, avail_h, max_zoom=MAX_ZOOM):
     """Largest integer zoom of a frame_w x frame_h image that still fits in
-    avail_w x avail_h. Integer so the nearest-neighbour zoom keeps pixels
+    avail_w x avail_h. Integer so the nearest-neighbor zoom keeps pixels
     square, capped, and never below 1 — a pane too small for one native pixel
     per screen pixel clips rather than resampling."""
     if frame_w <= 0 or frame_h <= 0 or avail_w <= 0 or avail_h <= 0:
@@ -130,7 +130,7 @@ def resolve_zoom(fit, manual, frame_w, frame_h, avail_w, avail_h, max_zoom=MAX_Z
 
 
 def shared_available(sizes):
-    """The (w, h) both panes can honour, given each pane's own free space, so
+    """The (w, h) both panes can honor, given each pane's own free space, so
     one zoom draws both frames at the same size (they are meant to be compared
     pixel for pixel). Panes not laid out yet report 0 and are ignored."""
     real = [(w, h) for w, h in sizes if w > 0 and h > 0]

@@ -9,7 +9,7 @@ validity is a test (§2):
     mimetype                  first entry, ZIP_STORED, exactly `image/openraster`
     stack.xml                 <image version="0.0.5" w h><stack>…
     mergedimage.png           the composite as the file opens (hidden layers hidden)
-    Thumbnails/thumbnail.png  mergedimage.png, nearest-neighbour, max side 256
+    Thumbnails/thumbnail.png  mergedimage.png, nearest-neighbor, max side 256
     data/orig.png             layer 1
     data/context.png          layer 2, only when present
     data/paint.png            layer 3
@@ -33,9 +33,9 @@ The five layers, bottom to top (§3):
 are hidden — which is the strongest statement `stack.xml` can make about the
 layer the artist lands on (OpenRaster has no "selected layer" attribute).
 
-Everything this module draws is drawn in one sentinel colour, `#FF00FD` at
+Everything this module draws is drawn in one sentinel color, `#FF00FD` at
 alpha 255 (`mep_sentinel.SENTINEL_RGBA`), and the artwork and its twin are
-**asserted** free of that colour before anything is written (§4). Captions in
+**asserted** free of that color before anything is written (§4). Captions in
 the `palettes` band are knocked *out of* the sentinel background (transparent
 glyphs), so that band too is sentinel-only. The `context` band lives outside
 the cell grid and is clipped so no pixel of it falls inside a cell rectangle;
@@ -59,7 +59,7 @@ import zipfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import mep_sentinel  # noqa: E402 — the sentinel colour and the per-cell scan
+import mep_sentinel  # noqa: E402 — the sentinel color and the per-cell scan
 import sheet_repaint  # noqa: E402 — Image / write_png, the shared RGBA canvas
 from sheet_repaint import Image  # noqa: E402
 
@@ -248,7 +248,7 @@ def _over(dst: Image, src: Image, opacity: float):
 
 
 def _thumbnail(img: Image) -> Image:
-    """Nearest-neighbour, max side `THUMBNAIL_MAX` — never a resample (ADR-0154 §7)."""
+    """Nearest-neighbor, max side `THUMBNAIL_MAX` — never a resample (ADR-0154 §7)."""
     k = max(1, -(-max(img.width, img.height) // THUMBNAIL_MAX))
     if k == 1:
         return img.clone()
@@ -428,7 +428,7 @@ def build_surface(painted: Image, orig: Image, rects, *, captions=(), swatches=(
 
 
 def _knockout_text(img: Image, x: int, y: int, text: str, fs: int) -> int:
-    """Glyphs cleared *out of* a sentinel fill (transparent, not a colour), so
+    """Glyphs cleared *out of* a sentinel fill (transparent, not a color), so
     a band that carries text stays sentinel-only. Returns the pen advance."""
     pen = x
     for ch in text.upper():
@@ -443,9 +443,9 @@ def _knockout_text(img: Image, x: int, y: int, text: str, fs: int) -> int:
 
 def _palettes_band(W, H, rects, swatches, wildcard, font_scale, labels=()) -> Image:
     """§4 (amended 2026-09-23): one cell-tall band on the first cell row,
-    sentinel background. Each palette is a group of swatches, one per colour
+    sentinel background. Each palette is a group of swatches, one per color
     in `hires.txt` order, each swatch a quarter of the band wide, inset one
-    pixel top and bottom and separated from its neighbour by a one-pixel
+    pixel top and bottom and separated from its neighbor by a one-pixel
     sentinel column; groups are separated by three and, when `labels` are
     given, each group is preceded by its label knocked out of the sentinel
     (`first_use_palettes`: the first cell that uses it). A group that does
@@ -550,7 +550,7 @@ def write_chr_surface(out_chr: Path, asset_name: str, hd: Image, orig, cells, pa
     Captions are each cell's tile index in hex (the sidecar's `index`, the
     same number `hires.txt` keys the tile by). Swatches are the palettes the
     recording observed on this page, in first-use order down the page and
-    labelled with the hex index of the first cell wearing each — the same
+    labeled with the hex index of the first cell wearing each — the same
     number the cell's caption shows; a page with none (a static page — every
     cell `fill`, `defaultTile = Y`, ADR-0219) says the wildcard instead.
 

@@ -43,7 +43,7 @@ BOOT = 240            # idle before the first Start: the boot and the demo
 STARTS_BOOT = 4       # Start presses that reach the title menu (frame 720)
 MENU_AT = 720         # the menu is interactive from frame 691; 720 is the 4th press
 # Frames from the last Start press to the bell. The ring introduction runs on
-# its own after the third Start: at frame 3004 the referee is still centre-ring
+# its own after the third Start: at frame 3004 the referee is still center-ring
 # and at 3246 the two are already boxing, so the bell is ~3080 and the entry
 # ends just before it - a body script pressed during the last seconds of the
 # introduction is ignored, one pressed after the bell is a fight nobody can

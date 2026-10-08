@@ -153,7 +153,7 @@ fi
 # `2>/dev/null || true`, so `make capture-tool` fails loud instead of shipping
 # a broken tool. Keep the repair as belt and suspenders: the checkout may carry
 # a binary built before that fix, or built on a machine with neither the CLT
-# nor an accepted Xcode licence. A release build must not leave the working
+# nor an accepted Xcode license. A release build must not leave the working
 # tree worse than it found it.
 RECORDER_REF="$("$OTOOL" -L "$RECORDER" | tail -n +2 | awk -v lib="$SHAREDLIB" '$1 ~ lib { print $1 }' | sed -n '1p')"
 if [[ -n "$RECORDER_REF" && "$RECORDER_REF" != "$CORE_DYLIB" ]]; then

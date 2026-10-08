@@ -16,7 +16,7 @@ base interior:
     `objNNN` around it.
 
 This tool turns that pack into a background kit that obeys the artist-pack
-rule: one file, one recognisable thing. It never writes into the pack it
+rule: one file, one recognizable thing. It never writes into the pack it
 reads — the sheets land in `--out` and a manifest says what was dropped and
 why, so the drop is reviewable instead of silent.
 
@@ -32,7 +32,7 @@ Three surfaces come out of it:
      it (see `_DETERMINISTIC_P` / `_MIN_PAIR_COUNT` for the thresholds and the
      measurement behind them).
   3. **scene** — `textures/backgrounds/screenNNN.png`, listed and left exactly
-     as recorded: a whole screen is already one recognisable thing.
+     as recorded: a whole screen is already one recognizable thing.
 
 It is one of the four generators of the shared artist kit
 (`runs/golden-20260913-f922/artist-kit-contract.md`): it writes its painting
@@ -72,7 +72,7 @@ PART = "background"
 MANIFEST = f"kit-part-{PART}.json"
 GENERATOR = "scripts/artist_bg_kit.py"
 
-# A cell is "inkless" when every one of its pixels is the same colour: there is
+# A cell is "inkless" when every one of its pixels is the same color: there is
 # no drawing on it, only a fill. Measured over the 14 golden packs listed in
 # `runs/golden-20260913-f922/background-objects.md`, 122 of 2490 background
 # cells (4.9%) are inkless, and every one of the 22 objects the panel could not
@@ -81,7 +81,7 @@ GENERATOR = "scripts/artist_bg_kit.py"
 # somebody chose.
 _INKLESS = 0.0
 
-# ADR-0153 §2's conditional probability at which a neighbour relation is read
+# ADR-0153 §2's conditional probability at which a neighbor relation is read
 # as "these two cells are one thing". Required in *both* directions: B follows A
 # every time A is seen, and A precedes B every time B is seen.
 #
@@ -110,7 +110,7 @@ class KitError(Exception):
 # ---- ink ------------------------------------------------------------------
 
 def cell_histogram(sheet: E.Sheet, cell: dict) -> collections.Counter:
-    """Colour histogram of one cell's 1x reference art."""
+    """Color histogram of one cell's 1x reference art."""
     img = sheet.cell_image(cell)
     hist = collections.Counter()
     for y in range(img.height):
@@ -120,10 +120,10 @@ def cell_histogram(sheet: E.Sheet, cell: dict) -> collections.Counter:
 
 
 def ink_ratio(hist: collections.Counter) -> float:
-    """Share of pixels that are not the cell's most common colour.
+    """Share of pixels that are not the cell's most common color.
 
-    The most common colour stands in for "the fill"; anything else is a mark
-    somebody drew. A flat cell scores 0 whatever its colour, which is the only
+    The most common color stands in for "the fill"; anything else is a mark
+    somebody drew. A flat cell scores 0 whatever its color, which is the only
     property this tool needs from the measure."""
     total = sum(hist.values())
     if not total:
@@ -139,7 +139,7 @@ def colour_name(rgba) -> str:
 # ---- objects --------------------------------------------------------------
 
 def _object_layout(sheet: E.Sheet, nodes):
-    """Relative cell offsets of an `objNNN` group, normalised to (0, 0).
+    """Relative cell offsets of an `objNNN` group, normalized to (0, 0).
 
     ADR-0168's walk is the pack's own account of how the group sat on screen;
     reusing it means a kept cell lands where it was drawn instead of wrapping
@@ -183,7 +183,7 @@ def read_objects(pack: E.Pack):
             "seen": max(int(c.get("count") or 0) for c in cells),
         }
         if not inked:
-            report["reason"] = ("every cell is a single flat colour — there is "
+            report["reason"] = ("every cell is a single flat color — there is "
                                 "nothing drawn on this object to repaint")
             dropped.append(report)
             continue
@@ -246,7 +246,7 @@ def _components(edges):
 
 
 def _place(members, edges):
-    """Relative offsets of a component's cells, normalised to (0, 0)."""
+    """Relative offsets of a component's cells, normalized to (0, 0)."""
     pos = {min(members): (0, 0)}
     changed = True
     while changed:
@@ -287,7 +287,7 @@ def node_has_ink(pack: E.Pack, node: int, _memo={}) -> bool:
 
     Same rule as the object surface, applied to whatever `node_art` resolves —
     an art sheet's cell, or a crop of the screen that owns it (ADR-0166). A
-    cell that is one flat colour is a fill, not a picture, and an element built
+    cell that is one flat color is a fill, not a picture, and an element built
     out of those is the very blob this tool exists to stop emitting. A node
     whose pixels cannot be resolved at all is not ours to judge, so it passes
     and `_export` decides."""
@@ -474,7 +474,7 @@ def build_kit(pack_dir: Path, out_dir: Path, names_file=None) -> dict:
     files, dropped, notes = [], [], []
 
     for report in inkless:
-        colours = " / ".join(report["inklessColours"]) or "one flat colour"
+        colours = " / ".join(report["inklessColours"]) or "one flat color"
         dropped.append({
             "path": report["sheet"],
             "why": (f"{report['cells']} cells, all uniform {colours} — "
@@ -586,12 +586,12 @@ def build_kit(pack_dir: Path, out_dir: Path, names_file=None) -> dict:
     if any(f["unit"] == "scene" for f in files):
         notes.append(
             "scene/ holds the whole-screen captures exactly as recorded — no "
-            "re-cutting, because a screen is already one recognisable thing. "
+            "re-cutting, because a screen is already one recognizable thing. "
             "Paint over them for backdrop work; the cell sheets are for the "
             "pieces the engine actually re-uses.")
 
     notes.append(
-        "Cells that are one flat colour were removed: nothing is drawn on "
+        "Cells that are one flat color were removed: nothing is drawn on "
         "them, so there is nothing to repaint. Every removal is in dropped[] "
         "or in the note for its sheet, with the count behind it.")
 

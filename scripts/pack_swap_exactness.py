@@ -39,7 +39,7 @@ transition changes nothing and a negative control must fail; see transitions().
 Fixtures are minted here, never committed (`.mss` and ROM-derived packs are not
 versioned): the state from the user's own ROM with the committed mint script,
 pack A from a 1x recording of the route (`headless_record ... hdpack`) with its
-images inverted, pack B the same recording with its colour channels rotated (so
+images inverted, pack B the same recording with its color channels rotated (so
 A, B and no pack render differently), and an audio-only pack whose `<bgm>` the
 game never triggers.
 

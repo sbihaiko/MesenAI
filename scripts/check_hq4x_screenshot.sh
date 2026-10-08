@@ -9,9 +9,9 @@
 # native frame size, once with filter=hq4x. It then asserts, on the PNGs:
 #   1. the HQ4x PNG is exactly 4x the native width and height;
 #   2. a filter signature - HQ4x interpolates, so (a) many 4x4 blocks of the
-#      output are NOT uniform (a plain nearest-neighbour upscale of a native
-#      frame would make every 4x4 block a solid colour) and (b) the output has
-#      far more distinct colours than the native frame.
+#      output are NOT uniform (a plain nearest-neighbor upscale of a native
+#      frame would make every 4x4 block a solid color) and (b) the output has
+#      far more distinct colors than the native frame.
 # The PNG is decoded with the Python standard library only (zlib), no PIL.
 #
 # On-demand tool, not a CI gate: it needs a built core dylib and a ROM.
@@ -173,7 +173,7 @@ if (hw, hh) == (nw * 4, nh * 4):
 						diff += 1
 	print('    differs from nearest-neighbour 4x upscale on %.2f%% of pixels' % (100.0 * diff / (hw * hh)))
 
-# 2b. filter signature: colour count inflation from interpolation
+# 2b. filter signature: color count inflation from interpolation
 ncolors = len(set(npx))
 hcolors = len(set(hpx))
 print('    distinct colours: native=%d hq4x=%d' % (ncolors, hcolors))

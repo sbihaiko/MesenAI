@@ -152,7 +152,7 @@ class Image:
             self.px[dst:dst + other.width * 4] = other.px[src:src + other.width * 4]
 
     def upscale(self, n: int) -> "Image":
-        """Nearest neighbour. The only resampler in this file: a soft edge on
+        """Nearest neighbor. The only resampler in this file: a soft edge on
         an 8x8 NES tile is wrong by construction (ADR-0154 §7)."""
         if n == 1:
             return self.clone()
@@ -359,7 +359,7 @@ class RepaintBackend:
 
     A backend returns a single image at exactly `request.control` size. It may
     ignore alpha, shift the palette and produce discontinuous cell borders:
-    the caller re-applies the source alpha (§7), recolours palette variants
+    the caller re-applies the source alpha (§7), recolors palette variants
     from one generation (§5) and runs the seam pass (§6) *after* this returns,
     so a backend is corrected rather than trusted.
 
@@ -389,7 +389,7 @@ class RepaintBackend:
 
 
 class PassthroughBackend(RepaintBackend):
-    """Nearest-neighbour upscale: the deterministic control arm of PRD Phase 9
+    """Nearest-neighbor upscale: the deterministic control arm of PRD Phase 9
     validation test 8, and what makes the rest of this pipeline runnable and
     testable with no model at all."""
 
@@ -403,10 +403,10 @@ class PassthroughBackend(RepaintBackend):
 
 
 def _keep_opaque(candidate, current):
-    """Scale2x/Scale3x substitute a neighbouring pixel for the centre one. A
-    *transparent* neighbour must never win over an opaque centre: its RGB is
-    the ghost colour left under the mask, `apply_alpha` would then hand it the
-    centre's alpha back, and the cell would grow a speck of a colour that is
+    """Scale2x/Scale3x substitute a neighboring pixel for the center one. A
+    *transparent* neighbor must never win over an opaque center: its RGB is
+    the ghost color left under the mask, `apply_alpha` would then hand it the
+    center's alpha back, and the cell would grow a speck of a color that is
     nowhere in the art. With this guard every opaque output pixel is a copy of
     an opaque source pixel."""
     return current if candidate[3] == 0 and current[3] != 0 else candidate
@@ -416,7 +416,7 @@ def _scale2x(img: Image) -> Image:
     """Scale2x/AdvMAME2x, the hq2x/xBRZ family's simplest member.
 
     Every output pixel is a *copy* of an input pixel, so the pass can neither
-    invent a colour nor soften an edge — which is exactly what ADR-0154 §7
+    invent a color nor soften an edge — which is exactly what ADR-0154 §7
     wants of a pixel-art scaler and what makes this arm of PRD test 8 fail for
     reasons about the art rather than about the algorithm."""
     w, h = img.width, img.height
@@ -444,7 +444,7 @@ def _scale2x(img: Image) -> Image:
 
 def _scale3x(img: Image) -> Image:
     """Scale3x, same family and the same copy-only guarantee. Present so a
-    scale of 3 or 6 is not silently degraded to nearest neighbour."""
+    scale of 3 or 6 is not silently degraded to nearest neighbor."""
     w, h = img.width, img.height
     out = Image(w * 3, h * 3)
     for y in range(h):
@@ -475,7 +475,7 @@ def _scale3x(img: Image) -> Image:
 def classical_scale(img: Image, factor: int) -> Image:
     """Factor 1 -> a copy; otherwise the factor is decomposed into 2s and 3s
     and the residual (a factor of 5, 7, …, which no member of this family
-    covers) falls back to nearest neighbour. `apply_alpha` re-imposes the
+    covers) falls back to nearest neighbor. `apply_alpha` re-imposes the
     source alpha afterwards, so a pass that moved a silhouette by one pixel is
     corrected rather than trusted."""
     if factor <= 1:
@@ -909,10 +909,10 @@ def apply_alpha(generated: Image, control: Image, verbose=False, label=""):
 
 
 def palette_correspondence(img: Image, canon: Region, variant: Region):
-    """ADR-0154 §5 step 1 (mechanism; ADR-0161 consolidated into ADR-0154) — which canonical colour is
-    which variant colour.
+    """ADR-0154 §5 step 1 (mechanism; ADR-0161 consolidated into ADR-0154) — which canonical color is
+    which variant color.
 
-    The ADR words this as "in NES colour-index order (0..3)", and the index is
+    The ADR words this as "in NES color-index order (0..3)", and the index is
     what matters: index *i* of the canonical palette must line up with index
     *i* of the variant's. This script cannot read that order off the sidecar's
     `tiles[].palette`, because a sheet is rendered through the emulator's
@@ -921,22 +921,22 @@ def palette_correspondence(img: Image, canon: Region, variant: Region):
     an RGB triple here. It is read off the pixels instead, and **positionally**
     rather than by frequency: the two cells are members of one shape group
     (`shape_key`, palette ignored), so they share the same CHR bitmaps and the
-    same pixel at the same offset carries the same colour index in both. Same
+    same pixel at the same offset carries the same color index in both. Same
     offset therefore *is* same index, exactly.
 
     Returns `(canon_palette, mapping, missing)`:
 
-      * `canon_palette` — every opaque colour of the canonical cell, in
-        first-appearance order. The nearest-colour search runs over all of it,
-        including colours with no counterpart, so a generated pixel is never
+      * `canon_palette` — every opaque color of the canonical cell, in
+        first-appearance order. The nearest-color search runs over all of it,
+        including colors with no counterpart, so a generated pixel is never
         attracted to the wrong index just because its own went unmapped;
       * `mapping` — `canonical rgb -> variant rgb` where the evidence is
         unambiguous;
-      * `missing` — the canonical colours with no counterpart, either because
-        the variant is transparent there or because one canonical colour was
-        seen against two different variant colours (which means the two cells
+      * `missing` — the canonical colors with no counterpart, either because
+        the variant is transparent there or because one canonical color was
+        seen against two different variant colors (which means the two cells
         are not the same drawing after all). Those degrade to identity: §5
-        would rather leave a colour alone than invent a mapping for it.
+        would rather leave a color alone than invent a mapping for it.
     """
     palette, seen, ambiguous = [], {}, set()
     known = set()
@@ -967,9 +967,9 @@ def recolour(generated: Image, canonical: Region, source: Image,
              canon_src: Region, variant_src: Region, verbose=False, label=""):
     """ADR-0154 §5: produce a palette variant of an already generated cell.
 
-    Every generated pixel is matched to the nearest colour of the canonical
+    Every generated pixel is matched to the nearest color of the canonical
     cell's palette; the residual is kept and re-applied on top of the variant's
-    colour at the same index, so shading and dithering survive while the
+    color at the same index, so shading and dithering survive while the
     silhouette (which comes from one generation and one alpha mask) does not
     move. Missing indexes degrade to identity, loudly, rather than inventing a
     mapping."""
@@ -978,10 +978,10 @@ def recolour(generated: Image, canonical: Region, source: Image,
         return generated.crop(canonical.x, canonical.y, canonical.w, canonical.h)
     if missing:
         # §5: "says so on stderr rather than inventing a mapping" — not gated
-        # on --verbose, because silently dropping a colour is exactly the case
+        # on --verbose, because silently dropping a color is exactly the case
         # a person needs to know about.
         print(f"warning: {label or 'palette variant'}: {len(missing)} of {len(canon_pal)} "
-              "canonical colour(s) have no counterpart in this variant — left unchanged rather "
+              "canonical color(s) have no counterpart in this variant — left unchanged rather "
               "than guessed (ADR-0154 §5)", file=sys.stderr)
     out = generated.crop(canonical.x, canonical.y, canonical.w, canonical.h)
     for y in range(out.height):
@@ -1034,7 +1034,7 @@ def adjacency_pairs(sheets, scale: int):
 
 
 def seam_pass(img: Image, rect_pairs, width: int):
-    """Symmetrise the border band of every adjacent rect pair.
+    """Symmetrize the border band of every adjacent rect pair.
 
     `rect_pairs` is [(rect_a, side, rect_b)] in target pixels. For offset j
     from the border, f = 0.5*(W-j)/W and both sides move toward each other by
@@ -1048,14 +1048,14 @@ def seam_pass(img: Image, rect_pairs, width: int):
     Every read is taken from the image as it was *before* the pass, and every
     write happens after the last read. That is what makes the operation
     order-independent, and it is the only way §6's "a cell with several
-    different neighbours on the same side gets the mean of all of them" can be
-    true: blending pair by pair in place would let the second neighbour
+    different neighbors on the same side gets the mean of all of them" can be
+    true: blending pair by pair in place would let the second neighbor
     outweigh the first, and would move a border line after its partner had
     already been averaged against the old value — so at j = 0 the two sides
     would no longer agree, which is exactly the property PRD validation
     test 4 (a continuous stripe across a map) rests on. A pixel with N
     partners moves to `own + mean_i(f_i * (partner_i - own))`, which collapses
-    to the ADR's `(1-f)*own + f*partner` for the single-neighbour case a map
+    to the ADR's `(1-f)*own + f*partner` for the single-neighbor case a map
     always produces."""
     if width <= 0:
         return img
@@ -1114,7 +1114,7 @@ def _rects_by_vocab(sheet: Sheet, regions):
 
 def seam_rect_pairs(sheet: Sheet, regions, pairs):
     """Turn the vocabulary pair table into rect pairs for one sheet: on a map,
-    geometric neighbours; on a contact sheet, the cells that render the paired
+    geometric neighbors; on a contact sheet, the cells that render the paired
     vocabulary entries (they are not physically adjacent there — separated by
     ADR-0153's gutter — but they must still tile in game)."""
     if sheet.kind == MAP_KIND:
@@ -1162,7 +1162,7 @@ def repaint_sheet(sheet: Sheet, backend: RepaintBackend, scale: int, pairs,
 def _apply_variants(sheet: Sheet, generated: Image, control: Image, regions, verbose: bool):
     """Group the sheet's cells by tile-shape tuple; keep the highest-`count`
     member as the canonical generation and rebuild every other member from it
-    by recolour (ADR-0154 §5)."""
+    by recolor (ADR-0154 §5)."""
     groups = {}
     for region in regions:
         if region.index >= len(sheet.cells):
@@ -1316,7 +1316,7 @@ def render_screen_hires(doc: HiresManifest, kept, factor: int) -> str:
 def repaint_screen(screen: Screen, backend: RepaintBackend, scale: int, verbose: bool) -> Image:
     """A whole scene, end to end. No palette variants and no seam pass: a
     captured screen is one continuous image, it has no cell vocabulary and no
-    border to symmetrise. Alpha still comes from the source (ADR-0154 §7),
+    border to symmetrize. Alpha still comes from the source (ADR-0154 §7),
     which on an opaque background is a no-op and on a masked one is not."""
     source = read_png(screen.png_path)
     control = source.upscale(scale)
@@ -1492,7 +1492,7 @@ def build_parser():
                    help="what to repaint: the ADR-0153 artist sheets, the captured "
                         "<background> screens (ADR-0154 §2's primary target), or both")
     p.add_argument("--backend", default="passthrough", choices=sorted(BACKENDS),
-                   help="generation backend (default: passthrough, a nearest-neighbour upscale)")
+                   help="generation backend (default: passthrough, a nearest-neighbor upscale)")
     p.add_argument("--sheets", help="comma-separated sheet/screen names to repaint (default: all)")
     p.add_argument("--backend-timeout", type=int, default=600,
                    help="seconds a local backend process/queue may take per image")
@@ -1518,7 +1518,7 @@ def build_parser():
     p.add_argument("--seam-width", type=int, default=DEFAULT_SEAM_WIDTH,
                    help="seam band in 1x pixels; 0 disables the seam pass")
     p.add_argument("--no-variants", action="store_true",
-                   help="generate every palette variant independently instead of recolouring one")
+                   help="generate every palette variant independently instead of recoloring one")
     p.add_argument("--verbose", action="store_true")
     return p
 

@@ -14,7 +14,7 @@ condition prefix (`[cond]<tile>...`) does not change the key. `tileData` is
 either the 16 bytes of a CHR RAM pattern (32 hex digits) or a CHR ROM tile
 index; the emulator tells them apart by width (`HdPackLoader::ReadTileData`).
 An index is decimal below `<ver>103` and hex from it on, so indices are
-normalised to an integer before they are compared - reading them all as hex
+normalized to an integer before they are compared - reading them all as hex
 invents keys that are not there.
 
 PATH is a `hires.txt`, a `textures/` folder, a pack folder holding

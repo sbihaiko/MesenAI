@@ -3,7 +3,7 @@
 Opens a pack recorded since F9.17 (one whose `textures/sheets/` carries
 `adjacency.json`), resolves node ids to art, and answers the two queries
 ADR-0164 §5 needs: the seed -> rank -> lock -> recompute loop inside a layer
-and the sprite Y-band membership a scene is materialised from. A figure's
+and the sprite Y-band membership a scene is materialized from. A figure's
 layout comes from `sheets/poses.json` when the pack carries one (ADR-0170 §4)
 and from the ADR-0168 §2 `evidence[]` walk when it does not. Exports a
 composition as an ordinary `object`/`sprite` sidecar (`usrNNN`) with
@@ -37,7 +37,7 @@ import ora_writer  # noqa: E402 — ADR-0220: the layered .ora written beside ev
 import sheet_repaint  # noqa: E402 — Image/read_png/write_png, stdlib RGBA codec
 
 GUTTER = 1  # kSheetGutter (TileSheetTypes.h): the cell grid's transparent margin
-BAND_QUANTUM = 8  # ADR-0164 §1: sprite floors are quantised to 8 px (Y + 8)
+BAND_QUANTUM = 8  # ADR-0164 §1: sprite floors are quantized to 8 px (Y + 8)
 
 
 def cell_origin(cx: int, cy: int, unit: int) -> tuple:
@@ -51,7 +51,7 @@ def cell_origin(cx: int, cy: int, unit: int) -> tuple:
 SHEET_VERSION = 1  # mep_build's ADR-0153 v1 schema
 #Below this alpha a source pixel does not cover what it is pasted over: a
 #sprite tile is mostly transparent, so pasting one opaquely would erase the
-#neighbour it overlaps in a composed pose. Same value the scene spike
+#neighbor it overlaps in a composed pose. Same value the scene spike
 #(`spike_compose_scene.paste_alpha`) has always used.
 _ALPHA_CUTOFF = 128
 _COMPOSED_RE = re.compile(r"^usr(\d{3})\.json$")
@@ -64,7 +64,7 @@ class ComposeError(Exception):
 
 
 def _nearest_downscale(img, scale):
-    """Nearest-neighbour reduction of an N x capture crop back to 1x. The
+    """Nearest-neighbor reduction of an N x capture crop back to 1x. The
     screen reference twin was upscaled by N without resampling, so sampling
     every Nth pixel recovers the original art exactly — no soft edge, which
     ADR-0154 §7 forbids on 8-bit tile art."""
@@ -200,8 +200,8 @@ class Adjacency:
         return self._co.get(tuple(sorted((a_cell, b_cell))), 0)
 
     def floors(self) -> list:
-        """Every quantised bottom edge some sprite stands on, sorted ascending —
-        the Y bands a scene can materialise. Screen-fixed shapes are not
+        """Every quantized bottom edge some sprite stands on, sorted ascending —
+        the Y bands a scene can materialize. Screen-fixed shapes are not
         standing on anything (ADR-0173), so a band only they reach is not a
         band at all."""
         bands = set()
@@ -232,7 +232,7 @@ POSES_VERSION = 1
 
 # ADR-0168 §2 step 3's cross-pose guard, as `spike_compose_scene` shipped it:
 # the share of the strongest group edge below which an edge is treated as a
-# cross-pose accident rather than a neighbour relation. A judgement call, not a
+# cross-pose accident rather than a neighbor relation. A judgement call, not a
 # measured threshold (ADR-0168 §3) — kept verbatim so a pack without a pose
 # sidecar composes exactly as it does today.
 WALK_EDGE_COUNT_FLOOR = 0.25
@@ -329,7 +329,7 @@ def caption(entity_id, label="", label_source=None, human=None):
 
 class Pose:
     """One entry of `poses.json`: a silhouette the recorder actually saw in a
-    single OAM frame, normalised to its own top-left (ADR-0170 §1)."""
+    single OAM frame, normalized to its own top-left (ADR-0170 §1)."""
 
     __slots__ = ("id", "frames", "size", "tiles", "fusion_of", "variant_of", "hold", "next",
                  "label", "label_source", "pixels", "z")
@@ -354,7 +354,7 @@ class Pose:
         # everywhere, which is exactly how it read before the field existed.
         self.fusion_of = tuple(fusion_of)
         # ADR-0179 §4: the kept pose this one is, plus a satellite too small
-        # to be a pose (a figure and its shot). None means "not labelled".
+        # to be a pose (a figure and its shot). None means "not labeled".
         self.variant_of = variant_of
         # ADR-0179 §1-2: frames this pose was linked to itself on a track, and
         # ((pose id, count), ...) most-linked first — the raw succession
@@ -369,12 +369,12 @@ class Pose:
 
     @property
     def variant(self) -> bool:
-        """True when the recorder labelled this entry a variant (ADR-0179 §4)."""
+        """True when the recorder labeled this entry a variant (ADR-0179 §4)."""
         return self.variant_of is not None
 
     @property
     def fused(self) -> bool:
-        """True when the recorder labelled this entry a fusion (ADR-0177).
+        """True when the recorder labeled this entry a fusion (ADR-0177).
 
         False covers both "classified and not a fusion" and "never
         classified" — the file cannot tell them apart, and a consumer that
@@ -1028,7 +1028,7 @@ class Pack:
             return None
         # ADR-0177 §5: laying a figure out from a fused entry hands the artist
         # a figure plus a bystander. Prefer the entries that are figures; fall
-        # back to the full list only when every candidate is labelled, so a
+        # back to the full list only when every candidate is labeled, so a
         # subject the recorder never saw alone is not lost to the label.
         unfused = [p for p in hits if not p.fused]
         hits = unfused or hits
@@ -1562,7 +1562,7 @@ class Pack:
                captions: list = None, context=None):
         """Write a composed sheet (`usrNNN`) to `to_dir` (default the pack's own
         sheets dir). `kind` is `object` or `sprite`; `nodes` are the kept node
-        ids in sheet order; `band` is the quantised bottom for a sprite band.
+        ids in sheet order; `band` is the quantized bottom for a sprite band.
         Returns the sidecar stem. The sheet is written at the pack's `<scale>`
         and its `*.orig.png` twin at 1x, the same pair every bootstrap sheet
         forms: a pack whose sheets are 4x rejects a 1x sheet outright ("all
@@ -1617,7 +1617,7 @@ class Pack:
         rects = [{"index": c["index"], "x": c["x"] * scale, "y": c["y"] * scale,
                   "w": unit * scale, "h": unit * scale, "seen": c.get("seen")} for c in cells]
         # The `palettes` band follows first use in reading order (row, then
-        # column), each group labelled with the first cell's `index` — a
+        # column), each group labeled with the first cell's `index` — a
         # hex-sorted set put the leftmost group under a cell that never wore
         # it (2026-09-23 follow-up, defect (b)).
         swatches, swatch_labels = ora_writer.first_use_palettes(

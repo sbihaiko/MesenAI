@@ -3,7 +3,7 @@
 believed on its own word.
 
 The kit generators (`artist_kit.py`, `artist_bg_kit.py`, `artist_map.py`,
-`artist_chr_kit.py`) can cut a recording into surfaces an artist recognises and
+`artist_chr_kit.py`) can cut a recording into surfaces an artist recognizes and
 can prove, by rebuilding the pack, that the cut is lossless. What they cannot do
 is *judge*: which of 1642 shapes is a figure and which is HUD, whether two
 figures in one box are one thing or two, and what any of it is called. In Mesen
@@ -13,7 +13,7 @@ protocol for asking a vision agent instead.
 Four rules it exists to enforce (the design, not an implementation detail):
 
 1. **The reviewer looks at the rendered surface, never at raw data.** Every ask
-   names a PNG a human would recognise - a figure grid, a scenery object, a
+   names a PNG a human would recognize - a figure grid, a scenery object, a
    panorama, a pattern page - and a rectangle inside it. No tile arrays, no hex
    keys, no bare 8x8 crops. Reading 8 px thumbnails is what put three green
    enemies on the player's sheet the last time a human did this by hand.
@@ -26,7 +26,7 @@ Four rules it exists to enforce (the design, not an implementation detail):
    at and the rectangle inside it, so a reviewer opens one image and knows. A
    proposal that cannot be checked is a defect and `check` rejects it.
 4. **Abstention is a first-class answer.** "I do not know what this is" is a
-   valid, unpenalised outcome; `score` counts it in its own bucket and never
+   valid, unpenalized outcome; `score` counts it in its own bucket and never
    folds it into an accuracy number.
 
 The reviewer is an agent with vision reading the PNGs - not an API call. There
@@ -101,7 +101,7 @@ QUESTION = {
     "page": (
         "This is a pattern page, not a scene: the game's tiles in storage "
         "order, so most of it will look like fragments. Only answer where a "
-        "whole recognisable thing is laid out contiguously. Abstaining on a "
+        "whole recognizable thing is laid out contiguously. Abstaining on a "
         "pattern page is the expected answer."
     ),
 }
@@ -161,7 +161,7 @@ def row_bands(rows):
 def box_candidates(columns):
     """Every box width one grid row could have been laid out at, narrowest first.
 
-    `artist_kit.py` pads each figure to its row's box, centres it and leaves
+    `artist_kit.py` pads each figure to its row's box, centers it and leaves
     exactly one empty column between boxes (`SLOT_GAP`), then emits the cells
     box by box in reading order. A width is possible when nothing sits in one of
     its gap columns, the box indexes run contiguously from zero, and the emitted
@@ -320,7 +320,7 @@ def build_packet(kit: Path) -> dict:
 
     Order is the kit's own reading order - figures first, pattern pages last -
     because a reviewer who has already seen the player as a whole figure is the
-    one who can recognise its torso on a pattern page, never the other way
+    one who can recognize its torso on a pattern page, never the other way
     round."""
     fragments = load_fragments(kit)
     asks, skipped = [], []
@@ -404,7 +404,7 @@ def _asks_for(kit: Path, part, entry, png: Path):
         return out
 
     if rel.startswith("scene/"):
-        # A whole recorded screen: already one recognisable thing, shown whole.
+        # A whole recorded screen: already one recognizable thing, shown whole.
         return [_ask("screen", part, png.stem, rel,
                      (entry.get("ids") or [png.stem])[0], [0, 0, width, height],
                      None, reference, note=entry.get("title", ""))]
@@ -486,7 +486,7 @@ def write_crops(packet: dict, kit: Path, out_dir: Path, min_edge=256):
 
     This is the lever the design's first rule points at: the same figure judged
     from an 8 px thumbnail and from a 128 px render is not the same judgement.
-    Nearest-neighbour, so no pixel is invented; written outside the kit, because
+    Nearest-neighbor, so no pixel is invented; written outside the kit, because
     a crop is a reviewing aid and not a painting surface."""
     try:
         from PIL import Image
@@ -652,7 +652,7 @@ def build_truth(kit: Path, hires: Path, subject_map: dict, dominance=0.6) -> dic
     labels a box is the tiles that belong to one subject and no other.
 
     A box whose exclusive tiles do not give one subject a `dominance` majority
-    is labelled `mixed` - not unknown. The kit really does put two overlapping
+    is labeled `mixed` - not unknown. The kit really does put two overlapping
     figures in one box sometimes, and a reviewer who says so is right."""
     rows = read_reference_tiles(hires)
     # `_`-prefixed keys are the map's own prose, not subjects.
@@ -663,7 +663,7 @@ def build_truth(kit: Path, hires: Path, subject_map: dict, dominance=0.6) -> dic
         """Exact `(pattern, palette)` keys only.
 
         Matching on the pattern alone would be a guess, and a guess has no
-        business in ground truth: Contra's grey rock faces share patterns with
+        business in ground truth: Contra's gray rock faces share patterns with
         the light tiles of the player's sheet, and a palette-blind lookup
         cheerfully labels a mountain `player`. The kit records the unmirrored
         `source` a mirrored tile came from, and the reference pack keys both

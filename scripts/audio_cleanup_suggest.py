@@ -4,7 +4,7 @@ suggest which trigger ids look like garbage (ADR-0135 point 6: "so a human can
 prune garbage ids"; F5.4g Block D item 12).
 
 The probe writes `<pack>/auto/audio/enumeration.log` with one CSV row per id:
-`id,kind,audible,frames,last,hash,"first-notes",repeat`. This helper summarises
+`id,kind,audible,frames,last,hash,"first-notes",repeat`. This helper summarizes
 which ids are worth dropping (short/title/repeat/silent) so a human can decide,
 then does the final cut with `rename-audio-id` or a manual edit of
 fingerprints.json after listening. It is deliberately REPORT-ONLY: the

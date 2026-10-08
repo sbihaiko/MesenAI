@@ -3,7 +3,7 @@
 Form, the `cheat-submitted.yml` workflow and the labels they use.
 
   * .github/ISSUE_TEMPLATE/cheat-code.yml is an Issue Form titled "[Cheat] ",
-    labelled `cheat`, with exactly the four required fields of section 1 (Game
+    labeled `cheat`, with exactly the four required fields of section 1 (Game
     as SHA-1 + name, Console, Code, Description), whose labels and dropdown
     options are the ones scripts/cheat_submission.py parses - a renamed label
     would make the gate read an empty field.

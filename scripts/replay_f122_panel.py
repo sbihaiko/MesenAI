@@ -28,7 +28,7 @@ Per game the replay does exactly what the script tells the evaluator to do:
 
 The key pasted in P10 stands in for P7's right-click. A machine cannot click a
 tile, so the key is *measured* instead of guessed: a probe pass paints every
-`metatiles` cell's first quadrant a colour that encodes the cell index, plays
+`metatiles` cell's first quadrant a color that encodes the cell index, plays
 the same route to the same frame, and reads back which cells the screen
 actually draws. The key it returns is a tile that is provably on screen at the
 frame the replay asserts against - which is what the evaluator's click gives
@@ -306,9 +306,9 @@ def enhancement_packs_clean():
 def probe_key(ctx, game):
     """Stand-in for P7's right-click, measured rather than guessed.
 
-    Paints the first 8x8 quadrant of every `metatiles` cell with the colour
+    Paints the first 8x8 quadrant of every `metatiles` cell with the color
     (255, index>>8, index&255), rebuilds, reopens the ROM at the reference
-    frame and reads the screenshot back. Every probe colour found names a cell
+    frame and reads the screenshot back. Every probe color found names a cell
     the screen really draws; the one covering the most pixels wins, and its
     `tiles[0]` is the key the replay pastes.
 

@@ -42,7 +42,7 @@ Limits, stated rather than hidden (ADR-0197 §2):
   a **sprite** key needs no join;
 * the recorder bakes a sprite's OAM flips into the shape it interns
   (ADR-0178) and the dump does not say which shapes were flipped, so
-  `spriteNearby`'s mirrored offset sign is not modelled (the unmirrored sign
+  `spriteNearby`'s mirrored offset sign is not modeled (the unmirrored sign
   is used) and a condition naming a flipped sprite by its run-time key does
   not match the recorded shape;
 * `positionCheckX/Y` are per-pixel in the loader; here an instance holds only
@@ -289,7 +289,7 @@ class Condition:
         """The background tile covering screen pixel (px, py) matches the key.
 
         The C++ bounds-checks the pixel index against the screen and returns
-        false outside it, which is the behaviour reproduced here rather than an
+        false outside it, which is the behavior reproduced here rather than an
         error: a condition that points off-screen simply never holds, and lint
         reports that as a run of failures rather than as a crash.
         """
@@ -884,7 +884,7 @@ def iter_routes(paths, on_skip=None):
     Deliberately a generator, and callers must keep it that way. A real Contra
     route is ~190 MB of text standing for ~18 000 retained frames, and six of
     them at once is an ordinary `--routes` argument; decoded, each frame is a
-    30x32 grid of Python ints. Materialising the whole set costs gigabytes,
+    30x32 grid of Python ints. Materializing the whole set costs gigabytes,
     while evaluating every condition against one route and then dropping it
     costs one. The report is therefore written route-major and printed at the
     end, rather than condition-major and streamed.
@@ -1073,7 +1073,7 @@ def frame_range_phases(condition, route, limit=4):
     frame of this route.
 
     `frameRange` tests the emulator's global frame counter and a recording
-    knows only its own retained index, so a bare verdict would be an artefact
+    knows only its own retained index, so a bare verdict would be an artifact
     of where the recording started. What is reportable is the set of offsets
     `k` for which `(index + k) % A >= B` holds throughout — empty when no
     offset works, which is the real finding.
@@ -1119,7 +1119,7 @@ def inherited_variants(raw_variants):
         by_cond.setdefault(cond, list(rest))
     if any(c for c in by_cond) and "" not in by_cond:
         # Recorder always writes the bare twin after each [condition] rule;
-        # synthesise it from the first conditional's trailing fields when the
+        # synthesize it from the first conditional's trailing fields when the
         # key source lost it (or a hand-edited manifest omitted it).
         by_cond[""] = list(next(v for c, v in by_cond.items() if c))
     # Conditionals first, bare twin last — matches HdPackBuilder's order and
@@ -1136,7 +1136,7 @@ def cell_condition(cell):
       and the crop emits `[name]` plus the ADR-0189 §3 bare twin (#256).
     - `(name, True)` — ADR-0198 §1 (F12.7): the crop carries *exactly* one
       rule, `[name]`, or the bare unconditional rule when `name` is empty. No
-      inherited sibling, no synthesised twin. A legacy manifest keys one
+      inherited sibling, no synthesized twin. A legacy manifest keys one
       pattern at several crops, one per condition, and any extra rule emitted
       from this crop would draw the other crops' art.
     """

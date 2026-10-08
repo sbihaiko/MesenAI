@@ -20,7 +20,7 @@ state (with the tiles only that state exhibited; a state is named for the
 folder two levels above `auto/`, extended leftwards when two runs of the
 same state would otherwise share a row). This is the measurement
 ADR-0182 §3 asks for before a further stage is played; the 2026-09-13 run
-over Contra80s 1.1 and the fifteen Contra packs is summarised in that ADR.
+over Contra80s 1.1 and the fifteen Contra packs is summarized in that ADR.
 
 The measurement is a set intersection, so it is only meaningful when both
 sides key their tiles the same way. A `hires.txt` names a tile either by

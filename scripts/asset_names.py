@@ -73,7 +73,7 @@ _RESERVED_STEMS = (
 )
 
 # Photoshop's relative-scale prefix: `200% name.png`, `2x name.png`,
-# `100x50 name.png`. It is recognised only before a space, so a name with no
+# `100x50 name.png`. It is recognized only before a space, so a name with no
 # space cannot trip it -- but a sanitized stem could grow one.
 _SCALE_PREFIX = re.compile(r"^\s*\d+(\.\d+)?(%|[xX])\s")
 _FIXED_SIZE_PREFIX = re.compile(r"^\s*\d+\s*[xX]\s*\d+\s")

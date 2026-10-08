@@ -72,7 +72,7 @@ fi
 # 134, "Library not loaded"), which shows up here as every fixture failing for
 # no visible reason. Catch it with one line instead. macOS only, and silent
 # when otool is unavailable - /usr/bin/otool is an xcrun shim that needs an
-# accepted Xcode licence, so prefer the Command Line Tools copy.
+# accepted Xcode license, so prefer the Command Line Tools copy.
 if [ "$(uname -s)" = "Darwin" ] && [ -x "$HARNESS" ]; then
   OTOOL="/Library/Developer/CommandLineTools/usr/bin/otool"
   command -v "$OTOOL" >/dev/null 2>&1 || OTOOL="$(command -v otool || true)"

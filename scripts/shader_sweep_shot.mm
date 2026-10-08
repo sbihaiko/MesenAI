@@ -29,8 +29,8 @@
 #include "MacOS/MetalPresenter.h"
 
 //ROM-free reference frame, 256x240 like an NES picture: flat NES-palette
-//tiles on black, 1-pixel lines, a checkerboard and a grey ramp, so a filter
-//that blurs, masks, curves or recolours changes a measurable number of pixels.
+//tiles on black, 1-pixel lines, a checkerboard and a gray ramp, so a filter
+//that blurs, masks, curves or recolors changes a measurable number of pixels.
 static void BuiltinFrame(std::vector<uint32_t>& px, uint32_t& w, uint32_t& h)
 {
 	static const uint32_t pal[] = { 0x0F0F0F, 0x2038EC, 0xB0287C, 0xE45C10, 0x58F898, 0xF8D878, 0xFCFCFC, 0x00A800 };

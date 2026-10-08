@@ -17,7 +17,7 @@ ADR-0183 §5:
   * `mep_figure.py export` writes `label`/`labelSource` for a group, a pose and
     a human-named figure, and an artist's rename in the sidecar is reported as
     theirs;
-  * a labelled pack round-trips through `mep_build.py build` with the same
+  * a labeled pack round-trips through `mep_build.py build` with the same
     `(tileData, palette)` key set (ADR-0183 §4) and the labels untouched.
 
 Run:  python3 scripts/test_sidecar_labels.py
@@ -208,7 +208,7 @@ def test_a_labelled_pack_round_trips_through_build_unchanged():
         keys_before = F.hires_keys(root / "textures" / "hires.txt")
         rc = mep_build.main(["build", str(root), "--quiet"])
         keys_after = F.hires_keys(root / "textures" / "hires.txt")
-        check(rc == 0, "mep_build.py build exits 0 on a labelled pack", str(rc))
+        check(rc == 0, "mep_build.py build exits 0 on a labeled pack", str(rc))
         check(keys_before == keys_after, "with the same (tileData, palette) key set (ADR-0183 §4)",
               f"{len(keys_before)} -> {len(keys_after)}")
         after_labels = {p.name: p.read_bytes() for p in sheets.glob("*.json")}

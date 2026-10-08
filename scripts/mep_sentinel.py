@@ -1,7 +1,7 @@
-"""The guide sentinel colour and the per-cell scan that catches a wrong export.
+"""The guide sentinel color and the per-cell scan that catches a wrong export.
 
 ADR-0220 §4 (F12.11). The kit's `.ora` carries two drawn layers — `guides` and
-`palettes` — in one sentinel colour, `#FF00FD` at alpha 255 (amended 2026-09-22:
+`palettes` — in one sentinel color, `#FF00FD` at alpha 255 (amended 2026-09-22:
 `#FF00FF` collided with the recorder's own unpainted-cell fill `0xFFFF00FF`;
 see ADR-0220 §4). Both are hidden
 for export; an artist who leaves one visible ships grid lines or swatches into

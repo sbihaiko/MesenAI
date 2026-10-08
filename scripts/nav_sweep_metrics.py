@@ -433,7 +433,7 @@ def version_note(reference, compared) -> str:
 
 # --- a session must prove it went somewhere (ADR-0239 §4) --------------------
 def ram_check_spec(raw: dict, where: str) -> dict:
-    """Normalise a `values[].ramCheck`, refusing a bad one before anything runs.
+    """Normalize a `values[].ramCheck`, refusing a bad one before anything runs.
 
     Same rule as a cheat and for the same reason (ADR-0184 §1): the check reads
     the emulator's internal RAM through `mss_ram.py`, so an address outside

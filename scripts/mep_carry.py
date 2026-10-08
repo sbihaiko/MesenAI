@@ -178,7 +178,7 @@ def build_audio_manifest(folder: Path, system: str | None, seed: list, ver: str)
     NES-only: GB/SMS/GG OGG replacement is frozen (ADR-0041) and mep_lint has
     no audio tags for the ver>=200 format, so a non-NES pack returns None.
     Seed refs whose OGG no longer exists are dropped (their track id is
-    reclaimed); a digit-named OGG's id is honoured only when free, else the
+    reclaimed); a digit-named OGG's id is honored only when free, else the
     next free id is used — so the manifest never carries two <bgm>/<sfx>
     entries with the same album*256+track id.
 

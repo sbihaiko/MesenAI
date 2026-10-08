@@ -77,7 +77,7 @@ for job in checks python-tests core-unit-tests ui-tests headless-ui-tests; do
   fi
 done
 
-# 4. ADR-0131's invariants travelled with the folded jobs: no native link, no
+# 4. ADR-0131's invariants traveled with the folded jobs: no native link, no
 #    SDL2 in the two dotnet jobs, and the 10.x pin.
 if grep -qE "^  ui-tests:" "$WORKFLOWS/checks.yml"; then
   if ! grep -q "verify-ui-logic-firewall" "$WORKFLOWS/checks.yml"; then
