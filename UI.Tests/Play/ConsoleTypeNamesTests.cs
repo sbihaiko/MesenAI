@@ -10,7 +10,7 @@ using Xunit;
 namespace Mesen.Tests.Play
 {
 	//#1081: the Enhancements sheet's disabled Overclock row names the console it
-	//cannot overclock ("not available on Master System"), and had been printing
+	//cannot overclock ("not available on Sega Master System"), and had been printing
 	//the raw id the resource helper falls back to - `not available on [[Sms]]` -
 	//because a ConsoleType was never a name the locale file carried.
 	//
@@ -49,7 +49,7 @@ namespace Mesen.Tests.Play
 		{
 			Dictionary<string, string> texts = ResourceTexts();
 			string name = texts[ConsoleTypeNames.MessageId(ConsoleType.Sms)];
-			Assert.Equal("Master System", name);
+			Assert.Equal("Sega Master System", name);
 			Assert.DoesNotContain("[", name);
 		}
 

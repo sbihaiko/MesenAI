@@ -2637,12 +2637,15 @@ E
 		console renamed in the enum and left behind here is caught by
 		UI.Tests/Play/ConsoleTypeNamesTests. The words are the ones the rest of
 		the UI already uses for each machine (lblNes/lblSnes/lblPce/
-		lblWonderSwan, RomConsoleMasterSystem), not the core's own spelling. -->
+		lblWonderSwan), not the core's own spelling. SMS is the one that spells
+		the maker's name out: the bug's report asked for `Sega Master System`
+		over the shorter `Master System` the picker's RomConsoleMasterSystem row
+		carries, and the sentence reads `not available on Sega Master System`. -->
 		<Message ID="ConsoleTypeSnes">SNES</Message>
 		<Message ID="ConsoleTypeGameboy">Game Boy</Message>
 		<Message ID="ConsoleTypeNes">NES</Message>
 		<Message ID="ConsoleTypePcEngine">PC Engine</Message>
-		<Message ID="ConsoleTypeSms">Master System</Message>
+		<Message ID="ConsoleTypeSms">Sega Master System</Message>
 		<Message ID="ConsoleTypeGba">Game Boy Advance</Message>
 		<Message ID="ConsoleTypeWs">WonderSwan</Message>
 		<!--ADR-0253 §4 (W.5): the Widescreen switch's one-line reason when the

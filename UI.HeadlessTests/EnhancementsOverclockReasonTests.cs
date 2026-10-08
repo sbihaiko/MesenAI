@@ -52,7 +52,7 @@ public class EnhancementsOverclockReasonTests : IDisposable
 		model.OpenEnhancementsPanel();
 		Dispatcher.UIThread.RunJobs();
 
-		Assert.Equal("not available on Master System", model.EnhOverclockReason);
+		Assert.Equal("not available on Sega Master System", model.EnhOverclockReason);
 		TextBlock reason = window.FindNamed<TextBlock>("EnhancementsOverclockReason");
 		Assert.Equal(model.EnhOverclockReason, reason.Text);
 		Assert.DoesNotContain("[[", reason.Text ?? "");
@@ -72,7 +72,7 @@ public class EnhancementsOverclockReasonTests : IDisposable
 		MainWindowViewModel model = Assert.IsType<MainWindowViewModel>(window.DataContext);
 		model.OpenEnhancementsPanel();
 		Dispatcher.UIThread.RunJobs();
-		Assert.Equal("not available on Master System", model.EnhOverclockReason);
+		Assert.Equal("not available on Sega Master System", model.EnhOverclockReason);
 
 		model.CloseEnhancementsPanel();
 		Dispatcher.UIThread.RunJobs();
