@@ -1226,7 +1226,14 @@ namespace Mesen.Windows
 				return;
 			}
 
-			if(e.Key != Key.None) {
+			//#1095: this block is the whole of the core's keyboard path on Windows and
+			//Linux, so the one press the window must not feed it is withheld here: the
+			//overlay's key while the keyboard is a control's. HandleEscInTheUi declines
+			//it in that state (the Esc belongs to the box), and feeding it anyway let the
+			//core's shortcut handler open the pause sheet over the box keeping the key -
+			//which is what a player typing in the barcode field saw. The rule is
+			//OverlayKeyPress's, and the macOS arm above applies it too.
+			if(e.Key != Key.None && OverlayKeyPress.TheCoreIsFedThePress(IsTheOverlayKey(e), TheKeyboardIsSomewhereElse())) {
 				UInt16 keyCode = e.GetKeyCode();
 				_keyPressedStamp[keyCode] = _stopWatch.ElapsedTicks;
 
