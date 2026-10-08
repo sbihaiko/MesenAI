@@ -12,8 +12,33 @@
 #include "Shared/Emulator.h"
 #include "Shared/EmuSettings.h"
 #include "Shared/KeyDefinitions.h"
+#include "Shared/KeyMonitorRouting.h"
 #include "Shared/SettingTypes.h"
 #undef Debugger
+
+//#1080: the modifier families a host event carries, as the routing rule compares
+//them against the families a binding names. Command is deliberately absent: the
+//shared key table has no name for it, so no binding can hold one, and the monitor
+//passes command chords through before the rule is asked (UI/Logic/OverlayKeyPress
+//makes the same point for the window's side).
+//
+//Function and the numeric-pad flag are absent for the same reason: nothing in the
+//config can name them, and a press carrying one is read as carrying nothing -
+//which is also what Avalonia's KeyModifiers hands the window's twin rule.
+static int PressModifierFamilies(NSEventModifierFlags flags)
+{
+	int families = KeyMonitorRouting::NoModifier;
+	if((flags & NSEventModifierFlagShift) != 0) {
+		families |= KeyMonitorRouting::ShiftModifier;
+	}
+	if((flags & NSEventModifierFlagControl) != 0) {
+		families |= KeyMonitorRouting::ControlModifier;
+	}
+	if((flags & NSEventModifierFlagOption) != 0) {
+		families |= KeyMonitorRouting::AltModifier;
+	}
+	return families;
+}
 
 MacOSKeyManager::MacOSKeyManager(Emulator* emu)
 {
@@ -66,20 +91,52 @@ MacOSKeyManager::MacOSKeyManager(Emulator* emu)
 		}
 	});
 
+	//#1080: the six keyboard keys the config can name as a modifier, in the shared
+	//table's own codes (Shared/KeyDefinitions.h: 116-117 Shift, 118-119 Ctrl,
+	//120-121 Alt - the same codes HandleModifiers writes into _keyState).
+	const KeyMonitorRouting::ModifierKeyCodes modifierKeys = { 116, 117, 118, 119, 120, 121 };
+
 	NSEventMask eventMask = NSEventMaskKeyDown | NSEventMaskKeyUp | NSEventMaskFlagsChanged;
 
 	_eventMonitor = [NSEvent addLocalMonitorForEventsMatchingMask:eventMask handler:^ NSEvent* (NSEvent* event) {
-		if(_emu->GetSettings()->CheckFlag(EmulationFlags::InBackground)) {
-			//Allow UI to handle key-events when main window is not in focus
+		//#1080: what this handler returns is who gets the key. `nil` discards the
+		//event and publishes it to the emulator's key state; the event itself is
+		//dispatched by AppKit as usual, which is the only way a key reaches the
+		//Avalonia window - Avalonia.Native installs no monitor of its own, so a key
+		//consumed here never reaches OnPreviewKeyDown. The overlay's own press is
+		//the UI's to answer (its arm is MainWindow.HandleEscInTheUi, and Esc in Play
+		//is the overlay's by decision), and it was being swallowed here, which is
+		//the reported repro: the press never arrived at the window that answers it.
+		//
+		//The decision is host-free and unit-tested (Core/Shared/KeyMonitorRouting.h,
+		//scripts/core_unit_tests.cpp Bloco U). The binding comes from the settings
+		//the config already pushed into the core - key sets 0 and 1, the two
+		//keyboard bindings; the pad slot is a third set and carries pad codes, which
+		//no host keyboard event maps to (GetShortcutKey bounds-checks the index, so
+		//neither call can read past the sets a config may fill).
+		//
+		//Everything that is not the overlay's press goes to the core exactly as it
+		//did before, and a press the window does not answer is handed back to the
+		//core there (MainWindow), so the arms the core owns keep working.
+		NSEventType type = [event type];
+		bool isFlagsChanged = type == NSEventTypeFlagsChanged;
+		uint32_t rawCode = isFlagsChanged ? 0 : (uint32_t) [event keyCode];
+		uint16_t mappedKeyCode = rawCode < AliasedKeyState::RawCodeCount ? _keyCodeMap[rawCode] : 0;
+
+		EmuSettings* settings = _emu->GetSettings();
+		KeyMonitorRouting::Route route = KeyMonitorRouting::For(
+			settings->CheckFlag(EmulationFlags::InBackground),
+			type == NSEventTypeKeyDown && ([event modifierFlags] & NSEventModifierFlagCommand) != 0,
+			KeyMonitorRouting::IsTheOverlaysPress(mappedKeyCode, PressModifierFamilies([event modifierFlags]),
+				settings->GetShortcutKey(EmulatorShortcut::ToggleOverlay, 0),
+				settings->GetShortcutKey(EmulatorShortcut::ToggleOverlay, 1),
+				modifierKeys));
+
+		if(route == KeyMonitorRouting::Route::LeaveItToTheUi) {
 			return event;
 		}
 
-		if([event type] == NSEventTypeKeyDown && ([event modifierFlags] & NSEventModifierFlagCommand) != 0) {
-			//Pass through command-based keydown events so cmd+Q etc still works
-			return event;
-		}
-
-		if([event type] == NSEventTypeFlagsChanged) {
+		if(isFlagsChanged) {
 			HandleModifiers((uint32_t) [event modifierFlags]);
 		} else {
 			//AliasedKeyState answers this line both ways it used to be wrong. It
@@ -97,7 +154,7 @@ MacOSKeyManager::MacOSKeyManager(Emulator* emu)
 			//this repo can settle: the Fn key arrives as FlagsChanged (the branch
 			//above) and media keys arrive as SystemDefined, which the event mask
 			//does not subscribe to.
-			_hostKeyState.SetKeyState((uint32_t) [event keyCode], [event type] == NSEventTypeKeyDown);
+			_hostKeyState.SetKeyState(rawCode, type == NSEventTypeKeyDown);
 		}
 
 		return nil;
