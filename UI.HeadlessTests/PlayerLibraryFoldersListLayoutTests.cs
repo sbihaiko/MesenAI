@@ -74,6 +74,21 @@ public class PlayerLibraryFoldersListLayoutTests
 		}
 	}
 
+	//The clipping the issue is about: in a window shorter than the list wants, the
+	//sheet's own edge cuts the box and the *Add a folder…* press is pushed out of the
+	//sheet. A press the player cannot see is a press the player cannot reach, so the
+	//press has to stay inside the sheet at any window height - the box gives way, not
+	//the press. 8 folders is more than the box can show at this height on any build.
+	[AvaloniaFact]
+	public void The_add_press_stays_inside_the_sheet_when_the_window_is_short()
+	{
+		using Harness harness = Harness.Open(8, height: 400);
+
+		double press = harness.OffsetIn(harness.Add, harness.Sheet).Y + harness.Add.Bounds.Height;
+		double sheet = harness.Sheet.Bounds.Height;
+		Assert.True(press <= sheet + 1, $"the *Add a folder…* press leaves the sheet: press bottom={press}, sheet height={sheet}");
+	}
+
 	//The press that adds a folder is a Play button like any other: the pad lands
 	//on it first, so its ring is the only thing saying where the player is. It
 	//draws the theme's ring and nothing of its own.
@@ -102,23 +117,25 @@ public class PlayerLibraryFoldersListLayoutTests
 		private readonly List<string>? _folders;
 		private readonly Window _window;
 
+		public Control Sheet { get; }
 		public Control Box { get; }
 		public ScrollViewer Scroller { get; }
 		public IReadOnlyList<Visual> Rows { get; }
 		public Button Add { get; }
 
-		private Harness(string root, List<string>? folders, Window window, Control box, ScrollViewer scroller, IReadOnlyList<Visual> rows, Button add)
+		private Harness(string root, List<string>? folders, Window window, Control sheet, Control box, ScrollViewer scroller, IReadOnlyList<Visual> rows, Button add)
 		{
 			_root = root;
 			_folders = folders;
 			_window = window;
+			Sheet = sheet;
 			Box = box;
 			Scroller = scroller;
 			Rows = rows;
 			Add = add;
 		}
 
-		public static Harness Open(int folders)
+		public static Harness Open(int folders, double height = 740)
 		{
 			string root = Path.Combine(Path.GetTempPath(), "mesen-1079-" + Guid.NewGuid().ToString("N"));
 			List<string>? saved = ConfigManager.Config.Preferences.LibraryFolders;
@@ -144,7 +161,7 @@ public class PlayerLibraryFoldersListLayoutTests
 				}
 
 				PlayerRomPickerView view = new() { DataContext = model };
-				window = new Window() { Width = 1100, Height = 740, Content = view };
+				window = new Window() { Width = 1100, Height = height, Content = view };
 				window.Classes.Add("player");
 				window.Classes.Add("play");
 				window.Show();
@@ -164,7 +181,7 @@ public class PlayerLibraryFoldersListLayoutTests
 				Button add = window.GetVisualDescendants().OfType<Button>().First(b => b.Name == "RomPickerAddFolder");
 
 				Assert.True(rows.Count == folders, $"the list drew {rows.Count} rows for {folders} folders");
-				return new Harness(root, saved, window, box, scroller, rows, add);
+				return new Harness(root, saved, window, sheet, box, scroller, rows, add);
 			} catch {
 				window?.Close();
 				Pump();
