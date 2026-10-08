@@ -277,27 +277,54 @@
 						a pad cannot answer one. Removing takes the row out of the list and
 						touches nothing else: the folder and its games are the player's either
 						way.-->
-						<DockPanel Name="RomPickerFoldersSheet" IsVisible="{Binding IsFoldersSheetVisible}" Margin="0 14 0 0">
-							<TextBlock Classes="subhead secondary" DockPanel.Dock="Top" Text="{l:Translate lblRomPickerFoldersHint}" TextWrapping="Wrap" />
+						<!--A Grid, not a StackPanel, and the list top-aligned inside it
+						(#1079): a StackPanel measures its children with infinite height, so
+						the list took its MaxHeight 300 whatever the sheet had, and in a short
+						window (MainWindow MinHeight 144) the sheet's own edge cut the box and
+						pushed the *Add a folder…* press off the sheet - a press the player can
+						neither see nor reach. The rows here make the list the one part that
+						gives way: the hint and the notice are Auto, the list is the star (so it
+						is measured against what the sheet really has left and its scroller
+						shrinks instead of overflowing), and the Add press has a row of its own
+						at the bottom, always inside the sheet. The list panel stays
+						VerticalAlignment="Top" so that when there IS room the box is exactly as
+						tall as its rows - a stretched box drew a list 300 high in a 417-high
+						frame and floated it in the middle, the gap above the first row.-->
+						<Grid Name="RomPickerFoldersSheet" IsVisible="{Binding IsFoldersSheetVisible}" Margin="0 14 0 0" RowDefinitions="Auto,Auto,*,Auto">
+							<!--One thing per child and every child names its row: the hint,
+							the notice the last add or remove answered, the list, the press.
+							The hint and the notice once shared the default row, which drew
+							the notice over the hint as soon as the hint wrapped.-->
+							<TextBlock Name="RomPickerFoldersHint" Grid.Row="0" Classes="subhead secondary" Text="{l:Translate lblRomPickerFoldersHint}" TextWrapping="Wrap" />
 							<!--What the last add or remove answered, said on the sheet rather
 							than in a dialog over it.-->
-							<TextBlock Name="RomPickerFoldersNotice" Classes="footnote" DockPanel.Dock="Top" Text="{Binding FoldersNoticeText}" TextWrapping="Wrap" Margin="0 10 0 0" IsVisible="{Binding FoldersNoticeText.Length}" />
-							<Button Name="RomPickerAddFolder" Classes="secondary regular" DockPanel.Dock="Bottom" HorizontalAlignment="Left" Margin="0 14 0 0" Content="{l:Translate btnRomPickerFoldersAdd}" Click="OnAddFolder" />
-							<Border Classes="inset" Margin="0 12 0 0">
-								<ScrollViewer MaxHeight="300" HorizontalScrollBarVisibility="Disabled">
+							<TextBlock Name="RomPickerFoldersNotice" Grid.Row="1" Classes="footnote" Text="{Binding FoldersNoticeText}" TextWrapping="Wrap" Margin="0 10 0 0" IsVisible="{Binding FoldersNoticeText.Length}" />
+							<!--The inset is drawn behind the list, not around it, so the rows
+							keep the box's rounded edge off their own separators and the last
+							row is not cut by it (PlayerReplaysSheetView).-->
+							<Panel Grid.Row="2" Margin="0 12 0 0" VerticalAlignment="Top">
+								<Border Classes="inset" />
+								<ScrollViewer MaxHeight="300" Margin="1" HorizontalScrollBarVisibility="Disabled">
 									<ItemsControl Name="RomPickerFoldersList" ItemsSource="{Binding LibraryFolderRows}" XYFocus.NavigationModes="Enabled">
 										<ItemsControl.ItemTemplate>
 											<DataTemplate x:DataType="vm:PlayerLibraryFolderRow">
-												<DockPanel>
-													<Button Name="RomPickerFolderRemove" Classes="plain small" DockPanel.Dock="Right" Content="{l:Translate btnRomPickerFolderRemove}" Click="OnRemoveFolder" />
-													<TextBlock Classes="title" Text="{Binding Label}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
-												</DockPanel>
+												<!--The theme's inset row: 46 high with a hairline from
+												the label to the right edge, and none under the last
+												row. The path is the row, the press that takes the
+												folder out is docked at its right end (#1079).-->
+												<Border Classes="switch-row">
+													<DockPanel Margin="0 8 16 8">
+														<Button Name="RomPickerFolderRemove" Classes="plain small" DockPanel.Dock="Right" VerticalAlignment="Center" Content="{l:Translate btnRomPickerFolderRemove}" Click="OnRemoveFolder" />
+														<TextBlock Classes="callout" Text="{Binding Label}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+													</DockPanel>
+												</Border>
 											</DataTemplate>
 										</ItemsControl.ItemTemplate>
 									</ItemsControl>
 								</ScrollViewer>
-							</Border>
-						</DockPanel>
+							</Panel>
+							<Button Name="RomPickerAddFolder" Grid.Row="3" Classes="secondary regular" HorizontalAlignment="Left" Margin="0 12 0 0" Content="{l:Translate btnRomPickerFoldersAdd}" Click="OnAddFolder" VerticalAlignment="Top" />
+						</Grid>
 				</Panel>
 			</DockPanel>
 		</Border>
