@@ -1,13 +1,15 @@
 # ADR-0267: A game with nothing to reveal is filled from a synthesized edge band, not left with a disabled switch
 
-- Status: proposed 2026-10-08 — an open either/or (options A–D below), awaiting the owner's pick.
-  Nothing here is implemented, and the current behavior is *not* a bug: see Context. Every option
-  amends ADR-0253 §1/§3/§4; options B and C also add one source to that ADR's fallback chain, and
-  option A instead corrects ADR-0253 §2 in place (a refinement, not a reversal, so no superseded
-  line is owed either way). **Option C additionally amends ADR-0253 §2**: its SMS per-console
-  scope line ("Reveal is offered but has no map columns to show, so it always uses the fallback")
-  is replaced by the synthesized band, and its Reveal-source contract is widened so that extended
-  columns no longer imply revealed map columns. See Decision, Option C.
+- Status: accepted 2026-10-08 — the owner picked **B now, then C**, verbatim: *"B agora, depois
+  C (Recommended)"* (2026-10-08, via direct question). The intake is staged: **stage 1 is option
+  B**, implemented by a separate PR (the Widescreen switch stays enabled for a console with no
+  side map and applies `VideoAspectRatio.Widescreen`, reason string reworded), and **stage 2 is
+  option C**, in the slices below. **B amends ADR-0253 §1/§3/§4 only and adds no source to that
+  ADR's fallback chain; the §2 amendment is owed only when C lands.** The current behavior is
+  still *not* a bug: see Context, and nothing here is implemented by this branch. Options A and D
+  were weighed and not taken; option A's in-place §2 correction remains the answer only if C is
+  dropped, and C's own amendment to §2 (its SMS per-console scope line, and the Reveal-source
+  contract that ties extended columns to revealed map content) is stated under Decision, Option C.
 - Date: 2026-10-08
 - Related: issue #1082; ADR-0253 (the Reveal and its fallback chain — §1 the one switch, §2 the
   per-console scope, §3 the content-aware fallback and its "never on their own" rule, §4 the
@@ -15,13 +17,17 @@
   frames stay bit-identical); ADR-0163 (fork–upstream coexistence: `SmsVdp` is upstream-owned);
   ADR-0236 (recorded captures are keyed to 256-wide cell positions); PRD Part B §6.1 (the WideScrn
   row) and §8 (the W.1–W.7 slices); `docs/specs/MEP-v1.md` §5.5 (the `widescreen` section).
-- Supersedes / amends: amends ADR-0253 §1 ("the stretch to 16:9 is dropped"), §3 ("a border or
-  black alone never makes a game supported") and §4 ("SMS/SG-1000 without pack art are known
-  unsupported before the game runs, so the switch is disabled at once"). **If Option C is
-  accepted it also amends §2**, in two places: the per-console scope entry for SMS/SG-1000, and
-  the Reveal-source contract that today ties "extended columns" to map content the console
-  reveals. Options A, B and D leave §2 untouched. No option amends §2's arithmetic — a frame is
-  still `2N` pixels wider, and the standard mode is still bit-identical (ADR-0162).
+- Supersedes / amends: **the accepted option B amends ADR-0253 §1** ("the stretch to 16:9 is
+  dropped"), **§3** ("a border or black alone never makes a game supported") and **§4** ("SMS/SG-1000
+  without pack art are known unsupported before the game runs, so the switch is disabled at once").
+  B leaves **§2 untouched** and adds **no source** to §3's fallback chain — it re-enables the switch
+  and applies the existing `VideoAspectRatio.Widescreen` fill, it does not reveal anything. **The §2
+  amendment is owed only when option C lands**, and C states it in two places: the per-console scope
+  entry for SMS/SG-1000, and the Reveal-source contract that today ties "extended columns" to map
+  content the console reveals. Until C ships, §2's SMS sentence stays exactly as accepted. Option A
+  would have corrected §2 in place instead (a refinement, not a reversal, so no superseded line is
+  owed either way); option D left §2 alone. No option amends §2's arithmetic — a frame is still `2N`
+  pixels wider, and the standard mode is still bit-identical (ADR-0162).
 
 ## Context
 
@@ -76,8 +82,30 @@ SNES.
 
 ## Decision
 
-*Proposed — the recommendation is option C, and the owner picks. The options are ordered by cost,
-cheapest first.*
+*Accepted 2026-10-08 — the owner's answer, verbatim: *"B agora, depois C (Recommended)"*. The
+decision is staged: **stage 1 is option B**, which ships first and is implemented by a separate PR;
+**stage 2 is option C**, which follows in slices. The four options are kept below as they were
+weighed, ordered by cost, cheapest first.*
+
+**Stage 1 — option B, now, in a separate PR.** For a console with no side map the Widescreen switch
+stays **enabled**, and turning it on applies `VideoAspectRatio.Widescreen` — the pre-ADR-0253 fill
+already implemented in `AspectRatioMath`. The one-line reason is reworded off "nothing to show
+beside the picture" onto a fill wording (for example "Nothing to reveal beside the picture;
+widescreen will only stretch it"), so the switch never claims a Reveal it does not have. That is the
+smallest change that answers the report as written: it changes `WidescreenSupportRule` — §4's
+"disabled at once" becomes "enabled, fills" — and its 19 pinned cases, plus one new resource string.
+It amends ADR-0253 §1/§3/§4 and **leaves §2 alone**, because a fill is not a fallback source and §2
+is about the Reveal's own scope. This ADR does not implement it.
+
+**Stage 2 — option C, in slices, after B.** The edge band follows once B has shipped, in this order
+and no other: **C1** the synthesized edge-band source and its position in
+`WidescreenFallback::ApplyChain`, with the `W253C:`-family host-free tests; **C2b** the SMS HD-pack
+path sized from the frame it is handed — the RGB555 pixel buffer and the `HdTilePixelInfo`
+provenance grid taken from the frame's own width instead of the hard-coded 256, with the band
+columns' provenance synthesized — which lands *with* C2, since the widened frame reaches the
+composer the moment C2 ships; **C3** §3/§4's rule (`WidescreenFallback::SupportsWidescreen`,
+`WidescreenSupportRule`) and the reworded reason string. C2, C4 and C5 keep the meaning they carry
+in the slice plan below. **The §2 amendment is owed with C, not before it.**
 
 - **Option A — status quo; reconcile the prose.** Keep the switch disabled for SMS/SG-1000 and
   point the player at Player Settings → Display → Aspect ratio → Widescreen for the plain stretch.
@@ -87,7 +115,8 @@ cheapest first.*
   promising SMS a fallback that §3 and §4 forbid. So this option is only honest together with an
   in-place correction of §2's SMS sentence, plus a decision on whether the reason string should
   point at the Display setting.
-- **Option B — the switch applies the fill.** Keep the Widescreen switch *enabled* for a console
+- **Option B — the switch applies the fill. *Accepted as stage 1 (2026-10-08); implemented by a
+  separate PR.*** Keep the Widescreen switch *enabled* for a console
   with no side map (and, for consistency, for a game the measurement settled as unsupported), and
   let turning it on apply `VideoAspectRatio.Widescreen` — the pre-ADR-0253 behavior, already
   implemented in `AspectRatioMath`. The one-line reason is reworded from "nothing to show beside
@@ -97,7 +126,8 @@ cheapest first.*
   the default; changes `WidescreenSupportRule` (§4's "disabled at once" becomes "enabled, fills")
   and its 19 pinned cases; one new resource string. This is the smallest change that answers the
   report as written.
-- **Option C — a synthesized edge band, revealed like real columns. *Recommended.*** The SMS VDP
+- **Option C — a synthesized edge band, revealed like real columns. *Accepted as stage 2
+  (2026-10-08), in slices, after B ships.*** The SMS VDP
   emits its line `2N` columns wider — §2's frame-width arithmetic, unchanged — where the extra
   pixels of a scanline repeat the nearest real column of that same scanline. Those rows are marked
   in the per-row side-fill map (`RenderedFrame::ExtendedSideFill`) as *synthesized*, and
@@ -171,14 +201,17 @@ cheapest first.*
   it does not by itself say what "on" *does* for a console with no side map, so it still needs B
   or C underneath. Recorded for completeness, not recommended.
 
-**Recommendation: C**, with B as the stopgap if the owner wants the pillarboxes gone for one
-line of work, and A if the owner considers the Display surface's aspect-ratio setting the answer and
-wants only the prose reconciled. C is the only option that gives the reporter what §1 says the
-chain is for — the picture *wider*, not stretched — and it is the only one that makes ADR-0253 §2's
-promise to SMS mean something.
+**The recommendation was C**, with B as the stopgap if the owner wanted the pillarboxes gone for one
+line of work, and A if the owner considered the Display surface's aspect-ratio setting the answer and
+wanted only the prose reconciled. The owner took both, B first: **B removes the pillarboxes now and C
+is the destination**, since C is the only option that gives the reporter what §1 says the chain is
+for — the picture *wider*, not stretched — and the only one that makes ADR-0253 §2's promise to SMS
+mean something. B is therefore a deliberate, temporary re-admission of the 16:9 stretch §1 exists to
+remove, and C is what retires it again.
 
-**If C or B is accepted it is a new PRD slice** in Part B §8, after W.7, with W.5's switch state
-revisited (§4's early-disable clause) and §6.1's WideScrn row updated. Slice plan for C:
+**B and C are new PRD slices** in Part B §8, after W.7, with W.5's switch state revisited (§4's
+early-disable clause) and §6.1's WideScrn row updated. **B is implemented by a separate PR**; the C
+slices below follow it once B has landed. Slice plan for C:
 **C1** the edge-band source and its position in `WidescreenFallback::ApplyChain`, with the
 `W253C:`-family host-free tests; **C2** `SmsVdp` emitting the extra columns and the "synthesized"
 mark; **C2b** the SMS HD-pack path sized to the frame it is handed — the RGB555 pixel buffer and the
@@ -196,10 +229,12 @@ under MEP-v1's Versioning line ("a semantic change = major"), since C relaxes a 
 
 ## Consequences
 
-- **ADR-0253's internal contradiction gets settled either way.** With B or C, §4's "SMS/SG-1000
-  are known unsupported before the game runs, so the switch is disabled at once" is replaced by a
-  mode for those consoles; with A, §2's SMS sentence must be corrected in place so it stops
-  promising a fallback §3 forbids.
+- **ADR-0253's internal contradiction is settled in two steps, not one.** Stage 1 (B) settles §4's
+  "SMS/SG-1000 are known unsupported before the game runs, so the switch is disabled at once" —
+  those consoles get a switch mode (the fill) as soon as B ships. It does **not** settle §2: §2's
+  dead SMS sentence, the one promising a fallback §3 forbids, stays as accepted until stage 2 (C)
+  replaces it. If C is ever dropped, correcting that sentence in place — option A's edit — becomes
+  the piece still owed, and the ADR register would then hold a §2 clause no option of record amends.
 - **MEP-v1 §5.5 needs a revision if C is picked, and that revision is a *major* bump.** The
   section says hosts "MUST NOT synthesize widescreen art on their own". That rule is about a host
   inventing a pack section's authored content; an edge band derived per row from the picture's own
