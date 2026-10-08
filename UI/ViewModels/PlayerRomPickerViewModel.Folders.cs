@@ -310,7 +310,7 @@ namespace Mesen.ViewModels
 			//a query or filter while this rescan runs must not draw them.
 			BeginLibraryVisit();
 			ResetConsoleFilter();
-			StartLibraryScan();
+			StartLibraryStream();
 		}
 
 		//One message per answer the host-free rule can give about an add. `Added`
