@@ -16,6 +16,15 @@
 - Supersedes / amends: amends PRD Part B §7, whose non-goal *"A widescreen mode that reveals
   more of the playfield … would be its own per-console engine ADR"* this ADR is. Amends §6.1's
   WideScrn row, which today is defined as a 16:9 stretch.
+- Amended by: ADR-0267 (accepted 2026-10-08, stage 1 = its option B, implemented by a separate PR,
+  not by the branch that accepted it) — **§1** ("The stretch to 16:9 is dropped: it is the
+  distortion this ADR exists to remove."), **§3** ("border and black are per-frame fill-ins that
+  never on their own make a game supported") and **§4** ("SMS/SG-1000 without pack art are known
+  unsupported before the game runs, so the switch is disabled at once") are amended: a console with
+  no side map keeps the Widescreen switch enabled, and turning it on applies
+  `VideoAspectRatio.Widescreen` — a fill, not a Reveal. **§2 is untouched by that amendment**, and
+  stays exactly as accepted here; the §2 amendment is owed only when ADR-0267's option C (the
+  synthesized edge band) lands.
 
 ## Record
 
