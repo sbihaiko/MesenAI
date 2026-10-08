@@ -1179,6 +1179,10 @@ namespace Mesen.Windows
 				return;
 			}
 
+			if(HandleEscInTheUi(e)) {
+				return;
+			}
+
 			if(OperatingSystem.IsMacOS()) {
 				//Keyhandler handles key internally on macOS
 				return;
@@ -1205,6 +1209,44 @@ namespace Mesen.Windows
 				//Prevent menu/window from handling these keys to avoid issue with custom shortcuts
 				e.Handled = true;
 			}
+		}
+
+		//#1080: Esc is answered here, at the window's own keyboard, for the two
+		//contexts UiEsc gives the UI (Player mode's overlay and its Settings sheet).
+		//The press used to be left to the core's shortcut handler alone, and that
+		//path is not one the player can rely on: on macOS it runs on the native key
+		//monitor, and in Player mode an Esc that reached the core left the game
+		//running with no overlay until the window was re-focused. Answering it here
+		//is what makes the key work from the focus state the game view is left in.
+		//
+		//The press stops here on purpose. Both paths end in the same router
+		//(ShortcutHandler.ApplyUiEsc), so letting the core see this Esc as well would
+		//open the overlay and close it again in the same press - and this handler
+		//returns before InputApi.SetKeyState, which is the only way a keyboard press
+		//reaches the core on Windows and Linux, so nothing is fed twice there either.
+		private bool HandleEscInTheUi(KeyEventArgs e)
+		{
+			if(e.Key != Key.Escape || _model == null) {
+				return false;
+			}
+
+			UiEscAction action = UiEsc.For(
+				_model.Config.Preferences.UiMode == UiMode.Player,
+				_model.IsPlayWorkspace,
+				_model.BiosSheet.IsVisible,
+				_model.SelectRomSheet.IsVisible,
+				_model.ToolSheet.IsVisible,
+				_model.IsPlayerSettingsVisible,
+				_model.IsRemasterGameView,
+				_model.Shell.Active == Workspace.Share
+			);
+			if(!UiEsc.UiTakesThePress(action)) {
+				return false;
+			}
+
+			e.Handled = true;
+			_shortcutHandler.ApplyUiEsc(action);
+			return true;
 		}
 
 		private void OnPreviewKeyUp(object? sender, KeyEventArgs e)

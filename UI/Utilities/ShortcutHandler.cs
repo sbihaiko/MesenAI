@@ -28,6 +28,23 @@ namespace Mesen.Utilities
 
 		private MainWindowViewModel MainWindowModel => (MainWindowViewModel)_mainWindow.DataContext!;
 
+		//The one place UiEsc's answer is applied, for both of its callers: the
+		//core's ToggleOverlay press (above) and the window's own Esc (#1080).
+		public void ApplyUiEsc(UiEscAction action)
+		{
+			switch(action) {
+				case UiEscAction.TogglePlayerOverlay: MainWindowModel.TogglePlayerOverlay(); break;
+				case UiEscAction.ClosePlayerSettings: MainWindowModel.ClosePlayerSettings(); break;
+				//G.3 (W-R2): in Remaster's recording view Esc stops the recording
+				//and returns to the project screen; G.6: from a build shown in the
+				//game it just returns.
+				case UiEscAction.LeaveRemasterGameView: MainWindowModel.Remaster.LeaveGameView(); break;
+				//G.8 (rule 8, ShareEsc): stops a replay recording, or closes the
+				//topmost sheet or list.
+				case UiEscAction.ShareEsc: MainWindowModel.Share.HandleEsc(); break;
+			}
+		}
+
 		public void ExecuteShortcut(EmulatorShortcut shortcut)
 		{
 			if(!EmuApi.IsShortcutAllowed(shortcut, 0)) {
@@ -77,22 +94,20 @@ namespace Mesen.Utilities
 					//and Esc cancels it there too (TogglePlayerOverlay takes it first);
 					//so does an archive's game list (an open from any workspace),
 					//and ADR-0250's tool sheet (About, Command Line…) from any door.
-					if(MainWindowModel.Config.Preferences.UiMode == UiMode.Player && (MainWindowModel.IsPlayWorkspace || MainWindowModel.BiosSheet.IsVisible || MainWindowModel.SelectRomSheet.IsVisible || MainWindowModel.ToolSheet.IsVisible)) {
-						MainWindowModel.TogglePlayerOverlay();
-					} else if(MainWindowModel.Config.Preferences.UiMode == UiMode.Player && MainWindowModel.IsPlayerSettingsVisible) {
-						//ADR-0250: Settings… opened from Remaster's or Share's
-						//Tools ⋯ closes on Esc, keeping what was changed.
-						MainWindowModel.ClosePlayerSettings();
-					} else if(MainWindowModel.IsRemasterGameView) {
-						//G.3 (W-R2): in Remaster's recording view Esc stops the
-						//recording and returns to the project screen; G.6: from
-						//a build shown in the game it just returns.
-						MainWindowModel.Remaster.LeaveGameView();
-					} else if(MainWindowModel.Shell.Active == Workspace.Share) {
-						//G.8 (rule 8, ShareEsc): stops a replay recording, or closes
-						//the topmost sheet or list.
-						MainWindowModel.Share.HandleEsc();
-					}
+					//#1080: the meaning is UiEsc's, not this arm's, because the window
+					//answers the same key at its own keyboard (MainWindow's Esc arm) and
+					//both callers have to resolve it the same way - two copies of the
+					//chain is how one press opens the overlay and closes it again.
+					ApplyUiEsc(UiEsc.For(
+						MainWindowModel.Config.Preferences.UiMode == UiMode.Player,
+						MainWindowModel.IsPlayWorkspace,
+						MainWindowModel.BiosSheet.IsVisible,
+						MainWindowModel.SelectRomSheet.IsVisible,
+						MainWindowModel.ToolSheet.IsVisible,
+						MainWindowModel.IsPlayerSettingsVisible,
+						MainWindowModel.IsRemasterGameView,
+						MainWindowModel.Shell.Active == Workspace.Share
+					));
 					break;
 
 				case EmulatorShortcut.OpenFile: OpenFile(); break;
