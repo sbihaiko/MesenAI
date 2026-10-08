@@ -66,6 +66,10 @@ public class PlayRomPickerAskTests : IDisposable
 		prefs.GameFolder = _gameFolder ?? "";
 		prefs.OverrideGameFolder = _overrideGameFolder;
 		prefs.ConfirmExitResetPower = _confirmExitResetPower;
+		//The list this class's fixtures seeded names a folder that Dispose deletes, so
+		//it goes back to absent rather than being left pointing at a gone tree (see
+		//LibraryRoot: the seed is what makes the next case's own folder the library).
+		prefs.LibraryFolders = null;
 		ConfigManager.Config.Save();
 
 		try {
@@ -78,6 +82,14 @@ public class PlayRomPickerAskTests : IDisposable
 	//A games folder with `count` ROMs under it and the settings pointed at it, so the
 	//configured folder IS the library folder on any machine. Every ROM is its own
 	//byte, so the grid is a grid of distinct games rather than one dump repeated.
+	//
+	//#1036 made the sheet read the STORED list (Preferences.LibraryFolders) and fall
+	//back to the single games folder only while that list is absent
+	//(SeedLibraryFolders). One process runs the whole suite against one portable
+	//config, so any case that edits the list - this class's own sibling among them -
+	//leaves a path behind and the seed never runs again: the sheet would then read
+	//that leftover folder, and this fixture's tree would land no tile at all. Taking
+	//the list back to absent is what makes "the settings point at it" true per case.
 	private void LibraryRoot(int count)
 	{
 		string root = Path.Combine(_folder, "games");
@@ -88,6 +100,7 @@ public class PlayRomPickerAskTests : IDisposable
 			rom[32 + i] = 0x01;
 			File.WriteAllBytes(Path.Combine(nes, $"Game {i:00} (USA).nes"), rom);
 		}
+		ConfigManager.Config.Preferences.LibraryFolders = null;
 		ConfigManager.Config.Preferences.GameFolder = root;
 		ConfigManager.Config.Preferences.OverrideGameFolder = true;
 	}
