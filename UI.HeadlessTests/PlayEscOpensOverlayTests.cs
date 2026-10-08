@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
+using System.Reflection;
 using System.Threading;
 using Avalonia.Controls;
 using Avalonia.Headless;
@@ -13,6 +15,7 @@ using Mesen.Config;
 using Mesen.Config.Shortcuts;
 using Mesen.Interop;
 using Mesen.Logic;
+using Mesen.Utilities;
 using Mesen.ViewModels;
 using Mesen.Windows;
 using Xunit;
@@ -187,6 +190,10 @@ public class PlayEscOpensOverlayTests : IDisposable
 		window.KeyPressQwerty(PhysicalKey.Escape, RawInputModifiers.None);
 		Dispatcher.UIThread.RunJobs();
 		WaitFor(() => model.IsGamePaused && window.IsPauseCardActive(), "the first Esc did not open W-P4 (#1080)");
+		//Released in between: a press is a down and an up, and the window answers
+		//a key it has not seen released as the press still being held (below).
+		window.KeyReleaseQwerty(PhysicalKey.Escape, RawInputModifiers.None);
+		Dispatcher.UIThread.RunJobs();
 
 		//The router is still the one Esc answers to, and Esc still means one
 		//thing: the second press is the way back to the game.
@@ -194,6 +201,120 @@ public class PlayEscOpensOverlayTests : IDisposable
 		Dispatcher.UIThread.RunJobs();
 		WaitFor(() => !EmuApi.IsPaused(), "the second Esc did not resume the game (#1080)");
 		Assert.False(model.IsPlayerOverlayVisible);
+	}
+
+	//#1080: the OS repeats a key the player holds, and every repeat arrives as
+	//another KeyDown of the same key with no KeyUp between. TogglePlayerOverlay has
+	//no repeat guard of its own, so answering each down toggles the overlay at the
+	//repeat rate: a held Esc opens W-P4 and closes it again, and in Settings it
+	//closes the sheet and opens the overlay. Only the first down of a key is a
+	//press.
+	[AvaloniaFact]
+	public void Esc_is_answered_once_while_the_key_is_held()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model, _) = ShowRunningGame();
+
+		window.KeyPressQwerty(PhysicalKey.Escape, RawInputModifiers.None);
+		Dispatcher.UIThread.RunJobs();
+		WaitFor(() => model.IsGamePaused && window.IsPauseCardActive(), "the first Esc did not open W-P4 (#1080)");
+
+		//No release in between: this is the auto-repeat of the key still held.
+		window.KeyPressQwerty(PhysicalKey.Escape, RawInputModifiers.None);
+		Dispatcher.UIThread.RunJobs();
+
+		Assert.True(window.IsPauseCardActive(), "the auto-repeat of a held Esc closed W-P4 (#1080): the overlay toggles at the repeat rate");
+		Assert.True(model.IsGamePaused, "the auto-repeat of a held Esc resumed the game (#1080)");
+
+		//Letting go is what makes the next down a press again.
+		window.KeyReleaseQwerty(PhysicalKey.Escape, RawInputModifiers.None);
+		Dispatcher.UIThread.RunJobs();
+		window.KeyPressQwerty(PhysicalKey.Escape, RawInputModifiers.None);
+		Dispatcher.UIThread.RunJobs();
+		WaitFor(() => !EmuApi.IsPaused(), "Esc after the key was released did not resume the game (#1080)");
+		Assert.False(model.IsPlayerOverlayVisible);
+	}
+
+	//#1080: reopening found the window's Esc arm running before the menu check
+	//ProcessFullscreenShortcut applies, so a press made while the keyboard was in a
+	//menu opened W-P4 behind it instead of reaching the menu - and the arm marked
+	//the press handled, so the menu never saw the key it closes on.
+	[AvaloniaFact]
+	public void Esc_while_a_menu_has_the_keyboard_is_not_the_overlays_press()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model, _) = ShowRunningGame();
+
+		//The shell bar is on screen with W-P4 (WorkspaceShell.IsBarVisible), and
+		//its Tools ⋯ is the menu a player can have open over a paused game.
+		window.KeyPressQwerty(PhysicalKey.Escape, RawInputModifiers.None);
+		Dispatcher.UIThread.RunJobs();
+		WaitFor(() => window.IsPauseCardActive(), "the first Esc did not open W-P4 (#1080)");
+		window.KeyReleaseQwerty(PhysicalKey.Escape, RawInputModifiers.None);
+		Dispatcher.UIThread.RunJobs();
+
+		Menu tools = window.FindNamed<Menu>("ToolsMenu");
+		MenuItem button = tools.GetRealizedContainers().OfType<MenuItem>().First(m => m.Name == "ToolsMenuButton");
+		button.Open();
+		button.Focus();
+		Dispatcher.UIThread.RunJobs();
+
+		//The premise, and the window's own answer to it: _focusInMenu is what its
+		//poll (TimerUpdateBackgroundFlag) writes, and the poll runs on a timer, so
+		//it is waited for rather than assumed.
+		WaitFor(() => WindowSaysTheKeyboardIsInAMenu(window), "the window never saw the keyboard move into the Tools menu");
+
+		window.KeyPressQwerty(PhysicalKey.Escape, RawInputModifiers.None);
+		Dispatcher.UIThread.RunJobs();
+
+		//The press was the menu's, and the overlay never moved on it. This is the
+		//defect: the arm answered a press whose keyboard was not the game's, so
+		//W-P4 went away behind the menu that had asked for the key.
+		Assert.True(window.IsPauseCardActive(), "Esc with a menu open closed W-P4 (#1080): the overlay answered a press that was the menu's");
+		Assert.True(model.IsGamePaused, "Esc with a menu open resumed the game (#1080)");
+	}
+
+	//#1080: same guard, the other half - a focused text input owns its keys, and
+	//the overlay's arm must not swallow them. The tool sheet's barcode field is the
+	//case that puts a text box in front of the player over a running game: the
+	//sheet focuses it on open (PlayFocusOnOpen), so this is the state a press
+	//arrives in.
+	[AvaloniaFact]
+	public void Esc_while_a_text_box_has_the_keyboard_is_not_the_overlays_press()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model, _) = ShowRunningGame();
+
+		new ShortcutHandler(window).InputBarcode();
+		Dispatcher.UIThread.RunJobs();
+		TextBox box = window.FindNamed<TextBox>("ToolSheetBarcode");
+		Assert.True(model.ToolSheet.IsVisible && box.IsOnScreen(), "the arrangement did not put the barcode sheet's field on screen");
+		box.Focus();
+		Dispatcher.UIThread.RunJobs();
+		Assert.True(box.IsFocused, "the arrangement did not put the keyboard in the text box");
+		Assert.False(window.IsPauseCardActive());
+
+		//Read where the press arrives at the focused control itself, which is the
+		//claim: the box gets its key, and the window has not already answered it.
+		bool theBoxSawThePress = false;
+		bool takenBeforeTheBox = true;
+		box.AddHandler(InputElement.KeyDownEvent, (_, e) => { theBoxSawThePress = true; takenBeforeTheBox = e.Handled; }, RoutingStrategies.Bubble, true);
+		window.KeyPressQwerty(PhysicalKey.Escape, RawInputModifiers.None);
+		Dispatcher.UIThread.RunJobs();
+
+		Assert.True(theBoxSawThePress, "the press never reached the focused text box");
+		Assert.False(takenBeforeTheBox, "the window took Esc before the text box it was focused on could (#1080)");
+		Assert.False(window.IsPauseCardActive(), "Esc with a text box focused opened W-P4 behind it (#1080)");
+		Assert.False(model.IsPlayerOverlayVisible);
+	}
+
+	//The window's own view of the keyboard, read off the field its poll writes
+	//(TimerUpdateBackgroundFlag). A real menu cannot be driven far enough here to
+	//observe it any other way: once its popup is up the popup is its own top level,
+	//and the press below is sent to the window, which is the arm under test.
+	private static bool WindowSaysTheKeyboardIsInAMenu(MainWindow window)
+	{
+		return (bool)typeof(MainWindow).GetField("_focusInMenu", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(window)!;
 	}
 
 	//#1080: Esc by name is the bug - the overlay's key is the binding's, so moving
