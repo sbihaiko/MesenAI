@@ -66,9 +66,9 @@
       "join": "all",
       "allow": {
         "models": [
+          "claude-deepseek-v4-flash",
           "claude-sonnet-5-5",
           "claude-gpt-5.6-sol-fast",
-          "claude-deepseek-v4-flash",
           "claude-grok-4.6",
           "claude-grok-4.5",
           "claude-gpt-5.5",
@@ -125,7 +125,7 @@
     {
       "name": "router",
       "kind": "agent",
-      "model": "claude-sonnet-5-5",
+      "model": "claude-deepseek-v4-flash",
       "tools": [
         "Read",
         "Grep",
