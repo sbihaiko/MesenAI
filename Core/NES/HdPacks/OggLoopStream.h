@@ -7,7 +7,7 @@
 //at the OGG's own rate): once the stream runs out, playback resumes at that
 //sample instead of at 0, so a track's intro is not repeated. A track that
 //omits the field (0), or whose loop point falls outside the stream, keeps the
-//pre-item-8 behaviour and loops the whole file.
+//pre-item-8 behavior and loops the whole file.
 //
 //Split out of OggReader so the rule can be exercised without stb_vorbis or
 //VirtualFile - the same move ADR-0142 made for the mixer with IOggSource. The

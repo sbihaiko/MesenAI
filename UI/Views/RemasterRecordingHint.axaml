@@ -10,7 +10,7 @@
 	x:Class="Mesen.Views.RemasterRecordingHint"
 >
 	<!--ADR-0249 (W-R2): the render's hint is a separate toast near the bottom
-	of the game - a 440 x 36 HUD (radius 10) with one centred 12.5 medium
+	of the game - a 440 x 36 HUD (radius 10) with one centered 12.5 medium
 	white line. The native renderer draws above Avalonia content, so the toast
 	sits in a strip under the game, as RemasterRecordingStrip sits above it.
 	Player mode only: Advanced keeps the hint inside its strip, and this

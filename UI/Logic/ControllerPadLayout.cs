@@ -11,12 +11,12 @@ namespace Mesen.Logic
 	//Where one button sits on the setup sheet's pad, in the pad's own pixels.
 	public readonly record struct PadKey(double Left, double Top, double Width, double Height, PadKeyShape Shape);
 
-	//A console's pad body: its size, the D-pad's centre square (drawn, never a
+	//A console's pad body: its size, the D-pad's center square (drawn, never a
 	//step) and, for the Game Boy, the screen drawn above the buttons.
 	public sealed record PadBody(double Width, double Height, PadKey DPadCentre, PadKey? Screen);
 
 	//ADR-0249 (W-P15): the setup sheet draws a pad - the renderer's 340 x 140
-	//body with the D-pad cross centred at (70, 70), Select/Start pills either
+	//body with the D-pad cross centered at (70, 70), Select/Start pills either
 	//side of the middle, B low and A high on the right, and the GBA's L/R
 	//shoulders along the top - so the lit key shows which button to press.
 	public static class ControllerPadLayout
@@ -24,7 +24,7 @@ namespace Mesen.Logic
 		public const double Width = 340;
 		public const double Height = 140;
 
-		//The D-pad's centre square, drawn but never a step.
+		//The D-pad's center square, drawn but never a step.
 		public static readonly PadKey DPadCentre = new(58, 58, 24, 24, PadKeyShape.DPad);
 
 		public static PadKey Of(SetupButton button)

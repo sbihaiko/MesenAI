@@ -235,7 +235,7 @@ namespace Mesen.Windows
 			base.OnClosing(e);
 			if(SkipCloseConfirmation) {
 				//The harness is closing a window it showed (#840): there is no
-				//player to ask, and a cancelled close would leak the window - and
+				//player to ask, and a canceled close would leak the window - and
 				//its pad timer - into the next test. The exit path itself is
 				//unchanged: CloseEmu still stops the emulator and runs ReleaseCore.
 				_needCloseValidation = false;

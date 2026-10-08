@@ -13,7 +13,7 @@ namespace Mesen.Logic;
 //of it with its license, source and sha256; the folder is extracted with the
 //other dependencies into <home>/Shaders/Looks. Host-free (ADR-0123): Parse and
 //Entries feed Settings › Look, Validate is what UI.Tests runs on the real
-//bytes. Adding a look is a code change - there is no catalogue browser and no
+//bytes. Adding a look is a code change - there is no catalog browser and no
 //download path.
 public sealed record NamedLookFile(string Path, string Sha256, string License, string Source);
 

@@ -23,7 +23,7 @@ public enum PackLayer
 public enum PackLayerNote
 {
 	None,
-	//The pack has no such layer (the render's grey chip).
+	//The pack has no such layer (the render's gray chip).
 	NotInPack,
 	//The global switch has it off for every game.
 	OffEverywhere

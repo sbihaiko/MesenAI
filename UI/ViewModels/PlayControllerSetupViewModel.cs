@@ -83,7 +83,7 @@ namespace Mesen.ViewModels
 		public Action Resume { get; set; } = EmuApi.Resume;
 		public Func<bool> IsPaused { get; set; } = EmuApi.IsPaused;
 
-		//The sheet closed (done or cancelled); the owner shows the result.
+		//The sheet closed (done or canceled); the owner shows the result.
 		public event Action<string>? Finished;
 
 		public TimeSpan Now => _clock.Elapsed;

@@ -8,7 +8,7 @@
 struct MepTarget
 {
 	string System; //nes, gb, gbc, sms, gg, sg1000, coleco, snes
-	string Sha1; //40 uppercase hex digits (normalised on parse)
+	string Sha1; //40 uppercase hex digits (normalized on parse)
 	string Crc32; //8 uppercase hex digits or empty
 	string Name;
 };
@@ -115,7 +115,7 @@ public:
 
 	static const char* GetSectionName(MepSectionType type);
 
-	//Normalises a container-relative path and rejects anything that could
+	//Normalizes a container-relative path and rejects anything that could
 	//escape the pack root (spec §2.3/§6 - also used for zip entries).
 	//Returns false when unsafe; "normalized" receives the cleaned path.
 	static bool NormalizeRelativePath(const string& path, string& normalized);

@@ -262,7 +262,7 @@ public:
 	//#470 filter** - a fully transparent half is emitted like any other, so a
 	//caller here sees a half the production path drops. Its only caller is
 	//`OamFetchLatchModel::RunFrame` (`scripts/core_unit_tests.cpp`), which reads
-	//back the halves of a modelled frame as fetched. Production goes through the
+	//back the halves of a modeled frame as fetched. Production goes through the
 	//4-arg overload above.
 	template<typename Emit>
 	void ForEachLatched(Emit&& emit)
@@ -274,7 +274,7 @@ public:
 		}
 	}
 
-	//Issue #470: a sprite tile whose 16 bytes are all zero draws colour 0 -
+	//Issue #470: a sprite tile whose 16 bytes are all zero draws color 0 -
 	//transparent - on every pixel. The loader never draws one
 	//(HdNesPack::DrawTile returns on IsFullyTransparent, and
 	//InitializeFallbackTiles skips blank tiles), and the PPU makes a <tile>

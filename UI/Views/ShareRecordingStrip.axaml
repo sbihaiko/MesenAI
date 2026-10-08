@@ -15,7 +15,7 @@
 	the same Stop as W-R2 for a mouse. It sits above the game, not over it,
 	because the native renderer draws above Avalonia content.-->
 	<!--ADR-0249: in Player mode the strip is W-R2's HUD (Border.hud, red dot,
-	white semibold pill, grey `primary hud` Stop); Advanced keeps the classic one.-->
+	white semibold pill, gray `primary hud` Stop); Advanced keeps the classic one.-->
 	<UserControl.Styles>
 		<Style Selector="v|ShareRecordingStrip:not(.player) Border#ShareRecordingStripBorder">
 			<Setter Property="Background" Value="#202020" />

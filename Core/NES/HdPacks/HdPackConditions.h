@@ -186,7 +186,7 @@ struct HdPackBasePositionCheckCondition : public HdPackCondition
 			//written against. Refusing them here is what stops `x = -64` from
 			//being read as the huge unsigned it would otherwise be - and, with
 			//the old coordinate wrap, from being answered about an unrelated
-			//centre pixel. No improvement is the failure mode, never a hole.
+			//center pixel. No improvement is the failure mode, never a hole.
 			return false;
 		}
 		uint32_t val;

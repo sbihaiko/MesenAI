@@ -229,7 +229,7 @@ void BisqwitNtscFilter::GenerateNtscSignal(int8_t* ntscSignal, int& phase, int r
 	//ADR-0253 W.6: the phase advance after a row is what is left of the PPU's
 	//whole 341-cycle scanline once the row that was actually drawn is taken out.
 	//The "(341 - 256) * 8" this used to be left a 384-px row 128 subcarrier
-	//samples (10.7 colour cycles) short, which crawls the hue down the picture.
+	//samples (10.7 color cycles) short, which crawls the hue down the picture.
 	phase += WidescreenFrameFlow::Ntsc::PhaseAdvanceAfterRow((uint32_t)width);
 }
 

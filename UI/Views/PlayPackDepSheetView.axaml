@@ -41,7 +41,7 @@
 					</StackPanel>
 				</Button>
 				<!--Every wait moves (2026-10-03): the dropped file is hashed and
-				copied off the UI thread; the controls grey out and this moves.-->
+				copied off the UI thread; the controls gray out and this moves.-->
 				<StackPanel Name="PackDepSheetBusy" Spacing="8" Margin="0 12 0 0" IsVisible="{Binding IsBusy}">
 					<TextBlock Name="PackDepSheetBusyText" Classes="subhead secondary" Text="{l:Translate lblPackDepSheetBusy}" />
 					<ProgressBar IsIndeterminate="True" Width="220" HorizontalAlignment="Left" />

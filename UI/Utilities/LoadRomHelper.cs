@@ -44,7 +44,7 @@ namespace Mesen.Utilities
 			InternalLoadRom(romPath, patchPath);
 		}
 
-		//G.5 (W-P13): the game a BIOS sheet names when it is cancelled.
+		//G.5 (W-P13): the game a BIOS sheet names when it is canceled.
 		public static string RequestedGameName { get; private set; } = "";
 
 		//G.5 (PRD Part B §13.5.2 W-P14): in Player mode's Play workspace the home
@@ -110,7 +110,7 @@ namespace Mesen.Utilities
 			ReportLoadFailure(cause, shownName, openGeneration);
 		}
 
-		//W-P14: one sentence per cause. A load the user stopped by cancelling the
+		//W-P14: one sentence per cause. A load the user stopped by canceling the
 		//BIOS sheet is not a broken file, and a failure while another game keeps
 		//running stays today's on-screen message (the home is not on screen).
 		//#674: an open that another open has replaced reports nothing.

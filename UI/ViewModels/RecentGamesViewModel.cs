@@ -87,7 +87,7 @@ namespace Mesen.ViewModels
 			//would collapse the whole template - taking W-P1 (formerly the Welcome
 			//card) down with it, for exactly the user it exists for. The Player home
 			//must stay up with zero entries; Save/Load/game-selection keep the old
-			//empty->hidden behaviour.
+			//empty->hidden behavior.
 			bool keepPlayerHomeHostVisible = false;
 
 			if(mode == GameScreenMode.RecentGames) {

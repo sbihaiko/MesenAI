@@ -6,20 +6,20 @@
 
 //ADR-0253 slice W.4: the Reveal's extra columns as the HD pack sees them.
 //
-//The sides are the picture's own neighbours (NesWidescreenReveal), so the pack
-//has to be asked about them the way it is asked about a centred pixel - the same
-//tile key, the same ROM colour behind a tile it has no rule for - and the answer
+//The sides are the picture's own neighbors (NesWidescreenReveal), so the pack
+//has to be asked about them the way it is asked about a centered pixel - the same
+//tile key, the same ROM color behind a tile it has no rule for - and the answer
 //has to be at the pack's own scale. BuildSideTiles is the bridge: it reads one
 //HdSideTile per 8-px tile of one row straight from the row's scroll basis, using
 //only the mapper's side-effect-free VRAM read, and the renderer draws those
 //tiles through the ordinary per-pixel pipeline (HdNesPack::DrawWidescreenColumns).
 //
-//Every value it stores is the value HdNesPpu::DrawPixel stores for a centred
-//pixel, so a `<tile>` rule cannot tell a side pixel from a centre one - which is
+//Every value it stores is the value HdNesPpu::DrawPixel stores for a centered
+//pixel, so a `<tile>` rule cannot tell a side pixel from a center one - which is
 //the whole point of the slice. One deliberate difference: grayscale and emphasis
-//are not folded into the stored colours here, because the HD path applies them to
+//are not folded into the stored colors here, because the HD path applies them to
 //the finished RGB row (ProcessGrayscaleAndEmphasis), exactly as it does for the
-//centre.
+//center.
 namespace HdWidescreenColumns
 {
 	//The row HdScreenInfo::SideTiles stores must be the row this header walks: one
@@ -32,7 +32,7 @@ namespace HdWidescreenColumns
 	//`mapper` is a BaseMapper, or anything with DebugReadVram(uint16_t) (the
 	//side-effect-free read), GetPpuAbsoluteAddress(uint32_t) and
 	//CopyChrTile(uint32_t, uint8_t*) - the three calls HdNesPpu makes for a
-	//centred tile.
+	//centered tile.
 	template<typename Mapper>
 	void BuildSideTiles(const NesWidescreenReveal::RowBasis& basis, MirroringType mirroring, Mapper& mapper, const uint8_t* paletteRam, bool isChrRam, uint32_t packVersion, HdSideTile* tiles)
 	{
@@ -52,7 +52,7 @@ namespace HdWidescreenColumns
 			if(!hasContent) {
 				//ADR-0253 §3's black fallback, in the pack's own vocabulary: a
 				//tile the renderer paints black and never looks up. It is not a
-				//colour the game chose, so it is not run through grayscale or
+				//color the game chose, so it is not run through grayscale or
 				//emphasis either - exactly as W.1 leaves it.
 				side.Tile.TileIndex = HdPpuTileInfo::NoTile;
 				for(uint32_t p = 0; p < 8; p++) {
@@ -117,13 +117,13 @@ namespace HdWidescreenColumns
 	//NesWidescreenReveal::RenderRowSides produces. HdNesPpu fills the widened
 	//RenderedFrame ADR-0253 §2 promises from the very tiles the HD renderer draws,
 	//so a consumer that is not the HD filter - the border layer, which takes the
-	//centre, a screenshot, the recorder - sees W.1's picture, not a second one
+	//center, a screenshot, the recorder - sees W.1's picture, not a second one
 	//computed a different way. `sideRow` is one side of a row of
 	//HdScreenInfo::SideTiles (HdWidescreenColumns::TilesPerSide of them).
 	//
-	//An empty column is the black fallback *unmasked*: it is not a colour the game
+	//An empty column is the black fallback *unmasked*: it is not a color the game
 	//chose, so grayscale and emphasis do not touch it. Every other pixel is the
-	//ROM's own colour, which they do.
+	//ROM's own color, which they do.
 	inline void SideTilesToLowResRow(const HdSideTile* sideRow, uint8_t xScroll, uint8_t paletteMask, uint16_t emphasisBits, uint16_t* output)
 	{
 		for(uint32_t m = 0; m < ExtraColumns; m++) {
@@ -136,7 +136,7 @@ namespace HdWidescreenColumns
 	}
 
 	//One side pixel's per-pixel record, in the shape HdNesPpu::DrawPixel fills for
-	//a centred pixel - what HdNesPack::GetPixels reads. `pixel` is the column of
+	//a centered pixel - what HdNesPack::GetPixels reads. `pixel` is the column of
 	//the side tile this output column draws, i.e. the second value
 	//SideColumnToTile handed back.
 	//

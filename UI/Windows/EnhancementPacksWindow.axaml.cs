@@ -61,7 +61,7 @@ namespace Mesen.Windows
 			try {
 				string? result = await _model.InstallPack(this);
 				if(result == null) {
-					return; //cancelled
+					return; //canceled
 				}
 				if(result.Length > 0) {
 					await MesenMsgBox.Show(this, result, MessageBoxButtons.OK, MessageBoxIcon.Error);

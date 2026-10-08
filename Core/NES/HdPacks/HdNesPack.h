@@ -162,8 +162,8 @@ private:
 	__forceinline void ProcessGrayscaleAndEmphasis(HdPpuPixelInfo& pixelInfo, uint32_t* outputBuffer, uint32_t hdScreenWidth);
 
 	//ADR-0253 W.4: one row of the Reveal's extra columns, drawn through the same
-	//GetPixels the centre uses - so a `<tile>` rule cannot tell a side pixel from
-	//a centred one - at the pack's own scale. `sideTiles` is one row of
+	//GetPixels the center uses - so a `<tile>` rule cannot tell a side pixel from
+	//a centered one - at the pack's own scale. `sideTiles` is one row of
 	//HdScreenInfo::SideTiles; `rowStart` is the row's first output pixel.
 	void DrawWidescreenColumns(int32_t y, HdSideTile* sideTiles, uint32_t* rowStart, uint32_t screenWidth);
 

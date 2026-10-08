@@ -12,14 +12,14 @@
 //Everything here is presentation only:
 //- the extra columns are fetched with GbPpu::LcdReadVram, the side-effect-free
 //  14-bit read the PPU's own fetchers use: the address carries the bank bit
-//  (0x2000), so a CGB attribute byte and a bank-1 tile resolve, and it honours
+//  (0x2000), so a CGB attribute byte and a bank-1 tile resolve, and it honors
 //  the CGB STOP freeze. Never GbPpu::ReadVram, the CPU-visible read that fires
 //  the debugger's hook, and never GbPpu::PeekVram, which drops the bank bit and
 //  refuses to read at all while the LCD is drawing (mode 3);
 //- sprites, the sprite FIFO, the STAT modes and every CPU-visible register stay
 //  on the original 160 px - this file never touches them;
 //- the standard 160x144 frame the PPU keeps (GetOutputBuffer, the HD builder,
-//  thumbnails, the debugger) is never written to: the centre of the extended
+//  thumbnails, the debugger) is never written to: the center of the extended
 //  frame is a copy of it.
 //
 //The row state each row is drawn from (SCX/SCY, LCDC, BGP, and the window's own
@@ -32,8 +32,8 @@
 //Where the console cannot fill, ADR-0253 §3 falls back to black. On the GB the
 //map always wraps, so the only uncovered rows are the ones the frame never drew
 //(a save state loaded mid-frame) - those are the black fallback. A DMG row whose
-//background layer is off is not a fallback: the hardware outputs one flat colour
-//there, and the revealed columns show that same colour.
+//background layer is off is not a fallback: the hardware outputs one flat color
+//there, and the revealed columns show that same color.
 //
 //Host-free on purpose: scripts/core_unit_tests.cpp drives it with a fake VRAM
 //that counts both read paths.
@@ -53,7 +53,7 @@ namespace GbWidescreenReveal
 	constexpr uint32_t ExtraColumns = 48;
 	constexpr uint32_t ExtendedWidth = StandardWidth + 2 * ExtraColumns;
 
-	//ADR-0253 §3's last fallback: raw RGB555 black. It is not a colour the game
+	//ADR-0253 §3's last fallback: raw RGB555 black. It is not a color the game
 	//chose, so it is not run through the palette.
 	constexpr uint16_t BlackColor = 0x0000;
 
@@ -65,18 +65,18 @@ namespace GbWidescreenReveal
 		uint8_t ScrollX = 0; //SCX
 		uint8_t ScrollY = 0; //SCY
 
-		bool CgbEnabled = false; //CGB double speed/colour mode: attributes + 32 palettes
+		bool CgbEnabled = false; //CGB double speed/color mode: attributes + 32 palettes
 		//LCDC.0. On DMG it switches the background/window layer off, and the
-		//hardware then outputs colour 0 through BGP for the whole line. On CGB
+		//hardware then outputs color 0 through BGP for the whole line. On CGB
 		//that bit is only the BG priority bit, so the map is drawn either way.
 		bool BgEnabled = false;
 		//The emulator's own "disable background" toggle (GameboyConfig).
 		//Independent of the hardware bit, and effective on both consoles: when it
-		//is on, the whole line is one flat colour on DMG and on CGB alike.
+		//is on, the whole line is one flat color on DMG and on CGB alike.
 		bool LayerDisabled = false;
 		bool BgTileSelect = false; //LCDC.4: tile data at 0x0000, else 0x1000 + a signed index
 		bool BgTilemapSelect = false; //LCDC.3: BG map at 0x1C00, else 0x1800
-		uint8_t BgPalette = 0xE4; //BGP (DMG shade mapping, and the flat colour above)
+		uint8_t BgPalette = 0xE4; //BGP (DMG shade mapping, and the flat color above)
 		bool PaletteBlocked = false; //CGB STOP froze the palette: every read is 0
 
 		//The window layer. WindowOnRow is the PPU's own latch for the row it
@@ -117,7 +117,7 @@ namespace GbWidescreenReveal
 	template<typename Vram>
 	void RenderRowSides(const RowBasis& basis, Vram& vram, const uint16_t* bgPalettes, uint16_t* left, uint16_t* right)
 	{
-		//The colour the PPU emits for a palette entry. A frozen palette (STOP on
+		//The color the PPU emits for a palette entry. A frozen palette (STOP on
 		//the CGB) reads 0, and so does the picture's own WriteBgPixel.
 		auto paletteColor = [&](uint8_t index) -> uint16_t {
 			return basis.PaletteBlocked ? 0 : (uint16_t)(bgPalettes[index] & 0x7FFF);
@@ -126,8 +126,8 @@ namespace GbWidescreenReveal
 		if(basis.LayerDisabled || (!basis.BgEnabled && !basis.CgbEnabled)) {
 			//The layer is not drawn: on DMG that is LCDC.0 cleared, on both
 			//consoles it is the emulator's own layer toggle. The hardware outputs
-			//colour 0 through BGP for the whole line, so the whole line - and so
-			//the revealed columns - is one flat colour.
+			//color 0 through BGP for the whole line, so the whole line - and so
+			//the revealed columns - is one flat color.
 			uint16_t blank = paletteColor((uint8_t)(basis.BgPalette & 0x03));
 			for(uint32_t i = 0; i < ExtraColumns; i++) {
 				left[i] = blank;
@@ -191,14 +191,14 @@ namespace GbWidescreenReveal
 					uint8_t bit = (attributes & 0x20) ? px : (uint8_t)(7 - px);
 					uint8_t color = (uint8_t)(((low >> bit) & 0x01) | (((high >> bit) & 0x01) << 1));
 					//On CGB the attribute picks one of the 8 palettes; on DMG BGP
-					//maps the two colour bits to one of the four shades
+					//maps the two color bits to one of the four shades
 					out[i] = basis.CgbEnabled ? paletteColor((uint8_t)(paletteOffset | color)) : paletteColor((uint8_t)((basis.BgPalette >> (color * 2)) & 0x03));
 				}
 			}
 		}
 	}
 
-	//Copies the standard frame into the centre of an extended one, row by row:
+	//Copies the standard frame into the center of an extended one, row by row:
 	//the 160 middle columns of every row are the standard picture, bit for bit.
 	inline void ComposeCenter(const uint16_t* standardFrame, uint16_t* extendedFrame)
 	{
@@ -244,7 +244,7 @@ namespace GbWidescreenReveal
 			return true;
 		}
 
-		//The extended frame (standard picture in the centre), or nullptr when
+		//The extended frame (standard picture in the center), or nullptr when
 		//this frame is standard. A row the frame never drew (a save state
 		//loaded mid-frame) gets the black fallback rather than last frame's.
 		const uint16_t* Finish(const uint16_t* standardFrame)

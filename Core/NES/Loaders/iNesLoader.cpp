@@ -53,7 +53,7 @@ void iNesLoader::LoadRom(RomData& romData, vector<uint8_t>& romFile, NesHeader* 
 			dataSize -= 512;
 		} else {
 			romData.Error = true;
-			MessageManager::Log("[iNes] Invalid file (file length does not match header information) - load operation cancelled.");
+			MessageManager::Log("[iNes] Invalid file (file length does not match header information) - load operation canceled.");
 			return;
 		}
 	}
@@ -73,13 +73,13 @@ void iNesLoader::LoadRom(RomData& romData, vector<uint8_t>& romFile, NesHeader* 
 	}
 
 	if(prgSize == 0) {
-		MessageManager::Log("[iNes] Invalid file (PRG size is 0) - load operation cancelled.");
+		MessageManager::Log("[iNes] Invalid file (PRG size is 0) - load operation canceled.");
 		romData.Error = true;
 	}
 
 	if(prgSize + chrSize > dataSize) {
 		//Invalid rom file
-		MessageManager::Log("[iNes] Invalid file (file length does not match header information) - load operation cancelled.");
+		MessageManager::Log("[iNes] Invalid file (file length does not match header information) - load operation canceled.");
 		romData.Error = true;
 	} else if(prgSize + chrSize < dataSize) {
 		MessageManager::Log("[iNes] Warning: File is larger than excepted (based on the file header).");

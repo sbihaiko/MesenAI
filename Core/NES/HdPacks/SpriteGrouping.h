@@ -55,7 +55,7 @@ namespace MesenSheets
 	//often on screen together never says whether they shared one silhouette.
 	//This keeps the per-frame structure instead: each frame is segmented into
 	//spatially connected clusters (within kPoseMaxGap on both axes), each
-	//cluster normalised to its own top-left and expressed as a set of
+	//cluster normalized to its own top-left and expressed as a set of
 	//(node, dx, dy), and equal sets merge. It is the *measured* enumeration -
 	//PRD spike S10.a built its ground truth exactly this way, off ADR-0169's
 	//live OAM channel, and found the ADR-0168 evidence[] walk recovering 6.7 %
@@ -83,7 +83,7 @@ namespace MesenSheets
 	//pipe mask). One byte per vocabulary index, 1 for a mask.
 	//
 	//Whole-recording judgement, in ADR-0173's shape: the recorder classifies
-	//and labels, the consumer filters, nothing is deleted. A node is labelled
+	//and labels, the consumer filters, nothing is deleted. A node is labeled
 	//when IsMaskEntry (TileSheetTypes.h) held for at least one of its
 	//appearances: that appearance was behind the background, contended for
 	//pixels and lost every one of them to it. The label is *evidence* - what

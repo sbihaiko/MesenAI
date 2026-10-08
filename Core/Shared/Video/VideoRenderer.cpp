@@ -344,7 +344,7 @@ void VideoRenderer::UpdatePackArtAssets()
 		}
 	}
 
-	//Fallback if viewport was absent or invalid: 4:3 centred inside canvas
+	//Fallback if viewport was absent or invalid: 4:3 centered inside canvas
 	layout.ApplyDefaultViewportIfMissing();
 	_borderLayout = layout;
 	BorderPrepareBackdrop(_borderBackdrop, _borderPixels.data(), _borderLayout);
@@ -467,7 +467,7 @@ RenderedFrame* VideoRenderer::CompositeBorder(RenderedFrame& inFrame)
 	if(inFrame.ExtendedColumns > 0 && inFrame.ExtendedSideFill) {
 		//ADR-0253 W.3: the sides the game/art did not fill keep the border art,
 		//so the border is the chain's second link rather than a reason to drop
-		//the extended frame back to its centre.
+		//the extended frame back to its center.
 		BorderCompositeExtendedFrame(dst, _borderBackdrop.data(), _borderPixels.data(), _borderLayout, (const uint32_t*)inFrame.FrameBuffer,
 			inFrame.Width, inFrame.Height, inFrame.ExtendedColumns, inFrame.ExtendedSideFill);
 	} else {
@@ -480,7 +480,7 @@ RenderedFrame* VideoRenderer::CompositeBorder(RenderedFrame& inFrame)
 	_compositedFrame.Height = _borderLayout.CanvasHeight;
 	//The canvas is a finished picture, not an extended frame: its sides are
 	//already composited in, so a reader that keyed on the extra columns would
-	//compute a standard centre out of the border's own width. The decoder's
+	//compute a standard center out of the border's own width. The decoder's
 	//own frame keeps them - that is what the aspect ratio reads
 	//(EmuSettings::GetAspectRatio's ExtendedFrame) - so only this copy drops them.
 	_compositedFrame.ClearExtension();

@@ -45,7 +45,7 @@
 //  3. PREFIX COMPARISON against the movie-less baseline. The old total, asked
 //     at every sampled frame instead of only at the last one. It is strictly
 //     more information for a fixed cost - the same two runs, the same counter,
-//     read more often - and it is what localises a partial desync: the
+//     read more often - and it is what localizes a partial desync: the
 //     movie-driven run's LEAD over the baseline (movie shapes minus baseline
 //     shapes at the same frame) grows while the movie is really driving the
 //     game and stops growing once it is not, because a run that has died into

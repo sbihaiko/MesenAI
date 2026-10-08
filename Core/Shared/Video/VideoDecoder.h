@@ -47,7 +47,7 @@ private:
 	bool _videoFilterIsPackArt = false;
 	unique_ptr<RotateFilter> _rotateFilter;
 
-	//ADR-0253: the standard centre of a widescreen Reveal frame, for a filter
+	//ADR-0253: the standard center of a widescreen Reveal frame, for a filter
 	//(or a border layer) that cannot take the extra columns
 	vector<uint16_t> _standardCentre;
 

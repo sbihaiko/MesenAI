@@ -312,7 +312,7 @@ void NesConsole::RequestHdPackImageReload()
 //Runs on the emulation thread from HdNesPpu::OnBeforeSendFrame, i.e. at a frame
 //boundary before the next frame is handed to the video pipeline.
 //
-//WaitForAsyncFrameDecode is the entire synchronisation (ADR-0212 §3):
+//WaitForAsyncFrameDecode is the entire synchronization (ADR-0212 §3):
 //HdVideoFilter::ApplyFilter reads the very PixelData this is about to
 //overwrite, and it runs on VideoDecoder's decode thread. Draining that thread
 //here is cheaper than locking the per-pixel read path for an event a human

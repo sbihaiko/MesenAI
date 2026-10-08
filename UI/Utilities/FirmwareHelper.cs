@@ -113,7 +113,7 @@ namespace Mesen.Utilities
 
 			if(!hashMatches) {
 				if(await MesenMsgBox.Show(wnd, "FirmwareMismatch", MessageBoxButtons.OKCancel, MessageBoxIcon.Warning, ResourceHelper.GetEnumText(type), knownFirmwares[0].Hashes[0], fileHash) != DialogResult.OK) {
-					//Files don't match and user cancelled the action, retry
+					//Files don't match and user canceled the action, retry
 					return false;
 				}
 			}

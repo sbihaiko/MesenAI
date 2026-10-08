@@ -139,7 +139,7 @@ struct HdCellRecordBinder
 	//Writing the skip at the call site instead is how the loader came to accept
 	//an LF blank line (it tested `lineContent.empty()` before rolling) while
 	//rejecting a CRLF one (a lone `\r` is not empty, so that spelling rolled and
-	//cancelled). Both spellings are one line here, and `mep_lint` and
+	//canceled). Both spellings are one line here, and `mep_lint` and
 	//`mep_carry`, which refuse both, are the tools this must not disagree with.
 	bool Step(const string& line)
 	{

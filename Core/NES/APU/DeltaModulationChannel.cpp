@@ -260,7 +260,7 @@ void DeltaModulationChannel::SetEnabled(bool enabled)
 	if(!enabled) {
 		if(_disableDelay == 0) {
 			//Disabling takes effect with a 1 apu cycle delay
-			//If a DMA starts during this time, it gets cancelled
+			//If a DMA starts during this time, it gets canceled
 			//but this will still cause the CPU to be halted for 1 cycle
 			if((_console->GetCpu()->GetCycleCount() & 0x01) == 0) {
 				_disableDelay = 2;

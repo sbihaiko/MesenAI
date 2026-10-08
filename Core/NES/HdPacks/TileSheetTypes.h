@@ -195,7 +195,7 @@ namespace MesenSheets
 	//
 	//The tolerance is the share of channel bytes allowed to differ before two
 	//cells count as one subject, measured against the *ink* of the richer of
-	//the two cells (pixels that are not its most common colour), never against
+	//the two cells (pixels that are not its most common color), never against
 	//the cell area. Against the area it is not a tolerance at all: every
 	//mostly-background metatile is within 10% of every other one, and the
 	//first near-empty cell becomes an attractor - on a real Ninja Gaiden
@@ -209,7 +209,7 @@ namespace MesenSheets
 	//---- F9.8: adjacency evidence before two screens share a map -----------
 	//
 	//A screen is appended to a map only when something measurable says it is a
-	//neighbour. The evidence is a shared border band read through the scroll:
+	//neighbor. The evidence is a shared border band read through the scroll:
 	//when a transition frame matches the already-placed screen at shift
 	//(dx, dy), the cells that shift exposes at the leading edge lie *outside*
 	//the placed screen, so they can only be the screen that was scrolling in -
@@ -221,7 +221,7 @@ namespace MesenSheets
 	//stitched sequences on record, the 2026-09-04 spike (runs/spike-sheets):
 	//Zelda's four accepted links score a whole-frame match of 0.73-0.77 at
 	//shifts of 5-8 cells, i.e. the 16-25 % of the frame that did *not* match
-	//the anchor is exactly the exposed band. On a real neighbour that band is
+	//the anchor is exactly the exposed band. On a real neighbor that band is
 	//therefore almost entirely the candidate's content; 0.60 leaves room for
 	//sprite overlap and a mid-transition sliver while still rejecting a band
 	//that merely happens to carry the same tiles.
@@ -234,7 +234,7 @@ namespace MesenSheets
 	//anchor already carried at the same positions. Read off the spike again:
 	//Zelda's dx=8 link scores 0.75 over the whole frame, i.e. 24 of 32 columns
 	//are anchor-explained and the remaining 8 - the band - contributed nothing,
-	//so a real neighbour's lead there is ~1.0. 0.25 is a wide safety margin
+	//so a real neighbor's lead there is ~1.0. 0.25 is a wide safety margin
 	//under that, and a backdrop-only band leads by 0.
 	constexpr double kStitchBandLead = 0.25;
 	//A band of fewer drawn cells than this is not a measurement - a strip of
@@ -242,7 +242,7 @@ namespace MesenSheets
 	//narrowest accepted band (5 rows x 32 cols) is 160.
 	constexpr uint32_t kStitchMinBandCells = 24;
 	//A one-cell band cannot even carry one metatile of the candidate at grid
-	//unit 16, so a shift that small is not evidence of a neighbour.
+	//unit 16, so a shift that small is not evidence of a neighbor.
 	constexpr int32_t kStitchMinShiftCells = 2;
 	//Transition frames probed between two stable screens. The de-duplicated
 	//stream (ADR-0153 §5) can put the whole transition in one entry or spread
@@ -339,7 +339,7 @@ namespace MesenSheets
 	//---- recorded data -----------------------------------------------------
 
 	//An 8x8 background tile exactly as hires.txt keys it: the 16 CHR bytes plus
-	//the 4-colour NES palette word ([31:24] = colour 0 ... [7:0] = colour 3).
+	//the 4-color NES palette word ([31:24] = color 0 ... [7:0] = color 3).
 	//ADR-0178: the OAM flip transform, shared by the recorder that bakes it into
 	//a sprite's recorded shape and by the code that un-bakes it to recover the
 	//tile data hires.txt keys by. Per axis it is an involution - applying the
@@ -405,13 +405,13 @@ namespace MesenSheets
 
 	//ADR-0221 (option B, F12.13): what "empty" means for the variant kind test.
 	//The recorder hands *every* drawn tile a shape id (ShapeIdFor), so a cell
-	//the game fills with a single flat colour is not kEmptyCell in the grid -
-	//it is a shape whose 16 CHR bytes resolve every pixel to one colour index
+	//the game fills with a single flat color is not kEmptyCell in the grid -
+	//it is a shape whose 16 CHR bytes resolve every pixel to one color index
 	//(each plane's eight row bytes all 0x00 or all 0xFF). That is the same
-	//"single flat colour per 8x8 cell" scripts/measure_capture_overdraw.py
+	//"single flat color per 8x8 cell" scripts/measure_capture_overdraw.py
 	//scores, chosen so the rule and its acceptance tool agree on the word. A
 	//kEmptyCell (nothing drawn there) is empty too. Palette-agnostic on
-	//purpose: two colour indexes that happen to map to one NES colour under
+	//purpose: two color indexes that happen to map to one NES color under
 	//some palette would read as "detail" here and "flat" in the tool, which
 	//errs toward the rival side - the safe one for #339.
 	inline bool IsFlatTileData(const uint8_t* tileData)
@@ -429,15 +429,15 @@ namespace MesenSheets
 		return true;
 	}
 
-	//Which 4-colour NES palette a cell was drawn with, interned by the recorder
+	//Which 4-color NES palette a cell was drawn with, interned by the recorder
 	//in first-sight order (ADR-0159 amendment, 2026-09-05). A whole
 	//PaletteColors word per cell would triple the retained stream; an id only
-	//has to answer "the same colours as last time?", which is the only question
+	//has to answer "the same colors as last time?", which is the only question
 	//the anchor rule asks of it.
 	using PaletteId = uint8_t;
 	//"No palette evidence": no cell was drawn here, the caller carries none at
 	//all, or the recording used more palettes than the id space holds. The
-	//anchor rule reads it as "the colours may well be the same" throughout, so
+	//anchor rule reads it as "the colors may well be the same" throughout, so
 	//a stream without palettes behaves exactly as it did before the amendment
 	//instead of anchoring on nothing.
 	constexpr PaletteId kUnknownPalette = 0xFF;
@@ -450,7 +450,7 @@ namespace MesenSheets
 		ShapeId Cells[kGridRows][kGridCols];
 		//Palette id per cell, same indexing as Cells (ADR-0159 amendment). The
 		//shape ids above are palette-agnostic on purpose - the vocabulary must
-		//see a bank-swapped or recoloured tile as one subject - so a recolour is
+		//see a bank-swapped or recolored tile as one subject - so a recolor is
 		//invisible in Cells, while the tileAtPosition condition an anchor becomes
 		//compares PaletteColors and fails on it. This plane is the evidence for
 		//that one case: +960 B on a 1920 B frame, ~2.8 KB retained per frame.
@@ -488,11 +488,11 @@ namespace MesenSheets
 			return n;
 		}
 		bool SameCells(const GridFrame& o) const { return memcmp(Cells, o.Cells, sizeof(Cells)) == 0; }
-		//Same drawing *and* same colours. The recorder de-duplicates on this, so
-		//a frame that only recolours the screen earns its own entry instead of
+		//Same drawing *and* same colors. The recorder de-duplicates on this, so
+		//a frame that only recolors the screen earns its own entry instead of
 		//collapsing into RepeatCount - otherwise the very evidence the anchor
 		//rule needs is the evidence the stream throws away. The vocabulary keeps
-		//using SameCells: for it a recoloured tile is the same subject.
+		//using SameCells: for it a recolored tile is the same subject.
 		bool SamePalettedCells(const GridFrame& o) const
 		{
 			return SameCells(o) && memcmp(Palettes, o.Palettes, sizeof(Palettes)) == 0;
@@ -607,22 +607,22 @@ namespace MesenSheets
 	};
 
 	//ADR-0234 (issue #505): what the sprite pipeline did with *one dot*, from the
-	//three things it decides it with - the colour of the winning shifter, whether
+	//three things it decides it with - the color of the winning shifter, whether
 	//the emulator draws the sprite layer at all, the background pixel under it
 	//and that shifter's priority bit. At most one of the two is true, and both are
-	//false when nothing contended: a transparent sprite pixel (colour 0) is not a
+	//false when nothing contended: a transparent sprite pixel (color 0) is not a
 	//contender, and neither is a sprite in the leftmost-8-columns clip, one whose
 	//rows PPUMASK hid, or the pre-render line's leftovers. This is the condition
-	//NesPpu::GetPixelColor returns the sprite's colour under, stated once - on
+	//NesPpu::GetPixelColor returns the sprite's color under, stated once - on
 	//the recorder's side, because the emulation path must not depend on it: the
 	//PPU reports the dot through BaseNesPpu::NoteSpritePixel and this classifies
 	//it. It is not readable off `_lastSprite`, which is the highest-priority
 	//*active* shifter - opaque or not.
 	struct SpritePixelVerdict
 	{
-		//The sprite's colour is the pixel that reaches the output buffer.
+		//The sprite's color is the pixel that reaches the output buffer.
 		bool Drawn = false;
-		//The sprite's colour contended for the pixel and an opaque background
+		//The sprite's color contended for the pixel and an opaque background
 		//pixel in front of a behind-the-background sprite took it.
 		bool Hidden = false;
 	};
@@ -646,8 +646,8 @@ namespace MesenSheets
 	//the same first-sight table the grid stream's "P" lines spell
 	//(HdPackBuilder::PaletteIdFor). The shape id wildcards the palette on
 	//purpose, so without it the OAM stream could settle the shape half of a
-	//spriteNearby condition and never its colour half. It is part of entry
-	//identity: two frames that differ only in sprite colour are two frames.
+	//spriteNearby condition and never its color half. It is part of entry
+	//identity: two frames that differ only in sprite color are two frames.
 	//One sprite half the PPU placed: the shape it was drawn from, its screen
 	//origin in pixels, and the palette its row was drawn in.
 	//
@@ -724,8 +724,8 @@ namespace MesenSheets
 		uint8_t Buttons[2] = {};
 
 		//Entry identity includes the palette id (ADR-0222), so a frame that only
-		//recolours a sprite is retained as its own frame, as the grid stream
-		//already does for a recoloured cell (ADR-0159 amendment, 2026-09-05).
+		//recolors a sprite is retained as its own frame, as the grid stream
+		//already does for a recolored cell (ADR-0159 amendment, 2026-09-05).
 		bool SameEntries(const OamFrame& o) const { return Entries == o.Entries; }
 	};
 
@@ -801,7 +801,7 @@ namespace MesenSheets
 	//---- F9.17 (ADR-0164): adjacency.json statistics ----------------------
 
 	//One bottom-edge band a sprite shape stood on: the OAM entry's bottom edge
-	//(Y + 8; an 8x16 sprite's lower half lands on the true bottom) quantised to
+	//(Y + 8; an 8x16 sprite's lower half lands on the true bottom) quantized to
 	//8 px. Counted over the retained, de-duplicated OamFrame stream, no distance
 	//cap - the 32 px offset test drops a pair the moment the actors are further
 	//apart, which is exactly the far-field question floors[] is for. The band a
@@ -911,7 +911,7 @@ namespace MesenSheets
 		}
 	};
 
-	//One distinct silhouette: a set of (node, dx, dy), normalised to its own
+	//One distinct silhouette: a set of (node, dx, dy), normalized to its own
 	//top-left. Two clusters are the same pose when the sets are equal, and
 	//identical sets merge, summing the frames they were seen in. Tiles are
 	//kept sorted (Dy, Dx, Node) so the set comparison and the file are
@@ -1133,7 +1133,7 @@ namespace MesenSheets
 	//two of the four clauses of scripts/gameplay_probe.py, chosen because they
 	//need only what the builder already has at save time; the thresholds are
 	//that script's, calibrated over 86 packs from three runs of a 30-ROM
-	//library (17 of 20 hand-labelled menu-only recordings caught, no false
+	//library (17 of 20 hand-labeled menu-only recordings caught, no false
 	//alarms).
 	//
 	//  - tile structure: how deterministically the frames reuse the same 2x2

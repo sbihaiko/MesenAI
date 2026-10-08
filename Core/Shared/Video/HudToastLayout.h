@@ -11,7 +11,7 @@
 //message alone in white, with no "[title]" prefix and no black outline.
 //Classic keeps SystemHud's original look; PreferencesConfig::ToastStyle picks.
 //
-//Everything here is geometry, colour and text rules - no DebugHud, no font
+//Everything here is geometry, color and text rules - no DebugHud, no font
 //table - so scripts/core_unit_tests.cpp asserts it without linking the HUD.
 //SystemHud measures the text with DrawStringCommand and draws what this
 //header lays out.
@@ -43,7 +43,7 @@ namespace HudToastLayout
 	constexpr int LineHeight = 9;
 	constexpr int GlyphRows = 8;
 
-	//Colours, RGB only. The card is PlayerTheme.axaml's PlayerHudColor
+	//Colors, RGB only. The card is PlayerTheme.axaml's PlayerHudColor
 	//(30,30,32 at alpha 225); the glyphs are the Player palette's Share green
 	//(the check W-P3 draws), orange (W-P9's failure pill) and Play blue, the
 	//Player accent, for every other toast.
@@ -61,7 +61,7 @@ namespace HudToastLayout
 		Warning
 	};
 
-	//Which glyph a toast gets. Title and message arrive already localised
+	//Which glyph a toast gets. Title and message arrive already localized
 	//(MessageManager::DisplayMessage), so the rule reads the English
 	//resources: the "Error" title and the failure openings are warnings, a
 	//pack that was applied ("Applied %1", MepPackApplied) is a success, and
@@ -106,9 +106,9 @@ namespace HudToastLayout
 		}
 	}
 
-	//DebugHud colours carry *transparency* in the top byte (0 = opaque,
+	//DebugHud colors carry *transparency* in the top byte (0 = opaque,
 	//DrawRectangleCommand/DrawStringCommand invert it). `alpha` is the
-	//colour's own opacity and `fade` the toast's fade-in/out (0-255).
+	//color's own opacity and `fade` the toast's fade-in/out (0-255).
 	inline uint32_t HudColor(uint32_t rgb, uint8_t alpha, uint8_t fade)
 	{
 		uint32_t effective = (uint32_t)alpha * fade / 255;
@@ -229,7 +229,7 @@ namespace HudToastLayout
 
 	//How many pixels row `row` of a `height`-tall card is cut in on each
 	//side, for a corner of `radius`: the quarter circle sampled at the
-	//pixel's centre. Rows outside both corners are 0.
+	//pixel's center. Rows outside both corners are 0.
 	inline int CornerInset(int row, int height, int radius)
 	{
 		if(radius <= 0 || height <= 0) {

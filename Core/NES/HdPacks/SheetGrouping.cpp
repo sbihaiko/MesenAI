@@ -154,7 +154,7 @@ namespace MesenSheets
 			return maxX;
 		}
 
-		//BFS from the hub, each neighbour placed at (+1,0) for an E edge and
+		//BFS from the hub, each neighbor placed at (+1,0) for an E edge and
 		//(0,+1) for an S edge. A member the walk never reaches is appended in a
 		//fresh column on row 0, so nothing silently drops.
 		PosMap PlaceMembers(const std::vector<uint32_t>& members, const AdjList& adjacency)
@@ -179,7 +179,7 @@ namespace MesenSheets
 						continue;
 					}
 					std::pair<int32_t, int32_t> spot(origin.first + neighbour.Dx, origin.second + neighbour.Dy);
-					//Sprite offsets are quantised to cells (F9.5), so two members
+					//Sprite offsets are quantized to cells (F9.5), so two members
 					//can land on the same square; nudge east until one is free
 					//rather than let a cell overwrite another on the sheet.
 					while(taken.count(spot)) {

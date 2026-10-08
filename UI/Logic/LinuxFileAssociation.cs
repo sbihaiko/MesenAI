@@ -253,7 +253,7 @@ namespace Mesen.Logic
 		//`key=`, tolerating whitespace before the `=`. That whitespace is not in
 		//the desktop entry grammar, but a line carrying it is a line whose key the
 		//loader will not read - appending a second Exec= beside it would leave two
-		//for the loader to choose between, so it is recognised and rewritten.
+		//for the loader to choose between, so it is recognized and rewritten.
 		private static bool IsKey(string line, string key)
 		{
 			string trimmed = line.Trim();

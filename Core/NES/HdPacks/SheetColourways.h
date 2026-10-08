@@ -4,7 +4,7 @@
 //The recorder interns a shape palette-wildcarded, so every sheet renders one
 //palette per shape - the first one seen - and before this the other palettes
 //the recording drew (up to MaxPaletteVariantsPerTile of them, each its own
-//hires.txt key) had no place on any organised sheet. For each such drawn
+//hires.txt key) had no place on any organized sheet. For each such drawn
 //(shape, palette) this header decides one of two things:
 //
 // - an *exact fold* (Decision item 2, refined on the #448 review): the palette
@@ -12,7 +12,7 @@
 //   crop scaled by that one Brightness reproduces what the recording drew for
 //   the key pixel for pixel. The cell's sidecar entry lists it under `folds`,
 //   and mep_build.py emits one exact defaultTile=N rule per fold;
-// - a *variant cell* (item 1) otherwise: a colourway (a painted entry changes
+// - a *variant cell* (item 1) otherwise: a colorway (a painted entry changes
 //   hue, or the residual fails the 25 degree gate), or a fold whose
 //   least-squares Brightness leaves a residual (a screen fade on the NES
 //   ramps). The variant is rendered in its own palette from the recorded art
@@ -60,7 +60,7 @@ namespace MesenSheets
 	//palette_folds.HUE_DRIFT_GATE_DEG.
 	constexpr double kHueDriftGateDegrees = 25.0;
 
-	//Palette entry k (0 = colour 0) of a hires.txt palette word, 6 bits.
+	//Palette entry k (0 = color 0) of a hires.txt palette word, 6 bits.
 	inline uint8_t FoldEntry(uint32_t palette, int k) { return (uint8_t)((palette >> ((3 - k) * 8)) & 0x3F); }
 
 	inline void FoldRgb(uint8_t colour, int rgb[3])
@@ -75,7 +75,7 @@ namespace MesenSheets
 	//0 for black, else the palette row + 1 - the rung of the hue's ramp.
 	inline int FoldLevel(uint8_t colour) { return FoldIsBlack(colour) ? 0 : (colour >> 4) + 1; }
 
-	//Bit k set when the 8x8 pattern paints colour index k (painted_indices).
+	//Bit k set when the 8x8 pattern paints color index k (painted_indices).
 	inline uint8_t PaintedIndexMask(const uint8_t* tileData)
 	{
 		uint8_t used = 0;
@@ -167,7 +167,7 @@ namespace MesenSheets
 
 	//palette_folds.palette_relation: how `other` relates to the palette a
 	//sheet cell carries, for this pattern. Inert, Fade and Brighter are folds;
-	//Colourway is another picture (a hue change, or a residual over the gate).
+	//Colorway is another picture (a hue change, or a residual over the gate).
 	inline PaletteRelationResult ClassifyPaletteRelation(const uint8_t* tileData, uint32_t cellPalette, uint32_t other)
 	{
 		PaletteRelationResult r;
@@ -220,7 +220,7 @@ namespace MesenSheets
 
 	//Decision item 2 as refined on the #448 review: the fold is admitted only
 	//when the cell's pixels scaled by the loader's Brightness equal, on every
-	//colour index the pattern paints, the pixels the recording drew for the
+	//color index the pattern paints, the pixels the recording drew for the
 	//fold's palette. `palette` is the table the sheet is rendered with
 	//(0x00RRGGBB, indexed like RenderTile).
 	inline bool FoldIsExact(const uint8_t* tileData, uint32_t cellPalette, uint32_t other, int loaderBrightness, NesPalette palette)
@@ -350,7 +350,7 @@ namespace MesenSheets
 		uint32_t ExactFoldKeys = 0;
 		uint32_t ResidualFoldKeys = 0;
 		uint32_t ColourwayKeys = 0;
-		uint32_t UnplacedKeys = 0; //no organised sheet holds the shape, or the id space ran out
+		uint32_t UnplacedKeys = 0; //no organized sheet holds the shape, or the id space ran out
 
 		const SheetTileKey* Variant(ShapeId id) const
 		{
@@ -388,8 +388,8 @@ namespace MesenSheets
 			carried.insert({ src, shapeTiles[s].PaletteColors });
 		}
 
-		//Where each shape sits on an organised sheet: (rank, -sheet, -cell) is
-		//maximised, so the first sheet and first cell win a tie.
+		//Where each shape sits on an organized sheet: (rank, -sheet, -cell) is
+		//maximized, so the first sheet and first cell win a tie.
 		struct Site
 		{
 			int Rank = -1;

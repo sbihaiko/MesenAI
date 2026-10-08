@@ -39,7 +39,7 @@ public static class PlayBiosPrompt
 		};
 	}
 
-	//"8 KB", "16 KB", "256 bytes", "2 MB": the sheet's grey hint and the
+	//"8 KB", "16 KB", "256 bytes", "2 MB": the sheet's gray hint and the
 	//wrong-size line (W-X2: plain words, never a byte count in hex).
 	public static string SizeText(long bytes)
 	{
@@ -75,7 +75,7 @@ public static class PlayBiosPrompt
 }
 
 //W-S1's status line carries one extra clause from an edge flow: "Zelda needs
-//the FDS BIOS" after a cancelled BIOS sheet (no game), "· waiting for one
+//the FDS BIOS" after a canceled BIOS sheet (no game), "· waiting for one
 //file" after a pack's missing dep (game running).
 public static class PlayStatusNotice
 {
