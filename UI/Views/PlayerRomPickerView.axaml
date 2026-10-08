@@ -146,6 +146,15 @@
 					(Decision 8) - a sentence with the next step, never a blank
 					grid.-->
 					<DockPanel IsVisible="{Binding IsLibraryMode}">
+						<!--#1037 (ADR-0264 Decision 9): the scan is visible while it
+						runs. The indeterminate bar IS the animation (#734: every
+						wait the player can see shows a moving one), and it goes when
+						the walk returns - the grid has been filling underneath it
+						the whole time, which is what makes the wait short. It lives
+						inside the library's own panel so a scan still walking while
+						the player reads *Browse a file…* is not a wait that surface
+						is in.-->
+						<ProgressBar Name="RomPickerScanProgress" DockPanel.Dock="Top" IsIndeterminate="True" Width="220" HorizontalAlignment="Left" Margin="0 12 0 0" IsVisible="{Binding IsScanning}" />
 						<TextBlock Name="RomPickerLibraryEmpty" Classes="subhead secondary" DockPanel.Dock="Bottom" Text="{Binding EmptyText}" TextWrapping="Wrap" Margin="16 12" IsVisible="{Binding EmptyText.Length}" />
 						<!--#1034 (ADR-0264 Decisions 3 and 5): the console filter, as
 						the theme's own segmented row. It offers All and then only the
@@ -172,7 +181,7 @@
 								</ItemsControl.ItemsPanel>
 								<ItemsControl.ItemTemplate>
 									<DataTemplate x:DataType="vm:PlayerLibraryTile">
-										<Button Classes="library-tile" Click="OnPlayTile" GotFocus="OnTileFocus">
+										<Button Classes="library-tile" Click="OnPlayTile" GotFocus="OnTileFocused">
 											<StackPanel>
 												<Border Name="TileCover" Classes="library-cover" Background="{Binding Cover}" Width="104" Height="139" CornerRadius="8" ClipToBounds="True">
 													<!--#1039 (ADR-0265): the downloaded cover over the cover the

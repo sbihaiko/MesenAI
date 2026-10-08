@@ -454,9 +454,9 @@ public class PlayerLibraryConsoleFilterTests : IDisposable
 		(MainWindow window, MainWindowViewModel model) = ShowFirstRunHome();
 		ManualResetEventSlim gate = new(false);
 		model.RomPicker.RunLibraryScanInline = false;
-		model.RomPicker.LibraryScanSource = (folders, lister) => {
+		model.RomPicker.LibraryScanStreamSource = (folders, lister, onEntries) => {
 			gate.Wait(TimeSpan.FromSeconds(30));
-			return GameLibrary.Scan(folders, lister);
+			return GameLibrary.ScanStreaming(folders, lister, onEntries);
 		};
 		try {
 			int before = model.RomPicker.TilesRevision;

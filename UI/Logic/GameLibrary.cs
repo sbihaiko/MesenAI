@@ -86,6 +86,30 @@ public static class GameLibrary
 	//for what the default answers and why.
 	public static LibraryScanResult Scan(IEnumerable<string> libraryFolders, FolderLister list, StringComparer pathComparer)
 	{
+		return Walk(libraryFolders, list, pathComparer, null);
+	}
+
+	//#1037 (ADR-0264 Decision 9): the same bounded walk, reporting the entries it
+	//finds one listing at a time instead of only when the last folder answers -
+	//which is what lets a sheet fill its grid while the scan runs rather than
+	//showing a still picture until it ends.
+	//
+	//`onEntries` is called with the entries a single listing added, and never
+	//with an empty batch: a folder that held no game is not a revision of the
+	//grid. The call happens on the thread that called this, before the walk moves
+	//on, so a caller who wants the work off the UI thread owns that thread
+	//itself. The caps are the same two constants either way - streaming changes
+	//when the entries are handed over, never how many or how deep.
+	public static LibraryScanResult ScanStreaming(IEnumerable<string> libraryFolders, FolderLister list, Action<IReadOnlyList<LibraryEntry>> onEntries)
+	{
+		return Walk(libraryFolders, list, PathComparer, onEntries);
+	}
+
+	//Both scans walk here: `onEntries` is the only difference between a scan that
+	//answers once and one that answers as it goes, and `pathComparer` is the fold
+	//the walk asks its "same file?" questions with.
+	private static LibraryScanResult Walk(IEnumerable<string> libraryFolders, FolderLister list, StringComparer pathComparer, Action<IReadOnlyList<LibraryEntry>>? onEntries)
+	{
 		List<LibraryEntry> entries = new();
 		//One spelling per file and per folder, so the same ROM reachable through
 		//two library folders - or a folder that lists itself, which is what a
@@ -116,6 +140,9 @@ public static class GameLibrary
 					continue;
 				}
 				(IReadOnlyList<string> folders, IReadOnlyList<string> files) = List(list, current);
+				//What this one listing adds, so the stream reports a folder's
+				//games as it finds them rather than at the end of the walk.
+				int found = entries.Count;
 				foreach(string file in files) {
 					if(RomFileKinds.IsHiddenName(Path.GetFileName(file)) || !RomFileKinds.IsOpenable(file)) {
 						continue;
@@ -131,6 +158,12 @@ public static class GameLibrary
 						break;
 					}
 					entries.Add(new LibraryEntry(full, ConsoleOf(full), CleanTitle(Path.GetFileName(file))));
+				}
+				//Reported whatever stopped the loop - a capped scan streams the
+				//entries it did collect, so the player sees the games up to the
+				//limit rather than nothing.
+				if(onEntries is not null && entries.Count > found) {
+					onEntries(entries.GetRange(found, entries.Count - found));
 				}
 				if(truncated || depth >= MaxDepth) {
 					continue;
@@ -317,10 +350,22 @@ public static class GameLibrary
 	//rather than whatever the disk answered first. The path tiebreak asks the
 	//scan's own "is this the same path?" question, so two spellings that tie on
 	//Windows and macOS are still ordered on Linux instead of left to the host.
-	private static int Compare(LibraryEntry left, LibraryEntry right, StringComparer pathComparer)
+	//
+	//Public because it IS the grid's order (Decision 1) and not only the
+	//collected list's: a caller that fills the grid as entries stream in merges
+	//them with this comparator rather than restating the rule, so a streamed
+	//grid and a whole-result one cannot disagree about where a game belongs.
+	public static int Compare(LibraryEntry left, LibraryEntry right, StringComparer pathComparer)
 	{
 		int byTitle = string.Compare(SortTitle(left.Title), SortTitle(right.Title), StringComparison.OrdinalIgnoreCase);
 		return byTitle != 0 ? byTitle : pathComparer.Compare(left.Path, right.Path);
+	}
+
+	//The same order with the platform's fold, which is the question a grid
+	//merging streamed entries asks - it has no caller-named fold to pass on.
+	public static int Compare(LibraryEntry left, LibraryEntry right)
+	{
+		return Compare(left, right, PathComparer);
 	}
 
 	//A folder listing that threw is an empty answer: the scan runs over disks

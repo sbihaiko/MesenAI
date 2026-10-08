@@ -72,7 +72,10 @@ namespace Mesen.Windows
 			//test's Avalonia session setup. Stopping it here rather than in a
 			//caller keeps the two together wherever Attach is used, and stops the
 			//window the player closes from leaving a timer behind too.
-			window.Closed += (_, _) => timer.Stop();
+			window.Closed += (_, _) => {
+				timer.Stop();
+				bridge.RomPickerParked = null;
+			};
 			timer.Start();
 			return timer;
 		}
@@ -119,6 +122,14 @@ namespace Mesen.Windows
 		public static TextBox? KeyboardFieldForTest(MainWindow window)
 		{
 			return Installed.TryGetValue(window, out Bridge? bridge) ? bridge.KeyboardField : null;
+		}
+
+		//The header control the sheet parked this window's ring on while a restore
+		//waits, or null - so a headless case can tell one window's parking from
+		//another's.
+		public static Control? RomPickerParkedForTest(MainWindow window)
+		{
+			return Installed.TryGetValue(window, out Bridge? bridge) ? bridge.RomPickerParked : null;
 		}
 
 		//ADR-0256 Decision 3: ONE path decides who holds the focus when a Play
@@ -342,18 +353,70 @@ namespace Mesen.Windows
 				if(search is not null && (search.IsFocused || ReferenceEquals(KeyboardFieldForTest(window), search))) {
 					return search;
 				}
-				return RomPickerFirstTile(window) ?? Named(window, "RomPickerBrowseFile") ?? Named(window, "RomPickerBack");
+				//#1037: the end of a scan whose restore never landed, and the
+				//remembered game landing, are the sheet's own claims, not a claim
+				//over the ring - a player who walked it to Back or the search box
+				//while the scan ran keeps it there.
+				//The ring is the player's when it is on a header control other than
+				//the one the sheet parked it on, whichever control that is.
+				Control? focused = window.FocusManager?.GetFocusedElement() as Control;
+				//The header control the sheet itself parked THIS window's ring on while
+				//a restore waits - per window, so a second window's sheet never reads it.
+				Installed.TryGetValue(window, out Bridge? bridge);
+				Control? parkedBefore = bridge?.RomPickerParked;
+				if((model.RomPicker.IsFinishFallback || model.RomPicker.IsRestoreLanding)
+					&& focused is not null && focused.DataContext is not PlayerLibraryTile
+					&& focused.Name?.StartsWith("RomPicker") == true && !ReferenceEquals(focused, parkedBefore)) {
+					return focused;
+				}
+				//A restore still waiting on its game parks the ring on Back, never on
+				//*Browse a file…*: pressing that one would leave the library the
+				//player is waiting on.
+				Control? parked = model.RomPicker.IsRestorePending ? Named(window, "RomPickerBack") : null;
+				if(bridge is not null) {
+					bridge.RomPickerParked = parked;
+				}
+				if(parked is not null && RomPickerTile(window, model.RomPicker.LastFocusedTilePath, true) is null) {
+					return parked;
+				}
+				//#1037 picks the tile; the CALLER named the game, because the
+				//path lives on the view-model and this walks the tree. The
+				//fallback chain is #1060's: a grid with no tile at all - no
+				//library folder yet, or folders the scan answered nothing for -
+				//lands on the control its empty sentence names, and Back stays
+				//the last resort, being the one control the sheet always has.
+				return RomPickerTile(window, model.RomPicker.LastFocusedTilePath, model.RomPicker.IsRestorePending)
+					?? Named(window, "RomPickerBrowseFile") ?? Named(window, "RomPickerBack");
 			}
 			return RomPickerFirstRow(window) ?? Named(window, "RomPickerBack");
 		}
 
-		//The grid's first tile. The items are found by their own data context -
-		//the same way the rows are - so a rebuild that reorders the grid moves
-		//the ring to whatever leads it now.
-		private static Control? RomPickerFirstTile(MainWindow window)
+		//The tile the ring lands on. The items are found by their own data
+		//context - the same way the rows are - so a rebuild that reorders the
+		//grid moves the ring to whatever leads it now.
+		//
+		//#1037 (ADR-0264 Decision 1): the game the player was on leads, so the
+		//sheet REOPENS on it rather than on whatever the scan happened to list
+		//first. A path the grid no longer holds - the file was moved, the folder
+		//left the library - falls back to the first tile, which is also where a
+		//sheet that has never been opened lands; while the scan is still bringing
+		//that path the ring waits on the sheet's Back instead (see below).
+		//`restorePending` says the scan is still bringing the game the player left
+		//on and the grid does not hold it yet. The first-tile fallback is what the
+		//ring lands on in every other case - a sheet that has never been opened, a
+		//file that was moved - but mid-restore it is exactly the wrong answer: the
+		//tile that takes the ring reports "the player is on it" (Decision 1), and
+		//that report would overwrite the path the scan is still looking for. The
+		//sheet's Back is where the ring waits instead, which the caller's fallback
+		//supplies, so the sheet is never left with nothing to press.
+		private static Control? RomPickerTile(MainWindow window, string? path = null, bool restorePending = false)
 		{
 			IEnumerable<Button> tiles = (Named(window, "RomPickerGrid") as ItemsControl)?.GetVisualDescendants().OfType<Button>()
 				?? Enumerable.Empty<Button>();
+			Control? remembered = tiles.FirstOrDefault(b => b.DataContext is PlayerLibraryTile tile && tile.Path.Length > 0 && tile.Path == path);
+			if(remembered is not null || restorePending) {
+				return remembered;
+			}
 			return tiles.FirstOrDefault(b => b.DataContext is PlayerLibraryTile);
 		}
 
@@ -412,8 +475,10 @@ namespace Mesen.Windows
 				//The tile the player left, not the first one: Down undoes Up - and
 				//only while that tile is one the grid still draws (a rebuild
 				//replaced its container, and the old one is attached no longer).
+				//#1037: the fallback is the tile the sheet would reopen on, which
+				//is the first tile when the player has focused nothing yet.
 				return (lastTile is { IsEffectivelyVisible: true } ? lastTile : null)
-					?? RomPickerFirstTile(window) ?? Named(window, "RomPickerBack");
+					?? RomPickerTile(window) ?? Named(window, "RomPickerBack");
 			}
 			return null;
 		}
@@ -517,6 +582,10 @@ namespace Mesen.Windows
 			private PadKeyboard? _keyboard;
 			private TextBox? _keyboardField;
 			private Border? _keyboardPanel;
+
+			//The sheet's header control this window's ring was parked on while a
+			//restore waits; it dies with the window (see Attach).
+			public Control? RomPickerParked { get; set; }
 
 			public PadKeyboard? Keyboard => _keyboard;
 			public TextBox? KeyboardField => _keyboardField;

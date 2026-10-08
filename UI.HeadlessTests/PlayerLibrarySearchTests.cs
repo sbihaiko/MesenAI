@@ -512,9 +512,9 @@ public class PlayerLibrarySearchTests : IDisposable
 		(MainWindow window, MainWindowViewModel model) = ShowOpenLibrary();
 		ManualResetEventSlim gate = new(false);
 		model.RomPicker.RunLibraryScanInline = false;
-		model.RomPicker.LibraryScanSource = (folders, lister) => {
+		model.RomPicker.LibraryScanStreamSource = (folders, lister, onBatch) => {
 			gate.Wait(TimeSpan.FromSeconds(30));
-			return GameLibrary.Scan(folders, lister);
+			return GameLibrary.ScanStreaming(folders, lister, onBatch);
 		};
 
 		try {
