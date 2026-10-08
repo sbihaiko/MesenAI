@@ -514,16 +514,29 @@
 	     its own ring, which is why the only thing left on screen was the
 	     framework's black frame. Rows are unaffected: Border.group still clips
 	     them, and their glow is inset on purpose.-->
-	<!--#1089: the `.popup` drop-down in Play is two controls on top of each
-	     other - a <ComboBox Classes="popup"> and the one a <c:EnumComboBox
-	     Classes="popup"> wraps - and both of them clip, the same bounds twice
-	     over. Naming the wrapper and its ComboBox#Dropdown keeps the Aspect
-	     Ratio field from keeping the framework's frame and a clip that eats
-	     the ring while every other popup in the sheet is themed.-->
 	<Style Selector=".player Button, .player TextBox, .player ComboBox.popup, .player c|EnumComboBox.popup, .player c|EnumComboBox.popup ComboBox#Dropdown, .player TabControl.segmented > TabItem">
 		<Setter Property="FocusAdorner">
 			<FocusAdornerTemplate />
 		</Setter>
+	</Style>
+	<!--#1089: the clip comes off with the ring and only while the ring is up.
+	     Clearing it for good (the first cut of this rule did) is a layout
+	     regression, not a focus fix: a press, a field or a drop-down whose
+	     content is bigger than its box then draws that content outside the box
+	     - the W-P2 Continue press grew a second line of text the clip used to
+	     hide ("lines 2/1" in render-gate), and a long value in a field or a
+	     long popup label would spill past the rounded border the same way.
+	     Keyed on :focus-visible, the same pseudo-class the ring itself is set
+	     on, the clip is off exactly when the ring is on screen.
+	     The `.popup` drop-down in Play is two controls on top of each other -
+	     a <ComboBox Classes="popup"> and the one a <c:EnumComboBox
+	     Classes="popup"> wraps - and both of them clip, the same bounds twice
+	     over. Naming the wrapper and its ComboBox#Dropdown keeps the Aspect
+	     Ratio field from keeping the framework's frame and a clip that eats
+	     the ring while every other popup in the sheet is themed. The wrapper
+	     takes focus into its drop-down rather than on itself, so it answers
+	     :focus-within; the drop-down answers :focus-visible directly.-->
+	<Style Selector=".player Button:focus-visible, .player TextBox:focus-visible, .player ComboBox.popup:focus-visible, .player c|EnumComboBox.popup:focus-within, .player c|EnumComboBox.popup ComboBox#Dropdown:focus-visible, .player TabControl.segmented > TabItem:focus-visible">
 		<Setter Property="ClipToBounds" Value="False" />
 	</Style>
 	<!--Every button in Play, not a list of the five classes that happened to have

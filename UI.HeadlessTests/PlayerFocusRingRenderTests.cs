@@ -36,6 +36,11 @@ public class PlayerFocusRingRenderTests
 	//PlayerFocusRing's innermost layer, #7FB0FF, at full alpha.
 	private static readonly Color RingBlue = Color.FromRgb(0x7F, 0xB0, 0xFF);
 
+	//The window behind the overflow case: a colour Play never paints, so any
+	//pixel of it around a control is the window and any other pixel is the
+	//control's own drawing, past its own box.
+	private static readonly Color SpillBackdrop = Color.FromRgb(0xFF, 0x00, 0xFF);
+
 	//How far around a press's bounds the band is read: 3 px out, 3 px in. The
 	//ring's crisp layer is a 2 px spread, so a ring drawn outward sits in the
 	//part outside and one drawn inward sits in the part inside - the band takes
@@ -71,12 +76,101 @@ public class PlayerFocusRingRenderTests
 		window.Show();
 		Pump();
 
-		Focus(resume);
-		using Bitmap frame = PlayerRender.Capture(window);
-		PlayerRender.Save(frame, "focus-ring-primary-press");
+		//try/finally like every other case here: a window left open by a failing
+		//assertion takes focus and breaks the tests after it (#1089 review 3).
+		try {
+			Focus(resume);
+			using Bitmap frame = PlayerRender.Capture(window);
+			PlayerRender.Save(frame, "focus-ring-primary-press");
 
-		AssertRing(frame, window, resume);
-		window.Close();
+			AssertRing(frame, window, resume);
+		} finally {
+			window.Close();
+			Pump();
+		}
+	}
+
+	//#1089 (review 1 and 2): the clip the ring needs lifted has to stay on while
+	//the ring is down, so an overflowing press, field, drop-down or segment -
+	//*none of them focused* - draws nothing past its own box.
+	//
+	//What this case can and cannot say, measured: it holds on the rule it was
+	//written against (ClipToBounds = false on the whole selector list, all the
+	//time) as well as on the `:focus-visible` one that replaced it. The content
+	//of these four controls is clipped by a part of their own template - the
+	//press's PART_Background, the field's PART_ScrollViewer, the drop-down's
+	//content presenter - so the outer clip is not what keeps it in, and the
+	//review's "a long value in a TextBox spills past the rounded border" is not
+	//reproducible here. It is a guard on the rule, not the case that fails red
+	//on the old one: what W-P2's render actually lost is in the PR body, and it
+	//is the framework's focus frame, not a text line.
+	[AvaloniaFact]
+	public void An_overflowing_unfocused_press_and_field_spill_nothing()
+	{
+		//64 px wide against content that wants far more: the press's own label,
+		//the field's own value and the drop-down's own selected item all have to
+		//be clipped to the box the theme laid out.
+		Button press = new() {
+			Classes = { "primary" },
+			Width = 64,
+			Height = 24,
+			HorizontalAlignment = HorizontalAlignment.Left,
+			Content = new TextBlock { Text = "Overflowing label", FontSize = 20 }
+		};
+		TextBox field = new() {
+			Width = 64,
+			Height = 24,
+			HorizontalAlignment = HorizontalAlignment.Left,
+			Text = "a value far wider than the field is"
+		};
+		ComboBox dropdown = new() {
+			Classes = { "popup" },
+			Width = 64,
+			HorizontalAlignment = HorizontalAlignment.Left,
+			ItemsSource = new[] { "Aspect Ratio: a label far wider than the field" },
+			SelectedIndex = 0
+		};
+		TabControl segment = new() {
+			Classes = { "segmented" },
+			Width = 90,
+			HorizontalAlignment = HorizontalAlignment.Left,
+			ItemsSource = new[] { new TabItem { Header = "An overflowing segment header", Width = 40 } }
+		};
+
+		Window window = new() {
+			Width = 600,
+			Height = 560,
+			//A colour the Play theme paints nowhere, so a pixel of it is the
+			//window and a pixel that is not it belongs to a control.
+			Background = new SolidColorBrush(SpillBackdrop),
+			Content = new StackPanel {
+				Margin = new Thickness(160, 60),
+				Spacing = 80,
+				Children = { press, field, dropdown, segment }
+			}
+		};
+		window.Classes.Add("player");
+		window.Classes.Add("play");
+		window.Show();
+		Pump();
+
+		try {
+			Assert.False(press.IsFocused, "the press took focus, so this case would prove nothing");
+			Assert.False(field.IsFocused, "the field took focus, so this case would prove nothing");
+			Assert.False(dropdown.IsFocused, "the drop-down took focus, so this case would prove nothing");
+			Assert.False(segment.IsFocused, "the segmented tab took focus, so this case would prove nothing");
+
+			using Bitmap frame = PlayerRender.Capture(window);
+			PlayerRender.Save(frame, "focus-ring-unfocused-overflow");
+
+			AssertNothingSpills(frame, window, press);
+			AssertNothingSpills(frame, window, field);
+			AssertNothingSpills(frame, window, dropdown);
+			AssertNothingSpills(frame, window, segment);
+		} finally {
+			window.Close();
+			Pump();
+		}
 	}
 
 	//#1089: the Aspect Ratio field in Play's Display sheet is a
@@ -262,6 +356,32 @@ public class PlayerFocusRingRenderTests
 
 		Assert.True(outside.Any(c => Near(c, RingBlue)),
 			$"no #7FB0FF pixel outside {bounds}: the ring is cut off at the press's edge.{Describe(bounds, outside)}");
+	}
+
+	//The clip's other half, read as pixels: a control that is not showing the
+	//ring draws nothing outside its own bounds, so every pixel in the band
+	//around it is the backdrop. AssertRingOutside's mirror image - that one
+	//wants blue out there, this one wants nothing but the window.
+	private static void AssertNothingSpills(Bitmap frame, Window window, Control control)
+	{
+		Point origin = control.TranslatePoint(new Point(0, 0), window)
+			?? throw new InvalidOperationException("the control is not in the window");
+		Rect bounds = new(origin, control.Bounds.Size);
+
+		List<Color> band = new();
+		for(int y = (int)bounds.Top - Band; y < (int)bounds.Bottom + Band; y++) {
+			for(int x = (int)bounds.Left - Band; x < (int)bounds.Right + Band; x++) {
+				bool inside = x >= bounds.Left && x < bounds.Right && y >= bounds.Top && y < bounds.Bottom;
+				bool onFrame = x >= 0 && y >= 0 && x < frame.PixelSize.Width && y < frame.PixelSize.Height;
+				if(!inside && onFrame) {
+					band.Add(PlayerRender.Pixel(frame, x, y));
+				}
+			}
+		}
+
+		List<Color> spilled = band.Where(c => !Near(c, SpillBackdrop)).ToList();
+		Assert.True(spilled.Count == 0,
+			$"{spilled.Count} of {band.Count} pixels outside {bounds} are not the window: the control drew past its own box.{Describe(bounds, band)}");
 	}
 
 	private static bool Near(Color a, Color b)
