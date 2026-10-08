@@ -21,7 +21,7 @@ and `Mirrors`, and `OamEntry` carries no flip bit, so every OAM entry of the
 other orientation named the wrong art.
 
 On CHR RAM the key already is the drawn data, so the two orientations were
-always two shapes there. That is the behaviour the `RecordSprite` comment and
+always two shapes there. That is the behavior the `RecordSprite` comment and
 ADR-0178's Context describe: "the left and right halves of a mirrored figure
 are distinct shapes".
 

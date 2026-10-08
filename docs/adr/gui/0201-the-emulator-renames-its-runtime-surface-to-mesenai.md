@@ -46,7 +46,7 @@ Non-goals: this does not rename the git tag, the published assets, the pack form
 ## Consequences
 
 - **The project stops contradicting itself.** The window, the message boxes and the docs all say MesenAI.
-- **Existing installs stay put, deliberately.** Somebody who has run the emulator keeps `…/MesenCE` forever; a fresh install gets `…/MesenAI`. Two users can describe different paths for the same build, and support text has to allow for both — the behaviour the fork already had for `Mesen2`, extended by one link.
+- **Existing installs stay put, deliberately.** Somebody who has run the emulator keeps `…/MesenCE` forever; a fresh install gets `…/MesenAI`. Two users can describe different paths for the same build, and support text has to allow for both — the behavior the fork already had for `Mesen2`, extended by one link.
 - **Nothing migrates, so nothing can be lost.** The cost is that the rename is invisible to an existing user — a fresh-install change plus a display change, not a move.
 - **The free function is the testable core.** `HomeFolderChoice` takes the candidates and a predicate, so the precedence is asserted directly rather than through the filesystem; if the chain is later reordered, the test on the wrong order fails first.
 - **Four things still say MesenCE on purpose** (the env vars, the emitted-file stamps, the format names, the published assets), each listed above with its reason, so a future reader does not "finish the job" and break a contract.

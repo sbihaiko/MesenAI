@@ -4,7 +4,7 @@ Scope: issue #447, decided by ADR-0231. The issue: rebuilding a kit without
 painting anything changed what the pack drew. Every untouched sheet cell's
 key was re-pointed from the recorder's pattern page (`chr/Chr_*.png`, run
 through the xBRZ filter by `HdPackBuilder::GenerateHdTile`) to the cell's
-sheet crop (nearest-neighbour, `SheetRender::RenderTile`). The F14.4 runs
+sheet crop (nearest-neighbor, `SheetRender::RenderTile`). The F14.4 runs
 counted 901 of 912 Castlevania rules and 360 of 367 Zelda rules drawing other
 pixels than the recording. The layered sibling pack did not hide it, because
 `MergeLowerLayer` skips an `auto/` tile whenever `textures/` has the same key.

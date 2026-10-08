@@ -12,7 +12,7 @@ scratchpad and is not versioned; this log keeps the numbers.
 - Branch `feat/f1218-pose-pixel-offsets` on `f0b9bb5e`, uncommitted F12.18
   diff; `make capture-tool` with the CommandLineTools toolchain.
 - `InteropDLL/obj.osx-arm64/MesenCore.dylib` sha256 prefix `9b250b1d0b025f2e`;
-  `grep -a` finds the new `"px": ` serialisation literal in it, and
+  `grep -a` finds the new `"px": ` serialization literal in it, and
   `scripts/headless_record` links that dylib by absolute path (checked with
   `otool -L`) — the recording below ran on the change.
 - The ADR-0226 linker change (F12.19) is **not** in this binary.
@@ -71,7 +71,7 @@ to the cluster's top-left, drawn back to front in OAM order.
 (what every composed view drew before this slice) and its real pixel offset —
 the same 2–4 px the "before" log measured. Every run pose was drawn with a
 single pixel layout on this stream, so the most-seen rule had no competitor to
-break here; its tie and weighting behaviour is covered by the unit tests.
+break here; its tie and weighting behavior is covered by the unit tests.
 
 ## Scope notes
 

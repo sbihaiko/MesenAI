@@ -48,7 +48,7 @@
   `ConfigManager`/`ApplyConfig()` pair the classic Input page uses. The host-free
   rules are `UI/Logic/ControllerSheetRemap.cs` (with
   `UI.Tests/Play/ControllerSheetRemapTests.cs`), the sheet half is
-  `UI/ViewModels/ControllerSheetViewModel.Remap.cs`, and the window behaviour is
+  `UI/ViewModels/ControllerSheetViewModel.Remap.cs`, and the window behavior is
   `UI.HeadlessTests/PlayerControllerSheetTests.cs`. The two rules:
   - **While a capture is armed, the pad is the capture's** - and it says so
     through the predicate ADR-0256's bridge already asks
@@ -62,7 +62,7 @@
     focus and confirmed nothing anywhere in the Play door. The case is
     `Closing_the_sheet_ends_the_capture_it_was_in`.
   Four more defects the same review found are fixed in the slice, each with a
-  RED: the Master System rows were labelled with the console's buttons the wrong
+  RED: the Master System rows were labeled with the console's buttons the wrong
   way round (the core's `GetKeyNames()` is "UDLR12P", so the field it reads as B
   is button 1 and the field it reads as A is button 2; W-P15's older copy of the
   swap is fixed with it, through the one rule in
@@ -93,14 +93,14 @@
   implemented by the macOS key manager; `nil` (Xbox pads) is normal; Windows and
   Linux stay no-ops."* The ruling was "AGREED 2–1, option (a)"; the dissent
   (Codex) is recorded on #916 verbatim: *"(b) DEFER; NO SLICE — Keep port-label
-  colour; defer physical lighting until hardware verification is available.
+  color; defer physical lighting until hardware verification is available.
   Cross-platform builds alone cannot validate LEDs."* What landed:
   `IKeyManager::SetGamepadLight` (default no-op returning false, pinned by
   `TestAPadLightIsANoOpUnlessTheBackendHasOne` in `scripts/core_unit_tests.cpp`),
   the `SetGamepadLight` export, `MacOSGameController::SetLight`, and the
-  host-free `UI/Logic/PadLights` - a pad lights in the colour of the port whose
+  host-free `UI/Logic/PadLights` - a pad lights in the color of the port whose
   keys it holds (`ControllerSheetPorts.HoldsDevice`), so a PLAYERS reassignment
-  moves the colour with the keys, from the window's 1 s pad-lamp poll. The
+  moves the color with the keys, from the window's 1 s pad-lamp poll. The
   palette moved to `PadLights.PlayerColors`, which the PLAYERS rows paint from,
   so label and light cannot drift. The bullet below ("the one promise above with
   no owner") is therefore historical. Unverified here: no DualShock 4 or
@@ -337,7 +337,7 @@ theirs.
   (W-P4) makes free.
 - The player color has three places to appear - the port label, the pad's own
   light where it has one (DualShock 4/DualSense via `GCController.light`; `nil` on
-  an Xbox pad, which is not an error state), and nowhere else. Colour that appears
+  an Xbox pad, which is not an error state), and nowhere else. Color that appears
   once is decoration, not language.
 - **The reconnect repair has one limit that survives it, and it is a limit of
   the identity, not of the implementation (recorded 2026-10-04 with slice 5).** A
@@ -370,11 +370,11 @@ theirs.
   and it cannot be built from what exists: `GamepadInfo`
   (`Core/Shared/Interfaces/IKeyManager.h`) has no light field, nothing in `Core/`
   or `UI/` reads or writes one, and the only way to make a DualShock's light
-  follow a player colour is a new output path - a core call the macOS key manager
+  follow a player color is a new output path - a core call the macOS key manager
   implements through the GameController framework, a no-op on Windows and Linux,
   whose pads have no addressable light at all. That is new cross-backend work with
   no headless test behind it and no pad carrying an addressable light in this
   environment, which is why it is named here instead of guessed at. Until it
-  exists, the colour language this ADR asks for is the port label alone - and by
-  this ADR's own test ("colour that appears once is decoration") that is a weaker
+  exists, the color language this ADR asks for is the port label alone - and by
+  this ADR's own test ("color that appears once is decoration") that is a weaker
   language than the one it specifies.

@@ -3,7 +3,7 @@
 - Status: accepted (2026-10-02). Requested by the user, verbatim: *"Sim"* (2026-10-02), to the question whether to write a separate ADR for the three Look layers; accepted the same day (*"Aceitar"*). It writes down PRD Part B §13 W-P10 together with the user's answers of 2026-10-02: named looks bundled, Hold to Compare, and the Pixels override only in Options. Listed as slice **P.13** in PRD Part A §4, Phase 7. Implemented 2026-10-02 on the user's go-ahead, verbatim: *"sim, pode seguir. depois que tudo estiver no main, pode implementar usando paralelismo de tudo que puder"*, *"pode implementar em paralelo tudo que puder"* and *"pode seguir com a segunda leva em paralelo"* (2026-10-02). Rules in `UI/Logic/LookLayers` and `NamedLookManifest` (tested in `UI.Tests/Look/`); Look is a tab of today's ConfigWindow, which the overlay's Settings opens, since G.1 shipped only the shell. The display check by a person (marks read right, compare shows no stutter) is not evaluated. §5's bypass was macOS Metal only until 2026-10-05, when `Windows/Renderer.cpp` and `Linux/LinuxOglRenderer.cpp` were taught to read the same flag and present the held frames unfiltered, chain kept — the CPU-filter half already dropped everywhere, because `VideoDecoder::DecodeFrame` reads the flag in shared code. **Neither of those two renderers is run anywhere, and a normal pull request does not even compile them**: `.github/workflows/build.yml` runs on a pull request whose base is `prod` and on manual dispatch, never on one into `main`. What holds their pairing is `scripts/checks/verify_hold_compare_bypass.py`, a presence guard that says so in its own docstring - it sees that the flag is read, not what is done with it, nor whether the read is on the right branch. macOS is the only platform with a renderer harness (`make metal-presenter-tests`).
 - Date: 2026-10-02
 - Related: ADR-0237 (shaders on macOS; non-goal amended 2026-10-02 for 2–3 named looks), ADR-0241 / PRD Part B §13 (W-P7, W-P8, W-P10), PRD Part B §6.1 (restore-not-clobber for the quick panel)
-- Supersedes / amends: amends ADR-0237's non-goals ("no bundled preset catalogue" is lifted for a short named list; §4 below). It also moves *Hi-res filter* out of the quick panel (PRD §6.1), and the shader selector out of Video settings into Look.
+- Supersedes / amends: amends ADR-0237's non-goals ("no bundled preset catalog" is lifted for a short named list; §4 below). It also moves *Hi-res filter* out of the quick panel (PRD §6.1), and the shader selector out of Video settings into Look.
 
 ## Context
 
@@ -46,14 +46,14 @@ Measured facts that make the mix-up costly:
    - **Pixels is disabled over pack art** on every console with HD art, with
      "Off while a pack draws the art". Look never overrides it; Tools ⋯ ›
      Options still can, for an advanced user.
-   - **NTSC is labelled** "Not applied while a pack draws the art" rather than
+   - **NTSC is labeled** "Not applied while a pack draws the art" rather than
      looking active.
    - **Shaders over pack art are allowed**, and are what Look recommends for
      "the TV look" on a remastered game.
 4. **Named looks.** Two or three bundled `.slangp` presets, *CRT TV* and
    *Handheld LCD* first, each with a GPL-3.0-compatible license recorded with its
    source and sha256 (ADR-0237 as amended). Adding one is a code change; there is
-   no catalogue browser.
+   no catalog browser.
 5. **Hold to Compare.** While held, Pixels and Screen drop and the original
    pixels show; Art stays. No split view. The slice measures the shader swap
    first, and if it stutters, bypasses the chain for the held frames instead of

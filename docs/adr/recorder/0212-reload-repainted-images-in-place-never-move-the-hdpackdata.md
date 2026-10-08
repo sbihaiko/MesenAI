@@ -24,7 +24,7 @@ Each `HdPackBitmapInfo` records the **absolute path** it loaded from and a `(siz
 
 ### 3. The re-decode happens on the emulation thread at frame end, after the decode thread is drained
 
-The reload is requested asynchronously (menu action, headless flag, interop call) and sets a pending flag. At the next frame boundary on the emulation thread the console calls `VideoDecoder::WaitForAsyncFrameDecode()` — after it returns the decode thread is idle and not inside `HdVideoFilter::ApplyFilter` — then re-decodes the changed images, clears the flag and logs one line. That drain is the entire synchronisation; locking `PixelData` on the read side was rejected because reads are the per-pixel render hot path, and a reload is rare and explicit, so paying once on the writer's side is the right trade.
+The reload is requested asynchronously (menu action, headless flag, interop call) and sets a pending flag. At the next frame boundary on the emulation thread the console calls `VideoDecoder::WaitForAsyncFrameDecode()` — after it returns the decode thread is idle and not inside `HdVideoFilter::ApplyFilter` — then re-decodes the changed images, clears the flag and logs one line. That drain is the entire synchronization; locking `PixelData` on the read side was rejected because reads are the per-pixel render hot path, and a reload is rare and explicit, so paying once on the writer's side is the right trade.
 
 ### 4. A repaint that resizes the canvas is refused, per image, and says so
 

@@ -15,7 +15,7 @@
 ### 1. The unit of the sprite layer is the pose
 
 A pose is one entry of `sheets/poses.json`: a set of `(node, dx, dy)` in 8 px cells — e.g.
-`{"node": 11, "dx": 0, "dy": 0}` — normalised to its own top-left, with the frame count
+`{"node": 11, "dx": 0, "dy": 0}` — normalized to its own top-left, with the frame count
 it was seen in. The fallback ladder, in order: (a) the pose containing the gesture's
 anchor node, from `poses.json`; (b) failing that — no sidecar, or an anchor in no pose —
 the `sprNNN` figure laid out by the ADR-0168 §2 walk; (c) failing that, the bare node, a
@@ -47,7 +47,7 @@ score(pose) = ( sum over distinct member nodes of coFrames(node, locked) )
 sorted by `score` descending, then the pose's `frames` descending, then by `id`. A pose
 with no co-presence against the locked set is not a candidate, exactly as a node with
 `co == 0` is not one today. The square root damps the size term without reversing it — a
-bare sum favours the 11-tile pose, a mean the 4-tile fragment. `coFrames` is recorded
+bare sum favors the 11-tile pose, a mean the 4-tile fragment. `coFrames` is recorded
 evidence, not a derived quantity.
 
 ### 5. Export is unchanged
@@ -58,7 +58,7 @@ ADR-0164 §3 — `cells[]` at composed positions, `"composed": true`,
 its anchor by `pose_of(anchor)` on reopen. `mep_build.py` needs no change; `pose_cells` is
 what the export preview draws; no new field.
 
-### 6. A sprite that never moved is labelled screen-fixed; the recorder labels, the consumer filters, nothing is deleted
+### 6. A sprite that never moved is labeled screen-fixed; the recorder labels, the consumer filters, nothing is deleted
 
 `SpriteAdjacencyStats` gains, per node, `Positions` (distinct `(X, Y)` it was ever drawn
 at) and `NodeFrames` (retained frames it appeared in at all, once per frame however many
@@ -187,7 +187,7 @@ classified*, untouched until re-recorded.
 - **`screenFixed` false positives:** a genuinely stationary actor (a turret, a boss idle)
   drops off its band; the trade is deliberate — furniture is always the most-seen shape and
   heads the list. On the measured capture 30 of 288 sprite nodes are screen-fixed and 19 of
-  the 30 bands shed 1–11 false members apiece. The thresholds are a judgement (median 4.3
+  the 30 bands shed 1–11 false members apiece. The thresholds are a judgment (median 4.3
   against 139–609), beside the adjacency constants in `TileSheetTypes.h`; moving them is a
   recording change, not a format change. `#71` of that capture (a spark effect) is not
   distinguished.

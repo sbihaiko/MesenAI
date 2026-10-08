@@ -53,7 +53,7 @@ scripts/headless_record rec/run/Contra.nes 60 rec/run/rec bootstrap hdpack-off \
 1 954 `<tile>` rules, 49 sidecars (44 group sheets, `metatiles`, `sprites`,
 `unsorted`, `adjacency`, `poses`).
 
-**The first 10 figures, as the Core labelled them** (top-level `label` of
+**The first 10 figures, as the Core labeled them** (top-level `label` of
 `sprNNN.json`, all `labelSource: inferred`):
 
 | sheet | label |
@@ -72,9 +72,9 @@ scripts/headless_record rec/run/Contra.nes 60 rec/run/rec bootstrap hdpack-off \
 `spr003` cites no pose (its cells belong to no kept pose), so the label
 carries no pose count — an absence stated, not filled in.
 
-Cells: `spr000` 9/9 labelled (`sprite #81 x99`, `sprite #82 x99`, …);
+Cells: `spr000` 9/9 labeled (`sprite #81 x99`, `sprite #82 x99`, …);
 `metatiles` 97/97 (`scene #0 x596`, `scene #1 x92`, …); `unsorted` 22/22
-(`misc #0 x1`, …). Poses: 49/49 labelled — `pose000` `figure 2x2, 4 tiles,
+(`misc #0 x1`, …). Poses: 49/49 labeled — `pose000` `figure 2x2, 4 tiles,
 2601 frames`, `pose001` `figure 3x2, 6 tiles, 217 frames, variant of pose041`,
 `pose004` `figure 3x6, 10 tiles, 133 frames`. Runs: `cycle000` `loop of 6
 phases, 3x6, x5`, `cycle001` `loop of 6 phases, 2x4, x2`, `seq000` `sequence

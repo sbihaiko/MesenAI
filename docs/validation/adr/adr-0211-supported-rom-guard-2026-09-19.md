@@ -48,7 +48,7 @@ themselves:
 
 ADR-0211 as written refused anything that was not the loaded ROM's full-file
 hash. Run against the disk, that rule refused **Zelda Remastered** — a pack
-issue #314 had already examined and explicitly cleared as correct behaviour. Its
+issue #314 had already examined and explicitly cleared as correct behavior. Its
 `<supportedRom>` is the hash of the ROM *after* its own IPS patch (ADR-0198 §2),
 so it matches no unpatched dump by construction.
 

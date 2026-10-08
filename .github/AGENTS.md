@@ -83,7 +83,7 @@ what CI actually runs; this doc records why they're split the way they are.
     matrix job `doc-checks-shard` (display name "Doc checks shard N",
     `fail-fast: false`), and **`checks` is now a fan-in job**: `needs:
     [doc-checks-shard]`, `if: always()`, and it fails unless the shards'
-    aggregate result is exactly `success` (a failed, cancelled or skipped
+    aggregate result is exactly `success` (a failed, canceled or skipped
     shard fails it). Rules that keep this honest:
     - **No shard job may be named like a required context** (`checks`,
       `python-tests`, `core-unit-tests`, `ui-tests`, `headless-ui-tests`):
@@ -298,7 +298,7 @@ what CI actually runs; this doc records why they're split the way they are.
   exclusive, and while every verdict path inside
   `community-pack-validate.yml` already enforces that (#159), a Status moved
   **by hand** bypasses all of them — the ADR-0148 de-listing of 2026-08-31
-  left #128–#131 and #133–#136 in "Inválido" still labelled `pack:valid`,
+  left #128–#131 and #133–#136 in "Inválido" still labeled `pack:valid`,
   with zero `pack:invalid` on the whole board. The step treats the board
   Status as the source of truth for the verdict, skips items still in "Novo
   envio"/"Em validação" (no verdict yet), and only edits labels: it never

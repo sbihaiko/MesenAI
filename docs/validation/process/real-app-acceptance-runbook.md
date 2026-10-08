@@ -6,10 +6,10 @@ OSD toast appearing", by ADR-0167's HUD-only capture seam (wave 4). What is
 left on this runbook is **genuinely human, hardware or pixel**: each item
 carries its reason, and none can be driven headless — a headless assertion
 for any of them would assert a fake (a faked file picker, a faked pad, a
-recorded judgement).
+recorded judgment).
 
 This consolidates that residue into one pass a human runs on a real machine
-with a display, a physical pad and speakers. It accepts product behaviour;
+with a display, a physical pad and speakers. It accepts product behavior;
 it does not re-run what the suites already assert. A reproducible failure
 here is a bug (or, if it reveals a decision, an ADR) — see "Where a failure
 goes".
@@ -44,7 +44,7 @@ and inside a sprite Y band (floor-sharing shapes) — exported as a composed
    on an older pack instead of silently recomputing).
 2. `python3 scripts/compose_editor.py <pack folder>`
 3. Exercise the human gestures: seed a cell the `objNNN` grouping supports
-   and lock its strongest neighbour on the object layer; compose a floor band
+   and lock its strongest neighbor on the object layer; compose a floor band
    of the sprite layer; **export** a kept `usrNNN` sheet; save (the save
    dialog promotes an edited sheet from `auto/` to `mep/textures/sheets/`
    per ADR-0164 §4 and says so rather than writing derived `auto/` data).
@@ -112,7 +112,7 @@ the hardware): per-device VID:PID binding, MBC7 / GBA tilt, Linux
 ## 5. Subjective audio pass (human ears)
 
 **Why it stays human:** timbre and "is the SFX audible over the replaced
-track" are judgements; the *regression* halves are already Blocos I, K, L.
+track" are judgments; the *regression* halves are already Blocos I, K, L.
 
 **How to run:** with a pack whose audio is replaced and a game that plays
 SFX over it, listen for:
@@ -139,7 +139,7 @@ SFX over it, listen for:
   relocated) → open a bug with `scripts/report-bug.sh` and record the
   repro here.
 - A **product decision** surfaced by the panel (compose UX, audio policy,
-  a pad behaviour) → an ADR, not a bug.
+  a pad behavior) → an ADR, not a bug.
 - A compose *engine* defect → reproduce it headless first
   (`test_compose_engine.py`); the GUI is a thin controller and should never
   be the only place a defect shows.

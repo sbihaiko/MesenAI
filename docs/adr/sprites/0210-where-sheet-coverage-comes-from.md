@@ -6,7 +6,7 @@
 
 ## Context
 
-ADR-0209 measured the gap blocking the artist loop — of Zelda's 2 203 recorded keys, only 319 (12.5%) have a cell on a sheet — and its Q4 option (m) proposed seeding coverage from a pack's key index on the premise that *"a `<tile>` key is `(tileData, palette)`: 16 bytes of original CHR plus four NES colours — that **is** the original art"*.
+ADR-0209 measured the gap blocking the artist loop — of Zelda's 2 203 recorded keys, only 319 (12.5%) have a cell on a sheet — and its Q4 option (m) proposed seeding coverage from a pack's key index on the premise that *"a `<tile>` key is `(tileData, palette)`: 16 bytes of original CHR plus four NES colors — that **is** the original art"*.
 
 **That premise is only half true, and the false half is the majority of the library.** `HdPackLoader::ReadTileData` branches on the field's length:
 
@@ -20,7 +20,7 @@ Measured 2026-09-18 across the 30-ROM bounded library: **23 CHR ROM** (88 576 ti
 3. **What a third-party index adds to a CHR ROM game is palettes.** Ninja Gaiden names 401 distinct palettes to our 364; Donkey Kong 19 to our 8. A pair whose palette we never observed will not match at run time however complete our shapes are — the palette set, not the shape set, is scarce there.
 4. **Added 2026-09-24, measured.** Filter 2 first refused every `<patch>` pack outright, throwing away safe coverage. The survey (`docs/validation/measurements/community-mapping-survey-2026-09-24.md` §1b) ran the shipped read on the 32-hex `<patch>` packs with their `<patch>` lines stripped and searched each new 16-byte shape verbatim in stock: for Castlevania (2 673 / 2 673), Mega Man (3 350 / 3 350) and Zelda (1 612 / 1 612) **100 % of our recorded shapes are verbatim in stock**. Of the new shapes **249 / 257 / 44 are verbatim** (+550); the rest (236 / 239 / 18) are not — all 239 of Mega Man's sit in the *patched* ROM, the patch author's art. A 16-byte key is its own witness.
 
-The non-goal is stated up front: this ADR does not decide how a marked figure reaches the artist's editor (that is ADR-0209), and it imports no pixel, colour choice or upscale from anyone's pack.
+The non-goal is stated up front: this ADR does not decide how a marked figure reaches the artist's editor (that is ADR-0209), and it imports no pixel, color choice or upscale from anyone's pack.
 
 ## Decision
 
@@ -32,7 +32,7 @@ What `HdPackBuilder::ProcessTile` observed the PPU actually draw: the only sourc
 
 ### 2. The ROM's own CHR — for the 23 CHR ROM games, this closes the shape gap
 
-`artist_chr_kit.py`'s preference order (`evidence` → `borrowed` → `donated` → `fill` → `empty`) already does this; a `fill` cell is `seen: false`. For a CHR ROM game the shape side is therefore **100% by construction, with no third party and no further play** — the answer to ADR-0209 Q4 for 23 of 30 games. The residue is the palette: a shape pulled straight from CHR has no colours attached; source 3 supplies them.
+`artist_chr_kit.py`'s preference order (`evidence` → `borrowed` → `donated` → `fill` → `empty`) already does this; a `fill` cell is `seen: false`. For a CHR ROM game the shape side is therefore **100% by construction, with no third party and no further play** — the answer to ADR-0209 Q4 for 23 of 30 games. The residue is the palette: a shape pulled straight from CHR has no colors attached; source 3 supplies them.
 
 ### 3. A third-party key index — palettes always, art only for CHR RAM
 
@@ -56,14 +56,14 @@ Every cell carries its source: `recorded` (source 1), `chr` (source 2) or `index
 
 ### The palette question is already answered — `defaultTile` is the wildcard
 
-**Corrected 2026-09-19.** An earlier revision claimed a `<tile>` rule must name a concrete palette and that `hires.txt` exposed a wildcard only through `IgnorePalette` on `<addition>` and conditions. **That is wrong.** The last field of a `<tile>` rule — `Y`/`N`, parsed into `DefaultTile` — is not "the default artwork for this tile": when `Y`, `HdPackLoader` registers the rule under the exact key and `GetKey(true)`, whose `PaletteColors` is `0xFFFFFFFF`, and `HdNesPack` falls back to it on a miss. So source 2 is **already self-sufficient**: a shape lifted from CHR carries no palette, is emitted with `Y`, and matches whatever colours the game puts it under. Across the 30-ROM library, **88 576 of 117 650 `<tile>` rules (75%) are already `Y`** — exactly the CHR ROM tile count.
+**Corrected 2026-09-19.** An earlier revision claimed a `<tile>` rule must name a concrete palette and that `hires.txt` exposed a wildcard only through `IgnorePalette` on `<addition>` and conditions. **That is wrong.** The last field of a `<tile>` rule — `Y`/`N`, parsed into `DefaultTile` — is not "the default artwork for this tile": when `Y`, `HdPackLoader` registers the rule under the exact key and `GetKey(true)`, whose `PaletteColors` is `0xFFFFFFFF`, and `HdNesPack` falls back to it on a miss. So source 2 is **already self-sufficient**: a shape lifted from CHR carries no palette, is emitted with `Y`, and matches whatever colors the game puts it under. Across the 30-ROM library, **88 576 of 117 650 `<tile>` rules (75%) are already `Y`** — exactly the CHR ROM tile count.
 
-Comparing two `hires.txt` files by `(shape, palette)` equality **understates matching**, because it does not model the fallback. What stays open is therefore not palette but editing surface: ADR-0209's 1 928 Zelda keys with no cell are unreachable because nothing draws them, not because their colours disagree; Q4(k)'s remainder sheet is the answer, and no format change is involved.
+Comparing two `hires.txt` files by `(shape, palette)` equality **understates matching**, because it does not model the fallback. What stays open is therefore not palette but editing surface: ADR-0209's 1 928 Zelda keys with no cell are unreachable because nothing draws them, not because their colors disagree; Q4(k)'s remainder sheet is the answer, and no format change is involved.
 
 ## Consequences
 
 - ADR-0209's Q4(m) is answerable concretely only for the 7 CHR RAM games; for the other 23 the answer is the ROM itself and no third party. Q4(k)'s remainder sheet remains the mechanism that makes *any* source reach the artist.
 - The importer needs the ROM's CHR tile count, so it cannot run on a key index alone — a feature: it is also what catches a pack aimed at another ROM.
 - Refusing conditions costs coverage (a pack like Metroid's, with 4 426 conditions); accepted, because the alternative asserts things we never saw, which is what ADR-0183 protects.
-- Any tooling comparing two `hires.txt` files must normalise the index the loader's way — branch on `<ver>`, as `Rule.parsed_index` does. The prescription "Normalise the index (`int(field, 16)`)" and the base-16 reading of the index range were the same trap: base 16 is right only from `<ver>`103 on, and a `<ver>`100 pack's tokens are decimal.
+- Any tooling comparing two `hires.txt` files must normalize the index the loader's way — branch on `<ver>`, as `Rule.parsed_index` does. The prescription "Normalize the index (`int(field, 16)`)" and the base-16 reading of the index range were the same trap: base 16 is right only from `<ver>`103 on, and a `<ver>`100 pack's tokens are decimal.
 - **Added 2026-09-24.** With the per-key `<patch>` guard three more catalog packs contribute shapes — **Castlevania +249, Mega Man +257, Zelda +44** (1 268 keys), with **0 admitted shapes absent from the stock dump** and 493 refused and counted (`docs/validation/adr/adr0210-patch-verbatim-guard-2026-09-24.md`). The guard is a byte search, not a judgment: a community tile equal to 16 stock bytes somewhere in PRG would pass it, and the admitted cell renders only those stock bytes, never the pack's PNG.

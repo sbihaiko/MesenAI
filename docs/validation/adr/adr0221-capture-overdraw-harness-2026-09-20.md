@@ -12,14 +12,14 @@
 
 ADR-0221 states the acceptance test in pixels — the ROM draws 7 808
 `STARRING` / `LITTLE MAC` pixels and the render has 0 — which is exact for that
-one frame and does not generalise: a rendered pack frame is 4x native, so any
+one frame and does not generalize: a rendered pack frame is 4x native, so any
 direct pixel diff against the unpacked frame measures the upscale rather than
 correctness. The tool therefore works per 8x8 NES cell:
 
-- **detail** — the ROM's own frame has 2 or more distinct colours in the cell,
+- **detail** — the ROM's own frame has 2 or more distinct colors in the cell,
   so the ROM is drawing something there;
 - **erased** — detail holds and the render's corresponding 32x32 region is a
-  single flat colour, so whatever the ROM drew is gone.
+  single flat color, so whatever the ROM drew is gone.
 
 `erased` is deliberately conservative. A cell the artist repainted with *any*
 variation does not count, so the tool under-reports rather than inventing
@@ -118,7 +118,7 @@ loss, the fight is sprite loss with zero background loss; the prototype's 141
 is 0 on the background column, so it passes `--verdict background` while the
 shipped pack's 374 does not.
 
-## Traps honoured
+## Traps honored
 
 Both of ADR-0221's measurement traps are enforced by the tool rather than left
 to the operator. A render that comes back at native 256x240 means no pack was

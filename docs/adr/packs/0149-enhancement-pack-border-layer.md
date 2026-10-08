@@ -108,7 +108,7 @@ pass reported as three blocked parts is one blocked, one already expressible, an
 needed the decision it asked for:
 
 - **Letterboxing inside the viewport — blocked, and it stays blocked.** MEP-v1 §5.4's `viewport`
-  row is a MUST: the host "scales the game frame to fill the rectangle exactly (nearest-neighbour),
+  row is a MUST: the host "scales the game frame to fill the rectangle exactly (nearest-neighbor),
   it does **not** letterbox inside it". The Non-goals line above — "game aspect ratio is preserved
   within the designated viewport" — is the clause that conflicts, and the one that yields.
   Implementing the PRD's "letterbox inside the viewport" means amending the published spec, which is
@@ -123,7 +123,7 @@ needed the decision it asked for:
   recorded it as an open point needing "a decision before the next border-related slice". This is
   that decision. It stays unapplied because MEP-v1 §5.4's `scale_mode` row tells authors they MUST
   NOT rely on `"stretch"` yet and documents that the reference hands the canvas to the regular video
-  scaler: applying it would make the emulator honour a mode the published spec tells authors not to
+  scaler: applying it would make the emulator honor a mode the published spec tells authors not to
   use. `BorderLayout::ParseScaleMode` and `CanvasRectOnOutput` stay as they are — parsed, pinned by
   tests, and consumed by no production caller, which is the state the spec describes.
 - **Untouched and unblocked:** the lint of a bare root `border.png`, the fourth part of F8.4.

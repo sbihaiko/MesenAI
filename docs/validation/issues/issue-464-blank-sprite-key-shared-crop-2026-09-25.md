@@ -26,7 +26,7 @@ build passed, but a tile the NES draws as fully transparent now drew art.
 - `mep_addition.is_blank_sprite(tile_data, palette)` is true for 32 zero hex
   digits under a sprite palette key (first byte `FF`, which `HdBuilderPpu` sets
   on every sprite palette). A background tile with the same data is not blank,
-  because its colour 0 is the backdrop, which the NES draws.
+  because its color 0 is the backdrop, which the NES draws.
 - In `mep_build.py`, a blank sprite crop never claims its key by paint. Its
   entry carries `claim = False` even when its cell differs from the twin, so
   it never joins the muted-paint reports (#343, #253).

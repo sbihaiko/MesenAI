@@ -35,7 +35,7 @@ Output is 40 uppercase hex digits (matches `SHA1::GetHash`). Comparison with
 ## Consequences
 - Matching runs once per `Emulator::InternalLoadRom` after the optional IPS/
   BPS patch is applied, so a pack targets the *patched* ROM hash — the same
-  behaviour users get from `HdPacks/<rom>/hires.txt` patch handling.
+  behavior users get from `HdPacks/<rom>/hires.txt` patch handling.
 - An `.nes` file without the iNES magic (e.g. UNIF) is hashed whole; UNIF
   packs are unsupported until No-Intro publishes a rule for them.
 - Cheap: one SHA-1 over a buffer already in memory.

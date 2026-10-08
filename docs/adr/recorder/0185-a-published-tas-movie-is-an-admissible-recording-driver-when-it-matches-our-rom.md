@@ -20,7 +20,7 @@ The converter **refuses, does not warn**, and names the cause: a `savestate` hea
 
 ### 3. The harness must not be able to silently record nothing
 
-`MovieManager` ignores a file it does not recognise: no player, no message, `MoviePlay` returns void, and a run started that way records the title screen for its whole budget. So `scripts/headless_record`'s `movie=` flag polls `MoviePlaying()` immediately after `MoviePlay` and **fails the run** when it is false, naming the file and the two container shapes the Core accepts — a zip holding `GameSettings.txt` is a Mesen `.mmo`, one holding `Input Log.txt` is a BizHawk `.bk2`. `movie=` is mutually exclusive with `input=` and `state=`, refused when combined: a movie carries its own start state and poll counter. `MovieManager` detects the format by content, and `MoviePlay`/`MovieStop`/`MoviePlaying` are already exported; there is **no `.fm2` reader** (Mesen 1 accepted them, Mesen 2 dropped it).
+`MovieManager` ignores a file it does not recognize: no player, no message, `MoviePlay` returns void, and a run started that way records the title screen for its whole budget. So `scripts/headless_record`'s `movie=` flag polls `MoviePlaying()` immediately after `MoviePlay` and **fails the run** when it is false, naming the file and the two container shapes the Core accepts — a zip holding `GameSettings.txt` is a Mesen `.mmo`, one holding `Input Log.txt` is a BizHawk `.bk2`. `movie=` is mutually exclusive with `input=` and `state=`, refused when combined: a movie carries its own start state and poll counter. `MovieManager` detects the format by content, and `MoviePlay`/`MovieStop`/`MoviePlaying` are already exported; there is **no `.fm2` reader** (Mesen 1 accepted them, Mesen 2 dropped it).
 
 ### 4. Synchronization is measured against the movie-less run and gated (amended 2026-09-14, issue #201)
 
@@ -75,7 +75,7 @@ Non-goals: adding a `.fm2` reader to the Core (a converter outside it is smaller
 - **The coverage ceiling moves for the games this covers, and not at all for the one that motivated it.** Contra keeps needing gameplay search.
 - **ADR-0184's two-pass split becomes a fallback, not the plan.** Where a movie exists, §1 says one clean run serves all four surfaces; ADR-0184 stays in force for the games without one, and its §4 still binds (a run of a game a TAS never dies in records no death material).
 - **Movie mode gives up ADR-0157's in-frame stop** (§4.3).
-- **A new silent-failure class enters the harness**, and §3 is the whole defence: a movie that does nothing looks exactly like a movie that does not help, and the only way to tell is to compare against the run without it.
+- **A new silent-failure class enters the harness**, and §3 is the whole defense: a movie that does nothing looks exactly like a movie that does not help, and the only way to tell is to compare against the run without it.
 - **Sync is a standing risk we cannot detect in-band.** §4.2's total catches a total desync; a *partial* desync — the movie diverging halfway — produces a run better than the baseline and worse than the movie, and only a mid-run screenshot catches it (issue #201). Prefer BizHawk-made `.bk2` over converted `.fm2`.
 - **A converted movie needs its power-on row dropped** (§4.4), a property of the pair of emulators, not the movie.
 - **We now depend on an external archive for material.** `.cache/tas/` is a cache, not an archive; the publication URL in `notes[]` is what makes the run reproducible later.

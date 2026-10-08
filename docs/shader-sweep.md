@@ -16,7 +16,7 @@ before telling users which presets work.
 ## Prerequisites
 
 - macOS on Apple Silicon with a Metal device. Command Line Tools are enough;
-  where `/usr/bin/make` refuses to run without an Xcode licence, use
+  where `/usr/bin/make` refuses to run without an Xcode license, use
   `/Library/Developer/CommandLineTools/usr/bin/make` with
   `CXX="/Library/Developer/CommandLineTools/usr/bin/clang++ -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk"`.
 - `UI/Dependencies/librashader.dylib`, from `scripts/fetch_librashader_macos.sh`
@@ -84,7 +84,7 @@ For each preset, in separate processes so one crash or hang costs one row:
    `MetalPresenter` to an offscreen `NSView`, as `make metal-presenter-tests`
    does. It loads the preset, presents the reference frame `--nframes` times
    with readback on, and compares the last drawable with a CPU
-   nearest-neighbour scale of the frame. That scale is what the presenter
+   nearest-neighbor scale of the frame. That scale is what the presenter
    shows with no shader.
 2. **Params.** The same script, in a child process with `UI/Dependencies/` as
    its working directory (where `./librashader.dylib` resolves), makes the two
@@ -99,7 +99,7 @@ mean nothing.
 ### Why a built-in frame
 
 The default reference is a 256×240 pattern generated inside the harness:
-flat NES-palette tiles on black, a 1-pixel checkerboard, a grey ramp and a
+flat NES-palette tiles on black, a 1-pixel checkerboard, a gray ramp and a
 grid. It was chosen over a real frame because:
 
 - the ROM library is not in the repo;

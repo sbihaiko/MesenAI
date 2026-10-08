@@ -1,7 +1,7 @@
 # ADR-0264: The Play *Open a game* sheet is a flat library of the ROMs under the library folders
 
 - Status: accepted (2026-10-07) — requested by the owner as issue #1031, the
-  decision-and-wireframes slice of the parent spec #1030, labelled
+  decision-and-wireframes slice of the parent spec #1030, labeled
   `ready-for-agent`. The issue states the decision itself: the sheet becomes a
   flat library, the folder browser survives only as *Browse a file…*, the pad
   map and the cover priority are fixed, and ADR-0256 Decision 9's folder
@@ -51,7 +51,7 @@ What the sheet has no way to do, measured against what a player wants:
 - search them, so one title in a long list is reachable without walking;
 - narrow them by console, so the Game Boy half of a collection can be set
   aside;
-- recognise a game by its cover rather than by a file name.
+- recognize a game by its cover rather than by a file name.
 
 The information needed for all four is already in the app: every ROM under a
 root can be classified by console, a file name can be cleaned into a title, a
@@ -125,7 +125,7 @@ library.
    2. **downloaded title-screen image** (Decision 10);
    3. **the player's own screenshot from the Recent list**, matched by the
       ROM's full path, for a game already played;
-   4. **a generic console-coloured cover carrying the title**, for a hack, a
+   4. **a generic console-colored cover carrying the title**, for a hack, a
       translation or any ROM no database knows.
 
    A ROM that falls to case 4 is not re-queried for art on every visit.
@@ -166,7 +166,7 @@ library.
      twenty thousand openable entries, and says so in the header rather than
      silently truncating.
 
-   An archive (`.zip`, `.7z`) whose name the console classifier recognises
+   An archive (`.zip`, `.7z`) whose name the console classifier recognizes
    appears as one game; the archive path is the entry, and the existing
    load-time question about which ROM it holds is unchanged.
 
@@ -254,7 +254,7 @@ never deletes anything, which is also why nothing here prunes the box-art
 cache when a folder leaves the list.
 
 **A generic cover is a real outcome, not a failure.** A hack, a translation
-and a homebrew ROM will keep Decision 6's console-coloured cover forever; that
+and a homebrew ROM will keep Decision 6's console-colored cover forever; that
 is the intended result, and it is why case 4 exists at all.
 
 **The window into this work is the wireframe.** W-P19 and W-P19b are the
@@ -263,6 +263,6 @@ tile proportion or the sheet's control set is an amendment to this ADR, not a
 silent edit in the view.
 
 **Not decided here.** A player-chosen custom cover, scraping services that need
-an account or an API key, favourites, collections, play-time statistics and
+an account or an API key, favorites, collections, play-time statistics and
 metadata beyond title and console are all out of scope — each is its own
 decision when someone asks for it.

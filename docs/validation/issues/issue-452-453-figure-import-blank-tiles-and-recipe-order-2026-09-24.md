@@ -41,7 +41,7 @@ pre-existing bug, listed under follow-ups.
 
 `import_figure` looks up each painted cell's recorded art: its crop of the
 sheet's `*.orig.png` twin, the same crop `Sheet.cell_image` returns. When
-every pixel of that crop is transparent (colour 0 only, a tile the NES never
+every pixel of that crop is transparent (color 0 only, a tile the NES never
 draws), the cell is not written. It is listed under the report's new
 `blank` array, with its node, pose, sheet, cell index and `tileData/palette`
 keys, and it is not counted as `painted`. The CLI prints one line with the

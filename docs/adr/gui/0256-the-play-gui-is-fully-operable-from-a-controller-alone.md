@@ -273,7 +273,7 @@ heading are answered by them and by the section after.**
      (`InitializeEmu` registers it only when the window *and* the viewer handles
      are present, `InteropDLL/EmuApiWrapper.cpp`). A pad in the wizard would mean
      either a second, platform-specific reading of the pad - against this ADR's
-     one-place rule - or initialising the core to read a device on the screen
+     one-place rule - or initializing the core to read a device on the screen
      whose job is to say where the core's files go, the wrong order, creating
      files before the player chose where they live.
 
@@ -288,7 +288,7 @@ pad press is reduced to one navigation intent in a single place next to
 **How it moves the focus is decided with the user, 2026-10-04**: not the wording
 this ADR first carried. Translating pad events into synthetic keyboard events
 was rejected on measurement: no code in the app has ever set a
-`NavigationMethod`, and there is no evidence a synthesised `KeyEventArgs` drives
+`NavigationMethod`, and there is no evidence a synthesized `KeyEventArgs` drives
 Avalonia 12's focus navigation — a mechanism that cannot be proven from a
 headless test is the wrong foundation for the one path a keyboard-less cabinet
 depends on. The bridge calls the focus engine directly

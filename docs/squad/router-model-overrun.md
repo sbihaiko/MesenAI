@@ -64,7 +64,7 @@ Applied:
 - A **stopping rule** appended to the router's `instructions`, after the role
   text: read what you need and no more, spend at most about fifteen turns of
   reading, then return the object — or `needs-human` naming the question that
-  would settle it. This targets the observed behaviour directly.
+  would settle it. This targets the observed behavior directly.
 - The router moved to DeepSeek and `allow.models` leads with
   `claude-deepseek-v4-flash` (a child that pins no model takes
   `allow.models[0]`), owner instruction of 2026-10-05. This is a preference,
@@ -136,7 +136,7 @@ were measured:
 | `run-20261005-205624` | `node_turn_cap` | three children at 41, 46, 51 turns, $1.18–$1.40 each | the router was sizing `turns` from the 40–50 the role text quoted as the observed norm, which cannot finish a three-bug TDD task. **All three left real edits in their worktrees and returned no artifact**: `error_max_turns` ends the session mid-work, so a child at the wall never gets the turn that would have returned its object |
 | `run-20261005-210625` | `merge_conflict` | $0.84 router + three children at 61/63/78 turns | **the first run whose children worked** — three passed with artifacts. It still failed, because two of them had taken the same pair of bugs (#902/#904) and both edited `MacOS/MacOSKeyManager.mm` |
 | `run-20261005-213328` | `node_spend_cap` | one child $3.28/61 turns, one passed at $2.31 | the router **partitioned correctly** (two disjoint named slices, no overlap) and then priced a turn at the three cents the role quoted — the `claude-deepseek-v4-flash` rate, while it had chosen `claude-grok-4.6` at high effort, where a turn costs $0.054 |
-| `run-20261005-214446` | **completed** | $7.77 in all: router $0.63, children $2.22 / $2.37 / $1.37 / $1.19 | the first run to reach a verdict with every child inside its budget and **no `merge_conflict`**: four disjoint slices (Core/ bugs, UI/+scripts/ bugs, the F8.4 `border.png` lint, the CI live-validation flag), each with its own stopping rule. One child landed a real bug the board did not have (`#905`, the content_id hasher's DEL escape); one returned `fail` with `no_open_bugs_in_slice` and **no invented work**; one returned `needs-human` because the spec sanctioned the behaviour its brief called a bug; one returned `pass` on a deliberate *not cleared* rather than flipping a CI flag |
+| `run-20261005-214446` | **completed** | $7.77 in all: router $0.63, children $2.22 / $2.37 / $1.37 / $1.19 | the first run to reach a verdict with every child inside its budget and **no `merge_conflict`**: four disjoint slices (Core/ bugs, UI/+scripts/ bugs, the F8.4 `border.png` lint, the CI live-validation flag), each with its own stopping rule. One child landed a real bug the board did not have (`#905`, the content_id hasher's DEL escape); one returned `fail` with `no_open_bugs_in_slice` and **no invented work**; one returned `needs-human` because the spec sanctioned the behavior its brief called a bug; one returned `pass` on a deliberate *not cleared* rather than flipping a CI flag |
 
 Two lessons that are not about the node's own configuration:
 

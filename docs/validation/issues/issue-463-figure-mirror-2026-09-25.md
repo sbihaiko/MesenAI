@@ -57,7 +57,7 @@ per-cell field, and readers that ignore it are unaffected.
 ## Red before the fix
 
 `python3 scripts/test_mep_figure.py`, run against the unmodified
-`mep_figure.py` with the two new behavioural cases
+`mep_figure.py` with the two new behavioral cases
 (`test_paint_on_a_mirrored_cell_lands_unmirrored_after_the_first_build`,
 `test_pixel_ownership_reads_a_mirrored_cell_in_the_figure_orientation`):
 
@@ -76,10 +76,10 @@ flips, and the involution.
 
 | Mutation | Result |
 |---|---|
-| M1: `pending_flips` never flips | 4 failures: both behavioural cases, plus two `pending_flips` checks |
+| M1: `pending_flips` never flips | 4 failures: both behavioral cases, plus two `pending_flips` checks |
 | M2: ownership reads the un-baked art (no flip in `_owned_pixels`) | 1 failure: the ownership case |
 | M3: flip even when the crop still carries its `mirror` | 1 failure: "recorded, still baked: no flip" |
-| M4: export records no `mirror` | 3 failures: the export check and both behavioural cases |
+| M4: export records no `mirror` | 3 failures: the export check and both behavioral cases |
 | M5: the paint is not un-baked (the mask still is) | 1 failure: the mirrored-paint case |
 
 Each mutation was reverted, and the suite is green again.
@@ -122,7 +122,7 @@ H-mirror, and as other otherwise.
 
 Two fewer cells count as painted before the fix (138, not 140). The likely
 cause is the mirrored ownership: it gave every pixel of those cells to a
-neighbour. This was not traced cell by cell.
+neighbor. This was not traced cell by cell.
 
 The 25 partial cells in the fixed arm are not orientation errors. Their
 matching pixels all match the right orientation and none matches the

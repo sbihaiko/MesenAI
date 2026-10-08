@@ -7,7 +7,7 @@
 
 ## Context
 
-ADR-0191 (2026-09-14) cut `build.yml` down to Linux: two Windows publish jobs and four macOS legs deleted, the policy being every *binary* build macOS Apple Silicon only and CI compiling Linux only. That left the README shipping a Windows link labelled **frozen at the 2026-09-14 build** — it resolves only through nightly.link's fallback to an older run and can never refresh — and macOS with no CI leg, so a macOS break was found only by a hand `make release-macos`.
+ADR-0191 (2026-09-14) cut `build.yml` down to Linux: two Windows publish jobs and four macOS legs deleted, the policy being every *binary* build macOS Apple Silicon only and CI compiling Linux only. That left the README shipping a Windows link labeled **frozen at the 2026-09-14 build** — it resolves only through nightly.link's fallback to an older run and can never refresh — and macOS with no CI leg, so a macOS break was found only by a hand `make release-macos`.
 
 The user reversed the policy on 2026-09-16 ("quero bild de windows e mac"), narrowed by two choices from the same conversation: **macOS Apple Silicon only** and **the trigger set unchanged**. A second decision followed: the README's links named `main`, and the user asked that they name `prod`. That is more than a text edit — nightly.link resolves a branch against the `head_branch` Actions recorded for a run, which for a `pull_request` run is the PR's **source** branch and for a `workflow_dispatch` run is whatever `ref` the dispatch named. No run of `build.yml` has ever had `head_branch: prod`, because nothing has dispatched it with `--ref prod`; the existing `main` links resolved only because every `prod` pull request so far had `main` as its source.
 
@@ -19,7 +19,7 @@ Non-goals. This does not restore `push`, does not add an Intel macOS leg, does n
 
 2. **A `macos` job returns for Apple Silicon only**: `clang` and `clang_aot` on `macos-15`. The `macos-15-intel` legs are **not** restored — the release is arm64, so an Intel leg would build an artifact nothing links to. The old four-leg job becomes two.
 
-3. **The triggers do not change.** `pull_request` filtered to the `prod` base branch, plus `workflow_dispatch` (ADR-0200). The legs run on a `prod` pull request or a dispatch, not on every push. Restoring `push` reintroduces what #230 and ADR-0191 removed: a full LTO/AOT matrix per push, and a push cancelling the run the download links resolve against.
+3. **The triggers do not change.** `pull_request` filtered to the `prod` base branch, plus `workflow_dispatch` (ADR-0200). The legs run on a `prod` pull request or a dispatch, not on every push. Restoring `push` reintroduces what #230 and ADR-0191 removed: a full LTO/AOT matrix per push, and a push canceling the run the download links resolve against.
 
 4. **The `if: github.event_name != 'pull_request'` guard does not come back.** Every deleted upload carried it; ADR-0200 removed it from the Linux jobs because a `prod` pull request runs the whole matrix and publishes nothing. The restored jobs publish on every trigger they have.
 

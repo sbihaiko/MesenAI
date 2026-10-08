@@ -13,7 +13,7 @@ MEP's textures/ section is an envelope over the existing hires.txt format and de
 **Extended by ADR-0040 and ADR-0049.** This ADR only records the envelope decision; the precedence chain grew from the original two-tier example (loose HD pack over installed MEP pack) to the three-tier rule above when the sibling-folder origin was added.
 
 ## Consequences
-One texture-loading path instead of two; the F2 format extension automatically benefits MEP packs. The precedence rule becomes user-visible behaviour and must be documented in MEP-v1.md, not just implemented.
+One texture-loading path instead of two; the F2 format extension automatically benefits MEP packs. The precedence rule becomes user-visible behavior and must be documented in MEP-v1.md, not just implemented.
 
 ## Alternatives
 Independent MEP texture parser: duplicates HdPackLoader and forks the format. No precedence rule: whichever loader runs last wins, nondeterministically.

@@ -1,8 +1,8 @@
 # W-P2 vs docs/media/gui-redesign/W-P2.png
 
-Tolerances: colour ΔE ≤ 10, ink-box edge offset ≤ 8 px, text-line centre offset ≤ 8 px with the same line count.
+Tolerances: color ΔE ≤ 10, ink-box edge offset ≤ 8 px, text-line center offset ≤ 8 px with the same line count.
 
-| region | render colour | wireframe colour | ΔE | box offset (px) | lines render/wireframe | line offset (px) | verdict |
+| region | render color | wireframe color | ΔE | box offset (px) | lines render/wireframe | line offset (px) | verdict |
 |---|---|---|---|---|---|---|---|
 | title bar | #FAFAFB | #FAFAFB | 0.0 | 6.0 | 1/1 | 0.5 | pass |
 | content | #F6F6F8 | #F7F7F8 | 0.6 | 8.0 | 5/5 | 12.0 | FAIL: text lines |

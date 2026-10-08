@@ -192,7 +192,7 @@ script goes, and #543 is why the two had come apart at all.
 
 **The route replaces `stage1-run.txt`.** It goes 2 047 px (eight screens) and one
 whole section further than the committed one, replays deterministically, and
-keeps `$0076` at 2 for all 3 330 frames. The old route's behaviour is kept in
+keeps `$0076` at 2 for all 3 330 frames. The old route's behavior is kept in
 the file's header: it reached abs x 988 by frame 690 and held the act there for
 48 s with 120-frame direction holds, because the eight macros have nothing that
 leaves the pin.

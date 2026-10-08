@@ -26,7 +26,7 @@
    recording drew whose palette is a colourway of the cell's palette
    (`artist_chr_kit`'s test: a painted entry changes hue, or the residual fails
    the 25° gate), the recorder emits a variant cell, rendered in that palette
-   from the recorded art, beside its base cell on the same organised sheet, in
+   from the recorded art, beside its base cell on the same organized sheet, in
    the variant layout ADR-0183 §2 item 1 uses, as its own exact key. A sprite
    cycle grid keeps its phase order: variants follow their base phase, never
    interleave phases. The emission lives in the host-free `MesenSheets::`
@@ -55,7 +55,7 @@
 
 ## Context
 
-ADR-0229 asked why the organised and `unsorted` sheets reach only about 18 % of
+ADR-0229 asked why the organized and `unsorted` sheets reach only about 18 % of
 a recorded pack's keys; its "Measured 2026-09-23" prototype found the premise
 does not hold. Most of the pack is the bootstrap's PRG-scan `defaultTile=Y`
 export at the neutral palette (ADR-0043, ADR-0210): those tiles are reachable

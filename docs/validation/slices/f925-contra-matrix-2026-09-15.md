@@ -38,7 +38,7 @@ ADR-0182 owns why the list stops at stage 4.
 `scripts/record_stages.sh` re-ran the nine state+script pairs, 60 s each, no
 cheat (ADR-0184 §2 first row), one pack per state. Pose counts reproduce the
 2026-09-13 measurements in `scripts/stages/README.md` exactly, which is the
-check that these are the same recordings and not new behaviour.
+check that these are the same recordings and not new behavior.
 
 | state | `.mss` sha256 | script sha256 | tileData | keys | frames | wall s | poses / cycles |
 |---|---|---|---|---|---|---|---|

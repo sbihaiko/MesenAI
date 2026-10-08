@@ -14,10 +14,10 @@ While the bootstrap records, a static screen (same background tile at every pixe
 
 Under a human `textures/` layer the auto screens are **not** merged (only the tiles are): a whole-screen PNG would hide the artist's tiles. The artist promotes a screen by copying its lines (and PNG) into `textures/hires.txt`.
 
-Note: dropping all auto `<background>` entries whenever a human `textures/` layer exists is a deliberate deviation from the per-entry resolution rule in MEP-v1 §5.1 / §2.1 rule 6 (human entry wins, remaining `auto/` entries are added). The spec needs a sentence recording this exception, citing this ADR; until then this ADR is the only place the behaviour is stated.
+Note: dropping all auto `<background>` entries whenever a human `textures/` layer exists is a deliberate deviation from the per-entry resolution rule in MEP-v1 §5.1 / §2.1 rule 6 (human entry wins, remaining `auto/` entries are added). The spec needs a sentence recording this exception, citing this ADR; until then this ADR is the only place the behavior is stated.
 
 ## Consequences
 - The auto layer yields exactly the artefact the best packs are built from; the first "paint over a screenshot" workflow needs no tooling.
-- Animated screens (Zelda title waterfall, scrolling) never stabilise and are skipped by design — tiles still cover them.
-- Two latent core bugs fixed on the way: `HdBackgroundInfo::ToString` dropped priority/scroll (a reload fell back to priority 10) and tile conditions serialised `tileData` and palette without the separating comma.
+- Animated screens (Zelda title waterfall, scrolling) never stabilize and are skipped by design — tiles still cover them.
+- Two latent core bugs fixed on the way: `HdBackgroundInfo::ToString` dropped priority/scroll (a reload fell back to priority 10) and tile conditions serialized `tileData` and palette without the separating comma.
 - Headless: `scripts/headless_record` now seeds the default 2C02 palette (the core reads `NesConfig.UserPalette` as-is; without the UI it was black).

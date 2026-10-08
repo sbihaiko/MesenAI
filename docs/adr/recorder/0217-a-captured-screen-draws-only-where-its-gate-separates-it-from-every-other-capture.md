@@ -116,7 +116,7 @@ proxy `scripts/spike_anchor_stability.py` already uses):
 library as healthy — 73/700 unstable anchors, 279/3 220 variant pairs missed
 before the rule and 1/3 220 after, 55/1 632 non-variant false matches. It counts
 false matches **only over non-variant pairs**, so all 3 220 variant pairs are
-scored as intended behaviour. The spike and the rule share the premise, which is
+scored as intended behavior. The spike and the rule share the premise, which is
 why five years of green measurements never saw this.
 
 ### Whether it is fixable at all
@@ -192,7 +192,7 @@ written and no `<background>` line is emitted.
   O(`kAnchorCandidateCap` × picks × frames), so a fourth pick is +33% of a
   per-screen cost already paid once at save time.
 - **It does not work.** The five Punch-Out!! screens are all *variants*, so they
-  are never in the rival set the greedy optimises against; a fourth probe from
+  are never in the rival set the greedy optimizes against; a fourth probe from
   the same stable pool lands in the same portrait box. Three probes already
   suffice for 222/232 captures **when the pool and the rival set are right**. B
   is a no-op unless paired with C.
@@ -236,7 +236,7 @@ of 960 cells agree.
 - **Memory:** the recorder's `GridFrame` is already 2 880 B (1 920 B `Cells` +
   960 B `Palettes`, ADR-0159 §Cost). Per-session cap 300 screens → **864 kB**
   resident, against 3.93 MB *per PNG* at scale 4. In the pack it needs a new
-  serialised construct — `hires.txt` has no field for it — so it is also a format
+  serialized construct — `hires.txt` has no field for it — so it is also a format
   change and an `HdPackLoader` version bump.
 - **Runtime:** `GetLayerIndex` runs once per frame. 960 cell compares per
   candidate × 47 candidates (Donkey Kong, the worst in the sweep) = 45 120
@@ -257,7 +257,7 @@ of 960 cells agree.
 2. **If it owns its variants — which one wins when several gates match?** Today
    it is load order (`GetLayerIndex` returns the first match), arbitrary and
    silent; 135 of 237 captures are decided by it.
-3. **The threshold, if E.** Anything from "exact" to 99.6% is one behaviour;
+3. **The threshold, if E.** Anything from "exact" to 99.6% is one behavior;
    below 99.6% it is the current bug with extra steps.
 4. **Is the 64 px spread worth 44 captures?** It has no measurement behind it and
    blocks C on 22.8% of the library.

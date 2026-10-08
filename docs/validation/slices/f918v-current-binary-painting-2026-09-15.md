@@ -148,7 +148,7 @@ twin pointing at the *same* PNG cell (`HdPackBuilder.cpp`, F9.28 dual
 emission), so hit and miss draw identical pixels. The runtime does expose
 the decision, though — `HdNesPack::GetMatchingTile` returns the first entry
 in file order whose conditions pass — so re-pointing each *line class* at an
-unmistakable cell turns the decision into a colour. This is a validator
+unmistakable cell turns the decision into a color. This is a validator
 artifact: it edits a copy of the built pack for measurement, never the
 artist's path (gate 6.3 forbids `hires.txt` diagnosis on the *user's*
 success path). The generator is
@@ -204,7 +204,7 @@ key, same route, both orientations, 2 784–2 928 marker px per instance
 one stored un-flipped cell, `DrawTile` applying the OAM flip at draw time.
 The Y|mid|B census had earlier flagged 4–12-row "mirrored" slivers in
 sprite-over-background regions; those are artifacts of painting opaque
-pixels only (a transparent yellow band exposes the background's colours) and
+pixels only (a transparent yellow band exposes the background's colors) and
 are why the mirror check uses the solid marker instead.
 
 Observations outside the checks: frames ≥ 17 s of this route are the Game

@@ -104,7 +104,7 @@ This fork also loads HD textures on **Game Boy/GBC and SMS/Game Gear**, and keep
 
 | Console | Picture | With the Reveal | What the sides show |
 |---|---|---|---|
-| **NES** | 256×240 | 384×240 — 64 px per side | the neighbouring nametable, through the mapper's mirroring |
+| **NES** | 256×240 | 384×240 — 64 px per side | the neighboring nametable, through the mapper's mirroring |
 | **GB / GBC** | 160×144 | 256×144 — 48 px per side | the wrapping 256×256 BG map and the window |
 | **Game Gear** | 160×144 | 256×144 — 48 px per side | the 96 px its shipped preset crops, which the VDP drew all along |
 | **GBA** | 240×160 | 284×160 — 22 px per side | text backgrounds only |

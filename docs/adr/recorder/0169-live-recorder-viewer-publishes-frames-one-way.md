@@ -54,7 +54,7 @@
   `BackgroundLeftColumnClip`/`LeftColumnClip`, whose polarity is the opposite — those PPU mask
   bits are a "show in the leftmost 8 pixels" flag, so the assignment is now inverted. Verified
   on a Punch-Out "Mike is waiting for your challenge" portrait screen: 85.54% exact-pixel match
-  before either fix, 92.15% after; the residual is NTSC-style blend colours no palette entry can
+  before either fix, 92.15% after; the residual is NTSC-style blend colors no palette entry can
   produce (e.g. `(47,61,42)`).
 - 2026-09-08 — "frame/state capture race" (from the /goal "testar as duas telas do player por
   similaridade para todas as ROMs", a 30-ROM batch): both producers captured the composite

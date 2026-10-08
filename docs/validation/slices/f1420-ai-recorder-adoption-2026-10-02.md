@@ -150,7 +150,7 @@ every RAM checkpoint (§2).
 
 `scripts/kit_new_keys.py` (new, versioned, `scripts/test_kit_new_keys.py`) is
 F14.15's `runs/f1415/cells.py` measurement made reproducible: per `hires.txt`
-key `(tileData, palette)`, conditions ignored, CHR ROM indices normalised by
+key `(tileData, palette)`, conditions ignored, CHR ROM indices normalized by
 `<ver>`. The baselines are every pack for these two dumps on this machine:
 the committed route recordings above, the search-alone recordings, the
 library ROMs' own bootstrap packs (`<rom>/auto`), the community catalog pack

@@ -242,7 +242,7 @@ and a full `viewport` are required — see the spec table for exact rules):
   transparent for a soft bezel edge.
 - Without `border.json` (or without a usable `viewport`) the host assumes a
   16:9 bezel around a 4:3 game: a viewport as tall as the canvas, 4/3 as
-  wide, centred horizontally.
+  wide, centered horizontally.
 - `underlay: true` draws the PNG *behind* the game instead of blending it
   on top (the game covers the whole viewport opaquely).
 - `scale_mode` is `fit` (default) or `stretch`. The current MesenAI build
@@ -301,7 +301,7 @@ layer without recording audio manually:
 
 3. **Listen, prune, promote.** `enumeration.log` lists every id with its
    kind (bgm/sfx/short/title), length, hash and first notes;
-   `scripts/audio_cleanup_suggest.py <pack-folder>` summarises which ids
+   `scripts/audio_cleanup_suggest.py <pack-folder>` summarizes which ids
    look like garbage (short/title/repeat/silent) from the log. Delete the
    garbage ids from `audio/fingerprints.json`, rename the keepers
    (`scripts/mep_build.py rename-audio-id <folder> <old-id> <new-id>`),

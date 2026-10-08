@@ -102,8 +102,8 @@ name comes back.
    or dispatch-only run never reaches. The compile is mostly a ccache hit for
    a PR that did not touch `Core/`. The repository is public, so
    standard-runner minutes are not billed; the bound that matters is queue
-   time, and one path-gated leg per UI PR, cancelled when superseded, is the
-   smallest cost that makes the gate real. ADR-0122 invariant 9 is honoured
+   time, and one path-gated leg per UI PR, canceled when superseded, is the
+   smallest cost that makes the gate real. ADR-0122 invariant 9 is honored
    rather than amended: the core build lives in its own workflow, never in
    the host-free job. The change is reversible by deleting one file.
 6. **The contract is pinned.** `scripts/test_verify_render_gate.py`, run by

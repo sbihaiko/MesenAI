@@ -73,7 +73,7 @@ pack's author.
    machine/recorder layer. When `<Game>/mep/` is a pack directory,
    resolution is **per entry** with the human layer (`mep/`) winning over the
    machine layer (`auto/`); entries present only in `auto/` are added after the
-   human layer (the reference behaviour of §5.1). A `pack.json` living at
+   human layer (the reference behavior of §5.1). A `pack.json` living at
    `<Game>/mep/pack.json` is read for metadata, `patches[]`, and explicit
    `sections`, with location still being identity. The ADR-0050 exception is
    unchanged: `<background>` entries from the machine layer are added only
@@ -142,10 +142,10 @@ pack's author.
 | `version` | MUST | pack version, semver |
 | `id` | SHOULD (v1.4) | the pack's **product identity** (`pack_id`, ADR-0140 source (1)): a lowercase slug matching `^[a-z0-9][a-z0-9-]{2,63}$` (the same regex as `scripts/pack_id_rules.py` `SLUG`), unique in the official catalog and **stable across revisions** — `version` identifies the revision, `id` identifies the product, so two pack versions with the same `id` compete for the same catalog slot instead of being listed as competing packs. When absent, hosts and the catalog pipeline MUST NOT refuse the pack; they derive a `pack_id` from the catalog fallbacks instead — `owner/repo` × game for github.com origins (ADR-0140 source (2) as amended by ADR-0143), `issue-<n>` of the accepted submission (source (3)), or `local:<container-name>` for local drops (source (4)). Hosts SHOULD lowercase the value before comparing and MUST ignore a non-matching value as if absent (never fail the load on it); validators (`scripts/mep_lint.py`) accordingly report a missing or malformed `id` as a **warning**, never an error. Added in v1.4 as an optional field, so v1.0–v1.3 packs remain valid unchanged; because unknown fields are ignored (§3.2), `id` MAY appear in a pack declaring any 1.x `mep` value (the golden packs under `docs/specs/golden/mep*/` declare `1.0.0` and carry an `id`) |
 | `author` | SHOULD | author(s) |
-| `license` | SHOULD | SPDX identifier for the pack's content (e.g. `CC0-1.0`, `CC-BY-4.0`). Optional since v1.1 (2026-08-28): when absent, hosts MUST treat the pack as `NOASSERTION` (licence not declared), MUST NOT refuse it for that reason alone, and SHOULD surface "not declared" wherever they show pack metadata |
+| `license` | SHOULD | SPDX identifier for the pack's content (e.g. `CC0-1.0`, `CC-BY-4.0`). Optional since v1.1 (2026-08-28): when absent, hosts MUST treat the pack as `NOASSERTION` (license not declared), MUST NOT refuse it for that reason alone, and SHOULD surface "not declared" wherever they show pack metadata |
 | `targets` | MUST, ≥1 | ROMs the pack applies to (see §4) |
 | `patches` | MAY (v1.1) | `[{ "sha1", "file" }]` — patch (IPS/BPS) per ROM revision. The host MUST apply only the entry whose `sha1` (No-Intro, §4) matches the loaded ROM; with no matching entry, it MUST load the remaining sections and **skip** the patch with a warning. An explicit user override MAY apply a patch from a different revision, always with a warning |
-| `generated` | MAY (v1.6) | the pack was produced by a machine, not drawn by a person — **disclosure, never a verdict** (ADR-0154 §3). An object with `by` (the tool, e.g. `sheet_repaint`) and `backend` (the algorithm or model, e.g. `classical`, `diffusion`) required, and `date`, `scale` and `source` informational. Its **presence** is the label; the field is deliberately not called `ai`, because a non-generative upscale is labelled all the same — what a reader cares about is "no human drew this", not which algorithm did not. Hosts MUST load a pack carrying it exactly like any other, and validators MUST NOT error, warn or change a verdict on it (§3.2 already makes it ignorable for pre-v1.6 hosts). The community catalog surfaces it as a column next to `author`, so whoever installs the pack can see it; the pipeline neither requires nor detects it, and a submitter who deletes the field is not caught — the label is an honesty mechanism, not a detector |
+| `generated` | MAY (v1.6) | the pack was produced by a machine, not drawn by a person — **disclosure, never a verdict** (ADR-0154 §3). An object with `by` (the tool, e.g. `sheet_repaint`) and `backend` (the algorithm or model, e.g. `classical`, `diffusion`) required, and `date`, `scale` and `source` informational. Its **presence** is the label; the field is deliberately not called `ai`, because a non-generative upscale is labeled all the same — what a reader cares about is "no human drew this", not which algorithm did not. Hosts MUST load a pack carrying it exactly like any other, and validators MUST NOT error, warn or change a verdict on it (§3.2 already makes it ignorable for pre-v1.6 hosts). The community catalog surfaces it as a column next to `author`, so whoever installs the pack can see it; the pipeline neither requires nor detects it, and a submitter who deletes the field is not caught — the label is an honesty mechanism, not a detector |
 | `sections` | MUST, ≥1 section | pack content (see §5): `textures`, `audio`, `synth`, and — since v1.5 — `border` (§5.4) and — since v1.8 — `widescreen` (§5.5). Each is an object with a `path` (§2 rule 3). Unknown section names MUST be ignored (§3.2) |
 
 ### 3.2 General rules
@@ -235,7 +235,7 @@ inside a widened frame.
   a non-negative integer, the loop point of the replacement OGG in **PCM
   samples at the OGG's own sample rate** — NOT APU frames (`frames` counts
   emulated frames of the *original* track; the OGG length is unrelated).
-  Absence means "loop the whole file" (the pre-Block-C behaviour); a host
+  Absence means "loop the whole file" (the pre-Block-C behavior); a host
   MUST clamp an out-of-range value to 0 and MUST ignore an unknown/malformed
   field rather than reject the pack. The bootstrap recorder cannot know a
   loop point it did not produce; the human author writes it, or
@@ -306,7 +306,7 @@ is authored content: hosts MUST NOT synthesize a border on their own.
   |---|---|---|
   | `version` | SHOULD | schema version of this file; `1` for this spec. Hosts MUST ignore an unknown value rather than reject the pack; `scripts/mep_lint.py` warns on a value other than `1` |
   | `width`, `height` | MUST, integers > 0 | the design resolution of `border.png`. Documentary for the host — it MUST take the canvas size from the decoded PNG and SHOULD warn when the two disagree — but required by the validators: `scripts/mep_lint.py` reports a missing or non-positive value as an error, and `scripts/validate-specs.py` additionally requires the golden's values to match its PNG |
-  | `viewport` | MUST, object | `{ "x", "y", "width", "height" }` — the rectangle, in canvas pixels, that receives the game image. All four are integers ≥ 0 (`scripts/mep_lint.py` reports a missing key or a negative/non-integer value as an error); a rectangle that extends past the canvas is clamped by the host and reported as a warning by the lint. Authors SHOULD size it to the game's aspect ratio: the host scales the game frame to fill the rectangle exactly (nearest-neighbour), it does **not** letterbox inside it |
+  | `viewport` | MUST, object | `{ "x", "y", "width", "height" }` — the rectangle, in canvas pixels, that receives the game image. All four are integers ≥ 0 (`scripts/mep_lint.py` reports a missing key or a negative/non-integer value as an error); a rectangle that extends past the canvas is clamped by the host and reported as a warning by the lint. Authors SHOULD size it to the game's aspect ratio: the host scales the game frame to fill the rectangle exactly (nearest-neighbor), it does **not** letterbox inside it |
   | `scale_mode` | MAY, `"fit"` \| `"stretch"`, default `"fit"` | how the composite canvas maps onto the output surface: `"fit"` keeps the canvas aspect ratio (letter/pillarboxing), `"stretch"` fills the surface. Any other value is an error for `scripts/mep_lint.py` and MUST be ignored (treated as `"fit"`) by hosts. The reference implementation parses it but, as of v1.5, still hands the canvas to the regular video scaler (the user's aspect-ratio/integer-scale settings apply), so authors MUST NOT rely on `"stretch"` yet |
   | `underlay` | MAY, boolean, default `false` | `false`: **overlay** — the canvas is cleared to black, the game is drawn into the viewport, then `border.png` is alpha-blended (source-over) on top, so translucent bezel edges may overlap the game. `true`: **underlay** — `border.png` is copied first and the game is drawn opaquely over the viewport, ignoring the PNG's alpha there |
 
@@ -318,7 +318,7 @@ is authored content: hosts MUST NOT synthesize a border on their own.
   warn.
 - **Defaults (MUST) when `border.json` is absent, or its `viewport` is
   missing/invalid (`width` or `height` resolves to 0):** the viewport is a
-  **4:3 rectangle as tall as the canvas, centred horizontally** —
+  **4:3 rectangle as tall as the canvas, centered horizontally** —
   `height = canvas.height`, `width = canvas.height × 4 / 3` (integer
   division), `x = (canvas.width − width) / 2` when the canvas is wider than
   that, else `0`; `y = 0`. `underlay` defaults to `false`. This is the
@@ -376,7 +376,7 @@ MUST NOT synthesize widescreen art on their own.
   |---|---|---|
   | `version` | MUST, integer `1` | schema version of this file. A manifest whose `version` is missing or is not `1` is invalid (`scripts/mep_lint.py` reports an error); a host MUST reject the section and keep loading the pack's other sections |
   | `left`, `right` | MAY, strings | section-relative `.png` paths — the default art for the left and the right extra columns. At least one of `left`/`right`/`screens[]` MUST be present, otherwise the section names nothing and is invalid |
-  | `screens[]` | MAY, array of objects | per-screen overrides, each `{ "id": <integer ≥ 0>, "left": <png path>, "right": <png path> }`. `id` MUST be present, an integer ≥ 0 and unique within the array; at least one of `left`/`right` MUST be present. A host that knows the current screen id uses that screen's art where given and falls back to the default pair per side. A host that cannot know the screen id uses the default pair for every frame — the manifest is still valid, and this is the behaviour of the reference implementation as of ADR-0253 slice W.3 |
+  | `screens[]` | MAY, array of objects | per-screen overrides, each `{ "id": <integer ≥ 0>, "left": <png path>, "right": <png path> }`. `id` MUST be present, an integer ≥ 0 and unique within the array; at least one of `left`/`right` MUST be present. A host that knows the current screen id uses that screen's art where given and falls back to the default pair per side. A host that cannot know the screen id uses the default pair for every frame — the manifest is still valid, and this is the behavior of the reference implementation as of ADR-0253 slice W.3 |
 
 - **Image paths (MUST):** each path is relative to the section root, uses
   `/`, ends in `.png` (extension matched case-insensitively), and MUST resolve
@@ -427,7 +427,7 @@ MUST NOT synthesize widescreen art on their own.
 `scripts/validate-specs.py` (required fields, semver, hash formats, safe
 relative paths). Since v1.5 the golden also declares a `border` section:
 [`golden/mep/border/border.png`](golden/mep/border/border.png) (32×18 RGBA,
-transparent 4:3 centre) and [`golden/mep/border/border.json`](golden/mep/border/border.json)
+transparent 4:3 center) and [`golden/mep/border/border.json`](golden/mep/border/border.json)
 (viewport `4,0 24×18`), checked for §5.4 conformance (`width`/`height` match
 the PNG, `viewport` inside the canvas) by the same script.
 

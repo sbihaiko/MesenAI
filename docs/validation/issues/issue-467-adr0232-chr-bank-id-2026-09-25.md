@@ -35,7 +35,7 @@ Raw material (binaries, recordings) is not versioned.
 
 The helper did not exist before, so the new C++ tests could not compile
 against the old tree. The red below is the new tests run against the
-helper with the pre-fix behaviour put back, a CHR write that never marks
+helper with the pre-fix behavior put back, a CHR write that never marks
 the banks stale. That is what the misspelled override did. Verbatim:
 
 ```
@@ -62,7 +62,7 @@ then reverted.
 
 | mutation | failing cases |
 |---|---|
-| M1 `OnVideoMemoryWrite` never marks stale (the pre-fix behaviour) | 6 (the red above) |
+| M1 `OnVideoMemoryWrite` never marks stale (the pre-fix behavior) | 6 (the red above) |
 | M2 eager: every CHR write counts a rehash (option (a) as prototyped) | 4: *"8 192 CHR writes and no drawn tile rehash nothing"*, *"the first tile after the upload rehashes once"*, *"tiles drawn with no CHR write in between reuse the hashes"*, *"rehashes are bounded by drawn tiles …"* |
 | M3 #460 guard removed (a taken slot is overwritten) | 10, including *"ADR-0232: on a colliding bank id the #460 guard keeps both tiles"* |
 | M4 `IsPreFixChrRamTile` ignores the tile data | 1: *"an all-zero tile on bank 0 is the power-on bank's, not a pre-fix tile"* |

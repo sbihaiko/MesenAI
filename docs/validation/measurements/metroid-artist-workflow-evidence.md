@@ -286,7 +286,7 @@ i.e. he is keeping the layer-number namespace in his head, in a tab, by hand.
 
 ### The columns are the fields of a `<tile>` rule
 
-`Power Brinstar Samus for Hires` row 1 is fully labelled, in plain English,
+`Power Brinstar Samus for Hires` row 1 is fully labeled, in plain English,
 and the labels are exactly the rule's grammar:
 
 | cell | header |
@@ -313,7 +313,7 @@ and the labels are exactly the rule's grammar:
 The **commas are their own columns**, holding a literal `,`. He is laying out
 the serialized text of the format as a grid, one glyph-group per cell.
 
-This fully-labelled header is the exception, not the rule: only three sheets
+This fully-labeled header is the exception, not the rule: only three sheets
 carry it (`Power Brinstar Samus for Hires`, `Zero Hair Fix Coding`, `Power
 Brinstar Samus LandFall F`). The others either begin directly with data — the
 first row of `Kraid Boss Expanded` is already `<tile>0 | <tile>0 | , | 14EB | ,
@@ -535,5 +535,5 @@ anything on the strength of this section.
   obtained mechanically, by scanning every sheet part for a formula chaining
   four or more cell references with `&`, and is exhaustive over the file — but
   it says only that the column exists, not that its inputs are correct. No
-  claim is made that the sheets without a fully-labelled header row use the
+  claim is made that the sheets without a fully-labeled header row use the
   same column order as the ones with it.

@@ -43,7 +43,7 @@ rule was a drawn key with no shape, and so no cell. This broke the
 This is the new test `TestTheSpriteRuleGateAdmitsExactlyTheRowsTheLatchCanPlace`.
 It checks every OAM Y at 8x8 and 8x16 through the latch model and compares the
 rows the latch can place with the gate. The predicate starts out with the
-behaviour `DrawPixel` had before the fix, which admits every visible row. Run
+behavior `DrawPixel` had before the fix, which admits every visible row. Run
 against `origin/main` `8e0a22ab` (with #483), verbatim:
 
 ```
@@ -58,7 +58,7 @@ After the fix: 1160/1160.
 
 | Mutation | Result |
 |---|---|
-| `SpriteRowIsPlaced` admits row 0 (the old behaviour) | the 2 red checks fail (1158/1160) |
+| `SpriteRowIsPlaced` admits row 0 (the old behavior) | the 2 red checks fail (1158/1160) |
 | `SpriteRowIsPlaced` also rejects row 1 | 2 fail (1158/1160): `rows 1(latch only)` |
 | `SpriteRowIsPlaced` admits row 240 | 1 fails (1159/1160): `the pre-render line and row 240 are never drawn rows` |
 | `DrawPixel` ignores the gate | this is the "before" binary of the E2E below: Excitebike is back to 1 drawn key with no cell |

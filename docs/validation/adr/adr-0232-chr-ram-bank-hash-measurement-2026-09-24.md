@@ -80,7 +80,7 @@ and the method.
   byte-identical to B's for all three games.
 - Private copies of each `headless_record` were relinked with
   `install_name_tool`, and `otool -L` shows each linking its own dylib.
-- **Behavioural proof.**
+- **Behavioral proof.**
   - `nm | c++filt` finds `HdBuilderPpu::WriteRam(unsigned short, unsigned
     char)` in B and no such symbol in A.
   - A reproduces #473's Castlevania `hires.txt` (`e51ca7a2…`), with 1
@@ -188,7 +188,7 @@ screenshot` (the renderer is untouched by the fix). Every run logged
   - Zelda: 10, 20, 30, 40, 50, 60, 70 and 85 s, on the same input;
   - Contra: 5, 10, 20, 30, 40, 50 and 61 s from the state.
 - **Comparison.** Pixels were counted on 1024×960 PNGs. The no-pack frame
-  was upscaled ×4, nearest-neighbour.
+  was upscaled ×4, nearest-neighbor.
 
 | | frames | A vs B | tiles-only A vs B | pack vs no-pack (range) |
 |---|---|---|---|---|

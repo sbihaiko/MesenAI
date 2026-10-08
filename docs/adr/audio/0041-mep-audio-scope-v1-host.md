@@ -14,8 +14,8 @@ yet" for those tags; MSU-1 exists only in the SNES core, which is outside the
 PRD phases.
 
 ## Decision
-For the F3 host implementation the `audio` section is honoured **only for
-NES**, and it is realised as a hires.txt: `audio.path` must contain a
+For the F3 host implementation the `audio` section is honored **only for
+NES**, and it is realized as a hires.txt: `audio.path` must contain a
 `hires.txt` whose `<bgm>`/`<sfx>` tags reference OGG files in that folder.
 The manager loads it through the same `HdPackLoader::LoadHdNesPack(string)`
 call used for textures, into the same `HdPackData`; when a pack has both

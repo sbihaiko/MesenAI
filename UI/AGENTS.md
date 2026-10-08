@@ -345,7 +345,7 @@ can be exercised by real xunit tests without Avalonia or the native
   `kit/rec-NNN/kit.json` and `kit/pages/kit.json` (never
   `kit-proposals.json`, ADR-0188); `RemasterPaintProbe` calls a surface
   painted only when it differs from its `*.orig.png` twin upscaled
-  nearest-neighbour, as `mep_build`'s `_EditedProbe` does, and only for the
+  nearest-neighbor, as `mep_build`'s `_EditedProbe` does, and only for the
   units whose twin is a pre-paint copy (grid, object, element, panorama) -
   pattern pages, scene captures and imported sheets say "cannot tell".
   A pattern-page thumbnail marks its cells (ADR-0219, #911) only from the
@@ -395,7 +395,7 @@ can be exercised by real xunit tests without Avalonia or the native
   (silent apply). `DistinctPackIdCount` uses `DerivePackId` (ADR-0140 id, else
   `local:<container>`). The owning VM (`MainWindowViewModel`) injects the pack
   list + ROM sha1 (data-injected from the code-behind), builds the choices
-  from the core's `GetPackListText` columns (name/author/version/licence/
+  from the core's `GetPackListText` columns (name/author/version/license/
   sections/origin already there), and `PickPlayerPack` stores the P.3
   preference then applies it through `LoadRomHelper.ApplyPackChange` (in
   place, or the old power cycle; see `PackChangePolicy`); `DismissPlayerPackPicker`
@@ -449,7 +449,7 @@ can be exercised by real xunit tests without Avalonia or the native
 - `CommunityPackCatalogMatcher` (F6.4b, MEI-v1 §2.3): auto-match is exact
   No-Intro `rom.sha1` / `rom.sha1s` first, then a same-game identity
   fallback (`SameGame`: core-title token multiset after stripping trailing
-  region/dump tags) so a nearby dump of a catalogued title still
+  region/dump tags) so a nearby dump of a cataloged title still
   auto-installs. The fallback only runs on entries that already carry a
   sha1 — `rom: {}` stays listable/manual. SHA1 always wins over the
   filename. IPS/patches stay hash-gated (ADR-0044). `CommunityPackCatalogFetcher`
@@ -554,7 +554,7 @@ can be exercised by real xunit tests without Avalonia or the native
   3924215).** `MainWindow` sizes the renderer only from its result; don't
   round inline there. Invariants, covered by `RendererViewportFitTests` and
   the headless `RendererLetterboxTests`:
-  - `RealWidth`/`RealHeight` are even (no shader centre seam) and never
+  - `RealWidth`/`RealHeight` are even (no shader center seam) and never
     exceed `floor(panel * dpi)`. The one exception is the integer-scale
     clamp to 1x on a panel shorter than one screen.
   - The binding axis rounds **down** to even. Upstream's round-up overflows
@@ -734,7 +734,7 @@ drawn by `scripts/render_gui_wireframes.py`), not classic Mesen. The theme is
   (`UI/Controls/PlayerTheme.cs`) are inherited attached brushes: the scope
   sets Play's blue; a `remaster` or `share` class on any element inside it
   switches to purple / green below that element. Tinted components bind to
-  them, so never hard-code a workspace colour.
+  them, so never hard-code a workspace color.
 - **Components** (classes, inside the scope):
   - Buttons: `Button.primary` (tint fill, white semibold), `.secondary`
     (white, hairline, shadow), `.tinted` (TintSoft fill, TintText label),
@@ -743,7 +743,7 @@ drawn by `scripts/render_gui_wireframes.py`), not classic Mesen. The theme is
     up to 32 high, 11 above). A leading icon is `PathIcon Classes="leading"`.
   - Grouped list: `Border.group` holding `Button.row` items (50 high, the
     last row has no hairline). Row content: a DockPanel with
-    `Border.badge` (background = a badge colour) + `PathIcon`,
+    `Border.badge` (background = a badge color) + `PathIcon`,
     `PathIcon.chevron` docked right, `TextBlock.value` docked right,
     `TextBlock.title`. `Button.row.text` is a row without a badge.
   - Badges: `Border.badge` 26 (`.small` 22, `.medium` 32, `.xlarge` 40
@@ -762,7 +762,7 @@ drawn by `scripts/render_gui_wireframes.py`), not classic Mesen. The theme is
   - Text: `TextBlock.large-title`, `title1`, `title2`, `title3` (for 26
     bold and 16 semibold use `display` and `card-title`, below),
     `headline`, `callout`, `body`, `subhead`, `footnote`, `caption`,
-    `section-header`; colour modifiers `secondary` (TEXT2), `tertiary`
+    `section-header`; color modifiers `secondary` (TEXT2), `tertiary`
     (TEXT3), `tint`.
   - Settings groups (W-P8, W-P10): `Border Classes="group inset"` (the
     play sheets' `Border.inset` fill, #F8F8FA, radius 12) holding `:is(Panel).setting-row` rows (46 high) split by
@@ -792,7 +792,7 @@ drawn by `scripts/render_gui_wireframes.py`), not classic Mesen. The theme is
     beats Remaster's `Border.warning`.
   - Controls: `ComboBox.popup` / `c:EnumComboBox Classes="popup"` (the
     renders' 24-high macOS pop-up button: white, hairline, radius 6, Play-blue
-    up/down stepper in every workspace; its own template, greyed with no
+    up/down stepper in every workspace; its own template, grayed with no
     stepper when disabled), `TabControl.segmented`
     (a TabControl with the segmented strip, 96 px segments),
     `RadioButton.choice` (tint-filled, 13.5 medium), `Border.hud.compact`
@@ -825,12 +825,12 @@ drawn by `scripts/render_gui_wireframes.py`), not classic Mesen. The theme is
   - What each Play sheet holds. *Enhancements* (W-P7,
     `PlayerEnhancementsSheetView`) is one inset list of four switches that
     edit a draft - Modern instruments, Border ("Applies on reload" under it
-    where the change restarts), Widescreen, Overclock (grey with its reason
+    where the change restarts), Widescreen, Overclock (gray with its reason
     where the console has no knob) - then the Pack row, `Pack: <name> ›`,
     which opens W-P6, or W-P5 with 2+ packs; one Apply button writes the
     draft. *Pack detail* (W-P6, `PlayerPackDetailSheetView`) holds this
     game's Textures / Music / ROM Patch switch rows, never a global one:
-    a layer the pack lacks is grey ("Not in this pack"), one whose global
+    a layer the pack lacks is gray ("Not in this pack"), one whose global
     default is off reads "Off for every game — Tools ⋯ › Enhancement
     Packs", and those three defaults live only in the Enhancement Packs
     window (Classic's Tools ▸, the Remaster door's ⋯). When the only pack is
@@ -866,7 +866,7 @@ drawn by `scripts/render_gui_wireframes.py`), not classic Mesen. The theme is
       `FlyoutPresenterClasses="popover"` on a `Flyout`.
     - `Border.hud` (the dark pill over the game: `PlayerHud`, radius 12,
       white text; `secondary` / `tint` text inside it read
-      `PlayerHudText2` / `PlayerHudTintText`), `Button.primary.hud` (grey
+      `PlayerHudText2` / `PlayerHudTintText`), `Button.primary.hud` (gray
       Stop); `PlayerGameBackgroundBrush` (black behind the game).
     - Tile tokens `PlayerTileFill` / `PlayerTileBorder` and `PlayerChipFill`.
 - **No classic dialog from a Player flow** (ADR-0249 final audit). Quit
@@ -891,7 +891,7 @@ drawn by `scripts/render_gui_wireframes.py`), not classic Mesen. The theme is
   root-level `BiosSheetLayer`, so W-P13 asks in every workspace.
   `UI.HeadlessTests/PlayerNoClassicDialogTests` pins all of it.
 - **Restyling a screen.** Keep every `Name`, binding, handler and focus
-  order (the headless suites find controls by name). Swap local colours and
+  order (the headless suites find controls by name). Swap local colors and
   sizes for classes; add a render test next to
   `UI.HeadlessTests/PlayerThemeRenderTests` that saves the PNG and asserts
   font, size, radius, tint and background of the named controls.

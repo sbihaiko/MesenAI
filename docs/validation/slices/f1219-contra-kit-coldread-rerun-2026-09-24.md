@@ -24,7 +24,7 @@ file keeps the numbers.
   `InteropDLL/obj.osx-arm64/MesenCore.dylib` sha256
   `83e2ad178712c4f5ac4f588a647d58d96bf3b7f7f48f0e675468d0cdc9787065`.
   `otool -L scripts/headless_record` resolves the dylib to this worktree.
-- Behavioural proof that the dylib carries ADR-0228: `poses.json` marks
+- Behavioral proof that the dylib carries ADR-0228: `poses.json` marks
   **6** poses fused. The 2026-09-23 binary marked 2. That is the
   `fused 2 -> 6` #405 measured. Every other `poses.json` figure reproduces
   the 2026-09-23 re-record exactly (below).
@@ -141,7 +141,7 @@ The evaluator's friction points, with the builder's reading of each:
    both.** The evaluator guessed that `usr001` was a "run-and-aim-diagonally
    variant". It is the left-facing twin, the mirror of `usr000`, with its
    own pose ids, as the first run read it. Nothing in the kit states the
-   facing, so this is still a labelling gap (the first run's point 5). It
+   facing, so this is still a labeling gap (the first run's point 5). It
    did not stop the evaluator, who chose to paint both. Not filed: the kit
    infers no subject or facing by decision (ADR-0183 §3/§5, ADR-0227).
 3. **`locked` in every `usrNNN.json` is undocumented for the artist.** It

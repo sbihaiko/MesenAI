@@ -125,7 +125,7 @@ captions only, and the evaluator spent two minutes matching palette hexes by
 hand. Named exceptions, per the criterion:
 
 - A known character cannot be found by name — only by opening sheets until one
-  is recognised.
+  is recognized.
 - The keys a figure's cells actually own are invisible: the evaluator painted
   the sheet that *shows* Mega Man and repainted two of his tiles, because five
   other sheets own the rest of his body. That is #253, and it belongs to section

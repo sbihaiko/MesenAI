@@ -24,7 +24,7 @@ folder, judged as a union" is the documented shape
 (`scripts/record_stages.sh`), and F9.25's evidence for Contra is 22
 recordings. Only one of ADR-0183's four surfaces merges across them today:
 
-| surface | cross-recording behaviour |
+| surface | cross-recording behavior |
 |---|---|
 | pattern pages | **unions** — `artist_chr_kit.py --also <pack>`, repeatable (#199: "a second recording of the same ROM donates CHR cells"); F9.25 measured 21 `--also` packs donating 142 cells into a 94 %-complete bank, 0 lost, 0 invented |
 | stage maps | **separate regions** — `artist_map.py` zips `--stage`, `--dump` and `--pack`, one pack per stage; two recordings of one stage give two panoramas |

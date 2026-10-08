@@ -46,7 +46,7 @@ Verification:
 | #474 (`2f8507344`) | `nm` + `c++filt` finds 4 `HdShapeKey` hash-table instantiations |
 | #488 (`61aa9c3e8`, ADR-0232) | `nm` finds `MesenSheets::ChrBankHashes::BankIdOf<…HdBuilderPpu::DrawPixel…>`; `strings` finds the ADR-0232 builder message |
 | Absent at baseline | `git grep` finds 0 hits for either identifier in `Core/` at `46b9136a` |
-| #479 (`05ab41f70`) | `OamFetchLatch::SpriteRowIsPlaced` is header-inline and has no symbol. Behaviour is consistent with it; its presence is not proven by `nm` |
+| #479 (`05ab41f70`) | `OamFetchLatch::SpriteRowIsPlaced` is header-inline and has no symbol. Behavior is consistent with it; its presence is not proven by `nm` |
 
 ROMs are the same dumps as the baselines: Excitebike sha1
 `2e9897846e54a4a9865e87de7517c6710bdec255`, Castlevania sha1
@@ -141,7 +141,7 @@ Bugs (the baseline's unfiled drafts, plus #447):
 | Drawn shapes | 1 009 | 999 | −10 |
 | Drawn keys on any sheet, baseline method | 1 003 = 60.6 % | 1 552 = 95.6 % | +35.0 pt |
 | Same, counting `folds` | 60.6 % | 1 623 = 100 % | +39.4 pt |
-| Drawn keys on an organised sheet (not `unsorted`) | 501 = 30.3 % | 657 = 40.5 % | +156 |
+| Drawn keys on an organized sheet (not `unsorted`) | 501 = 30.3 % | 657 = 40.5 % | +156 |
 | Missing drawn keys, baseline method | 652 on 402 shapes | 71 on 37 shapes, all pairwise inert, all in `folds` | −581 |
 | Variant cells | 0 | 500 | +500 |
 | Sheet keys never drawn (bug C) | 7 | 0 | −7 |
@@ -162,7 +162,7 @@ Bugs (the baseline's unfiled drafts):
 - **A** (rebuilt BG layer bakes the backdrop opaque and hides Glass Joe):
   **fixed**. Control, plain and painted rebuilds are pixel-identical to
   `auto` in the Joe box; a forced arm moving all 59 floor rules to `sheets/`
-  still draws Joe (build logs the #456 "keep colour 0 transparent" line).
+  still draws Joe (build logs the #456 "keep color 0 transparent" line).
 - **B** (flip not un-baked on index-keyed packs): **fixed**. Forced arms
   repainting 20 H-mirrored cells give 0 mirrored crops; the build logs
   "un-baked 20 mirror crop(s)".
@@ -215,7 +215,7 @@ lines (confirmed by the verifier); the baseline log is corrected in place.
 - It does not show that painted art is good, only that it reaches the
   screen; the magenta paint is a probe.
 - Wall clock is not comparable for Castlevania (passes ran concurrently).
-- Three games, one route each; nothing here generalises to other mappers or
+- Three games, one route each; nothing here generalizes to other mappers or
   CHR RAM games beyond Castlevania.
 
 ## Raw material

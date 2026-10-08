@@ -32,7 +32,7 @@ Rebuilt for this run:
   unchanged, and correctly so: the harness source did not change and it loads
   the dylib by absolute path.
 
-**The lesson generalises: a Core measurement must prove the binary contains the
+**The lesson generalizes: a Core measurement must prove the binary contains the
 change before it measures anything.** Grepping the dylib for a string the
 change introduces costs nothing and would have caught this immediately.
 
@@ -197,7 +197,7 @@ Two traps this run also found, worth keeping:
   `tiles=11606 keys=18895 images=96 backgrounds=10`, screenshot 1024×960. Any
   render measurement must check the resolution and the `LoadHdPack` line before
   trusting a zero.
-- **Comparing a rendered pack frame against a nearest-neighbour upscale of the
+- **Comparing a rendered pack frame against a nearest-neighbor upscale of the
   no-pack frame is meaningless as a correctness measure** — it also counts the
   upscale. The band comparison above is the honest one: count the pixels the
   game drew and the render does not have.

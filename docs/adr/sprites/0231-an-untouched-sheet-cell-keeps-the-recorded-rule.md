@@ -5,7 +5,7 @@
   *"Como o rebuild de um kit sem pintura deve voltar a renderizar exatamente o
   que foi gravado (#447)?"*; *"Célula intocada = regra gravada (Recommended)"* —
   an untouched cell re-emits the recording's own rule, pointing at the `auto/`
-  xBRZ page, while painting in nearest-neighbour; only a painted cell points at
+  xBRZ page, while painting in nearest-neighbor; only a painted cell points at
   the sheet crop; and *"resolva em paralelo o bug 447"*.
 - Date: 2026-09-24
 - Amended: 2026-09-25 (A4) — the first stroke swaps the whole 8×8 tile from the
@@ -25,7 +25,7 @@
 
 A recording's `textures/hires.txt` points every key at the xBRZ pattern pages
 (`chr/Chr_*.png`, `HdPackBuilder::GenerateHdTile`); a sheet crop is the raw
-tile upscaled nearest-neighbour (`SheetRender::RenderTile`), the surface
+tile upscaled nearest-neighbor (`SheetRender::RenderTile`), the surface
 painted on. `mep_build build` pointed every cell-carried key at the crop,
 painted or not, so an unpainted rebuild drew other pixels (901 of 912
 Castlevania rules, 360 of 367 Zelda rules; F14.4 runs, #447). `MergeLowerLayer`
@@ -131,7 +131,7 @@ pages reaches them, and *Reload Repainted Images* shows it in place (ADR-0212).
   #447 back; `mep_figure import` reports it.
 - A painted cell swaps the whole tile, not the pixels you touched: the first
   stroke takes the entire 8×8 cell from the filtered xBRZ art
-  (`HdPackBuilder::GenerateHdTile`) to the nearest-neighbour sheet art
+  (`HdPackBuilder::GenerateHdTile`) to the nearest-neighbor sheet art
   (`SheetRender::RenderTile`). On Super Mario Bros. 3 at 4×, one key, against a
   control rebuild: rebuild without painting **0 px** differ; **1 pixel** painted
   changes **106** on-screen px (1 magenta + 105 untouched); one 4×4 block

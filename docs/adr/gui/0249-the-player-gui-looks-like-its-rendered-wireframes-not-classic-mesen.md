@@ -19,7 +19,7 @@ compared it with the renders before it shipped.
 Renders of the shipped views, taken through the real `App.axaml` with Skia, look
 nothing like the PNGs — not because of any one view: `UI/Styles/MesenStyles.xaml`
 styles the whole application for the classic debugger-era windows (corner radius
-0, "Microsoft Sans Serif" at 11 px, flat grey bordered buttons), and the new
+0, "Microsoft Sans Serif" at 11 px, flat gray bordered buttons), and the new
 workspaces inherit all of it, defining no design tokens of their own.
 
 Non-goals: the classic windows keep `MesenStyles.xaml` unchanged (debugger,
@@ -31,7 +31,7 @@ output).
 
 1. **The renders are the visual spec.** Where an ASCII wireframe and its PNG
    agree on structure, the implementation matches the PNG's:
-   - typography, colour, radius and spacing;
+   - typography, color, radius and spacing;
    - control style (filled primary buttons, grouped rows with tinted icon
      badges, toggles, segmented tabs, cards with soft shadows);
    - the per-workspace tint: Play blue `#007AFF`, Remaster purple `#AF52DE`,

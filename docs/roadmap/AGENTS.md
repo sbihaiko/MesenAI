@@ -4,7 +4,7 @@
 
 The fork's planning lives in one consolidated PRD under this folder:
 
-- `PRD-mesence-enhancement-ecosystem.md` — the single roadmap, organised
+- `PRD-mesence-enhancement-ecosystem.md` — the single roadmap, organized
   as two Parts. Part A is the pack/core roadmap (vision, legal principles,
   standards, compact delivery record, and remaining work: Phase 9 painting
   verification, F9.18's human panel and bounded coverage; Phase 10 feasibility.
@@ -76,7 +76,7 @@ Owned with `docs/` (see parent `docs/AGENTS.md`). Does not own specs
   `make doc-checks`) reads every slice table under Part A §4 and Part B §8
   and fails when a row's Decision cell declares the slice shipped — the cell
   is split on `;`, `,` and a spaced em dash, and a fragment that *starts
-  with* `shipped` is the offence. A cell that merely mentions the word
+  with* `shipped` is the offense. A cell that merely mentions the word
   mid-sentence, or that still owes work, passes.
 
 ## Verification

@@ -33,26 +33,26 @@
   8:7 pixel aspect), the extra pixels from each row's own scroll state read through
   `DebugReadVram`; a row whose side columns have no content of their own is drawn black. The
   renderer shows an extended frame at the console's pixel aspect instead of stretching it. NTSC
-  filters and the border layer still get only the centre 256 columns (W.6 lifted the NTSC half;
+  filters and the border layer still get only the center 256 columns (W.6 lifted the NTSC half;
   the border layer is W.3's). With the switch off, SMB, Contra and SMB3 frames are bit-identical
   to the unmodified build. On the SMB3 title (horizontal mirroring) the sides showed a wrapped
   copy; the user decided *"sim, laterais sempre pretas no SMB3"*, so §3 treats horizontal
   mirroring as "cannot fill" at any scroll.
 - 2026-10-03 — **W.6**: both NES NTSC filters take the width from the frame and answer
   `AcceptsExtendedFrame()`, so a Reveal frame is filtered whole instead of cropped to its
-  standard centre. The shared arithmetic is host-free in `Core/Shared/Video/WidescreenFrameFlow.h`.
+  standard center. The shared arithmetic is host-free in `Core/Shared/Video/WidescreenFrameFlow.h`.
   On blargg, `BlitOutputWidth`/`BlitPlanePixels` size the blit plane (896×240 against 602×240 —
   the old fixed `NES_NTSC_OUT_WIDTH(256) * 240` was 294 px short per row, i.e. the blit wrote past its end) and the HUD scale is
   the frame's own (896/384, not 602/256). On Bisqwit, `SignalSamples` gives a row of the frame's
   own width (3072 against 2048), `DecodeFrame` reads `_baseFrameInfo.Width` as the row stride
-  instead of `(rowNumber << 8) | x`, and `PhaseAdvanceAfterRow` advances the colour phase by
+  instead of `(rowNumber << 8) | x`, and `PhaseAdvanceAfterRow` advances the color phase by
   what is left of the whole 341-cycle scanline. `ApplyPalBorder` takes the width in both
   filters. The recorder needed no change (`VideoRenderer::ProcessAviRecording` already opened the
   AVI/GIF recorder with `frame.Width`/`frame.Height`), but the HUD canvas is now
   `RecorderHudCanvas` (a Reveal recording lays it out on 448×240 against 301×240). `BlitVisibleWidth`
   is what a filter reports as the frame's width. The capture tools measure an extended capture's
-  centre through `StandardCentre`/`ExtractCentre`, whose caller now names the standard width so
-  "there is no centre here" is a real answer; `scripts/headless_record.cpp` keeps its explicit
+  center through `StandardCentre`/`ExtractCentre`, whose caller now names the standard width so
+  "there is no center here" is a real answer; `scripts/headless_record.cpp` keeps its explicit
   shape gate. Evidence: `TestW6BlitGeometryFollowsTheFrameWidth`,
   `TestW6BisqwitRowFollowsTheFrameWidth`,
   `TestW6ScanlinePhaseIsIndependentOfTheRevealedColumns`,
@@ -161,7 +161,7 @@
   mirroring `GbaPpu::ProcessColorMath` and `BlendColors`. `GbaPpu` latches the switch once per
   frame, holds the last extended frame while the console skips frames (only while Reveal is on;
   a skip before any extended frame uses the black fallback), and hands the decoder a 284-px frame
-  whose centre 240 columns are `_currentBuffer`; only text BGs are revealed (`TextBgCount`: BG
+  whose center 240 columns are `_currentBuffer`; only text BGs are revealed (`TextBgCount`: BG
   mode 0's four, BG mode 1's BG0/BG1); a row's side columns belong to its first render of the
   frame (`RenderScanline` runs again for every register write inside the row and in a loop while
   VRAM is being accessed). `GbaDefaultVideoFilter` reads the frame's own width and
@@ -188,7 +188,7 @@
 - 2026-10-03 — **W.2** (GB/GBC, Game Gear): GB/GBC N = 48, a 256×144 frame (16:9 exactly at
   square pixels), the side columns read per scanline from the 256×256 BG map around SCX/SCY —
   wrapping, window and its mid-tile takeover included, CGB attributes, flips, palettes and VRAM
-  bank honoured, a row whose BG layer is off flattened to that one colour, black only for rows
+  bank honored, a row whose BG layer is off flattened to that one color, black only for rows
   the frame never drew. Fetched with `GbPpu::LcdReadVram` (side-effect free, full 14-bit address
   with the bank bit); a test fails if `ReadVram`, the CPU-visible read that fires the debugger
   hook, is ever used. Game Gear: the Reveal is the player's own horizontal crop being dropped —
@@ -222,7 +222,7 @@
   frame's own coordinates with `HdWidescreenColumns::ScaleSideFill`. MEP-v1 §5.5's canvas is not
   amended: the art stays `extraColumns × frameHeight` on every console (64×240 on the NES), and
   `VideoRenderer::ApplyWidescreenFallback` scales a conforming image up with
-  `WidescreenFallback::ScaleSideArt` (nearest-neighbour by the integer factor the two canvases
+  `WidescreenFallback::ScaleSideArt` (nearest-neighbor by the integer factor the two canvases
   share — the pack's scale), so the same pack fills the sides with and without an HD pack; a
   non-conforming image is still refused, exactly as `FillSideFromArt` refuses it on the standard
   path, and the chain moves on to the border. Evidence: `TestW253PpuRevealLatchIsTheSharedSupportRule`,
@@ -316,7 +316,7 @@ The kind of game matters as much as the console:
      recorder, save-state thumbnails and screenshots get the width from the frame instead of a
      constant.
    - **Per-console scope:**
-     - NES: the neighbouring nametable through the mirroring.
+     - NES: the neighboring nametable through the mirroring.
      - GB/GBC: the BG map and window, wrapped.
      - Game Gear: no new pixels — the 96 columns its 160-px viewport crops
        (`SmsConfig.GameGearOverscan`) are map columns the VDP already draws, so the Reveal is
