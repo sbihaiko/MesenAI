@@ -147,4 +147,44 @@ public class RomPickerScanTests
 		Assert.False(picker.IsRestoreLanding, "the landing claim survived the player taking the ring");
 		Assert.False(picker.IsFinishFallback, "the landing claim left the fallback claim behind");
 	}
+
+	//The header-to-header case: the player walks the ring between header controls
+	//(no tile takes it, so RememberFocus never runs) and then narrows the grid.
+	//The filter's rebuild is the filter's own bump, so the scan's standing claim
+	//is spent with it and the arbiter re-claims the grid instead of keeping the
+	//ring where the scan's finish left it.
+	[AvaloniaFact]
+	public void The_filters_rebuild_spends_a_claim_the_ring_never_answered()
+	{
+		string gone = Path.Combine(_folder, "Gone (USA).nes");
+		string contra = Path.Combine(_folder, "Contra (U) [!].nes");
+		string land = Path.Combine(_folder, "Land (World).gb");
+
+		LibraryScanResult Games(Action<IReadOnlyList<LibraryEntry>> onBatch, bool withGone)
+		{
+			List<LibraryEntry> games = new() { Entry(contra, RomConsole.Nes, "Contra"), Entry(land, RomConsole.GameBoy, "Land") };
+			if(withGone) {
+				games.Add(Entry(gone, RomConsole.Nes, "Gone"));
+			}
+			onBatch(games);
+			return Scan(games.ToArray());
+		}
+
+		PlayerRomPickerViewModel picker = Picker((folders, list, onBatch) => Games(onBatch, true));
+		picker.Open();
+		picker.RememberFocus(picker.Tiles.Single(tile => tile.Path == gone));
+		picker.Hide();
+
+		picker.LibraryScanStreamSource = (folders, list, onBatch) => Games(onBatch, false);
+		picker.Open();
+		Assert.True(picker.IsFinishFallback, "the visit did not end on the fallback this case is about");
+		int revision = picker.TilesRevision;
+
+		picker.CycleConsole(1);
+
+		Assert.Equal(RomConsole.Nes, picker.SelectedConsole);
+		Assert.True(picker.TilesRevision > revision, "the filter's rebuild did not bump the revision");
+		Assert.False(picker.IsFinishFallback, "the fallback claim answered the filter's own bump");
+		Assert.False(picker.IsRestoreLanding, "the landing claim answered the filter's own bump");
+	}
 }

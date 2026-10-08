@@ -20,6 +20,12 @@ public readonly record struct ScanClaims(bool FinishFallback, bool RestoreLandin
 	//A tile took the ring (the player's move or the arbiter's): the claims are spent.
 	public ScanClaims AfterRingTaken() => None;
 
+	//The console filter's rebuild is the filter's own bump, never the scan's: a
+	//claim the scan left standing (the player walked the ring to a header control
+	//while the restore waited) is answered by the revision that made it, and must
+	//not make the arbiter keep the ring there for this one.
+	public ScanClaims AfterFilterRebuild() => None;
+
 	//The sheet going down ends the visit, and the sheet coming up is a new visit
 	//that owes the player nothing it promised before.
 	public ScanClaims AfterVisibilityChanged(bool visible) => None;

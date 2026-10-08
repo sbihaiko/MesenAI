@@ -24,6 +24,12 @@ namespace Mesen.Tests
 		}
 
 		[Fact]
+		public void The_filters_rebuild_spends_both_claims()
+		{
+			Assert.Equal(ScanClaims.None, Both.AfterFilterRebuild());
+		}
+
+		[Fact]
 		public void The_sheet_going_down_spends_both_claims()
 		{
 			Assert.Equal(ScanClaims.None, Both.AfterVisibilityChanged(false));
