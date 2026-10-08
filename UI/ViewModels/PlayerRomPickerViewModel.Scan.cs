@@ -89,12 +89,19 @@ namespace Mesen.ViewModels
 		//tile (see FinishLibraryStream). The focus arbiter asks this to know that
 		//bump is the sheet's fallback and not a claim over a ring the player has
 		//since moved to the header (PlayPadNavigationWiring).
+		//
+		//#1066: the claim is about ONE bump, never about the sheet from then on. It
+		//is dropped the moment the ring is the player's again (RememberFocus) and
+		//with the visit that made it (OnIsVisibleChanged), so the next bump of the
+		//same visit - the console filter's rebuild above all - is read as what it
+		//is rather than as a scan that finished long ago.
 		public bool IsFinishFallback { get; private set; }
 
 		//The bump for the remembered game landing is the same kind of claim: the
 		//sheet finishing what it promised, not a hand taken off a ring the player
 		//has since walked to Back or the search box while the restore was pending
-		//(PlayPadNavigationWiring answers it the way it answers the fallback).
+		//(PlayPadNavigationWiring answers it the way it answers the fallback). It
+		//expires exactly as IsFinishFallback does (#1066).
 		public bool IsRestoreLanding { get; private set; }
 
 		//A batch is merged into the grid in chunks this large, the rest posted at
@@ -127,6 +134,12 @@ namespace Mesen.ViewModels
 		//A scan the player has left stops reading the library: closing the sheet or
 		//stepping into the browser ends it here, and nobody has to come back for the
 		//walk to stop (Decision 9: bounded).
+		//
+		//#1066: the visit's two claims go with the visit. They describe a bump of
+		//the grid the sheet was showing, so nothing may read one while the sheet is
+		//down, and the sheet that takes the ring again is a new visit that owes the
+		//player nothing it promised before (a fresh scan makes its own claims in
+		//StartLibraryStream below).
 		partial void OnIsVisibleChanged(bool value)
 		{
 			if(!value) {
@@ -134,6 +147,8 @@ namespace Mesen.ViewModels
 				StopCanonicalTitles();
 				CancelCovers();
 			}
+			IsFinishFallback = false;
+			IsRestoreLanding = false;
 		}
 
 		partial void OnModeChanged(RomPickerMode value)
@@ -162,6 +177,13 @@ namespace Mesen.ViewModels
 		{
 			_tileTookRing = true;
 			_restoreTargetPath = "";
+			//#1066: the ring is the player's again, so the sheet's claims over the
+			//last bump are spent. They exist to keep a ring the sheet itself parked
+			//(PlayPadNavigationWiring), and a later bump - the console filter's own
+			//rebuild, which re-claims the grid on purpose - must not be read as one
+			//of them because the scan that made the claim is long over.
+			IsFinishFallback = false;
+			IsRestoreLanding = false;
 			LastFocusedTilePath = tile.Path;
 		}
 
