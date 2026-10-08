@@ -41,6 +41,7 @@ public class PlayerLibraryConsoleFilterTests : IDisposable
 	private readonly bool _confirm = ConfigManager.Config.Preferences.ConfirmExitResetPower;
 	private readonly string? _gameFolder = ConfigManager.Config.Preferences.GameFolder;
 	private readonly bool _overrideGameFolder = ConfigManager.Config.Preferences.OverrideGameFolder;
+	private readonly List<string>? _libraryFolders = ConfigManager.Config.Preferences.LibraryFolders;
 
 	private readonly List<MainWindow> _windows = new();
 	private readonly string _folder = Path.Combine(Path.GetTempPath(), "mesen-1034-" + Guid.NewGuid().ToString("N"));
@@ -114,6 +115,7 @@ public class PlayerLibraryConsoleFilterTests : IDisposable
 		prefs.ConfirmExitResetPower = _confirm;
 		prefs.GameFolder = _gameFolder ?? "";
 		prefs.OverrideGameFolder = _overrideGameFolder;
+		prefs.LibraryFolders = _libraryFolders;
 		ConfigManager.Config.Save();
 
 		try {
@@ -187,6 +189,8 @@ public class PlayerLibraryConsoleFilterTests : IDisposable
 		File.WriteAllBytes(Path.Combine(gb, GameBoyMario + " (World).gb"), SyntheticGbRom.Build());
 		ConfigManager.Config.Preferences.GameFolder = root;
 		ConfigManager.Config.Preferences.OverrideGameFolder = true;
+		//First run: the list has never been seeded, so it is seeded from this games folder.
+		ConfigManager.Config.Preferences.LibraryFolders = null;
 	}
 
 	private (MainWindow Window, MainWindowViewModel Model) ShowFirstRunHome()

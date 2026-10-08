@@ -291,7 +291,12 @@ namespace Mesen.ViewModels
 			if(_folders.Count == 0) {
 				//The last folder just left the list. The library is the named empty
 				//state again, never a grid still showing games no folder on the list
-				//reaches any more.
+				//reaches any more. The visit is rebuilt the way ShowLibrary rebuilds
+				//it: a scan still in flight is stale, and the search state of the
+				//scan before the edit goes, or the next keystroke would draw it.
+				_scanGeneration.Next();
+				BeginLibraryVisit();
+				ResetConsoleFilter();
 				ClearTiles();
 				HeaderText = ResourceHelper.GetMessage("RomPickerLibraryTitle");
 				SearchingText = "";
@@ -301,6 +306,10 @@ namespace Mesen.ViewModels
 				return;
 			}
 			EmptyText = "";
+			//The games of the scan before the edit are not the library any more:
+			//a query or filter while this rescan runs must not draw them.
+			BeginLibraryVisit();
+			ResetConsoleFilter();
 			StartLibraryScan();
 		}
 

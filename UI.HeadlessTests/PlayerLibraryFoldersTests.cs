@@ -613,6 +613,56 @@ public class PlayerLibraryFoldersTests : IDisposable
 		Assert.Contains("Add a folder", model.RomPicker.EmptyText);
 	}
 
+	//#1036: with no folder left, typing in the search box must not bring the
+	//removed folder's games back from the scan that preceded the edit, and the
+	//named empty state must stay.
+	[AvaloniaFact]
+	public void Typing_a_query_after_removing_the_last_folder_keeps_the_grid_empty()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		LibraryRoots();
+
+		(MainWindow window, MainWindowViewModel model) = ShowFirstRunHome();
+		OpenFoldersSheetWithPad(window, model);
+		WaitFor(() => model.RomPicker.Tiles.Count == 1, "the grid does not hold the seeded folder's game to begin with");
+
+		model.RomPicker.RemoveLibraryFolder(model.RomPicker.LibraryFolderRows.Single());
+		Assert.Empty(model.RomPicker.Tiles);
+
+		model.RomPicker.SearchQuery = "Contra";
+		Pump();
+		Assert.Empty(model.RomPicker.Tiles);
+		Assert.Contains("Add a folder", model.RomPicker.EmptyText);
+
+		model.RomPicker.SearchQuery = "";
+		Pump();
+		Assert.Empty(model.RomPicker.Tiles);
+		Assert.Contains("Add a folder", model.RomPicker.EmptyText);
+	}
+
+	//#1036: while the rescan that follows a remove is still running, a query
+	//must not draw the games of the folder that just left the list.
+	[AvaloniaFact]
+	public void A_query_typed_during_the_rescan_does_not_draw_the_removed_folders_games()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(string games, string extra, _) = LibraryRoots();
+
+		(MainWindow window, MainWindowViewModel model) = ShowFirstRunHome();
+		ConfigManager.Config.Preferences.LibraryFolders = new List<string> { games, extra };
+		OpenFoldersSheetWithPad(window, model);
+		WaitFor(() => model.RomPicker.Tiles.Count == 2, "the grid does not hold both folders' games to begin with");
+
+		//The rescan goes off the UI thread now, so the removal returns with the
+		//scan still in flight and the stale result is what the query would read.
+		model.RomPicker.RunLibraryScanInline = false;
+		PlayerLibraryFolderRow removed = model.RomPicker.LibraryFolderRows.Single(row => row.Path == extra);
+		model.RomPicker.RemoveLibraryFolder(removed);
+
+		model.RomPicker.SearchQuery = "Tetris";
+		Assert.Empty(model.RomPicker.Tiles);
+	}
+
 	//#1036 (ADR-0264 Decision 8): LibraryFolderSource is a SEAM - a caller or a
 	//test puts its own list there - and an edit must not overwrite it. Every add
 	//and every remove used to reassign it, so whatever a caller injected was gone
