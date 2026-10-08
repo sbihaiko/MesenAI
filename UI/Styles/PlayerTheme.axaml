@@ -514,7 +514,13 @@
 	     its own ring, which is why the only thing left on screen was the
 	     framework's black frame. Rows are unaffected: Border.group still clips
 	     them, and their glow is inset on purpose.-->
-	<Style Selector=".player Button, .player TextBox, .player ComboBox.popup, .player TabControl.segmented > TabItem">
+	<!--#1089: the `.popup` drop-down in Play is two controls on top of each
+	     other - a <ComboBox Classes="popup"> and the one a <c:EnumComboBox
+	     Classes="popup"> wraps - and both of them clip, the same bounds twice
+	     over. Naming the wrapper and its ComboBox#Dropdown keeps the Aspect
+	     Ratio field from keeping the framework's frame and a clip that eats
+	     the ring while every other popup in the sheet is themed.-->
+	<Style Selector=".player Button, .player TextBox, .player ComboBox.popup, .player c|EnumComboBox.popup, .player c|EnumComboBox.popup ComboBox#Dropdown, .player TabControl.segmented > TabItem">
 		<Setter Property="FocusAdorner">
 			<FocusAdornerTemplate />
 		</Setter>
@@ -733,8 +739,23 @@
 		<Setter Property="BoxShadow" Value="{StaticResource PlayerShadowTile}" />
 		<Setter Property="ClipToBounds" Value="True" />
 	</Style>
+	<!--#1089: the tile rule above clips the picture to the 10 px radius, and a
+	     clip belongs to the control that sets it - the press's takes the
+	     PlayerFocusRing off its own background skin, the skin's takes the ring
+	     off itself, and one is enough to leave the tile a pad lands on
+	     answering with nothing. The focused tile lifts both; an unfocused tile
+	     keeps them. The cost is that the focused tile's own picture is no
+	     longer rounded to the radius while the ring is up (the background is
+	     Black either way, so the corners are the only place it shows), which is
+	     the trade the ring needs: a focus look a pad user cannot see is a dead
+	     end, and PlayerFocusRing is drawn outside the bounds the clip is set
+	     to.-->
+	<Style Selector=".player c|StateGridEntry.tiles Button#TileButton:focus-visible">
+		<Setter Property="ClipToBounds" Value="False" />
+	</Style>
 	<Style Selector=".player c|StateGridEntry.tiles Button#TileButton:focus-visible /template/ Border#PART_Background">
 		<Setter Property="BoxShadow" Value="{StaticResource PlayerFocusRing}" />
+		<Setter Property="ClipToBounds" Value="False" />
 	</Style>
 	<Style Selector=".player c|StateGridEntry.tiles Button#TileButton:pointerover">
 		<Setter Property="Opacity" Value="0.9" />

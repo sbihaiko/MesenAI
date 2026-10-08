@@ -6,11 +6,13 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
 using Avalonia.Input;
+using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using Mesen.Config;
+using Mesen.Controls;
 using Mesen.ViewModels;
 using Mesen.Views;
 using Xunit;
@@ -77,6 +79,122 @@ public class PlayerFocusRingRenderTests
 		window.Close();
 	}
 
+	//#1089: the Aspect Ratio field in Play's Display sheet is a
+	//<c:EnumComboBox Classes="popup"> - a UserControl wrapping its own
+	//ComboBox#Dropdown, both of them the same bounds, both of them clipping.
+	//The `.player ComboBox.popup` half of the ring rule matches nothing inside
+	//it (the class sits on the user control, not on the drop-down), so the
+	//inner ComboBox keeps what the control gives it: an unset FocusAdorner,
+	//which the framework answers with its own frame, and a clip that eats the
+	//ring. Same press, same theme, one control further in. The frame needs a
+	//real window to be seen at all - it does not rasterise in the headless
+	//capture below - so what this case reads off the frame is the clip half.
+	[AvaloniaFact]
+	public void The_aspect_ratio_popup_draws_the_themes_ring_past_its_own_clip()
+	{
+		EnumComboBox aspectRatio = new() { Classes = { "popup" }, Width = 120, VerticalAlignment = VerticalAlignment.Center };
+		Window window = PlayWindow(new StackPanel { Children = { aspectRatio } });
+		try {
+			ComboBox dropdown = window.GetVisualDescendants().OfType<ComboBox>().Single(c => c.Name == "Dropdown");
+			dropdown.Focus(NavigationMethod.Tab);
+			Pump();
+			Assert.True(dropdown.IsFocused, "the Aspect Ratio popup did not take focus, so this case would prove nothing");
+			Assert.Equal((BoxShadows)Application.Current!.FindResource("PlayerFocusRing")!,
+				dropdown.GetVisualDescendants().OfType<Border>().First(b => b.Name == "Background").BoxShadow);
+			//The frame half, off the property rather than off the raster: an
+			//empty template is "set", and that is what keeps the framework's
+			//frame off the screen in a real window (PlayerLibraryFoldersListLayoutTests
+			//reads the same pair off the folders press).
+			Assert.NotNull(dropdown.FocusAdorner);
+			Assert.Null(dropdown.FocusAdorner!.Build());
+
+			using Bitmap frame = PlayerRender.Capture(window);
+			PlayerRender.Save(frame, "focus-ring-aspect-ratio-popup");
+
+			AssertRingOutside(frame, window, dropdown);
+		} finally {
+			window.Close();
+		}
+	}
+
+	//#1089: a Player home / save-state tile (c:StateGridEntry.tiles) is the one
+	//press whose own rule turns ClipToBounds back ON - the tile clips its
+	//picture to the 10 px radius. The clip is the control's, so it eats the
+	//PlayerFocusRing its PART_Background carries as well, and a tile that
+	//answers the pad draws nothing where the ring should be.
+	[AvaloniaFact]
+	public void The_focused_save_state_tile_draws_the_themes_ring()
+	{
+		//Enabled: a StateGridEntry whose entry never loaded refuses focus, and a
+		//tile that cannot be focused cannot show this case at all.
+		StateGridEntry tile = new() { Classes = { "tiles" }, Title = "Save 1", Enabled = true };
+		Window window = PlayWindow(new StackPanel { Children = { tile } });
+		try {
+			Button button = window.GetVisualDescendants().OfType<Button>().Single(b => b.Name == "TileButton");
+			Assert.Equal(176, button.Bounds.Width, 0.5);
+			Assert.Equal(132, button.Bounds.Height, 0.5);
+			Focus(button);
+
+			using Bitmap frame = PlayerRender.Capture(window);
+			PlayerRender.Save(frame, "focus-ring-save-state-tile");
+
+			//Outside only: the tile's own background is Black by rule, so the
+			//band AssertRing reads would call the tile's own face "the
+			//framework's black frame".
+			AssertRingOutside(frame, window, button);
+		} finally {
+			window.Close();
+		}
+	}
+
+	//#1089: the raster cases above ask what is drawn; this one asks what the
+	//ring *is*, on a host with no display at all. The review's third point was
+	//that only the headless raster is covered and #1089 asks for a check on a
+	//real macOS window - this is not that check and nothing here claims to be
+	//one. What it does pin, host-free, is that the press a pad lands on is
+	//given the theme's ring and not something that merely looks like it: the
+	//brush is the PlayerFocusRingColor token and the crisp layer is the 2 px
+	//spread PlayerTheme documents, so a fix that hard-codes a similar blue, or
+	//drops the thickness, fails here.
+	[AvaloniaFact]
+	public void The_play_press_ring_is_the_themes_brush_and_thickness()
+	{
+		Button resume = new() { Content = "Resume", Classes = { "primary" } };
+		Window window = PlayWindow(new StackPanel { Children = { resume } });
+		try {
+			Focus(resume);
+
+			BoxShadows ring = RingOf(resume);
+			Assert.Equal((BoxShadows)Application.Current!.FindResource("PlayerFocusRing")!, ring);
+
+			Color token = (Color)Application.Current!.FindResource("PlayerFocusRingColor")!;
+			Assert.Equal(token, ring[0].Color);
+			Assert.Equal(0d, ring[0].Blur);
+			Assert.Equal(2d, ring[0].Spread);
+			//Every layer is a ring (a spread), not a plain drop shadow.
+			for(int i = 0; i < ring.Count; i++) {
+				Assert.True(ring[i].Spread > 0, $"layer {i} has no spread, so it is a shadow and not a ring");
+			}
+		} finally {
+			window.Close();
+		}
+	}
+
+	//A plain window carrying Play's classes: the theme's rules are class-scoped,
+	//so `.player` has to be an ancestor of the control under test.
+	private static Window PlayWindow(Control content)
+	{
+		Window window = new() { Width = 480, Height = 300, Content = content };
+		window.Classes.Add("player");
+		window.Classes.Add("play");
+		window.Show();
+		Pump();
+		return window;
+	}
+
+	private static BoxShadows RingOf(Control control)
+		=> control.GetVisualDescendants().OfType<Border>().First(b => b.Name == "PART_Background").BoxShadow;
+
 	private static void Focus(Button button)
 	{
 		//NavigationMethod.Tab is what makes this :focus-visible rather than plain
@@ -92,11 +210,11 @@ public class PlayerFocusRingRenderTests
 	//nothing in the band is black. Either alone passes vacuously - a press that
 	//drew nothing has no black frame, and one that drew the old flat black ring
 	//has no blue - so both are asserted.
-	private static void AssertRing(Bitmap frame, Window window, Button button)
+	private static void AssertRing(Bitmap frame, Window window, Control control)
 	{
-		Point origin = button.TranslatePoint(new Point(0, 0), window)
+		Point origin = control.TranslatePoint(new Point(0, 0), window)
 			?? throw new InvalidOperationException("the press is not in the window");
-		Rect bounds = new(origin, button.Bounds.Size);
+		Rect bounds = new(origin, control.Bounds.Size);
 
 		List<Color> band = new();
 		for(int y = (int)bounds.Top - Band; y < (int)bounds.Bottom + Band; y++) {
@@ -116,6 +234,34 @@ public class PlayerFocusRingRenderTests
 			$"no #7FB0FF pixel in the {Band} px band around {bounds} - the ring is not drawn.{scan}");
 		Assert.False(band.Any(c => c.R < 24 && c.G < 24 && c.B < 24),
 			$"the band around {bounds} is black, not the theme's ring.{scan}");
+	}
+
+	//The clip's own claim, read where only the ring can answer: strictly
+	//outside the press's bounds. AssertRing's band reaches 3 px *in* as well,
+	//and a themed control has blue of its own inside that reach - the popup
+	//draws its stepper in Play's blue - so the band alone cannot tell a ring
+	//that is drawn from one that was cut off at the edge. Out here the theme
+	//paints nothing but the ring.
+	private static void AssertRingOutside(Bitmap frame, Window window, Control control)
+	{
+		Point origin = control.TranslatePoint(new Point(0, 0), window)
+			?? throw new InvalidOperationException("the press is not in the window");
+		Rect bounds = new(origin, control.Bounds.Size);
+
+		List<Color> outside = new();
+		for(int y = (int)bounds.Top - Band; y < (int)bounds.Bottom + Band; y++) {
+			for(int x = (int)bounds.Left - Band; x < (int)bounds.Right + Band; x++) {
+				bool inBounds = x >= bounds.Left && x < bounds.Right && y >= bounds.Top && y < bounds.Bottom;
+				//A press against the window's edge has no frame outside it to read.
+				bool onFrame = x >= 0 && y >= 0 && x < frame.PixelSize.Width && y < frame.PixelSize.Height;
+				if(!inBounds && onFrame) {
+					outside.Add(PlayerRender.Pixel(frame, x, y));
+				}
+			}
+		}
+
+		Assert.True(outside.Any(c => Near(c, RingBlue)),
+			$"no #7FB0FF pixel outside {bounds}: the ring is cut off at the press's edge.{Describe(bounds, outside)}");
 	}
 
 	private static bool Near(Color a, Color b)
