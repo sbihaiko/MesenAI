@@ -1,5 +1,8 @@
 using Mesen.Logic;
+using System;
 using System.Collections.Generic;
+using System.IO;
+using System.Text.RegularExpressions;
 using Xunit;
 
 namespace Mesen.Tests.Play;
@@ -374,5 +377,53 @@ public class PadNavigationTests
 		hand.OnPressed(new[] { KeyCode("Pad1 A") }, _ => null);
 		Assert.False(hand.HasPad);
 		Assert.Null(hand.Current);
+	}
+}
+
+//#1064: a *ForTest member is a door for a headless case, and a door the
+//shipping path leans on has stopped being a door - it is load-bearing, so it
+//can no longer move, and the test that names it cannot follow it anywhere. The
+//pad wiring's own focus decisions therefore read the open keyboard's field
+//through their own accessor; the public KeyboardFieldForTest delegates to it,
+//which is what keeps PlayerLibrarySearchTests' door open. This pins that the
+//shipping file never calls a test-only member again.
+public class PadWiringTestSeamTests
+{
+	private static readonly Regex ForTestCall = new(@"\b\w+ForTest\s*\(", RegexOptions.Compiled);
+
+	[Fact]
+	public void The_pad_wirings_focus_decisions_never_call_a_test_only_member()
+	{
+		string path = Path.Combine(FindRepoRoot(), "UI", "Windows", "PlayPadNavigationWiring.cs");
+		List<string> offenders = new();
+		string[] lines = File.ReadAllLines(path);
+		for(int i = 0; i < lines.Length; i++) {
+			string line = lines[i];
+			//A declaration is a member, so it carries a modifier - static. A line
+			//that names a ForTest member without one is a call, wherever it sits.
+			//A comment is prose and never reaches the shipped binary.
+			if(line.Contains("static") || line.TrimStart().StartsWith("//")) {
+				continue;
+			}
+			if(ForTestCall.IsMatch(line)) {
+				offenders.Add($"{path}({i + 1}): {line.Trim()}");
+			}
+		}
+
+		Assert.True(offenders.Count == 0,
+			"The pad wiring's production code calls a test-only member; read it through a private accessor and let the *ForTest member delegate to it:"
+				+ Environment.NewLine + string.Join(Environment.NewLine, offenders));
+	}
+
+	private static string FindRepoRoot()
+	{
+		DirectoryInfo? dir = new DirectoryInfo(AppContext.BaseDirectory);
+		while(dir != null && !File.Exists(Path.Combine(dir.FullName, "Mesen.sln"))) {
+			dir = dir.Parent;
+		}
+		if(dir == null) {
+			throw new InvalidOperationException("Could not locate repo root (Mesen.sln) from " + AppContext.BaseDirectory);
+		}
+		return dir.FullName;
 	}
 }
