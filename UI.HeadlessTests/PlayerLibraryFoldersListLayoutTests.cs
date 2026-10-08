@@ -21,7 +21,10 @@ namespace Mesen.HeadlessTests;
 //keep are host-free in UI.Tests/Play/LibraryFoldersRowLayoutTests; what is
 //measured here is the outcome a player sees - the box is as tall as its rows, so
 //no gap opens above the first one, each row is inset from the box on both sides,
-//and the *Add a folder…* press carries the app's own focus ring.
+//the notice the sheet answers after an edit lands below the hint rather than on
+//it, and the *Add a folder…* press takes the theme's ring on its template layer.
+//The ring is only read here as a property: whether that ring is what the pad
+//actually draws on screen is the render tracked in #1089.
 //
 //Core-free: the sheet is shown in a plain window, no MainWindow, so this runs
 //without the native MesenCore (PlayFocusGlowTests' pattern). The list is filled
@@ -89,6 +92,22 @@ public class PlayerLibraryFoldersListLayoutTests
 		Assert.True(press <= sheet + 1, $"the *Add a folder…* press leaves the sheet: press bottom={press}, sheet height={sheet}");
 	}
 
+	//What the sheet answers after an add or a remove is said on the sheet, under
+	//the hint that explains the list - and the hint wraps, so the two need their
+	//own rows. When they shared the sheet Grid's default row, the notice was drawn
+	//on top of the wrapped hint. The folder added here is already listed, so the
+	//list keeps its rows and the notice is the only thing that changes.
+	[AvaloniaFact]
+	public void The_notice_the_sheet_answers_sits_below_the_hint()
+	{
+		using Harness harness = Harness.Open(3, announce: true);
+
+		Assert.True(harness.Notice.IsVisible, "the notice is not visible, so this case would prove nothing");
+		double hintBottom = harness.OffsetIn(harness.Hint, harness.Sheet).Y + harness.Hint.Bounds.Height;
+		double noticeTop = harness.OffsetIn(harness.Notice, harness.Sheet).Y;
+		Assert.True(noticeTop >= hintBottom, $"the notice is drawn over the hint: notice top={noticeTop}, hint bottom={hintBottom}");
+	}
+
 	//The press that adds a folder is a Play button like any other: the pad lands
 	//on it first, so its ring is the only thing saying where the player is. It
 	//takes the theme's ring on the template layer and draws nothing of its own.
@@ -128,8 +147,10 @@ public class PlayerLibraryFoldersListLayoutTests
 		public ScrollViewer Scroller { get; }
 		public IReadOnlyList<Visual> Rows { get; }
 		public Button Add { get; }
+		public Control Hint { get; }
+		public Control Notice { get; }
 
-		private Harness(string root, List<string>? folders, Window window, Control sheet, Control box, ScrollViewer scroller, IReadOnlyList<Visual> rows, Button add)
+		private Harness(string root, List<string>? folders, Window window, Control sheet, Control box, ScrollViewer scroller, IReadOnlyList<Visual> rows, Button add, Control hint, Control notice)
 		{
 			_root = root;
 			_folders = folders;
@@ -139,9 +160,13 @@ public class PlayerLibraryFoldersListLayoutTests
 			Scroller = scroller;
 			Rows = rows;
 			Add = add;
+			Hint = hint;
+			Notice = notice;
 		}
 
-		public static Harness Open(int folders, double height = 740)
+		//announce: run the add the sheet answers with a notice, without changing the
+		//list - the folder handed to the view-model is one already in it.
+		public static Harness Open(int folders, double height = 740, bool announce = false)
 		{
 			string root = Path.Combine(Path.GetTempPath(), "mesen-1079-" + Guid.NewGuid().ToString("N"));
 			List<string>? saved = ConfigManager.Config.Preferences.LibraryFolders;
@@ -173,6 +198,11 @@ public class PlayerLibraryFoldersListLayoutTests
 				window.Show();
 				Pump();
 
+				if(announce) {
+					model.AddLibraryFolder(paths[0]);
+					Pump();
+				}
+
 				Control sheet = window.GetVisualDescendants().OfType<Control>().First(c => c.Name == "RomPickerFoldersSheet");
 				ScrollViewer scroller = sheet.GetVisualDescendants().OfType<ScrollViewer>().First();
 				//The box the list is drawn in: the inset is behind the list, so this is
@@ -185,9 +215,11 @@ public class PlayerLibraryFoldersListLayoutTests
 					.Where(c => c.DataContext is PlayerLibraryFolderRow && c.GetVisualParent() is ContentPresenter)
 					.Cast<Visual>().ToList();
 				Button add = window.GetVisualDescendants().OfType<Button>().First(b => b.Name == "RomPickerAddFolder");
+				Control hint = sheet.GetVisualDescendants().OfType<Control>().First(c => c.Name == "RomPickerFoldersHint");
+				Control notice = sheet.GetVisualDescendants().OfType<Control>().First(c => c.Name == "RomPickerFoldersNotice");
 
 				Assert.True(rows.Count == folders, $"the list drew {rows.Count} rows for {folders} folders");
-				return new Harness(root, saved, window, sheet, box, scroller, rows, add);
+				return new Harness(root, saved, window, sheet, box, scroller, rows, add, hint, notice);
 			} catch {
 				window?.Close();
 				Pump();

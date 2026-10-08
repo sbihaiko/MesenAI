@@ -291,10 +291,14 @@
 						tall as its rows - a stretched box drew a list 300 high in a 417-high
 						frame and floated it in the middle, the gap above the first row.-->
 						<Grid Name="RomPickerFoldersSheet" IsVisible="{Binding IsFoldersSheetVisible}" Margin="0 14 0 0" RowDefinitions="Auto,Auto,*,Auto">
-							<TextBlock Classes="subhead secondary" Text="{l:Translate lblRomPickerFoldersHint}" TextWrapping="Wrap" />
+							<!--One thing per child and every child names its row: the hint,
+							the notice the last add or remove answered, the list, the press.
+							The hint and the notice once shared the default row, which drew
+							the notice over the hint as soon as the hint wrapped.-->
+							<TextBlock Name="RomPickerFoldersHint" Grid.Row="0" Classes="subhead secondary" Text="{l:Translate lblRomPickerFoldersHint}" TextWrapping="Wrap" />
 							<!--What the last add or remove answered, said on the sheet rather
 							than in a dialog over it.-->
-							<TextBlock Name="RomPickerFoldersNotice" Classes="footnote" Text="{Binding FoldersNoticeText}" TextWrapping="Wrap" Margin="0 10 0 0" IsVisible="{Binding FoldersNoticeText.Length}" />
+							<TextBlock Name="RomPickerFoldersNotice" Grid.Row="1" Classes="footnote" Text="{Binding FoldersNoticeText}" TextWrapping="Wrap" Margin="0 10 0 0" IsVisible="{Binding FoldersNoticeText.Length}" />
 							<!--The inset is drawn behind the list, not around it, so the rows
 							keep the box's rounded edge off their own separators and the last
 							row is not cut by it (PlayerReplaysSheetView).-->

@@ -13,7 +13,9 @@ namespace Mesen.Tests.Play
 	//shape): each row inset from the box, the path on the left and its *Remove*
 	//press on the right, a hairline between rows and none on the last, the box
 	//the height of its rows rather than the sheet's, and the *Add a folder…*
-	//press on the sheet's own chrome with the app's focus ring.
+	//press on the sheet's own chrome carrying the theme's ring. The ring is only
+	//read here as a property; whether it is what the pad actually draws on screen
+	//is the render tracked in #1089.
 	//
 	//Host-free (ADR-0123): the sheet is read as XAML and the rules off the theme.
 	//Nothing here opens a window, and the measured outcome - rows inside the box,
