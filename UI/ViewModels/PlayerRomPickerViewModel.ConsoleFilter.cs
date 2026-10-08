@@ -88,6 +88,7 @@ namespace Mesen.ViewModels
 			//the box: RomPickerFocusTarget answers with the search box while it
 			//holds the ring or the pad keyboard. Only a selection change bumps -
 			//the scan and reset paths rebuild the row with their own bump.
+			_claims = _claims.AfterFilterRebuild();
 			TilesRevision++;
 		}
 
