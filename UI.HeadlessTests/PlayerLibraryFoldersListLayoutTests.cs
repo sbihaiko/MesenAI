@@ -91,9 +91,15 @@ public class PlayerLibraryFoldersListLayoutTests
 
 	//The press that adds a folder is a Play button like any other: the pad lands
 	//on it first, so its ring is the only thing saying where the player is. It
-	//draws the theme's ring and nothing of its own.
+	//takes the theme's ring on the template layer and draws nothing of its own.
+	//
+	//NOT a guard against the clipping: this case passes with the layout fix
+	//reverted, because it reads the press's own template, not where the sheet puts
+	//it. The clipping (the press pushed off a short sheet) is guarded by
+	//The_add_press_stays_inside_the_sheet_when_the_window_is_short above; whether
+	//the ring is actually the pad's focus look is tracked in #1089.
 	[AvaloniaFact]
-	public void The_add_press_shows_the_apps_focus_ring()
+	public void The_add_press_carries_the_theme_ring_on_its_template_layer()
 	{
 		using Harness harness = Harness.Open(1);
 
