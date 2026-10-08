@@ -69,6 +69,7 @@
 #include "Shared/MovieSyncGate.h"
 #include "Shared/Movies/ShareRecordingSettings.h"
 #include "Shared/ShortcutKeyRules.h"
+#include "Shared/KeyMonitorRouting.h"
 #include "Shared/GamepadButtonOrder.h"
 #include "Shared/AliasedKeyState.h"
 #include "Debugger/CdlFileCheck.h"
@@ -17290,6 +17291,219 @@ static void TestTheBusRoutesCpuReadsToReadRamAndDebugReadsToPeekRam()
 		"P.12: CheatManager::ApplyCheat still gates on compare -1 or the raw byte, the gate the counter mirrors");
 }
 
+//--- Bloco U: the host key monitor's routing (#1080) -----------------------
+//The macOS key monitor (MacOS/MacOSKeyManager.mm) is the app-level handler every
+//host key event passes through before a window or the core sees the key, and
+//Core/Shared/KeyMonitorRouting.h is the decision it makes. The case this block
+//exists for is the reported repro: the app is foreground (not InBackground), the
+//press is the overlay's own - Esc, the ToggleOverlay binding's key - and the
+//monitor swallowed it, so it never reached the window that answers it and the
+//Play overlay could not be opened from the state the game view is left in.
+//
+//The codes are the shared key table's (Core/Shared/KeyDefinitions.h), as literals
+//because this suite is host-free: Esc 13, F1 90, Shift 116-117, Ctrl 118-119, Alt
+//120-121, and the pad key space (1 for Pad1 B here) which no keyboard event maps
+//to.
+namespace
+{
+	using KeyMonitorRouting::Route;
+
+	const KeyMonitorRouting::ModifierKeyCodes kModifierKeys = { 116, 117, 118, 119, 120, 121 };
+
+	KeyCombination OverlayCombo(uint16_t key1, uint16_t key2 = 0, uint16_t key3 = 0)
+	{
+		KeyCombination comb = {};
+		comb.Key1 = key1;
+		comb.Key2 = key2;
+		comb.Key3 = key3;
+		return comb;
+	}
+
+	//The overlay's press, both of its key sets in play.
+	bool IsTheOverlaysPress(uint16_t pressedKeyCode, int pressedModifiers,
+		KeyCombination first = OverlayCombo(13), KeyCombination second = KeyCombination())
+	{
+		return KeyMonitorRouting::IsTheOverlaysPress(pressedKeyCode, pressedModifiers, first, second, kModifierKeys);
+	}
+
+	void TestTheOverlayKeyIsNotSwallowedWhileTheAppIsForeground()
+	{
+		//#1080, the case the fix is about: foreground (not InBackground), no
+		//Command, and the press is the overlay's own. It has to be left to the UI -
+		//returning the event is what lets AppKit dispatch it to the window, whose
+		//arm answers it (HandleEscInTheUi). Swallowing it here is the repro: the
+		//press never reaches the window's keyboard, and the overlay is unreachable
+		//from the focus state the game view is left in.
+		Check(KeyMonitorRouting::For(false, false, true, true) == Route::LeaveItToTheUi,
+			"BlocoU: the overlay's own press is left to the UI, not swallowed while the app is foreground (#1080)");
+
+		//The two pass-throughs the monitor has always had, now stated as rows of the
+		//same table: the app is not the emulator's keyboard when it is in the
+		//background, and Command chords stay the app's (cmd+Q and friends). Both are
+		//asked before the overlay question, so `false` is the honest input for the
+		//fourth column here - the app in the background is the app with no window of
+		//its own holding the keyboard.
+		Check(KeyMonitorRouting::For(true, false, false, false) == Route::LeaveItToTheUi,
+			"BlocoU: with the emulator in the background every event is the UI's");
+		Check(KeyMonitorRouting::For(false, true, false, true) == Route::LeaveItToTheUi,
+			"BlocoU: a Command chord is passed through to the app");
+		Check(KeyMonitorRouting::For(true, true, true, false) == Route::LeaveItToTheUi,
+			"BlocoU: background and Command both answer 'the UI's', whichever holds");
+	}
+
+	//#1080 (3): who has the keyboard is a second question, and it is the one that
+	//says whether the window that answers the overlay is there to answer it.
+	void TestTheOverlayPressIsTheUisOnlyWhileTheMainWindowHasTheKeyboard()
+	{
+		//InBackground is false whenever *any* window of the app is active, so it
+		//cannot stand in for this: with a Settings dialog, the debugger or a tool
+		//window focused, the event returned here is dispatched by AppKit to that
+		//window, which has no arm for the overlay - and the arms the core owns
+		//(Remaster, Share, Classic) lose the press they always had, while a dialog
+		//with a cancel button closes on it. On main the press went to the core.
+		Check(KeyMonitorRouting::For(false, false, true, false) == Route::FeedTheCore,
+			"BlocoU: the overlay's press goes to the core while another of the app's windows has the keyboard (#1080)");
+
+		//...and it is the UI's again the moment the window that answers it has the
+		//keyboard, which is the #1080 case row for row.
+		Check(KeyMonitorRouting::For(false, false, true, true) == Route::LeaveItToTheUi,
+			"BlocoU: and to the UI while the main window has it (#1080)");
+
+		//A Command chord is the app's whatever window has the keyboard: that
+		//pass-through is about the platform, not about this window.
+		Check(KeyMonitorRouting::For(false, true, true, false) == Route::LeaveItToTheUi,
+			"BlocoU: a Command chord is the app's even while another window has the keyboard");
+
+		//The second question is only asked about the overlay's own press; every
+		//other key is the core's either way.
+		Check(KeyMonitorRouting::For(false, false, false, false) == Route::FeedTheCore,
+			"BlocoU: an ordinary key is the core's whoever has the keyboard");
+	}
+
+	//#1080 (1): a key-up goes where its own key-down went, not where the modifiers
+	//it is released with would send it.
+	void TestAKeyUpFollowsTheRouteOfItsOwnDown()
+	{
+		KeyMonitorRouting::DownRoutes routes;
+
+		//(a) Ctrl+Esc down, Ctrl released, Esc up. The chord is not the overlay's
+		//press, so the core got the down.
+		Route ctrlEsc = KeyMonitorRouting::For(false, false,
+			IsTheOverlaysPress(13, KeyMonitorRouting::ControlModifier), true);
+		Check(ctrlEsc == Route::FeedTheCore,
+			"BlocoU: Ctrl+Esc is not the overlay's press, so its down is the core's");
+		Check(routes.Down(13, ctrlEsc) == Route::FeedTheCore,
+			"BlocoU: a key-down takes the route the rule gives it");
+
+		//The bare Esc up *is* the press a bare-Esc binding names, so the rule alone
+		//would hand the release to the UI: the core would never see Esc released,
+		//Esc would stay held until the next ResetKeyState, and every later Ctrl
+		//would read as Ctrl+Esc.
+		Check(KeyMonitorRouting::For(false, false,
+			IsTheOverlaysPress(13, KeyMonitorRouting::NoModifier), true) == Route::LeaveItToTheUi,
+			"BlocoU: the bare Esc up is the press the rule alone hands to the UI");
+		Check(routes.Up(13) == Route::FeedTheCore,
+			"BlocoU: Esc's release follows the chord's down to the core, not the bare press it looks like (#1080)");
+
+		//(b) Esc held, Shift pressed, Esc released - the same split the other way
+		//round. The down is the overlay's press; the release, carrying a modifier
+		//the binding does not name, is not, and the window would never see its key
+		//released.
+		KeyMonitorRouting::DownRoutes second;
+		Route bareEsc = KeyMonitorRouting::For(false, false,
+			IsTheOverlaysPress(13, KeyMonitorRouting::NoModifier), true);
+		Check(bareEsc == Route::LeaveItToTheUi, "BlocoU: the bare Esc press is the UI's");
+		Check(second.Down(13, bareEsc) == Route::LeaveItToTheUi,
+			"BlocoU: a key-down takes the route the rule gives it");
+		Check(KeyMonitorRouting::For(false, false,
+			IsTheOverlaysPress(13, KeyMonitorRouting::ShiftModifier), true) == Route::FeedTheCore,
+			"BlocoU: Shift+Esc is not the press of a bare-Esc binding");
+		Check(second.Up(13) == Route::LeaveItToTheUi,
+			"BlocoU: Esc's release stays the UI's while its own press was (#1080)");
+
+		//A release ends its pair: a second release with no down in between is not
+		//remembered as the UI's.
+		Check(second.Up(13) == Route::FeedTheCore,
+			"BlocoU: one release ends the pair");
+
+		//A raw code whose down was never seen - held when the monitor was installed
+		//- goes to the core, which is where every key went before #1080.
+		Check(routes.Up(90) == Route::FeedTheCore,
+			"BlocoU: a release with no down of its own goes to the core");
+
+		//ResetKeyState means nothing is held, and nothing is the UI's either.
+		KeyMonitorRouting::DownRoutes third;
+		third.Down(13, Route::LeaveItToTheUi);
+		third.Reset();
+		Check(third.Up(13) == Route::FeedTheCore,
+			"BlocoU: Reset forgets the downs that were the UI's");
+	}
+
+	void TestEveryOtherPressIsStillTheCores()
+	{
+		//The constraint the change carries: every press that is not the overlay's
+		//goes to the core exactly as it did before, so game input is untouched.
+		Check(KeyMonitorRouting::For(false, false, false, true) == Route::FeedTheCore,
+			"BlocoU: an ordinary key is still published to the core");
+		Check(KeyMonitorRouting::For(false, true, true, true) == Route::LeaveItToTheUi,
+			"BlocoU: a Command chord is the app's even when it carries the overlay's key");
+
+		//A press the table cannot name is not a key at all (#902): it is not the
+		//overlay's, and the core's path is what has always answered it (by dropping
+		//it in AliasedKeyState).
+		Check(!IsTheOverlaysPress(0, KeyMonitorRouting::NoModifier),
+			"BlocoU: an unmapped host code names no key, so it is not the overlay's press");
+	}
+
+	void TestTheOverlayRuleIsTheBindings()
+	{
+		//The twin of UI.Tests/Play/OverlayKeyPressTests, case for case: the window
+		//answers presses with OverlayKeyPress.IsThePress, and the monitor routes
+		//with this one. A row that drifted would hand the UI a press the window
+		//does not answer (both sides drop the key) or swallow one it does (#1080
+		//back again).
+		Check(IsTheOverlaysPress(13, KeyMonitorRouting::NoModifier),
+			"BlocoU: the default Esc binding is the Esc press");
+		Check(IsTheOverlaysPress(90, KeyMonitorRouting::NoModifier, OverlayCombo(90)),
+			"BlocoU: the overlay rebound to F1 is the F1 press");
+		Check(!IsTheOverlaysPress(13, KeyMonitorRouting::NoModifier, OverlayCombo(90)),
+			"BlocoU: with the overlay on F1, Esc is nobody's here");
+
+		//Modifiers are part of the press: Ctrl+Esc is a different key, and it has to
+		//reach the core's own path exactly as it did before.
+		Check(!IsTheOverlaysPress(13, KeyMonitorRouting::ControlModifier),
+			"BlocoU: Ctrl+Esc is not the press of a bare Esc binding");
+		Check(!IsTheOverlaysPress(90, KeyMonitorRouting::ShiftModifier, OverlayCombo(90)),
+			"BlocoU: Shift+F1 is not the press of a bare F1 binding");
+
+		//A binding that *names* a modifier is answered by that modifier, either hand,
+		//and only with it.
+		Check(IsTheOverlaysPress(13, KeyMonitorRouting::ControlModifier, OverlayCombo(118, 13)),
+			"BlocoU: a binding that names Left Ctrl is the Ctrl+Esc press");
+		Check(IsTheOverlaysPress(13, KeyMonitorRouting::ControlModifier, OverlayCombo(119, 13)),
+			"BlocoU: the right hand answers the same family");
+		Check(!IsTheOverlaysPress(13, KeyMonitorRouting::NoModifier, OverlayCombo(118, 13)),
+			"BlocoU: and only with the modifier it names");
+		Check(!IsTheOverlaysPress(13, KeyMonitorRouting::ControlModifier | KeyMonitorRouting::ShiftModifier, OverlayCombo(118, 13)),
+			"BlocoU: an unnamed modifier makes it a different press");
+
+		//An overlay with no keyboard binding owns no key (its chord may be a pad's),
+		//and the second key set is a binding of its own.
+		Check(!IsTheOverlaysPress(13, KeyMonitorRouting::NoModifier, KeyCombination(), KeyCombination()),
+			"BlocoU: an empty binding takes no key");
+		Check(IsTheOverlaysPress(13, KeyMonitorRouting::NoModifier, KeyCombination(), OverlayCombo(13)),
+			"BlocoU: either of the two key sets is the overlay's binding");
+
+		//The refusals the C# rule makes, which keep a press from being read as a
+		//chord it is not: the same key twice, and a key the press cannot carry - a
+		//pad code, which no host keyboard event maps to.
+		Check(!IsTheOverlaysPress(13, KeyMonitorRouting::NoModifier, OverlayCombo(13, 13)),
+			"BlocoU: the same key twice is not a binding a press can be");
+		Check(!IsTheOverlaysPress(13, KeyMonitorRouting::NoModifier, OverlayCombo(1, 13)),
+			"BlocoU: a pad code in the combination is not a key a press can carry");
+	}
+}
+
 int main()
 {
 	TestTheForcedPatchOverrideFollowsTheSettingUntilTheRomIsSuppressed();
@@ -17830,6 +18044,12 @@ TestW6TheFiltersAcceptTheExtendedFrame();
 	TestDebuggerProbeAndRawRamReadsNeverCount();
 	TestAHitIsAReadWhoseRawByteMeetsTheCompareValue();
 	TestTheBusRoutesCpuReadsToReadRamAndDebugReadsToPeekRam();
+
+	TestTheOverlayKeyIsNotSwallowedWhileTheAppIsForeground();
+	TestTheOverlayPressIsTheUisOnlyWhileTheMainWindowHasTheKeyboard();
+	TestAKeyUpFollowsTheRouteOfItsOwnDown();
+	TestEveryOtherPressIsStillTheCores();
+	TestTheOverlayRuleIsTheBindings();
 
 	printf("\n%d/%d cases passed\n", gCases - gFailures, gCases);
 	return gFailures == 0 ? 0 : 1;

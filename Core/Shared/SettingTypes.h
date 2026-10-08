@@ -12,6 +12,14 @@ enum class EmulationFlags
 	ConsoleMode = 0x10,
 	TestMode = 0x20,
 	OutputToStdout = 0x40,
+	//#1080: the app's main window is the one holding the keyboard, which
+	//InBackground above cannot say - that one is false whenever *any* window of
+	//the app is active. Set by MainWindow (UI/Windows/MainWindow.axaml.cs,
+	//OnActiveChanged) and read by the macOS key monitor, whose routing has to know
+	//whether the window that answers the overlay key is the one with the keyboard
+	//(Core/Shared/KeyMonitorRouting.h). Runtime state, never saved: it starts
+	//false, which routes as every key did before #1080.
+	MainWindowIsKey = 0x80,
 };
 
 enum class ScaleFilterType
