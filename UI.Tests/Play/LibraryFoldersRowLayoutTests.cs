@@ -18,7 +18,7 @@ namespace Mesen.Tests.Play
 	//Host-free (ADR-0123): the sheet is read as XAML and the rules off the theme.
 	//Nothing here opens a window, and the measured outcome - rows inside the box,
 	//no gap above the first - is asserted in
-	//UI.HeadlessTests/PlayerLibraryFoldersRowLayoutTests.
+	//UI.HeadlessTests/PlayerLibraryFoldersListLayoutTests.
 	public class LibraryFoldersRowLayoutTests
 	{
 		//The row the theme draws for an inset list: 46 high, a hairline from the

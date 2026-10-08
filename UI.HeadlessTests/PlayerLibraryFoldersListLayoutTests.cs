@@ -50,9 +50,12 @@ public class PlayerLibraryFoldersListLayoutTests
 		Assert.True(Math.Abs(box - expected) <= 2, $"the box is not its rows' height: box={box}, rows={expected}");
 
 		//The gap the issue saw: the list floated in the middle of a box that took
-		//the whole sheet. The first row starts at the top of the list.
-		double top = harness.OffsetIn(harness.Rows[0], harness.Scroller).Y;
-		Assert.True(top <= 1, $"there is a gap above the first row: {top} px");
+		//the whole sheet. Measured against the box, not against the scroller: the
+		//scroller scrolls to its own content, so the first row sits at its top by
+		//construction and the offset there is zero whatever the box does. Against
+		//the box, the measurement moves when the box grows around the rows.
+		double top = harness.OffsetIn(harness.Rows[0], harness.Box).Y;
+		Assert.True(top <= 2, $"there is a gap above the first row: {top} px");
 	}
 
 	[AvaloniaFact]
