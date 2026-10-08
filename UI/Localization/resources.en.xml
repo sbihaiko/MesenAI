@@ -2631,6 +2631,20 @@ E
 		<Message ID="PackDetailAutoMadeWith">Made on this computer from what you played ({0})</Message>
 		<Message ID="PackDetailIds">pack id: {0} · content id: {1} · container: {2}</Message>
 		<Message ID="EnhancementsOverclockUnavailable">not available on {0}</Message>
+		<!--#1081: the console the row above names. The IDs are `ConsoleType` +
+		the ConsoleType member (UI/Interop/InteropEnums.cs), paired by
+		ConsoleTypeNames.MessageId - the one table that knows both sides, so a
+		console renamed in the enum and left behind here is caught by
+		UI.Tests/Play/ConsoleTypeNamesTests. The words are the ones the rest of
+		the UI already uses for each machine (lblNes/lblSnes/lblPce/
+		lblWonderSwan, RomConsoleMasterSystem), not the core's own spelling. -->
+		<Message ID="ConsoleTypeSnes">SNES</Message>
+		<Message ID="ConsoleTypeGameboy">Game Boy</Message>
+		<Message ID="ConsoleTypeNes">NES</Message>
+		<Message ID="ConsoleTypePcEngine">PC Engine</Message>
+		<Message ID="ConsoleTypeSms">Master System</Message>
+		<Message ID="ConsoleTypeGba">Game Boy Advance</Message>
+		<Message ID="ConsoleTypeWs">WonderSwan</Message>
 		<!--ADR-0253 §4 (W.5): the Widescreen switch's one-line reason when the
 		game has nothing to show beside the picture (or a console with no side
 		map: SMS/SG-1000 without widescreen pack art).-->
