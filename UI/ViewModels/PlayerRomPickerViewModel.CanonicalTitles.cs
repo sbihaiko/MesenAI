@@ -233,8 +233,12 @@ namespace Mesen.ViewModels
 						tile.Title = title;
 					}
 				}
-				//A query that is on is not re-asked here: the next keystroke asks
-				//it of the titles resolved by then (_titles).
+				//#1065: and the grid takes the order those titles give it, in the
+				//same turn - a re-order, never a rebuild, so the containers (and
+				//the ring on one of them) survive it. It is the one path, and the
+				//same one a keystroke takes, so the grid a query narrows and the
+				//grid a title renames cannot disagree about where a game sits.
+				FillTiles();
 			});
 		}
 	}

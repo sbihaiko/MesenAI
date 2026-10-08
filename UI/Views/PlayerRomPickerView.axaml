@@ -186,7 +186,7 @@
 								</ItemsControl.ItemsPanel>
 								<ItemsControl.ItemTemplate>
 									<DataTemplate x:DataType="vm:PlayerLibraryTile">
-										<Button Classes="library-tile" Click="OnPlayTile" GotFocus="OnTileFocused">
+										<Button Classes="library-tile" Click="OnPlayTile" GotFocus="OnTileFocused" LostFocus="OnTileBlurred">
 											<StackPanel>
 												<Border Name="TileCover" Classes="library-cover" Background="{Binding Cover}" Width="104" Height="139" CornerRadius="8" ClipToBounds="True">
 													<!--#1039 (ADR-0265): the downloaded cover over the cover the

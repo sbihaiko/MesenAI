@@ -355,10 +355,14 @@ public static class GameLibrary
 	//collected list's: a caller that fills the grid as entries stream in merges
 	//them with this comparator rather than restating the rule, so a streamed
 	//grid and a whole-result one cannot disagree about where a game belongs.
+	//#1065: the rule itself is LibraryGridOrder's, which asks it over the title a
+	//game is SHOWN by. The scan's titles ARE the ones it shows at this point - the
+	//canonical pass renames tiles later - so this is the same rule with the same
+	//two strings, delegated rather than restated: the sheet re-sorting itself
+	//under a player and the scan filling the grid must not be able to disagree.
 	public static int Compare(LibraryEntry left, LibraryEntry right, StringComparer pathComparer)
 	{
-		int byTitle = string.Compare(SortTitle(left.Title), SortTitle(right.Title), StringComparison.OrdinalIgnoreCase);
-		return byTitle != 0 ? byTitle : pathComparer.Compare(left.Path, right.Path);
+		return LibraryGridOrder.Compare(left.Title, left.Path, right.Title, right.Path, pathComparer);
 	}
 
 	//The same order with the platform's fold, which is the question a grid
