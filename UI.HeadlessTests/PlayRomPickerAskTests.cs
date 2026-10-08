@@ -41,6 +41,7 @@ public class PlayRomPickerAskTests : IDisposable
 	private readonly Workspace _workspace = ConfigManager.Config.Preferences.Workspace;
 	private readonly string? _gameFolder = ConfigManager.Config.Preferences.GameFolder;
 	private readonly bool _overrideGameFolder = ConfigManager.Config.Preferences.OverrideGameFolder;
+	private readonly bool _confirmExitResetPower = ConfigManager.Config.Preferences.ConfirmExitResetPower;
 
 	private readonly List<MainWindow> _windows = new();
 	private readonly string _folder = Path.Combine(Path.GetTempPath(), "mesen-1067-" + Guid.NewGuid().ToString("N"));
@@ -64,6 +65,7 @@ public class PlayRomPickerAskTests : IDisposable
 		prefs.Workspace = _workspace;
 		prefs.GameFolder = _gameFolder ?? "";
 		prefs.OverrideGameFolder = _overrideGameFolder;
+		prefs.ConfirmExitResetPower = _confirmExitResetPower;
 		ConfigManager.Config.Save();
 
 		try {

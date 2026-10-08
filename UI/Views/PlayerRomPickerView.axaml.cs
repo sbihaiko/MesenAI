@@ -6,6 +6,7 @@ using Avalonia.Layout;
 using Avalonia.Markup.Xaml;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
+using Mesen.Logic;
 using Mesen.ViewModels;
 using System;
 using System.Collections.Generic;
@@ -114,7 +115,7 @@ namespace Mesen.Views
 			//handed when the library is not what is up (AskVisible), so the tiles were
 			//never the cost - the walk over them was, up to twenty thousand of them per
 			//pass. The guard is the same question, answered before the walk.
-			if(Model is not { IsVisible: true } model || model.Mode != RomPickerMode.Library) {
+			if(Model is not { } model || !RomPickerAskRule.ShouldWalkGrid(model.IsVisible, model.Mode == RomPickerMode.Library)) {
 				return;
 			}
 			if(this.FindControl<ItemsControl>("RomPickerGrid") is not { } grid) {
