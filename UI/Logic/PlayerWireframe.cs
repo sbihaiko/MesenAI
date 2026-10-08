@@ -84,10 +84,17 @@ public static class PlayerWireframe
 		},
 		//The seeded data, not the layout, differs: three tiles where the
 		//wireframe draws five and a subtitle without the wireframe's pack name.
+		//The Continue button is the focused control, so it now draws the theme's
+		//ring (#1089) where the framework's black frame used to be. The frame
+		//filled every row of the region, one ink band; the ring leaves the text
+		//band and adds a second one at the region's bottom edge. Focus state,
+		//not layout (#974), so it is tolerated but not a ratchet, like W-P1's
+		//primary button.
 		["W-P2"] = new KnownDeviation[] {
 			new("content", TextLines, "three seeded tiles, five drawn", false),
 			new("status line", InkBox, Chips, false),
 			new("continue card", InkBox, "seeded subtitle has no pack name", false),
+			new("continue button", TextLines, "focus ring under the Continue press", false),
 			new("recent tiles", InkBox, "three seeded tiles, five drawn", false),
 		},
 		//The card sits ~38 px below the wireframe's (so its Resume button and

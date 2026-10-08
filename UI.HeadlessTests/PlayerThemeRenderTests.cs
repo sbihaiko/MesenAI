@@ -357,7 +357,13 @@ public class PlayerThemeRenderTests : IDisposable
 		//rows are off too) over a flat dimmed home rather than the blurred game
 		//frame, and the status line carries the P1-P4 port chips.
 		AssertWireframeRegions(frame, "W-P4");
-		PlayerRender.AssertPixel(Color.Parse("#FAFAFC"), frame, 550, (int)(overlay.TranslatePoint(new Point(0, 0), window)!.Value.Y + 70));
+		//#1089: 8 px in from the card's left edge, not its middle. The Resume
+		//press is the card's one focused control, so PlayerFocusRing draws a
+		//bloom ~19 px around it, and a sample on the card's centre line at this
+		//height reads that bloom (#F2F5FB) instead of the card's own surface.
+		//The point is still on the card and off the press by 22 px.
+		Point card = overlay.TranslatePoint(new Point(0, 0), window)!.Value;
+		PlayerRender.AssertPixel(Color.Parse("#FAFAFC"), frame, (int)card.X + 8, (int)card.Y + 70);
 
 		window.FindNamed<Button>("OverlaySaveStatesButton").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
 		Dispatcher.UIThread.RunJobs();

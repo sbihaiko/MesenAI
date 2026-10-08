@@ -5,6 +5,7 @@ using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Presenters;
+using Avalonia.Controls.Templates;
 using Avalonia.Headless.XUnit;
 using Avalonia.Input;
 using Avalonia.Media;
@@ -130,7 +131,16 @@ public class PlayerLibraryFoldersListLayoutTests
 		Dispatcher.UIThread.RunJobs();
 
 		Assert.True(harness.Add.IsFocused);
-		Assert.Null(harness.Add.FocusAdorner);
+		//#1089: the press draws no focus look of its own, and the framework's is
+		//turned off for it - Fluent's AdornerLayer carries a DefaultFocusAdorner (a
+		//2 px black frame over a 1 px white hairline) and Control.cs falls back to it
+		//for any focused control whose FocusAdorner is unset, so an unset property is
+		//what put that frame on screen. The theme sets an empty template instead: the
+		//property is set, it builds nothing, and no adorner is added. This read used
+		//to be Assert.Null(FocusAdorner), which was true while the black frame was
+		//still being drawn.
+		Assert.NotNull(harness.Add.FocusAdorner);
+		Assert.Null(harness.Add.FocusAdorner!.Build());
 		Assert.Equal(ring, background.BoxShadow);
 	}
 
