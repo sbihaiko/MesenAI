@@ -95,14 +95,17 @@ namespace Mesen.ViewModels
 		//with the visit that made it (OnIsVisibleChanged), so the next bump of the
 		//same visit - the console filter's rebuild above all - is read as what it
 		//is rather than as a scan that finished long ago.
-		public bool IsFinishFallback { get; private set; }
+		public bool IsFinishFallback => _claims.FinishFallback;
 
 		//The bump for the remembered game landing is the same kind of claim: the
 		//sheet finishing what it promised, not a hand taken off a ring the player
 		//has since walked to Back or the search box while the restore was pending
 		//(PlayPadNavigationWiring answers it the way it answers the fallback). It
 		//expires exactly as IsFinishFallback does (#1066).
-		public bool IsRestoreLanding { get; private set; }
+		public bool IsRestoreLanding => _claims.RestoreLanding;
+
+		//The two claims above, with their expiry rule (Logic/ScanClaims, #1066).
+		private ScanClaims _claims = ScanClaims.None;
 
 		//A batch is merged into the grid in chunks this large, the rest posted at
 		//Background priority: one folder holding thousands of ROMs is one batch,
@@ -147,8 +150,7 @@ namespace Mesen.ViewModels
 				StopCanonicalTitles();
 				CancelCovers();
 			}
-			IsFinishFallback = false;
-			IsRestoreLanding = false;
+			_claims = _claims.AfterVisibilityChanged(value);
 		}
 
 		partial void OnModeChanged(RomPickerMode value)
@@ -182,8 +184,7 @@ namespace Mesen.ViewModels
 			//(PlayPadNavigationWiring), and a later bump - the console filter's own
 			//rebuild, which re-claims the grid on purpose - must not be read as one
 			//of them because the scan that made the claim is long over.
-			IsFinishFallback = false;
-			IsRestoreLanding = false;
+			_claims = _claims.AfterRingTaken();
 			LastFocusedTilePath = tile.Path;
 		}
 
@@ -220,8 +221,7 @@ namespace Mesen.ViewModels
 			_restoreTargetPath = LastFocusedTilePath;
 			_tileTookRing = false;
 			_pendingChunks = 0;
-			IsFinishFallback = false;
-			IsRestoreLanding = false;
+			_claims = ScanClaims.None;
 
 			ResetLibraryGrid(bump: false);
 			//The library has folders and is being read; the box owns the empty
@@ -382,7 +382,7 @@ namespace Mesen.ViewModels
 			//(IsRestorePending), so this is the sheet finishing what it promised
 			//rather than a claim over the player's ring.
 			if((wasEmpty && Tiles.Count > 0) || restoreLanded) {
-				IsRestoreLanding = restoreLanded;
+				_claims = restoreLanded ? _claims.WithRestoreLanding() : _claims with { RestoreLanding = false };
 				TilesRevision++;
 			}
 		}
@@ -440,7 +440,7 @@ namespace Mesen.ViewModels
 			if(_restoreTargetPath.Length > 0) {
 				_restoreTargetPath = "";
 				if(!_tileTookRing && Tiles.Count > 0 && !HasQuery) {
-					IsFinishFallback = true;
+					_claims = _claims.WithFinishFallback();
 					TilesRevision++;
 				}
 			}

@@ -25,6 +25,7 @@ namespace Mesen.HeadlessTests;
 //UI.Tests (that project does not reference Mesen.ViewModels at all), and the two
 //triggers - a tile taking the ring and the sheet losing the ring - are the
 //view-model's own hooks, so what is under test is the rule rather than the pad.
+[Collection(NativeCoreCollection.Name)]
 public class RomPickerScanTests
 {
 	private readonly string _folder = Path.Combine(Path.GetTempPath(), "mesen-1066-" + Guid.NewGuid().ToString("N"));

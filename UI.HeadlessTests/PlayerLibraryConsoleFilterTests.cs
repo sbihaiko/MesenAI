@@ -7,6 +7,7 @@ using System.Threading;
 using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using Mesen.Config;
 using Mesen.Interop;
 using Mesen.Logic;
@@ -325,6 +326,37 @@ public class PlayerLibraryConsoleFilterTests : IDisposable
 
 		PressShoulder(window, "Pad1 L1");
 		Assert.Equal(RomConsole.Nes, model.RomPicker.SelectedConsole);
+	}
+
+	//#1066: the console filter's own rebuild re-claims the grid for the ring. A
+	//ring the scan's claims once held (IsFinishFallback / IsRestoreLanding) must
+	//not make the arbiter keep a ring the player had left on the header: the
+	//claims are spent by the visit's first focus change, and the rebuild is read
+	//as the filter's own. Driven through the rendered picker: the focus the pad
+	//leaves on the header, then the focus after RB narrows the grid.
+	[AvaloniaFact]
+	public void The_filters_rebuild_puts_the_ring_back_on_a_game_after_the_scans_claims_expired()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		LibraryRoot();
+
+		(MainWindow window, MainWindowViewModel model) = OpenLibrary();
+		WaitFor(() => !model.RomPicker.IsScanning, "the scan did not finish");
+
+		//The player takes the ring (a tile reports it), then leaves it on the header.
+		model.RomPicker.RememberFocus(model.RomPicker.Tiles[0]);
+		Assert.False(model.RomPicker.IsFinishFallback);
+		Assert.False(model.RomPicker.IsRestoreLanding);
+		Press(window, PadNavAction.Up);
+		Press(window, PadNavAction.Up);
+
+		PressShoulder(window, "Pad1 R1");
+		Assert.Equal(RomConsole.Nes, model.RomPicker.SelectedConsole);
+
+		WaitFor(() => {
+			Control? focused = window.FocusManager?.GetFocusedElement() as Control;
+			return focused is not null && focused.FindAncestorOfType<ItemsControl>() is { Name: "RomPickerGrid" };
+		}, "the filter's rebuild did not put the ring back on a game of the narrowed grid");
 	}
 
 	//#1034 (ADR-0264 Decision 5): the row and the grid are the same decision -
