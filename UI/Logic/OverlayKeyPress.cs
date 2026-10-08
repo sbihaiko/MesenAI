@@ -84,4 +84,19 @@ public static class OverlayKeyPress
 		//one missing and it is a different press.
 		return ownsTheKey && named == pressedModifiers;
 	}
+
+	//#1095: which presses the window's own keyboard hands the core. On Windows and
+	//Linux this window is the only path a host key has into the core
+	//(InputApi.SetKeyState), so a press the window declines is still fed to it -
+	//right for the game's own keys, wrong for the overlay's while the keyboard is a
+	//control's: the core's shortcut handler answers that one by opening the overlay
+	//over the box keeping the key (a barcode field, a search box, an open menu).
+	//
+	//The keyboard being somewhere else is therefore what withholds this one press,
+	//on every platform - macOS's own arm asks the same two things before it hands
+	//the press back to the core.
+	public static bool TheCoreIsFedThePress(bool isTheOverlayKey, bool theKeyboardIsSomewhereElse)
+	{
+		return !(isTheOverlayKey && theKeyboardIsSomewhereElse);
+	}
 }
