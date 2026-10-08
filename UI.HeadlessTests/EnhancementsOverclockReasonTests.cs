@@ -59,7 +59,11 @@ public class EnhancementsOverclockReasonTests : IDisposable
 	}
 
 	//The row's text follows the console, so nothing is left over from the
-	//console that was loaded before it (the same panel, another game).
+	//console that was loaded before it (the same panel, another game). The panel
+	//outlives the game - it is one realized view toggled by IsVisible - so the
+	//binding itself has to re-evaluate, not just the ViewModel property: a
+	//one-time binding would keep the old console's sentence on screen while the
+	//ViewModel says otherwise. Hence the assertion on the realized TextBlock.
 	[AvaloniaFact]
 	public void The_reason_follows_the_loaded_console()
 	{
@@ -76,5 +80,9 @@ public class EnhancementsOverclockReasonTests : IDisposable
 		model.OpenEnhancementsPanel();
 		Dispatcher.UIThread.RunJobs();
 		Assert.Equal("not available on WonderSwan", model.EnhOverclockReason);
+
+		TextBlock reason = window.FindNamed<TextBlock>("EnhancementsOverclockReason");
+		Assert.Equal("not available on WonderSwan", reason.Text);
+		Assert.DoesNotContain("[[", reason.Text ?? "");
 	}
 }
