@@ -108,6 +108,12 @@ namespace Mesen.Windows
 		private bool _focusInMenu;
 		private bool _needRendererReset;
 
+		//#1080: the keys the window answered at its own keyboard and has not seen
+		//released yet. The OS repeats a held key, and every repeat arrives as
+		//another KeyDown of the same key, so this is what tells a press from the
+		//press still being held.
+		private readonly HashSet<UInt16> _keysAnsweredInTheUi = new();
+
 		//ADR-0254: the focus pause opened W-P4, so the automatic resume waits for
 		//the player's Esc instead of firing the moment the window comes forward.
 		private bool _focusPausedWithOverlay;
@@ -1144,7 +1150,7 @@ namespace Mesen.Windows
 			if(!WorkspaceMenu.IsFullscreenShortcut(e.Key.ToString(), (ShortcutModifiers)(int)e.KeyModifiers, OperatingSystem.IsMacOS())) {
 				return false;
 			}
-			if(_focusInMenu || TopLevel.GetTopLevel(this)?.FocusManager?.GetFocusedElement() is TextBox || IsCtrlFBoundElsewhere()) {
+			if(TheKeyboardIsSomewhereElse() || IsCtrlFBoundElsewhere()) {
 				return false;
 			}
 			ToggleFullscreen();
@@ -1270,7 +1276,7 @@ namespace Mesen.Windows
 		//carries, walks past into that path untouched.
 		private bool HandleEscInTheUi(KeyEventArgs e)
 		{
-			if(_model == null || !IsTheOverlayKey(e)) {
+			if(_model == null || !IsTheOverlayKey(e) || TheKeyboardIsSomewhereElse()) {
 				return false;
 			}
 
@@ -1288,13 +1294,53 @@ namespace Mesen.Windows
 				return false;
 			}
 
+			//A Held Key Is One Press (#1080). The OS repeats it as more KeyDowns
+			//with no KeyUp in between, and neither this arm nor TogglePlayerOverlay
+			//has a repeat guard: acting on each repeat toggles the overlay at the
+			//repeat rate - a held Esc opens W-P4 and closes it again, and a held Esc
+			//in Settings closes the sheet and then opens the overlay. The repeat is
+			//still this window's key and is consumed rather than passed on, because
+			//the core's own path below would fire the very same shortcut.
 			e.Handled = true;
+			if(!_keysAnsweredInTheUi.Add(e.GetKeyCode())) {
+				return true;
+			}
+
 			_shortcutHandler.ApplyUiEsc(action);
 			return true;
 		}
 
+		//#1080: the press is not this window's while the keyboard is somewhere
+		//else, and the one predicate answers for both hard-coded keys this class
+		//owns (the fullscreen stroke and the overlay's). A focused menu and a
+		//focused text input own their keys; the window's Esc arm used to skip the
+		//check the fullscreen one makes and swallowed them, marking the press
+		//handled before the menu could see the Esc it closes on.
+		//
+		//_focusInMenu is the window's own poll of the menus
+		//(TimerUpdateBackgroundFlag), which is the state the rest of this class
+		//reads.
+		private bool TheKeyboardIsSomewhereElse()
+		{
+			//The menus are asked live as well as through the poll's field: the poll
+			//answers every 100 ms, and the press that opens a menu can arrive
+			//before its next tick.
+			return _focusInMenu
+				|| MenuHelper.IsFocusInMenu(_mainMenu.MainMenu)
+				|| MenuHelper.IsFocusInMenu(_shellBar.ToolsMenu)
+				|| TopLevel.GetTopLevel(this)?.FocusManager?.GetFocusedElement() is TextBox;
+		}
+
 		private void OnPreviewKeyUp(object? sender, KeyEventArgs e)
 		{
+			//#1080: releasing the key ends its repeats, so the next down is a new
+			//press. Before the macOS return below: this is where the window's own
+			//count of held keys is kept, and the platform's key path is the other
+			//branch of the same handler.
+			if(e.Key != Key.None) {
+				_keysAnsweredInTheUi.Remove(e.GetKeyCode());
+			}
+
 			if(OperatingSystem.IsMacOS()) {
 				//Keyhandler handles key internally on macOS
 				return;
@@ -1334,6 +1380,10 @@ namespace Mesen.Windows
 				//should mean none of them has focus.
 				ConfigApi.SetEmulationFlag(EmulationFlags.InBackground, ApplicationHelper.GetActiveWindow() == null);
 				InputApi.ResetKeyState();
+				//#1080: a key released while another window had the keyboard sends
+				//no KeyUp here, and a key left in the set would answer its next
+				//press as a repeat. The window is not holding anything it answered.
+				_keysAnsweredInTheUi.Clear();
 			}
 		}
 
