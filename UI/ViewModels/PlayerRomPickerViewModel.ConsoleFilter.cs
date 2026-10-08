@@ -82,14 +82,11 @@ namespace Mesen.ViewModels
 				return;
 			}
 			RebuildLibraryTiles();
-			//The rebuild destroys the focused tile's container, and the arbiter
-			//only re-claims focus on a TilesRevision bump, so a selection change
-			//from the grid would leave the ring on nothing. The bump is safe for
-			//the box: RomPickerFocusTarget answers with the search box while it
-			//holds the ring or the pad keyboard. Only a selection change bumps -
-			//the scan and reset paths rebuild the row with their own bump.
+			//The filter's rebuild is its own bump and never the scan's, so a claim
+			//the scan left standing is spent here. The revision itself is not
+			//bumped: the rebuild MOVES tiles and keeps the ring's container, and
+			//RestoreTiles bumps when the tile the ring was on leaves the grid.
 			_claims = _claims.AfterFilterRebuild();
-			TilesRevision++;
 		}
 
 		//#1034 (ADR-0264 Decision 3): LB/RB, one option per press, wrapping at

@@ -173,18 +173,18 @@ namespace Mesen.ViewModels
 			//inserted there. Every tile still in the grid sits at or after the seat
 			//being filled, so a move is always backwards and no seat is visited
 			//twice.
-			int at = 0;
+			//Linear in the library (LibraryTileSeating): at 20000 entries a lookup per
+			//game is what froze the sheet.
+			Dictionary<string, LibraryGame> gameByPath = new(shown.Count, StringComparer.Ordinal);
+			List<string> order = new(shown.Count);
 			foreach(LibraryGame game in shown) {
-				if(_tileByPath.TryGetValue(game.Entry.Path, out PlayerLibraryTile? tile)) {
-					int from = Tiles.IndexOf(tile);
-					if(from != at) {
-						Tiles.Move(from, at);
-					}
-				} else {
-					Tiles.Insert(at, TileFor(game.Entry, game.Cover));
-				}
-				at++;
+				gameByPath[game.Entry.Path] = game;
+				order.Add(game.Entry.Path);
 			}
+			LibraryTileSeating.Seat(Tiles, order,
+				path => _tileByPath.GetValueOrDefault(path),
+				path => TileFor(gameByPath[path].Entry, gameByPath[path].Cover),
+				Tiles.Move);
 
 			//TilesRevision is deliberately NOT bumped for a re-order, and the
 			//difference from the scan path is the whole point: a scan replaces the
@@ -199,7 +199,9 @@ namespace Mesen.ViewModels
 			//not a tile, FocusTile is null, and the re-sort does not touch it (#1065
 			//acceptance criteria 1 and 4).
 			if(ring is not null && !(_tileByPath.TryGetValue(ring.Path, out PlayerLibraryTile? held) && ReferenceEquals(held, ring))) {
-				FocusTile = null;
+				if(ReferenceEquals(FocusTile, ring)) {
+					FocusTile = null;
+				}
 				TilesRevision++;
 			}
 		}
