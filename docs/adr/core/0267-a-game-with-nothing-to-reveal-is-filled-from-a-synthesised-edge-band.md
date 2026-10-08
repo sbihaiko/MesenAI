@@ -1,10 +1,13 @@
-# ADR-0262: A game with nothing to reveal is filled from a synthesised edge band, not left with a disabled switch
+# ADR-0267: A game with nothing to reveal is filled from a synthesised edge band, not left with a disabled switch
 
 - Status: proposed 2026-10-08 — an open either/or (options A–D below), awaiting the owner's pick.
   Nothing here is implemented, and the current behaviour is *not* a bug: see Context. Every option
   amends ADR-0253 §1/§3/§4; options B and C also add one source to that ADR's fallback chain, and
   option A instead corrects ADR-0253 §2 in place (a refinement, not a reversal, so no superseded
-  line is owed either way).
+  line is owed either way). **Option C additionally amends ADR-0253 §2**: its SMS per-console
+  scope line ("Reveal is offered but has no map columns to show, so it always uses the fallback")
+  is replaced by the synthesised band, and its Reveal-source contract is widened so that extended
+  columns no longer imply revealed map columns. See Decision, Option C.
 - Date: 2026-10-08
 - Related: issue #1082; ADR-0253 (the Reveal and its fallback chain — §1 the one switch, §2 the
   per-console scope, §3 the content-aware fallback and its "never on their own" rule, §4 the
@@ -14,8 +17,11 @@
   row) and §8 (the W.1–W.7 slices); `docs/specs/MEP-v1.md` §5.5 (the `widescreen` section).
 - Supersedes / amends: amends ADR-0253 §1 ("the stretch to 16:9 is dropped"), §3 ("a border or
   black alone never makes a game supported") and §4 ("SMS/SG-1000 without pack art are known
-  unsupported before the game runs, so the switch is disabled at once"). It does not amend §2's
-  frame-width contract, which every option keeps.
+  unsupported before the game runs, so the switch is disabled at once"). **If Option C is
+  accepted it also amends §2**, in two places: the per-console scope entry for SMS/SG-1000, and
+  the Reveal-source contract that today ties "extended columns" to map content the console
+  reveals. Options A, B and D leave §2 untouched. No option amends §2's arithmetic — a frame is
+  still `2N` pixels wider, and the standard mode is still bit-identical (ADR-0162).
 
 ## Context
 
@@ -92,9 +98,9 @@ cheapest first.*
   and its 19 pinned cases; one new resource string. This is the smallest change that answers the
   report as written.
 - **Option C — a synthesised edge band, revealed like real columns. *Recommended.*** The SMS VDP
-  emits its line `2N` columns wider — §2's frame-width contract, unchanged — where the extra
+  emits its line `2N` columns wider — §2's frame-width arithmetic, unchanged — where the extra
   pixels of a scanline repeat the nearest real column of that same scanline. Those rows are marked
-  in the existing per-row side-fill map (`RenderedFrame::ExtendedSideFill`) as *synthesised*, and
+  in the per-row side-fill map (`RenderedFrame::ExtendedSideFill`) as *synthesised*, and
   Decision 3's chain gains one ordered source: pack art → **synthesised edge band** → border →
   black. §3's "never on their own" clause is amended to admit the edge band as a mode, while a
   static border and plain black stay fill-ins: the band is made of the picture's own pixels, per
@@ -110,6 +116,47 @@ cheapest first.*
   app-side predicate that disables the switch before the game even runs — has to admit a console
   whose sides the band fills. Pack art still wins per row, so a pack that ships §5.5 art is
   unaffected.
+
+  **C amends ADR-0253 §2, and this ADR states it rather than claiming otherwise.** Two clauses
+  move:
+
+  - **The per-console scope entry.** §2 currently reads "SMS/SG-1000: Reveal is offered but has no
+    map columns to show, so it always uses the fallback (decision 3)." Under C that entry becomes:
+    SMS/SG-1000 has no map columns to reveal, so its extended columns are *synthesised* by the VDP
+    from the picture's own edge pixels. The claim "always uses the fallback" is dropped — the band
+    is produced where the pixels are made, like every other console's Reveal, and only what the
+    band leaves unstated (nothing, in the plain case) falls through to Decision 3.
+  - **The Reveal-source contract.** §2's contract binds an extended frame to revealed content ("a
+    console that supports Reveal emits a `RenderedFrame` that is `2N` pixels wider and says which
+    columns are extended"). C widens it: the frame reports the *source state* of each side rather
+    than a bare extended-or-not bit, so "extended" no longer implies "revealed from the map". The
+    arithmetic and the accuracy guarantee are untouched — still exactly `2N` px wider, still
+    bit-identical with the switch off.
+
+  **The side source-state contract C needs.** `RenderedFrame::ExtendedSideFill` is one bit per
+  side per row ("filled"), and `VideoRenderer::ApplyWidescreenFallback` skips a side the map
+  already marks filled. A single "filled" bit cannot express what C needs: the band must be
+  *drawn* (so the border must not repaint it) yet still be *overridable* by pack art (so the art
+  step must not skip it). The map is therefore expanded to a per-row, per-side source state:
+
+  - `none` — nothing is there; the border layer and then black may fill it (today's unfilled).
+  - `synthesised` — the VDP put the band's repeated edge pixels there. Pack art may overwrite it;
+    the border layer must not, and black must not.
+  - `game-or-art` — real content: revealed map columns, or pack art already applied. Nothing
+    overwrites it (today's filled).
+
+  Fixing `game-or-art` as the only state that the art step skips keeps §3's "pack art comes first"
+  order intact while letting the band lose to it. The resolution order for one side of one row is
+  **pack art → edge band → border → black**, resolved on this state, in
+  `WidescreenFallback::ApplyChain`: the art step writes over `none` and `synthesised`; the band
+  survives wherever the art left it; `VideoRenderer::CompositeBorder` fills only what is still
+  `none`; black is what "still `none`" renders as.
+
+  **Tests that would pin it** (named, not written here): the `W253C:` and `W253b:` families in
+  `scripts/core_unit_tests.cpp` — the state map, the band's rows, and the art-over-band order —
+  plus `WidescreenSupportRuleTests.cs` in `UI.Tests/Play/` for the switch state a banded console
+  now reports, and `UI.HeadlessTests/PlaySheetsViewTests.cs` for the switch and its reason on the
+  sheet. C2's "synthesised" mark and C1's chain position are pinned by the first of these.
 - **Option D — a per-game user override.** Leave the switch enabled everywhere, demote the reason
   to a hint, and let the player turn widescreen on for any game. Cost: ADR-0253 §4's per-ROM
   memory becomes advisory and the switch can no longer be trusted as "this game has a mode"; and
