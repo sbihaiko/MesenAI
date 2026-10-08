@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Threading;
@@ -6,8 +7,10 @@ using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
 using Avalonia.Input;
+using Avalonia.Interactivity;
 using Avalonia.Threading;
 using Mesen.Config;
+using Mesen.Config.Shortcuts;
 using Mesen.Interop;
 using Mesen.Logic;
 using Mesen.ViewModels;
@@ -37,6 +40,9 @@ public class PlayEscOpensOverlayTests : IDisposable
 	private readonly bool _pauseInBackground = ConfigManager.Config.Preferences.PauseWhenInBackground;
 	private readonly bool _pauseInMenus = ConfigManager.Config.Preferences.PauseWhenInMenusAndConfig;
 	private readonly string _folder = Path.Combine(Path.GetTempPath(), "mesen-esc-" + Guid.NewGuid().ToString("N"));
+	private KeyCombination? _overlayBinding;
+	private KeyCombination? _overlayBinding2;
+	private bool _overlayWasMissing;
 
 	public void Dispose()
 	{
@@ -45,6 +51,13 @@ public class PlayEscOpensOverlayTests : IDisposable
 		if(NativeCore.IsAvailable) {
 			EmuApi.Stop();
 			Dispatcher.UIThread.RunJobs();
+		}
+		if(_overlayWasMissing) {
+			ConfigManager.Config.Preferences.ShortcutKeys.RemoveAll(sk => sk.Shortcut == EmulatorShortcut.ToggleOverlay);
+		} else if(_overlayBinding != null) {
+			ShortcutKeyInfo? overlay = OverlayShortcut();
+			overlay.KeyCombination = _overlayBinding;
+			overlay.KeyCombination2 = _overlayBinding2!;
 		}
 		PreferencesConfig prefs = ConfigManager.Config.Preferences;
 		prefs.UiMode = _uiMode;
@@ -58,8 +71,46 @@ public class PlayEscOpensOverlayTests : IDisposable
 		}
 	}
 
+	private static ShortcutKeyInfo OverlayShortcut()
+	{
+		return ConfigManager.Config.Preferences.ShortcutKeys.Find(sk => sk.Shortcut == EmulatorShortcut.ToggleOverlay)!;
+	}
+
+	//#1080: the key the window answers is ToggleOverlay's own binding, so the test
+	//moves it the way a player does - onto F1, with the controller chord out of the
+	//keyboard's way. It is put back in Dispose: ConfigManager.Config is the process's
+	//one config and the other headless classes read it.
+	//
+	//The arrangement writes the binding the test is about, and only when the config
+	//does not already hold one (`onlyWhenUnbound`), so a test that rebound the overlay
+	//itself is not undone by the arrangement the running game makes. The codes are the
+	//shared key table's, which Avalonia's Key enum mirrors and which this window feeds
+	//the core with (Esc 13, F1 90) - a headless run registers no keyboard backend
+	//(InputApi.GetKeyCode answers 0 for every name), so the shortcut list this test
+	//finds is the one a config that never seeded it has: empty.
+	private void ArrangeOverlayKey(Key key, bool onlyWhenUnbound)
+	{
+		List<ShortcutKeyInfo> shortcuts = ConfigManager.Config.Preferences.ShortcutKeys;
+		ShortcutKeyInfo? overlay = shortcuts.Find(sk => sk.Shortcut == EmulatorShortcut.ToggleOverlay);
+		if(overlay == null) {
+			overlay = new ShortcutKeyInfo { Shortcut = EmulatorShortcut.ToggleOverlay };
+			shortcuts.Add(overlay);
+			_overlayWasMissing = true;
+		} else if(onlyWhenUnbound && !overlay.KeyCombination.IsEmpty) {
+			return;
+		}
+
+		if(_overlayBinding == null && !_overlayWasMissing) {
+			_overlayBinding = overlay.KeyCombination;
+			_overlayBinding2 = overlay.KeyCombination2;
+		}
+		overlay.KeyCombination = new KeyCombination() { Key1 = (UInt16)key };
+		overlay.KeyCombination2 = new KeyCombination();
+	}
+
 	private (MainWindow Window, MainWindowViewModel Model, Panel Renderer) ShowRunningGame()
 	{
+		ArrangeOverlayKey(Key.Escape, onlyWhenUnbound: true);
 		PreferencesConfig prefs = ConfigManager.Config.Preferences;
 		prefs.UiMode = UiMode.Player;
 		prefs.Workspace = Workspace.Play;
@@ -144,4 +195,59 @@ public class PlayEscOpensOverlayTests : IDisposable
 		WaitFor(() => !EmuApi.IsPaused(), "the second Esc did not resume the game (#1080)");
 		Assert.False(model.IsPlayerOverlayVisible);
 	}
+
+	//#1080: Esc by name is the bug - the overlay's key is the binding's, so moving
+	//the binding to F1 moves the key with it, and F1 must open W-P4.
+	[AvaloniaFact]
+	public void The_overlay_rebound_to_F1_opens_on_F1()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		ArrangeOverlayKey(Key.F1, onlyWhenUnbound: false);
+		(MainWindow window, MainWindowViewModel model, _) = ShowRunningGame();
+
+		window.KeyPressQwerty(PhysicalKey.F1, RawInputModifiers.None);
+		Dispatcher.UIThread.RunJobs();
+
+		WaitFor(() => window.IsPauseCardActive(), "F1 did not open W-P4 after the overlay was rebound to it (#1080)");
+		Assert.True(model.IsPlayerOverlayVisible);
+	}
+
+	//...and Esc is then nobody's here: the press goes on to the core's own shortcut
+	//path. On macOS that path is the native key monitor (this window's arm returns
+	//before InputApi.SetKeyState there by design), so what a headless run can show
+	//is the half the window owns - the press is neither taken nor marked handled.
+	[AvaloniaFact]
+	public void Esc_is_left_to_the_core_while_the_overlay_is_bound_to_F1()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		ArrangeOverlayKey(Key.F1, onlyWhenUnbound: false);
+		(MainWindow window, MainWindowViewModel model, _) = ShowRunningGame();
+
+		bool handled = false;
+		window.AddHandler(InputElement.KeyDownEvent, (_, e) => handled = e.Handled, RoutingStrategies.Bubble, true);
+
+		window.KeyPressQwerty(PhysicalKey.Escape, RawInputModifiers.None);
+		Dispatcher.UIThread.RunJobs();
+
+		Assert.False(handled, "the window took Esc while the overlay was bound to F1 (#1080)");
+		Assert.False(model.IsPlayerOverlayVisible);
+		Assert.False(window.IsPauseCardActive());
+	}
+
+	//#1080: the default binding is bare Esc, so a press carrying Ctrl is a different
+	//press - the modified Esc the player bound to something else must not be
+	//swallowed by the overlay's arm.
+	[AvaloniaFact]
+	public void Ctrl_Esc_is_not_the_overlays_press()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model, _) = ShowRunningGame();
+
+		window.KeyPressQwerty(PhysicalKey.Escape, RawInputModifiers.Control);
+		Dispatcher.UIThread.RunJobs();
+
+		Assert.False(model.IsPlayerOverlayVisible, "Ctrl+Esc was swallowed by the overlay's arm (#1080)");
+		Assert.False(window.IsPauseCardActive());
+	}
+
 }

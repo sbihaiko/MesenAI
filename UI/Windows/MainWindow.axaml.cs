@@ -1211,22 +1211,66 @@ namespace Mesen.Windows
 			}
 		}
 
-		//#1080: Esc is answered here, at the window's own keyboard, for the two
-		//contexts UiEsc gives the UI (Player mode's overlay and its Settings sheet).
-		//The press used to be left to the core's shortcut handler alone, and that
-		//path is not one the player can rely on: on macOS it runs on the native key
-		//monitor, and in Player mode an Esc that reached the core left the game
-		//running with no overlay until the window was re-focused. Answering it here
-		//is what makes the key work from the focus state the game view is left in.
+		//#1080: the six keyboard keys a combination can name as a modifier, as the
+		//shared key table numbers them (Core/Shared/KeyDefinitions.h: 116-121) - the
+		//Avalonia Key enum, which is the key space this window already feeds the core
+		//with (InputApi.SetKeyState, below) and the space the config stores. Read off
+		//the enum rather than through InputApi.GetKeyCode so the rule does not depend
+		//on a keyboard backend being registered (a headless run has none, and the
+		//lookup answers 0 for every name there).
+		private static readonly ModifierKeyCodes _modifierKeys = new(
+			(UInt16)Key.LeftShift, (UInt16)Key.RightShift,
+			(UInt16)Key.LeftCtrl, (UInt16)Key.RightCtrl,
+			(UInt16)Key.LeftAlt, (UInt16)Key.RightAlt);
+
+		//#1080: the key this handler answers is the one ToggleOverlay is *bound* to,
+		//read off the same config every other shortcut comes from - it is not Esc by
+		//name. A player who moves the overlay to F1 or to a controller must not be
+		//left with an Esc that opens the pause sheet anyway, and Esc is then free for
+		//whatever else it is bound to, which the core's own path (below) answers.
+		//
+		//Both of the shortcut's key combinations are bindings of their own
+		//(ToggleOverlay ships with Esc and a controller chord); the pad slot is not
+		//one of them, this being the keyboard's handler. An empty combination answers
+		//nothing (OverlayKeyPress), so an overlay bound to a pad alone - or one whose
+		//codes a run could not build - leaves the whole keyboard to the core.
+		private bool IsTheOverlayKey(KeyEventArgs e)
+		{
+			ShortcutKeyInfo? overlay = _model?.Config.Preferences.ShortcutKeys.Find(sk => sk.Shortcut == EmulatorShortcut.ToggleOverlay);
+			if(overlay == null) {
+				return false;
+			}
+
+			UInt16 pressed = e.GetKeyCode();
+			ShortcutModifiers modifiers = (ShortcutModifiers)(int)e.KeyModifiers;
+			return IsBoundTo(overlay.KeyCombination, pressed, modifiers)
+				|| IsBoundTo(overlay.KeyCombination2, pressed, modifiers);
+		}
+
+		private static bool IsBoundTo(KeyCombination combination, UInt16 pressed, ShortcutModifiers modifiers)
+		{
+			return OverlayKeyPress.IsThePress(combination.Key1, combination.Key2, combination.Key3, pressed, modifiers, _modifierKeys);
+		}
+
+		//#1080: the key the overlay is bound to is answered here, at the window's own
+		//keyboard, for the two contexts UiEsc gives the UI (Player mode's overlay and
+		//its Settings sheet). The press used to be left to the core's shortcut handler
+		//alone, and that path is not one the player can rely on: on macOS it runs on
+		//the native key monitor, and in Player mode an Esc that reached the core left
+		//the game running with no overlay until the window was re-focused. Answering
+		//it here is what makes the key work from the focus state the game view is left
+		//in.
 		//
 		//The press stops here on purpose. Both paths end in the same router
-		//(ShortcutHandler.ApplyUiEsc), so letting the core see this Esc as well would
-		//open the overlay and close it again in the same press - and this handler
-		//returns before InputApi.SetKeyState, which is the only way a keyboard press
-		//reaches the core on Windows and Linux, so nothing is fed twice there either.
+		//(ShortcutHandler.ApplyUiEsc), so letting the core see this press as well
+		//would open the overlay and close it again in the same press - and this
+		//handler returns before InputApi.SetKeyState, which is the only way a keyboard
+		//press reaches the core on Windows and Linux, so nothing is fed twice there
+		//either. Every other key, and this one when the binding is not what the press
+		//carries, walks past into that path untouched.
 		private bool HandleEscInTheUi(KeyEventArgs e)
 		{
-			if(e.Key != Key.Escape || _model == null) {
+			if(_model == null || !IsTheOverlayKey(e)) {
 				return false;
 			}
 

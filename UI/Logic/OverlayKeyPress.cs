@@ -3,26 +3,17 @@ using System;
 namespace Mesen.Logic;
 
 //#1080: the six keys the shortcut config can name as a modifier, in the shared
-//key table's own order and codes (Core/Shared/KeyDefinitions.h: Left/Right
-//Shift 116-117, Left/Right Ctrl 118-119, Left/Right Alt 120-121). Those are the
-//codes a KeyCombination stores, and the resolution goes through the host's key
-//manager rather than a table of its own, so naming them here cannot drift from
-//the key space the config is written in.
+//key table's own codes (Core/Shared/KeyDefinitions.h: Left/Right Shift 116-117,
+//Left/Right Ctrl 118-119, Left/Right Alt 120-121). Those are the codes a
+//KeyCombination stores, and the host hands them in rather than this reading a
+//table of its own, so naming them cannot drift from the key space the config is
+//written in.
 //
 //There is no Meta here on purpose: the shared table has no name for the
 //Windows/Command key, so no binding can hold one - which is why a press carrying
 //it is never the overlay's press (see IsThePress).
 public readonly record struct ModifierKeyCodes(UInt16 LeftShift, UInt16 RightShift, UInt16 LeftCtrl, UInt16 RightCtrl, UInt16 LeftAlt, UInt16 RightAlt)
 {
-	public static ModifierKeyCodes Of(Func<string, UInt16> keyCode)
-	{
-		return new ModifierKeyCodes(
-			keyCode("Left Shift"), keyCode("Right Shift"),
-			keyCode("Left Ctrl"), keyCode("Right Ctrl"),
-			keyCode("Left Alt"), keyCode("Right Alt")
-		);
-	}
-
 	//The modifier a key code names, or None when it is an ordinary key - the
 	//press's own. Both sides of a pair answer the same family: the config cannot
 	//tell which hand a "Ctrl" came from (InputApi's own name table merges them,
@@ -56,9 +47,41 @@ public static class OverlayKeyPress
 {
 	public static bool IsThePress(UInt16 key1, UInt16 key2, UInt16 key3, UInt16 pressedKeyCode, ShortcutModifiers pressedModifiers, ModifierKeyCodes modifierKeys)
 	{
-		//#1080 pre-fix, kept for one commit: the window takes Esc whatever the
-		//binding says. The tests in UI.Tests/Play/OverlayKeyPressTests are the
-		//RED for the binding-aware rule below.
-		return pressedKeyCode == 13;
+		//A press with no key, and a combination with no key, answer nothing: the
+		//overlay may hold no keyboard binding at all (its chord may be a pad's),
+		//and then no key is its.
+		if(pressedKeyCode == 0) {
+			return false;
+		}
+
+		UInt16[] keys = { key1, key2, key3 };
+		ShortcutModifiers named = ShortcutModifiers.None;
+		bool ownsTheKey = false;
+		foreach(UInt16 code in keys) {
+			if(code == 0) {
+				continue;
+			}
+			if(code == pressedKeyCode) {
+				if(ownsTheKey) {
+					//The same key twice is not a binding this press can be.
+					return false;
+				}
+				ownsTheKey = true;
+				continue;
+			}
+
+			ShortcutModifiers family = modifierKeys.FamilyOf(code);
+			if(family == ShortcutModifiers.None || (named & family) != ShortcutModifiers.None) {
+				//The combination wants a key that is not a modifier the press can
+				//carry, or two of a family it can carry only once.
+				return false;
+			}
+			named |= family;
+		}
+
+		//The press's own key is one of the combination's, and it carries exactly
+		//the modifiers the combination names - one extra (Ctrl+Esc is not Esc) or
+		//one missing and it is a different press.
+		return ownsTheKey && named == pressedModifiers;
 	}
 }
