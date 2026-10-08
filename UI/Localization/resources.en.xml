@@ -2648,10 +2648,12 @@ E
 		<Message ID="ConsoleTypeSms">Sega Master System</Message>
 		<Message ID="ConsoleTypeGba">Game Boy Advance</Message>
 		<Message ID="ConsoleTypeWs">WonderSwan</Message>
-		<!--ADR-0253 §4 (W.5): the Widescreen switch's one-line reason when the
-		game has nothing to show beside the picture (or a console with no side
-		map: SMS/SG-1000 without widescreen pack art).-->
-		<Message ID="EnhancementsWidescreenUnavailable">This game has nothing to show beside the picture</Message>
+		<!--ADR-0253 §4 (W.5), reworded by ADR-0267 stage 1 (option B): the
+		Widescreen switch's one-line reason when a game has nothing to reveal
+		beside the picture. It says what widescreen does there - a fill, not a
+		Reveal - because it is shown under a usable switch too (a console with no
+		side map: SMS/SG-1000 without widescreen pack art).-->
+		<Message ID="EnhancementsWidescreenUnavailable">Nothing to reveal beside the picture; widescreen will only stretch it</Message>
 		<Message ID="EnhancementsApply">Apply</Message>
 		<Message ID="EnhancementsApplyReload">Apply &amp; Reload</Message>
 		<Message ID="EnhancementsApplyRestart">Apply &amp; Restart</Message>

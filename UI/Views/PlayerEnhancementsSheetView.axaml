@@ -14,6 +14,9 @@
 	SetModernInstruments / ToggleLayer / ToggleWideScrn / ToggleOverclock paths and names the biggest restart it
 	causes (EnhancementsSheet.Pending, ADR-0244 Decision 3). Overclock is shown
 	disabled with its reason where the console has no overclock knob (rule 4).
+	Widescreen's reason line rides IsWidescreenReasonVisible (ADR-0267 stage 1):
+	a console with no side map keeps the switch usable and shows the fill
+	sentence under it, so the line can no longer be the disabled state's.
 	Hi-res filter lives once, as Settings › Look › Pixels (ADR-0246).-->
 	<!--ADR-0249 (W-P7): a light sheet - the four switches and the Pack row in an
 	inset list (CheckBox.switch rows, "Applies on reload" under Border, the
@@ -42,8 +45,8 @@
 				</Border>
 				<Border Classes="switch-row">
 					<Panel>
-						<CheckBox Name="EnhancementsWidescreenCheckBox" Classes="switch" Classes.subtitled="{Binding !IsWidescreenSupported}" Content="{l:Translate chkEnhancementsWideScrn}" IsChecked="{Binding EnhWidescreen, Mode=TwoWay}" IsEnabled="{Binding IsWidescreenSupported}" />
-						<TextBlock Name="EnhancementsWidescreenReason" Classes="row-subtitle" Text="{Binding EnhWidescreenReason}" IsVisible="{Binding !IsWidescreenSupported}" />
+						<CheckBox Name="EnhancementsWidescreenCheckBox" Classes="switch" Classes.subtitled="{Binding IsWidescreenReasonVisible}" Content="{l:Translate chkEnhancementsWideScrn}" IsChecked="{Binding EnhWidescreen, Mode=TwoWay}" IsEnabled="{Binding IsWidescreenSupported}" />
+						<TextBlock Name="EnhancementsWidescreenReason" Classes="row-subtitle" Text="{Binding EnhWidescreenReason}" IsVisible="{Binding IsWidescreenReasonVisible}" />
 					</Panel>
 				</Border>
 				<Border Classes="switch-row">

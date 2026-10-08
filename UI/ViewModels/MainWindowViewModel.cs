@@ -89,6 +89,13 @@ namespace Mesen.ViewModels
 		//still measuring the game.
 		[ObservableProperty] public partial bool IsWidescreenSupported { get; set; } = true;
 
+		//ADR-0267 stage 1 (option B): whether EnhWidescreenReason has anything
+		//to say. It is its own flag, not `!IsWidescreenSupported`, because the
+		//one state that says something with the switch usable is a console with
+		//no side map: the sentence under it names the fill, so the switch never
+		//claims a Reveal it does not have (ADR-0253 §1).
+		[ObservableProperty] public partial bool IsWidescreenReasonVisible { get; private set; }
+
 		//P.5 (PRD Part B §6): the currently-applied pack's name/layers for
 		//the overlay chip and the "Applied ..." toast.
 		[ObservableProperty] public partial string CurrentPackName { get; private set; } = "";
@@ -515,7 +522,12 @@ namespace Mesen.ViewModels
 				Config.PlayerEnhancements.IsRomWidescreenUnsupported(_widescreenRomSha1) ? WidescreenSupport.Unsupported : WidescreenSupport.Unknown,
 				ReadWidescreenPackArt());
 			IsWidescreenSupported = _widescreenSwitch.Enabled;
-			EnhWidescreenReason = _widescreenSwitch.Enabled ? "" : ResourceHelper.GetMessage(_widescreenSwitch.ReasonKey);
+			//ADR-0267 stage 1: the reason rides the state's own ReasonKey, not
+			//the disabled flag - the fill state is usable and still says what it
+			//does (WidescreenSupportRule.Fill), so the sheet shows the sentence
+			//under an enabled switch exactly where that is the truth.
+			EnhWidescreenReason = string.IsNullOrEmpty(_widescreenSwitch.ReasonKey) ? "" : ResourceHelper.GetMessage(_widescreenSwitch.ReasonKey);
+			IsWidescreenReasonVisible = EnhWidescreenReason.Length > 0;
 
 			IsOverclockEnabled = RomInfo.ConsoleType switch {
 				ConsoleType.Nes => PlayerEnhancementsToggle.IsNesOverclockOn(Config.Nes.PpuExtraScanlinesBeforeNmi, Config.Nes.PpuExtraScanlinesAfterNmi),
