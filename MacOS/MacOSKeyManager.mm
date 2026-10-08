@@ -117,20 +117,47 @@ MacOSKeyManager::MacOSKeyManager(Emulator* emu)
 		//
 		//Everything that is not the overlay's press goes to the core exactly as it
 		//did before, and a press the window does not answer is handed back to the
-		//core there (MainWindow), so the arms the core owns keep working.
+		//core there (MainWindow), so the arms the core owns keep working. The
+		//overlay's press is the UI's only while MainWindow - the window holding
+		//that arm - is the one with the keyboard: `InBackground` is false whenever
+		//*any* window of the app is active, and the press returned there would go
+		//to a Settings dialog or a tool window that has no arm for it.
+		//
+		//A key-up is sent the way its own key-down went, remembered per raw host
+		//code (#1080): the rule decides one event from the modifiers that event
+		//carries, and a modifier released or pressed between a press and its
+		//release would otherwise send the two halves of one key to different
+		//owners - the core never seeing the release, or the window never seeing it,
+		//either way a key left held.
 		NSEventType type = [event type];
 		bool isFlagsChanged = type == NSEventTypeFlagsChanged;
+		bool isKeyDown = type == NSEventTypeKeyDown;
 		uint32_t rawCode = isFlagsChanged ? 0 : (uint32_t) [event keyCode];
 		uint16_t mappedKeyCode = rawCode < AliasedKeyState::RawCodeCount ? _keyCodeMap[rawCode] : 0;
 
 		EmuSettings* settings = _emu->GetSettings();
-		KeyMonitorRouting::Route route = KeyMonitorRouting::For(
-			settings->CheckFlag(EmulationFlags::InBackground),
-			type == NSEventTypeKeyDown && ([event modifierFlags] & NSEventModifierFlagCommand) != 0,
-			KeyMonitorRouting::IsTheOverlaysPress(mappedKeyCode, PressModifierFamilies([event modifierFlags]),
-				settings->GetShortcutKey(EmulatorShortcut::ToggleOverlay, 0),
-				settings->GetShortcutKey(EmulatorShortcut::ToggleOverlay, 1),
-				modifierKeys));
+		KeyMonitorRouting::Route route;
+		if(isFlagsChanged) {
+			//A modifier of its own carries no key of the table's (rawCode is 0
+			//above), so it is never the overlay's press and there is no pair to
+			//keep: the rule answers it, as it always did.
+			route = KeyMonitorRouting::For(
+				settings->CheckFlag(EmulationFlags::InBackground),
+				false,
+				false,
+				settings->CheckFlag(EmulationFlags::MainWindowIsKey));
+		} else if(isKeyDown) {
+			route = _downRoutes.Down(rawCode, KeyMonitorRouting::For(
+				settings->CheckFlag(EmulationFlags::InBackground),
+				([event modifierFlags] & NSEventModifierFlagCommand) != 0,
+				KeyMonitorRouting::IsTheOverlaysPress(mappedKeyCode, PressModifierFamilies([event modifierFlags]),
+					settings->GetShortcutKey(EmulatorShortcut::ToggleOverlay, 0),
+					settings->GetShortcutKey(EmulatorShortcut::ToggleOverlay, 1),
+					modifierKeys),
+				settings->CheckFlag(EmulationFlags::MainWindowIsKey)));
+		} else {
+			route = _downRoutes.Up(rawCode);
+		}
 
 		if(route == KeyMonitorRouting::Route::LeaveItToTheUi) {
 			return event;
@@ -318,6 +345,9 @@ void MacOSKeyManager::ResetKeyState()
 {
 	memset(_keyState, 0, sizeof(_keyState));
 	_hostKeyState.Reset();
+	//Nothing is held, and nothing is the UI's either: a release arriving after
+	//this with no press of its own is the core's, as every key was before #1080.
+	_downRoutes.Reset();
 }
 
 void MacOSKeyManager::SetDisabled(bool disabled)

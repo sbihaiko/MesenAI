@@ -1,6 +1,8 @@
 #pragma once
 #include "pch.h"
+#include <bitset>
 #include "Shared/SettingTypes.h"
+#include "Shared/AliasedKeyState.h"
 
 //#1080: the decision the macOS key monitor makes for a host keyboard event.
 //
@@ -143,9 +145,56 @@ namespace KeyMonitorRouting
 		LeaveItToTheUi
 	};
 
+	//#1080: where each raw host code's key-down was sent, so its key-up goes the
+	//same way. The rule above decides one *event* from the modifiers that event
+	//carries, and a modifier can change between a press and its release: Ctrl+Esc
+	//down is a chord (the core's), and the bare Esc up a moment later is the press
+	//a bare-Esc binding names (the UI's) - the two halves of one press sent to two
+	//different owners, which is what this remembers instead.
+	//
+	//A bitset of the downs that went to the UI, because they are the only ones the
+	//route cannot be recomputed for: a key-up whose down the core took is the
+	//core's whatever it carries on release (a Command chord or a modifier pressed
+	//mid-hold does not move a key the core is holding to the app), and a raw code
+	//with no down of its own - held when the monitor was installed, or cleared by
+	//Reset - is fed to the core, which is where every key went before #1080.
+	class DownRoutes
+	{
+	public:
+		//One key-down. The route is the rule's; this only remembers it.
+		Route Down(uint32_t rawCode, Route byTheRule)
+		{
+			if(rawCode < AliasedKeyState::RawCodeCount) {
+				_sentToTheUi.set(rawCode, byTheRule == Route::LeaveItToTheUi);
+			}
+			return byTheRule;
+		}
+
+		//The matching key-up. No modifier rule is asked here on purpose: what the
+		//release carries is not what decides where it goes, its own press is.
+		Route Up(uint32_t rawCode)
+		{
+			if(rawCode < AliasedKeyState::RawCodeCount && _sentToTheUi.test(rawCode)) {
+				_sentToTheUi.reset(rawCode);
+				return Route::LeaveItToTheUi;
+			}
+			return Route::FeedTheCore;
+		}
+
+		//Nothing is held and nothing was handed to the UI.
+		void Reset()
+		{
+			_sentToTheUi.reset();
+		}
+
+	private:
+		std::bitset<AliasedKeyState::RawCodeCount> _sentToTheUi;
+	};
+
 	//What the monitor does with one host keyboard event. `isTheOverlaysPress` is
-	//the overlay's own press, answered at the window (#1080).
-	inline Route For(bool inBackground, bool isCommandChord, bool isTheOverlaysPress)
+	//the overlay's own press, answered at the window (#1080), and
+	//`mainWindowIsTheKeyWindow` says that window is the one with the keyboard.
+	inline Route For(bool inBackground, bool isCommandChord, bool isTheOverlaysPress, bool mainWindowIsTheKeyWindow)
 	{
 		if(inBackground) {
 			//Allow UI to handle key-events when main window is not in focus
@@ -163,7 +212,16 @@ namespace KeyMonitorRouting
 		//Returning it publishes nothing to the core, so the press is never answered
 		//twice - the window answers it, or hands it back (MainWindow), and the arms
 		//the core owns (Remaster, Share, Classic) keep the press they always had.
-		if(isTheOverlaysPress) {
+		//
+		//But only while that window - the one with the arm - is the one with the
+		//keyboard. `inBackground` cannot stand in for it: it is false whenever *any*
+		//window of the app is active, so with a Settings dialog, the debugger or a
+		//tool window focused the event returned here is dispatched by AppKit to
+		//that window, which has no arm for the overlay; the arms the core owns lose
+		//the press they always had, and a dialog with a cancel button closes on it.
+		//While another window has the keyboard the press goes to the core, which is
+		//where it went before #1080.
+		if(isTheOverlaysPress && mainWindowIsTheKeyWindow) {
 			return Route::LeaveItToTheUi;
 		}
 

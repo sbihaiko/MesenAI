@@ -1415,6 +1415,14 @@ namespace Mesen.Windows
 				//Check across all of the app's windows instead - "in background"
 				//should mean none of them has focus.
 				ConfigApi.SetEmulationFlag(EmulationFlags.InBackground, ApplicationHelper.GetActiveWindow() == null);
+				//#1080: and this window's own activation, which the flag above
+				//cannot answer - it is false whenever *any* window of the app is
+				//active, and the macOS key monitor asks who has the keyboard before
+				//it hands the overlay's press to the UI (KeyMonitorRouting,
+				//MacOSKeyManager). This window's own property is the exact answer:
+				//it changes on every transition between the app's windows, and
+				//"the first *other* window that reads active" is not asked at all.
+				ConfigApi.SetEmulationFlag(EmulationFlags.MainWindowIsKey, IsActive);
 				InputApi.ResetKeyState();
 				//#1080: a key released while another window had the keyboard sends
 				//no KeyUp here, and a key left in the set would answer its next
