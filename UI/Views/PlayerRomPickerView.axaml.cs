@@ -94,9 +94,30 @@ namespace Mesen.Views
 			}, DispatcherPriority.Render);
 		}
 
+		//#1067: the walk below is the sheet's own cost - one ContainerFromIndex per
+		//tile in the library, up to twenty thousand - and it is the one part of it
+		//that leaves no trace on screen, because the tiles it collects are handed to
+		//AskVisible, which drops them when the library is not what the sheet is
+		//showing. So the walk is counted where it is paid, one per tile walked past,
+		//which is what lets the cases in PlayRomPickerAskTests say that a closed
+		//sheet's pass costs nothing rather than that it happened to ask for nothing.
+		public int TilesExamined { get; private set; }
+
 		private void AskShowing()
 		{
-			if(this.FindControl<ItemsControl>("RomPickerGrid") is not { } grid || Model is not { } model) {
+			//#1067: a sheet that is closed, or is showing the folder browser instead,
+			//is showing no tile of the library - and asking is the one thing that must
+			//not be paid for anyway, because the walk below is one grid lookup per tile
+			//in the scan and the grid is a live collection whatever the sheet is doing:
+			//a scan landing or a search under a closed sheet still fires these events
+			//(OnTilesChanged, OnGridLayoutUpdated). The view-model drops what it is
+			//handed when the library is not what is up (AskVisible), so the tiles were
+			//never the cost - the walk over them was, up to twenty thousand of them per
+			//pass. The guard is the same question, answered before the walk.
+			if(Model is not { IsVisible: true } model || model.Mode != RomPickerMode.Library) {
+				return;
+			}
+			if(this.FindControl<ItemsControl>("RomPickerGrid") is not { } grid) {
 				return;
 			}
 			if(grid.FindAncestorOfType<ScrollViewer>() is not { } sheet) {
@@ -109,6 +130,7 @@ namespace Mesen.Views
 			Rect viewport = new(sheet.Offset.X, sheet.Offset.Y, sheet.Viewport.Width, sheet.Viewport.Height);
 			List<PlayerLibraryTile> showing = new();
 			for(int i = 0; i < model.Tiles.Count; i++) {
+				TilesExamined++;
 				if(grid.ContainerFromIndex(i) is Control { } container && container.Bounds.Intersects(viewport)) {
 					showing.Add(model.Tiles[i]);
 				}
