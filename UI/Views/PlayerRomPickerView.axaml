@@ -277,12 +277,20 @@
 						a pad cannot answer one. Removing takes the row out of the list and
 						touches nothing else: the folder and its games are the player's either
 						way.-->
-						<!--A StackPanel, not a DockPanel, and top-aligned on purpose (#1079):
-						a DockPanel's fill child takes every pixel the sheet has left, so the
-						box drew a list 300 high in a 417-high frame and floated it in the
-						middle - the gap above the first row. Here the box is measured by the
-						list it holds, so it is exactly as tall as its rows.-->
-						<StackPanel Name="RomPickerFoldersSheet" IsVisible="{Binding IsFoldersSheetVisible}" Margin="0 14 0 0" VerticalAlignment="Top">
+						<!--A Grid, not a StackPanel, and the list top-aligned inside it
+						(#1079): a StackPanel measures its children with infinite height, so
+						the list took its MaxHeight 300 whatever the sheet had, and in a short
+						window (MainWindow MinHeight 144) the sheet's own edge cut the box and
+						pushed the *Add a folder…* press off the sheet - a press the player can
+						neither see nor reach. The rows here make the list the one part that
+						gives way: the hint and the notice are Auto, the list is the star (so it
+						is measured against what the sheet really has left and its scroller
+						shrinks instead of overflowing), and the Add press has a row of its own
+						at the bottom, always inside the sheet. The list panel stays
+						VerticalAlignment="Top" so that when there IS room the box is exactly as
+						tall as its rows - a stretched box drew a list 300 high in a 417-high
+						frame and floated it in the middle, the gap above the first row.-->
+						<Grid Name="RomPickerFoldersSheet" IsVisible="{Binding IsFoldersSheetVisible}" Margin="0 14 0 0" RowDefinitions="Auto,Auto,*,Auto">
 							<TextBlock Classes="subhead secondary" Text="{l:Translate lblRomPickerFoldersHint}" TextWrapping="Wrap" />
 							<!--What the last add or remove answered, said on the sheet rather
 							than in a dialog over it.-->
@@ -290,7 +298,7 @@
 							<!--The inset is drawn behind the list, not around it, so the rows
 							keep the box's rounded edge off their own separators and the last
 							row is not cut by it (PlayerReplaysSheetView).-->
-							<Panel Margin="0 12 0 0">
+							<Panel Grid.Row="2" Margin="0 12 0 0" VerticalAlignment="Top">
 								<Border Classes="inset" />
 								<ScrollViewer MaxHeight="300" Margin="1" HorizontalScrollBarVisibility="Disabled">
 									<ItemsControl Name="RomPickerFoldersList" ItemsSource="{Binding LibraryFolderRows}" XYFocus.NavigationModes="Enabled">
@@ -311,8 +319,8 @@
 									</ItemsControl>
 								</ScrollViewer>
 							</Panel>
-							<Button Name="RomPickerAddFolder" Classes="secondary regular" HorizontalAlignment="Left" Margin="0 12 0 0" Content="{l:Translate btnRomPickerFoldersAdd}" Click="OnAddFolder" />
-						</StackPanel>
+							<Button Name="RomPickerAddFolder" Grid.Row="3" Classes="secondary regular" HorizontalAlignment="Left" Margin="0 12 0 0" Content="{l:Translate btnRomPickerFoldersAdd}" Click="OnAddFolder" VerticalAlignment="Top" />
+						</Grid>
 				</Panel>
 			</DockPanel>
 		</Border>

@@ -74,34 +74,45 @@ namespace Mesen.Tests.Play
 			Assert.Equal("{Binding Label}", (string?)label.Attribute("Text"));
 		}
 
-		//The gap above the first row (#1079): the sheet laid the list out as the
-		//fill child of a DockPanel, so the box took the whole remaining height and
-		//the capped list floated in the middle of it. A row-tall box needs a
-		//container that hands its children their own height, and the sheet itself
-		//is top-aligned so the space it does not need stays below it.
+		//The box's height (#1079): the gap above the first row, and the clipping
+		//below it. A StackPanel measures its children with infinite height, so the
+		//capped list took MaxHeight 300 whatever the sheet really had - in a short
+		//window the sheet's edge cut the box and the *Add a folder…* press fell off
+		//the sheet. The sheet's rows make the list the one part that gives way (Auto,
+		//Auto, star, Auto), and the list panel is top-aligned inside the star row, so
+		//that when there IS room the box is exactly as tall as its rows.
 		[Fact]
 		public void The_list_box_sizes_to_its_rows()
 		{
 			XElement sheet = RequireSheet();
-			Assert.Equal("StackPanel", sheet.Name.LocalName);
-			Assert.Equal("Top", (string?)sheet.Attribute("VerticalAlignment"));
+			Assert.Equal("Grid", sheet.Name.LocalName);
+			Assert.Equal("Auto,Auto,*,Auto", (string?)sheet.Attribute("RowDefinitions"));
 
 			//The box and the list are one on top of the other, so the list's own
 			//max height is what the box measures: 300 is the sheet's cap, and the
 			//box is exactly that tall when the rows fill it.
 			XElement box = ListBox();
 			Assert.Equal("Panel", box.Name.LocalName);
+			Assert.Equal("Top", (string?)box.Attribute("VerticalAlignment"));
+			Assert.Equal("2", (string?)box.Attribute("Grid.Row"));
 			Assert.Contains(box.Elements(), e => e.Name.LocalName == "Border" && ClassesOf(e).Contains("inset"));
 			XElement scroller = box.Elements().First(e => e.Name.LocalName == "ScrollViewer");
 			Assert.Equal("300", (string?)scroller.Attribute("MaxHeight"));
 			Assert.Contains(scroller.Descendants(), e => (string?)e.Attribute("Name") == "RomPickerFoldersList");
 		}
 
-		//The *Add a folder…* press (#1079): the sheet's own footer chrome, and the
-		//ring the theme draws for every Play button. Nothing in this view may
-		//redraw it - the heavy border the issue saw was a focus look of its own.
+		//The *Add a folder…* press (#1079): it takes the theme's chrome and the
+		//theme's focus ring, and draws no border or adorner of its own - the heavy
+		//border the issue saw was a focus look of its own.
+		//
+		//NOT a guard against the clipping: this case passes with the layout fix
+		//reverted, because it reads the press's own attributes, not where the sheet
+		//puts it. The clipping (the press pushed off a short sheet) is guarded by
+		//The_add_press_stays_inside_the_sheet_when_the_window_is_short in
+		//UI.HeadlessTests/PlayerLibraryFoldersListLayoutTests; the property read
+		//here is kept honest against the pad's focus look, tracked in #1089.
 		[Fact]
-		public void The_add_press_keeps_the_sheets_own_chrome()
+		public void The_add_press_takes_the_themes_ring_and_draws_no_border_of_its_own()
 		{
 			XElement add = RequireSheet().Descendants().First(e => (string?)e.Attribute("Name") == "RomPickerAddFolder");
 			Assert.Equal("Button", add.Name.LocalName);
