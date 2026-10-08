@@ -57,7 +57,7 @@ def test_background_seed_lock_recompute_matches_engine_acceptance():
         vm.seed_object(seed)
         check(vm.locked_list() == [seed], "seeding sets the sole locked node", str(vm.locked_list()))
         ranked = vm.background_rank()
-        check(bool(ranked), "seeding produces ranked neighbours")
+        check(bool(ranked), "seeding produces ranked neighbors")
         first = ranked[0][0]
         check(first in _OBJ000[1:], "top suggestion is inside the seed's obj000 group", f"got {first}")
         check(vm.lock(first, "object"), "locking the top suggestion succeeds")
@@ -129,7 +129,7 @@ def test_sprite_band_gradeado_seed_lock_swap_unlock_reset():
         # Swap the seed cell (index 0) too. In this fixture the seed (node 0)
         # is the only hub `pairs[]` gives any of the other shapes a nonzero
         # coFrames with, so there is genuinely no alternative for that slot —
-        # swap_cell must recognise that and no-op safely rather than force a
+        # swap_cell must recognize that and no-op safely rather than force a
         # bogus replacement.
         seed_before = vm.seed
         seed_after = vm.swap_cell(0)

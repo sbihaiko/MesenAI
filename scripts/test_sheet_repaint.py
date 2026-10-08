@@ -7,7 +7,7 @@ and asserts the parts of the repaint pipeline that do not depend on the model:
 
   * the `passthrough` backend round-trips the sheet unchanged in structure:
     at scale 1 with no seam pass the output is byte-identical to the input,
-    at scale 4 it is exactly the nearest-neighbour upscale, and the sidecar
+    at scale 4 it is exactly the nearest-neighbor upscale, and the sidecar
     plus the `*.orig.png` twin come across untouched;
   * the seam pass writes **only** the border band of cells that are adjacent
     in game (adjacency read off the map's `placements[]`), leaving every
@@ -16,9 +16,9 @@ and asserts the parts of the repaint pipeline that do not depend on the model:
   * alpha survives: the gutter and the in-cell hole stay fully transparent,
     the RGB of a transparent pixel is zeroed, and no opaque pixel is lost;
   * a palette variant is rebuilt from the canonical generation and lands on
-    its own colours, keeping the canonical silhouette;
+    its own colors, keeping the canonical silhouette;
   * `pack.json` carries the ADR-0154 §3 `generated` object, with `targets`
-    inherited from the neighbouring manifest, and the whole output survives
+    inherited from the neighboring manifest, and the whole output survives
     `mep_build.py build` (which lints it).
 
 Framework-free, mirroring test_mep_build.py's ok()/fail()/main() style.
@@ -50,7 +50,7 @@ COLUMNS = 3
 STRIDE = UNIT + GUTTER
 TRANSPARENT = (0, 0, 0, 0)
 # The fixture paints its transparent pixels magenta-under-zero-alpha: a real
-# PNG editor leaves colour under a transparent pixel, and ADR-0154 §7 requires
+# PNG editor leaves color under a transparent pixel, and ADR-0154 §7 requires
 # the repaint to zero it so no halo can leak into a sliced crop. Painting them
 # black would make that assertion vacuous.
 GHOST = (255, 0, 255, 0)
@@ -58,11 +58,11 @@ ROM_SHA1 = "2A4E126D0286BEA0BF503C80A12352C57539F76B"
 PAL_A = "0F162A30"
 PAL_B = "0F1626307"[:8]
 
-# Two flat colours per cell, chosen so the frequency ordering read by
-# _palette_of is unambiguous: the major colour covers 12 of the 16 columns.
+# Two flat colors per cell, chosen so the frequency ordering read by
+# _palette_of is unambiguous: the major color covers 12 of the 16 columns.
 CELL_COLOURS = {
     0: ((200, 40, 40), (40, 200, 40)),      # canonical of shape A
-    1: ((10, 10, 10), (250, 250, 250)),     # shape B, the map's east neighbour
+    1: ((10, 10, 10), (250, 250, 250)),     # shape B, the map's east neighbor
     2: ((60, 60, 220), (220, 220, 40)),     # shape A again, other palette
     3: ((90, 140, 90), (140, 90, 140)),     # shape C
 }
@@ -73,7 +73,7 @@ CELL_COUNT = {0: 100, 1: 80, 2: 20, 3: 5}
 HOLE = (2, 2, 4, 4)  # x0, y0, x1, y1 inside a cell — the alpha test
 # Cell 2's hole sits somewhere else on purpose: the variant is rebuilt from
 # cell 0's generation, so its output must carry cell 0's hole, not its own.
-# Without that difference the recolour test would also pass if the whole
+# Without that difference the recolor test would also pass if the whole
 # variant path never ran.
 HOLE_BY_CELL = {2: (10, 2, 12, 4)}
 
@@ -175,7 +175,7 @@ def cell_origin(index):
 
 def make_fixture(root: Path):
     """<Game>/auto/textures/sheets with metatiles + map, plus the recorder's
-    hires.txt key source and a neighbouring mep/pack.json to inherit from."""
+    hires.txt key source and a neighboring mep/pack.json to inherit from."""
     game = root / "Game"
     sheets = game / "auto" / "textures" / "sheets"
     sheets.mkdir(parents=True)
@@ -277,9 +277,9 @@ def test_passthrough_structure(root: Path, sheets: Path):
     got = png_read(out4 / "textures" / "sheets" / "metatiles.png")
     want = upscale(normalize(png_read(sheets / "metatiles.png")), 4)
     if got != want:
-        fail("passthrough at scale 4 is not the exact nearest-neighbour upscale")
+        fail("passthrough at scale 4 is not the exact nearest-neighbor upscale")
         return
-    ok("passthrough at scale 4 is exactly the nearest-neighbour upscale (structure preserved)")
+    ok("passthrough at scale 4 is exactly the nearest-neighbor upscale (structure preserved)")
 
 
 def test_seam_pass_touches_only_borders(root: Path, sheets: Path):
@@ -321,9 +321,9 @@ def test_seam_pass_touches_only_borders(root: Path, sheets: Path):
     # The same pass on the map, where the two cells really are adjacent.
     map_after = png_read(seamed / "textures" / "sheets" / "map-000.png")
     if map_after[0][UNIT - 1] != want or map_after[0][UNIT] != want:
-        fail("the map's geometric seam was not symmetrised")
+        fail("the map's geometric seam was not symmetrized")
         return
-    ok("the map's geometric neighbours are symmetrised the same way")
+    ok("the map's geometric neighbors are symmetrized the same way")
 
 
 def test_alpha_survives(root: Path, sheets: Path):
@@ -357,7 +357,7 @@ def test_alpha_survives(root: Path, sheets: Path):
 
 def test_palette_variant_recolour(root: Path, sheets: Path):
     """ADR-0154 §5: cell 2 is cell 0's shape under another palette, so it is
-    rebuilt from cell 0's single generation — same silhouette, own colours."""
+    rebuilt from cell 0's single generation — same silhouette, own colors."""
     out = root / "out-variants"
     if run_repaint(sheets, out, "--scale", "1") is None:
         return
@@ -366,7 +366,7 @@ def test_palette_variant_recolour(root: Path, sheets: Path):
     x2, y2 = cell_origin(2)
     x0, y0 = cell_origin(0)
 
-    # Expected: cell 0's geometry (including *its* hole) under cell 2's colours.
+    # Expected: cell 0's geometry (including *its* hole) under cell 2's colors.
     swap = dict(zip(CELL_COLOURS[0], CELL_COLOURS[2], strict=True))
     want = [[(swap[src[y0 + cy][x0 + cx][:3]] + (255,)) if src[y0 + cy][x0 + cx][3] else TRANSPARENT
              for cx in range(UNIT)] for cy in range(UNIT)]
@@ -378,9 +378,9 @@ def test_palette_variant_recolour(root: Path, sheets: Path):
              f"want {want[first[1]][first[0]]}")
         return
     if have == [[normalize([src[y2 + cy]])[0][x2 + cx] for cx in range(UNIT)] for cy in range(UNIT)]:
-        fail("the variant cell is just its own source — the recolour path never ran")
+        fail("the variant cell is just its own source — the recolor path never ran")
         return
-    ok("a palette variant is rebuilt from the canonical generation and lands on its own colours")
+    ok("a palette variant is rebuilt from the canonical generation and lands on its own colors")
 
     silhouette_a = [got[y0 + cy][x0 + cx][3] for cy in range(UNIT) for cx in range(UNIT)]
     silhouette_b = [got[y2 + cy][x2 + cx][3] for cy in range(UNIT) for cx in range(UNIT)]
@@ -407,7 +407,7 @@ def test_pack_json_label(root: Path, sheets: Path):
     if doc.get("targets") != [{"system": "nes", "sha1": ROM_SHA1}]:
         fail(f"'targets' was not inherited from the neighbouring manifest: {doc.get('targets')}")
         return
-    ok("'targets' is inherited from the neighbouring pack.json, never invented")
+    ok("'targets' is inherited from the neighboring pack.json, never invented")
 
 
 def test_survives_mep_build(root: Path, sheets: Path):
@@ -441,7 +441,7 @@ def test_no_sheets_is_an_error(root: Path):
 # --- fixtures for the new paths ---------------------------------------------
 
 # 3x3 staircase: the smallest picture on which Scale2x provably differs from a
-# nearest-neighbour upscale. Hand-derived below, in test_classical_backend.
+# nearest-neighbor upscale. Hand-derived below, in test_classical_backend.
 BLACK = (0, 0, 0, 255)
 WHITE = (255, 255, 255, 255)
 STAIR = [[BLACK, BLACK, BLACK],
@@ -501,7 +501,7 @@ def make_screens_fixture(root: Path):
 
 def test_classical_backend(root: Path, sheets: Path):
     """ADR-0154 §2's baseline arm. Scale2x is a *copy-only* scaler: it rounds
-    a staircase corner without inventing a colour, which is what makes it a
+    a staircase corner without inventing a color, which is what makes it a
     fair B in the blind A/B and what keeps alpha and palette out of the
     comparison."""
     stair = make_stair_fixture(root)
@@ -513,21 +513,21 @@ def test_classical_backend(root: Path, sheets: Path):
     if len(got) != 6 or len(got[0]) != 6:
         fail(f"classical at scale 2 produced {len(got[0])}x{len(got)}, expected 6x6")
         return
-    # Centre pixel E=(1,1)=black, with B=black above, D=black left, F=white
+    # Center pixel E=(1,1)=black, with B=black above, D=black left, F=white
     # right, H=white below. B != H and D != F, so Scale2x fires:
     #   E0 = D (D==B) = black, E1 = E (B!=F) = black,
     #   E2 = E (D!=H) = black, E3 = F (H==F) = WHITE.
-    # A nearest-neighbour upscale puts black in all four.
+    # A nearest-neighbor upscale puts black in all four.
     if got[3][3] != WHITE:
         fail(f"classical did not round the staircase corner: (3,3) is {got[3][3]}, expected white "
-             "— that pixel is exactly where Scale2x differs from nearest neighbour")
+             "— that pixel is exactly where Scale2x differs from nearest neighbor")
         return
     if got[2][2] != BLACK or got[2][3] != BLACK or got[3][2] != BLACK:
-        fail("classical changed a sub-pixel Scale2x leaves alone at the centre cell")
+        fail("classical changed a sub-pixel Scale2x leaves alone at the center cell")
         return
-    ok("the classical backend is Scale2x: it rounds a staircase corner nearest neighbour keeps")
+    ok("the classical backend is Scale2x: it rounds a staircase corner nearest neighbor keeps")
 
-    # Copy-only: no output colour that was not already in the source.
+    # Copy-only: no output color that was not already in the source.
     out_sheet = root / "out-classical-sheet"
     if run_repaint(sheets, out_sheet, "--scale", "2", "--seam-width", "0", "--no-variants",
                    "--backend", "classical") is None:
@@ -540,7 +540,7 @@ def test_classical_backend(root: Path, sheets: Path):
         fail(f"classical invented {len(invented)} colour(s) not in the source, e.g. "
              f"{sorted(invented)[:3]} — a pixel-art scaler must only copy")
         return
-    ok("the classical backend invents no colour: every output pixel is a source pixel")
+    ok("the classical backend invents no color: every output pixel is a source pixel")
 
     lost = [(x, y) for y in range(len(src)) for x in range(len(src[0]))
             if (src[y][x][3] == 0) != (got[y * 2][x * 2][3] == 0)]
@@ -827,7 +827,7 @@ def test_target_screens(root: Path):
     if (doc.get("generated") or {}).get("scale") != SCREEN_SCALE * 2:
         fail(f"pack.json's 'generated' does not record the effective scale: {doc.get('generated')}")
         return
-    ok("the screen repaint is labelled generated with the effective (source x factor) scale")
+    ok("the screen repaint is labeled generated with the effective (source x factor) scale")
 
 
 # --- the catalog's disclosure column -----------------------------------------
@@ -933,7 +933,7 @@ def test_palette_correspondence_is_positional():
     """ADR-0154 §5 step 1: canonical index *i* must line up with variant index
     *i*. Ranking the two palettes by frequency looks equivalent and is not —
     two indexes that cover the same number of pixels tie, and the tie is then
-    broken by RGB value, which the *variant's* colours can break the other
+    broken by RGB value, which the *variant's* colors can break the other
     way round. The two members of a shape group share the same CHR bitmaps,
     so the same offset carries the same index in both: the correspondence is
     positional, and that is exact rather than nearly right."""
@@ -942,7 +942,7 @@ def test_palette_correspondence_is_positional():
     canon = mod.Region(0, 0, 4, 4, 0, 0)
     variant = mod.Region(4, 0, 4, 4, 1, 1)
     # Eight pixels each, so frequency cannot separate them; the variant's own
-    # colours sort in the opposite order to the canonical's.
+    # colors sort in the opposite order to the canonical's.
     dark, light = (10, 10, 10), (200, 200, 200)
     v_dark, v_light = (250, 0, 0), (0, 0, 5)
     _paint(mod, img, canon,
@@ -961,9 +961,9 @@ def test_palette_correspondence_is_positional():
     if missing:
         fail(f"a fully mapped pair reported missing indexes: {missing}")
         return
-    ok("palette_correspondence pairs canonical and variant colours by pixel offset, not by rank")
+    ok("palette_correspondence pairs canonical and variant colors by pixel offset, not by rank")
 
-    # The whole point: recolour must land on the variant's colours, not on the
+    # The whole point: recolor must land on the variant's colors, not on the
     # swapped ones the frequency ranking would have produced.
     generated = img.clone()
     patch = mod.recolour(generated, canon, img, canon, variant)
@@ -972,15 +972,15 @@ def test_palette_correspondence_is_positional():
         fail(f"the recoloured variant does not land on the variant's palette: {sorted(got)}")
         return
     if patch.get(0, 0)[:3] != v_dark:
-        fail("the recoloured variant has its two colours swapped")
+        fail("the recolored variant has its two colors swapped")
         return
-    ok("recolour lands each canonical colour on its own variant counterpart, not on the other one")
+    ok("recolor lands each canonical color on its own variant counterpart, not on the other one")
 
 
 def test_palette_variant_missing_index_is_identity():
     """ADR-0154 §5: an index with no counterpart "degrades to identity ... and
     says so on stderr". Not on stdout and not only under --verbose: dropping a
-    colour silently is the failure this sentence exists to prevent."""
+    color silently is the failure this sentence exists to prevent."""
     import contextlib
     import io
     mod = _repaint_module()
@@ -1009,9 +1009,9 @@ def test_palette_variant_missing_index_is_identity():
         fail(f"the unmapped colour was changed instead of left alone: {patch.get(0, 3)}")
         return
     if patch.get(0, 0)[:3] != v_dark:
-        fail("the mapped colour was not recoloured")
+        fail("the mapped color was not recolored")
         return
-    ok("an unmapped canonical colour is left unchanged; the mapped one is still recoloured")
+    ok("an unmapped canonical color is left unchanged; the mapped one is still recolored")
 
     text = err.getvalue()
     if "metatiles.png cell 2" not in text or "ADR-0154 §5" not in text:
@@ -1021,9 +1021,9 @@ def test_palette_variant_missing_index_is_identity():
 
 
 def test_seam_pass_multiple_neighbours():
-    """ADR-0154 §6: "a cell with several different neighbours on the same side
+    """ADR-0154 §6: "a cell with several different neighbors on the same side
     gets the mean of all of them". Blending pair by pair in place gives the
-    last neighbour more weight than the first, and moves a border line after
+    last neighbor more weight than the first, and moves a border line after
     its partner was averaged against the old value — so the two sides stop
     agreeing at j = 0, which is the property PRD validation test 4 rests on."""
     mod = _repaint_module()
@@ -1052,7 +1052,7 @@ def test_seam_pass_multiple_neighbours():
             fail(f"neighbour at x={rect.x} is {got}, expected {want} — it was blended against a "
                  "border line the other pair had already moved")
             return
-    ok("several neighbours on one side contribute their mean, each read pre-blend (§6)")
+    ok("several neighbors on one side contribute their mean, each read pre-blend (§6)")
 
     swapped, rects2, _ = build()
     mod.seam_pass(swapped, [(rects2[0], "E", rects2[2]), (rects2[0], "E", rects2[1])], 1)

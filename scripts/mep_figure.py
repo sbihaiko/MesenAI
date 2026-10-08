@@ -296,7 +296,7 @@ def figure_caption(pack: E.Pack, figure: Figure, names=None):
 def figure_palettes(pack: E.Pack, figure: Figure, cells):
     """`(swatches, labels)` for the figure's `palettes` band: first-use order
     in the figure's **reading order** (row `dy`, then column `dx` - the order
-    `export_figure` places cells), each group labelled the way the `guides`
+    `export_figure` places cells), each group labeled the way the `guides`
     layer labels the cell: its home-sheet `index`, else its position in the
     figure. Same contract as `compose_engine.Pack.export` and
     `artist_map.panorama_palettes` (2026-09-23 follow-up, defect (b))."""
@@ -611,7 +611,7 @@ def _owned_pixels(pack: E.Pack, entries, i, others, unit):
 
 def _is_blank(sheet: E.Sheet, cell: dict, cache=None) -> bool:
     """True when the cell's recorded art (its `*.orig.png` crop) is fully
-    transparent: a tile of colour 0 only, which the NES never draws (#452).
+    transparent: a tile of color 0 only, which the NES never draws (#452).
     A sheet with no usable twin is not called blank. `cache` (orig path ->
     decoded twin, `_twin_crop`'s) keeps a figure import to one decode per
     twin instead of one per painted cell (#466 review)."""
@@ -985,7 +985,7 @@ def import_figure(pack: E.Pack, png_path: Path, scratch=None) -> dict:
             raise FigureError(f"{entry['sheet']}: cell for node {entry.get('node')} is gone")
         if _is_blank(sheet, cell, twins):
             # #452: the NES draws nothing for an all-transparent tile, so
-            # paint on it can only be a neighbour's ink spilling into its rect.
+            # paint on it can only be a neighbor's ink spilling into its rect.
             report["blank"].append(_blank_record(entry, cell))
             continue
         report["painted"] += 1
@@ -1181,7 +1181,7 @@ def cmd_import(args) -> int:
               "flip the game draws them with (ADR-0178), and the game mirrors the art back (#463)")
     if report["blank"]:
         print(f"  {len(report['blank'])} fully transparent tile(s) skipped: the NES draws nothing there, "
-              "so paint over them is a neighbour's and stays off the sheet (#452)")
+              "so paint over them is a neighbor's and stays off the sheet (#452)")
         for b in report["blank"]:
             print(f"    {b['sheet']} cell {b['index']} (node {b['node']}"
                   + (f", {b['pose']}" if b["pose"] else "") + f"): {', '.join(b['keys']) or '?'}")

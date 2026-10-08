@@ -96,7 +96,7 @@ ADR-0239 s4 reads as `did-not-warp`. The letter is not the problem (the
 keyboard offers H); the round is. They are left out on that evidence, and
 the evidence is recorded rather than the conclusion alone.
 
-WHY NO PASSWORD HERE IS SYNTHESISED. The arithmetic in the paragraph above is
+WHY NO PASSWORD HERE IS SYNTHESIZED. The arithmetic in the paragraph above is
 the round of a password the validator ACCEPTS, not an acceptance test, and the
 difference is measured: ten probes of one shape, `AAAA?` for ? = A..J
 (runs/f1418/bubblebobble/probe/accept5/), leave exactly one accepted - AAAAB,

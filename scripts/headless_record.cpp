@@ -24,7 +24,7 @@
 //of running an input script, so a pack can be recorded off a real playthrough
 //rather than a blind scripted one. It is mutually exclusive with "input=" (two
 //players fighting over the same pad) and with "state=" (a movie carries its own
-//start state and power cycles the console itself). The Core recognises exactly
+//start state and power cycles the console itself). The Core recognizes exactly
 //two containers, by content and not by extension (MovieManager::Play): a zip
 //holding "Input Log.txt" is a BizHawk .bk2, one holding "GameSettings.txt" is a
 //Mesen .mmo. There is no .fm2 reader. Anything else is dropped without a word -
@@ -92,7 +92,7 @@
 //what scripts/check_hq4x_screenshot.sh asserts for HQ4x (P.7).
 //With "widescreen" the WideScrn switch is on (VideoConfig.AspectRatio =
 //Widescreen): on a NES game the capture/screenshot is the ADR-0253 Reveal
-//frame, 384 px wide, whose centre 256 columns are the standard picture.
+//frame, 384 px wide, whose center 256 columns are the standard picture.
 //With "shader=<preset.slangp>" a RetroArch shader preset is configured the way
 //the Video settings configure one. It must change nothing this tool writes - a
 //shader is a display effect, never a recording one (ADR-0237);
@@ -151,7 +151,7 @@
 //a NesPpuState. NesTypes.h keeps the ABI the exact one the core was built with.
 #include "NES/NesTypes.h"
 #include "NES/NesWidescreenReveal.h"
-//ADR-0253 W.6: the standard centre of an extended frame is measured by the same
+//ADR-0253 W.6: the standard center of an extended frame is measured by the same
 //function the unit tests assert, not by a second copy of the arithmetic here.
 #include "Shared/Video/WidescreenFrameFlow.h"
 //ADR-0185 sec. 4 as amended 2026-09-14 (issue #201): the desync gate's rules
@@ -1656,7 +1656,7 @@ RecordMovieFrom recordStockFrom = RecordMovieFrom::CurrentState;
 	}
 	//Power-on RAM defaults to RamState::Random, which is a second source of
 	//run-to-run variation on top of the one F9.14 removed: a game that reads
-	//uninitialised RAM takes a different path, and the recording differs even
+	//uninitialized RAM takes a different path, and the recording differs even
 	//when both runs cover the same frames. The core's own deterministic replay
 	//harness zeroes it for the same reason (RecordedRomTest::Run).
 	//record-stock= is the negative control for record-share=: it must run under
@@ -1893,7 +1893,7 @@ RecordMovieFrom recordStockFrom = RecordMovieFrom::CurrentState;
 		//the console itself, which resets the frame counter, so the run's frame
 		//budget below counts from the movie's first frame with nothing to add.
 		MoviePlay((char*)moviePath.c_str());
-		//MovieManager::Play drops a file it does not recognise on the floor: no
+		//MovieManager::Play drops a file it does not recognize on the floor: no
 		//player is constructed, no message is shown, and MoviePlay returns void.
 		//The refusal is synchronous and happens on this thread, so the poll below
 		//is a fact and not a race - _player is either set or empty by the time
@@ -2239,7 +2239,7 @@ RecordMovieFrom recordStockFrom = RecordMovieFrom::CurrentState;
 					borders.Left, borders.Right, borders.Top, borders.Bottom, borders.Colour, borders.IsBlank ? 1 : 0);
 
 				//ADR-0253: on a NES Reveal frame (384x240, times a scale
-				//filter's factor) the standard picture is the centre 256
+				//filter's factor) the standard picture is the center 256
 				//columns. Its checksum is what scripts/accuracy_compare.py's
 				//"widescreen" arm compares against the vanilla arm's whole
 				//frame - the extra columns must leave it bit-identical.
@@ -2319,7 +2319,7 @@ RecordMovieFrom recordStockFrom = RecordMovieFrom::CurrentState;
 				//run's frame error, so a case that wants to prove it no longer is
 				//has to be able to make the read slow on purpose. Off unless the
 				//variable is set - nothing else in the harness reads it, and it
-				//changes no behaviour of its own.
+				//changes no behavior of its own.
 #ifdef _MSC_VER
 				//getenv is not deprecated, MSVC's CRT just says so (C4996), and
 				//this file is built by the makefile only - the guard keeps the

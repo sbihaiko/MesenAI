@@ -91,7 +91,7 @@ def test_inferred_art_is_marked_in_the_page_an_artist_reads():
         root = _kit(td, _fragment("chr", files=[
             {"path": "chr/Chr_0.png", "title": "page 0", "cells": 256, "seen": False}]))
         text = A.render_markdown(A.build_kit(root))
-        check("inferred - check it" in text, "a ROM fill is labelled as inferred in ARTIST.md")
+        check("inferred - check it" in text, "a ROM fill is labeled as inferred in ARTIST.md")
         check("never paint it" in text, "the page tells the artist the .orig.png is the reference")
         check("mep_build.py build" in text and "cp -R" in text,
               "the page says to build a copy of the recording, not the recording itself")

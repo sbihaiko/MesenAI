@@ -116,7 +116,7 @@ PALETTE = np.array([[int(v[0:2], 16), int(v[2:4], 16), int(v[4:6], 16)] for v in
 
 
 def _colour_counts(path: Path, scale: int) -> np.ndarray:
-    """Distinct colours per 8x8 NES cell, for an image at `scale`x native."""
+    """Distinct colors per 8x8 NES cell, for an image at `scale`x native."""
     rgb = np.asarray(Image.open(path).convert("RGB"), dtype=np.uint32)
     return _cell_colour_counts((rgb[:, :, 0] << 16) | (rgb[:, :, 1] << 8) | rgb[:, :, 2], scale)
 
@@ -232,7 +232,7 @@ def _decode_tile(tile: bytes) -> np.ndarray:
 
 
 def background_plane(frame: _GridFrame, shapes: dict, palettes: dict) -> np.ndarray:
-    """240x256 plane of NES colour numbers for the frame's background alone."""
+    """240x256 plane of NES color numbers for the frame's background alone."""
     plane = np.full((NATIVE[1], NATIVE[0]), -1, dtype=np.int16)
     backdrops = Counter()
     for r in range(ROWS):

@@ -9,7 +9,7 @@ its bare twin pointing at the same PNG cell (F9.28 dual emission), so a
 condition hit and a miss draw identical pixels and no screenshot sweep can
 tell them apart. `HdNesPack::GetMatchingTile` returns the first entry in
 file order whose conditions pass, so re-pointing each *line class* at an
-unmistakable cell turns that decision into a colour:
+unmistakable cell turns that decision into a color:
 
   `[cond]<tile>` (gated)              -> Y(8) | CYAN(16)   | B(8) cell
   bare line with NO gated sibling

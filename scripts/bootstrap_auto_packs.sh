@@ -99,7 +99,7 @@ record_one() {
 	# On 2026-09-05 eight of thirty runs exited non-zero this way; the cause was
 	# a watchdog that budgeted wall clock from the recording's *emulated*
 	# seconds, which stopped meaning anything once the frame limiter came off
-	# (#165). Judge the artefact, report the code.
+	# (#165). Judge the artifact, report the code.
 
 	local rec
 	rec=$(python3 "$ROOT/scripts/mep_project.py" next "$folder") || { echo "FAIL   $name (cannot number the next recording of $folder)"; return 0; }

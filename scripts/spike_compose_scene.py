@@ -116,7 +116,7 @@ def sprite_group_stems(sheets_dir: Path):
 # -- background: a whole screen filled from the directional evidence ---------
 
 def is_flat(img):
-    """True when a node's art is a single colour — a filler/blank metatile.
+    """True when a node's art is a single color — a filler/blank metatile.
 
     The most-*seen* background node is almost always one of these (a sky or a
     black backing tile fills most of most screens), so seeding a scene with it
@@ -132,10 +132,10 @@ def fill_perplexity(grid):
 
     Counting *distinct* nodes was the first attempt and it picks the wrong
     seed: the title-screen logo tiles a whole screen with one glyph plus a
-    scattering of neighbours, which scores high on distinctness while looking
+    scattering of neighbors, which scores high on distinctness while looking
     like wallpaper. Perplexity asks the honest question instead — how many
     nodes is this screen *effectively* made of — so one node covering most
-    cells is penalised however many rare companions it drags along."""
+    cells is penalized however many rare companions it drags along."""
     counts = {}
     total = 0
     for row in grid:
@@ -158,7 +158,7 @@ def fill_background(pack: E.Pack, seed: int, cols: int, rows: int):
 
     `background_rank` collapses direction to rank a flat list; a screen needs
     the direction kept, so each cell is scored against the two already-placed
-    neighbours that constrain it — the one to its west (an `E` edge) and the
+    neighbors that constrain it — the one to its west (an `E` edge) and the
     one to its north (an `S` edge) — using the same conditional mass ADR-0164
     persists. Deterministic: best score, ties by node id.
 
@@ -167,7 +167,7 @@ def fill_background(pack: E.Pack, seed: int, cols: int, rows: int):
     tile, so the screen fills with one node and the level's structure never
     appears. Reuse is therefore damped — a node's score is divided by how many
     cells it already occupies — which keeps the choice deterministic while
-    letting the second- and third-most-likely neighbours through. The damping
+    letting the second- and third-most-likely neighbors through. The damping
     strength is a judgement call, not a measured constant."""
     adj = pack.adjacency
     grid = [[None] * cols for _ in range(rows)]
@@ -266,7 +266,7 @@ def seed_candidates(pack: E.Pack, members, cols, rows, want=6):
     same choice, laid out so it can be made by eye.
 
     Which is why the panels are picked for spread, not for score alone. Two
-    seeds a few cells apart in the same region walk into the same neighbours
+    seeds a few cells apart in the same region walk into the same neighbors
     and compose the same screen twice; six near-identical panels are not a
     choice. A candidate is kept only when its vocabulary overlaps every panel
     already taken by less than `_PANEL_OVERLAP`."""

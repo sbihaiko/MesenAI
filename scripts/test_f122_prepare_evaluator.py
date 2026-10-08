@@ -7,7 +7,7 @@ The second one is a frame the *recorder* had already claimed: a pack's
 drawn at priority 20, i.e. after the `<tile>` layer (ADR-0050, ADR-0156), so on
 a second it matches, every `<tile>` rule under it is invisible and no painted
 cell can ever reach the game. `choose_frame` scores a candidate by *counting
-probe colours* found on its frame, and that count is fooled: the probe paints
+probe colors* found on its frame, and that count is fooled: the probe paints
 each rule `(255, g, b)` and upscaled art carries pixels that match those by
 coincidence - which the capture's own pixels then hide. Tetris 2's F14.2
 re-score is the measured case (its 40 s frame is `screen002.png`, its chosen
@@ -53,9 +53,9 @@ def fail(msg):
     print(f"FAIL: {msg}")
 
 
-# A one-tile background design (a solid, unmistakable colour once decoded by
+# A one-tile background design (a solid, unmistakable color once decoded by
 # `tile_pixels`) and a bare NES palette word - shape only matters for this
-# file, not what colour it draws as.
+# file, not what color it draws as.
 SOLID_TILE = "FF" * 8 + "00" * 8
 PAL = "0F162A30"
 
@@ -161,12 +161,12 @@ def capture_owned_tests(tmp):
     the panel would paste from the cell the capture covers, one outside it, and
     a recorded screen 64x32 at scale 4 - the frame's top-left 2x1 cells. Two
     candidate seconds are offered: 40 s, whose frame is that screen (with one
-    stray pixel of a rule's own probe colour on it, the coincidence the colour
+    stray pixel of a rule's own probe color on it, the coincidence the color
     count reads as "that rule is drawn here"), and 20 s, whose frame draws a
     rule for real. `subprocess.run` is replaced, so no emulator runs: the
     "Core" below is the two facts the probe asks it for - a recorded screen's
     painted PNG is what the frame shows where it lands, and a `<tile>` rule is
-    its crop's colour."""
+    its crop's color."""
     romdir = tmp / "romdir"
     rom = romdir / "Game (1993) (Nintendo).nes"
     (romdir / rom.stem).mkdir(parents=True)
@@ -191,7 +191,7 @@ def capture_owned_tests(tmp):
     sibling = romdir / rom.stem
 
     def painted(rel, x, y):
-        """The colour `paint_probe` gave one crop of the probe pack it installed."""
+        """The color `paint_probe` gave one crop of the probe pack it installed."""
         img = _repaint.read_png(sibling / "mep/textures" / rel)
         off = img.offset(x, y)
         return bytes(img.px[off:off + 3])
@@ -207,7 +207,7 @@ def capture_owned_tests(tmp):
         shots = Path(cmd[5]).parent / "mesen-home/Screenshots"
         shots.mkdir(parents=True, exist_ok=True)
         if "hdpack-off" in cmd:
-            #Not one colour, or the probe would call the frame a blank screen.
+            #Not one color, or the probe would call the frame a blank screen.
             img = _repaint.Image(256, 240, bytearray(b"".join(
                 bytes((x % 256, 0x30, 0x30, 0xff)) for y in range(240) for x in range(256))))
         else:
@@ -219,7 +219,7 @@ def capture_owned_tests(tmp):
                         src, off = cap.offset(x, y), img.offset(x, y)
                         img.px[off:off + 4] = cap.px[src:src + 4]
                 #The rule at crop 0,0 is under the capture: the game drew it and
-                #the screen PNG hid it, and this one pixel is all a colour count
+                #the screen PNG hid it, and this one pixel is all a color count
                 #can still find of it.
                 paint(img, 200, 200, 201, 201, painted("sheets/unsorted.png", 0, 0))
             else:

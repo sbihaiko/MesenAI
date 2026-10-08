@@ -76,7 +76,7 @@ case "$SOURCE" in
 esac
 
 # /usr/bin/lipo and /usr/bin/nm are xcrun shims that refuse to run without an
-# accepted Xcode licence; the Command Line Tools carry the real binaries.
+# accepted Xcode license; the Command Line Tools carry the real binaries.
 CLT=/Library/Developer/CommandLineTools/usr/bin
 LIPO="$CLT/lipo"; [[ -x "$LIPO" ]] || LIPO=lipo
 NM="$CLT/nm"; [[ -x "$NM" ]] || NM=nm

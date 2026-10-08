@@ -7,7 +7,7 @@ vocabulary cells. Two things inflate the cell count without adding a subject:
 - **Bank duplication.** A mapper that swaps CHR banks per animation frame
   (MMC2 in Punch-Out!!, MMC3 elsewhere) delivers the same drawing under a
   different tile key, so the vocabulary holds it twice, pixel for pixel.
-- **Animation neighbours.** Consecutive frames of one figure differ in a few
+- **Animation neighbors.** Consecutive frames of one figure differ in a few
   pixels; each still costs its own hand-painted cell today.
 
 This measures both: exact-duplicate collapse and near-duplicate collapse at a

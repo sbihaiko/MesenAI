@@ -238,7 +238,7 @@ def main():
             #Issue #543's client half: a read, a save and a frame request each
             #send the one request they name and nothing else, so the client
             #never moves the console on its own account. Whether the session
-            #honours that is the ROM-backed check's business
+            #honors that is the ROM-backed check's business
             #(scripts/test_step_emu_rom.py) - this is the boundary where a
             #future refactor would slip a synchronizing run in.
             inert = emu.frame()

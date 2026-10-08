@@ -652,7 +652,7 @@ def _the_unit_that_can_move_is_the_drawn_key():
               "every count is reported", f"{a['tiles']} {a['seen']} {a['keys']}")
 
         # The palette is half the key: a session that drew the same tile data
-        # as the baseline in another colour holds a cell the baseline does not.
+        # as the baseline in another color holds a cell the baseline does not.
         x = {"name": "x", "status": "ok",
              "hires": str(_hires(tmp / "x" / "hires.txt", 109, ["AAAA"]))}
         y = _hires(tmp / "y" / "hires.txt", 109, ["AAAA"])

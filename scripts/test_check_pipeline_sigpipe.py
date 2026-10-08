@@ -67,7 +67,7 @@ def fail(msg):
 # --- assertion 1: the labels check itself -----------------------------------
 
 def real_labels():
-    """The (name, colour, description) triples the shipped script declares."""
+    """The (name, color, description) triples the shipped script declares."""
     block = re.search(
         r"^LABELS=\((.*?)^\)$", LABELS_SCRIPT.read_text(encoding="utf-8"), re.S | re.M
     )
@@ -258,7 +258,7 @@ def is_early_exit_reader(segment):
 def split_pipelines(line):
     """The pipelines in one logical line: a list of segment lists.
 
-    Quotes are honoured, so a `|` inside a pattern (`grep -qE 'a|b'`) or inside
+    Quotes are honored, so a `|` inside a pattern (`grep -qE 'a|b'`) or inside
     `gh --jq '.[].name'` is literal. A command substitution is not: the pipes in
     `X="$(grep -n f | head -1 | cut -d: -f1)"` are real ones, which is what a
     quote-only splitter misses. `||`, `&&`, `&` and `;` end the pipeline in

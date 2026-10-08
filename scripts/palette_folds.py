@@ -51,19 +51,19 @@ DEFAULT_PALETTE_ARGB = [
 #
 # THE RULE, read off the NES palette and never off the picture:
 #
-#   NES colour byte c: row = c >> 4, hue = c & 0x0F. The four rows of one hue
-#   column ARE the console's brightness ramp for that colour
+#   NES color byte c: row = c >> 4, hue = c & 0x0F. The four rows of one hue
+#   column ARE the console's brightness ramp for that color
 #   ($2C -> $1C -> $0C -> $0F). Ten indices render pure black in the 2C02 table
 #   ($0D-$0F, $1D-$1F, $2E, $2F, $3E, $3F); a black entry carries no hue and is
 #   a wildcard.
 #
 #   Only the palette indices the tile ACTUALLY PAINTS are compared - a pattern
-#   that paints colours 0 and 3 does not care what 1 and 2 hold.
+#   that paints colors 0 and 3 does not care what 1 and 2 hold.
 #
 #   INERT  - the two palettes render the pattern to identical RGB. No judgement
 #            at all; the cells are the same picture.
 #   FADE   - every painted entry keeps its hue and none gets brighter, i.e. the
-#            game moved those colours down their own ramps.
+#            game moved those colors down their own ramps.
 #   Neither - a painted entry changed hue. A different picture. Collapsing a
 #            green enemy onto a red one would destroy evidence (ADR-0183 3),
 #            so it is never folded, however close the two happen to render.
@@ -84,7 +84,7 @@ DEFAULT_PALETTE_ARGB = [
 #
 # What this does NOT do is collapse a pattern to one cell. 1642 is Zelda's
 # *pattern* count, not its picture count: its most-repeated patterns carry ~7
-# hue families (grey, olive $x8, green $xB, cyan $xC, red $x6, blue $x2, brown
+# hue families (gray, olive $x8, green $xB, cyan $xC, red $x6, blue $x2, brown
 # $x7), each a 3-5 step ramp. 30 keys become 7 cells, not 1.
 
 HUE_DRIFT_GATE_DEG = 25.0
@@ -114,7 +114,7 @@ def _luma(c):
 
 
 def palette_entries(palette: str):
-    """`"0F0B1B2B"` -> the four NES colour indices, colour 0 first."""
+    """`"0F0B1B2B"` -> the four NES color indices, color 0 first."""
     v = int(palette, 16)
     return [(v >> ((3 - k) * 8)) & 0x3F for k in range(4)]
 
@@ -190,8 +190,8 @@ def palette_relation(tile_data: str, cell_palette: str, other_palette: str,
     `relation` is "inert" (same RGB on every painted entry), "fade" (the cell's
     palette further down the same ramps), "brighter" (the cell's palette is a
     fade of `other`, so rebuilding `other` needs a Brightness above 1) or
-    "colourway" (a painted entry changes hue, or the residual fails the drift
-    gate). The first three are folds; a colourway is another picture (ADR-0230
+    "colorway" (a painted entry changes hue, or the residual fails the drift
+    gate). The first three are folds; a colorway is another picture (ADR-0230
     Decision item 1, ADR-0183 3). `brightness` is always measured from the
     cell's palette to `other`. The F14.4 measurement's pairwise test, and what
     `MesenSheets::ClassifyPaletteRelation` ports."""

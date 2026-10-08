@@ -321,7 +321,7 @@ second table, `$05c5` (32 at the start, 0 at the win). Only Up+B from
 x = 100–128, or Right+Up+B from x = 100, lands, and only while the mouth
 is open; the search on `$05c5` with survival first took 105 windows of
 60 f and no death from arms-dead to `$003b` set. `stage3-boss.txt` (Up+B
-bursts from the left and centre lanes, diagonals, a prone burst) records
+bursts from the left and center lanes, diagonals, a prone burst) records
 that room (517 poses, 12 cycles, 355 sequences — the arms' sweep is
 not periodic); `stage3-boss-probe` (the stage-1 probe from the same state)
 reads Bill's run both ways as `port1` at 8 repeats each, the room being
@@ -354,7 +354,7 @@ holds and 4 repeats, under the rule's 4-window floor. The soldiers' run,
 at 37 repeats, correctly has no driver. The base solver applies to the
 second base unchanged except for its stage check, now relative to the
 state it starts from, and three things this base taught: the bullets
-converge toward the vanishing point, so a core off the centre is hit
+converge toward the vanishing point, so a core off the center is hit
 prone from a lane 24–48 px farther out than the core itself (a core at
 x = 104 falls to a prone burst from x = 56–80, one at 152 from 184–216); a
 core's HP nibble regenerates between bursts, so only the cores-left
@@ -500,7 +500,7 @@ beside its routes:
   `expr`, and the modulo is what keeps a column a column while both bytes wrap
   (F14.15, `docs/validation/slices/f1415-jev-adoption-2026-09-26.md` §3).
   Two of its top-level keys name the fields the run judges on — `progress` (the
-  number the search maximises and a stall is measured against) and `screen`, with
+  number the search maximizes and a stall is measured against) and `screen`, with
   `screen_width`, so "the start of the current screen" is a boundary the rewind
   ladder can hold. `--ram-map`, `--progress-field` and `--screen-field` override
   the file and its defaults.

@@ -21,13 +21,13 @@ blind to are checked here, because both let a consolidation pass silently:
    Nothing failed: 0231 has a file, so the id resolves either way. A claim about
    the register is a citation of it, and it is checked here.
 
-Two numbering conventions are in use and both are recognised:
+Two numbering conventions are in use and both are recognized:
 
   * a heading carrying the number   `### 5. Spec amendment (MEP-v1 §6)`
   * a numbered paragraph             `**2. Two keys, two jobs.**`
     bold or not, at the start of a line - ADR-0138's 56 Clarifications and
     ADR-0177's Decision are plain, ADR-0206's six Decision items are bold, and
-    the first version of this check recognised neither the bold form nor the
+    the first version of this check recognized neither the bold form nor the
     plain one, reporting 21 citations of ADR-0206/0157/0165 as broken when all
     three number their sections perfectly well. It then grew an allow-list to
     excuse them, which is how a scanner's own blind spot turns into a bug filed

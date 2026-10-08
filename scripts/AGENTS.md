@@ -1166,7 +1166,7 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   relation, so neither says a column is another one flipped. A sheet
   is captioned by the run's own `--names` entry, failing that by the
   **subjects** its poses are filed under in that file (most cells first, the
-  key humanised - the `subjects` prose goes to `notes[]` once), and failing
+  key humanized - the `subjects` prose goes to `notes[]` once), and failing
   that by the run/pose id plus the measured counts; a subject is never read
   off a palette, a size or a thumbnail. Cells
   are padded to **their own row's** figure box (the rest grid bins figures by

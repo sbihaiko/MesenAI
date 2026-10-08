@@ -62,7 +62,7 @@ def _cell_with_key(cell, node):
 def make_pack(root: Path, with_poses: bool) -> Path:
     root = T.make_pack(root, with_obj_sheet=True, scale=SCALE)
     sheets = root / "textures" / "sheets"
-    # Sprite vocabulary: five nodes, each with its own key and its own colour.
+    # Sprite vocabulary: five nodes, each with its own key and its own color.
     voc = [_cell_with_key(T._sprite_cell(i, n, 1000 - i), n) for i, n in enumerate(SPRITE_NODES)]
     T._write_sheet(sheets, "sprites", "sprites", voc, 8, 4, scale=SCALE)
     # The group: nodes 0..4 cut out of the vocabulary; its evidence is the
@@ -334,7 +334,7 @@ def _recorded_pack(root: Path, with_poses: bool) -> Path:
     """`make_pack` with the key source replaced by a recording (ADR-0231): every
     key is drawn from the recorder's own pattern page, so the built manifest
     names no `sheets/` image at all and no key has a sheet owner (#498's shape).
-    The recorded crops carry colours no sheet cell has, standing in for the
+    The recorded crops carry colors no sheet cell has, standing in for the
     scale filter the recorder's pages went through."""
     root = make_pack(root, with_poses=with_poses)
     textures = root / "textures"
@@ -928,7 +928,7 @@ def test_an_import_into_a_pack_that_does_not_build_is_refused():
 
 
 def _blank_node(pack_dir: Path, node: int):
-    """Make `node`'s cell fully transparent (all colour 0) on every sprite
+    """Make `node`'s cell fully transparent (all color 0) on every sprite
     sheet, twin and painted sheet alike: the blank sprite tile a game parks
     in a metasprite (Castlevania's `0000...` in Simon's walk, #452)."""
     sheets = pack_dir / "textures" / "sheets"
@@ -1058,7 +1058,7 @@ def test_cli_round_trip():
 def test_the_figure_palette_band_follows_first_use_in_reading_order_and_is_labelled():
     """The `palettes` band of a figure follows the same contract as a sheet's
     (`artist_kit_assemble.py` says so to the artist): first use in reading
-    order, each group labelled with the cell index it belongs to."""
+    order, each group labeled with the cell index it belongs to."""
     with tempfile.TemporaryDirectory() as td:
         pack_dir = make_pack(Path(td) / "pack", with_poses=False)
         # Node 0 (the first placed cell, at (0, 0)) wears a palette that sorts
@@ -1085,7 +1085,7 @@ def test_the_figure_palette_band_follows_first_use_in_reading_order_and_is_label
         check(first["node"] == 0 and (first["x"], first["y"]) == (0, 0), "node 0 is the first cell in reading order")
         labels = seen.get("swatch_labels")
         check(labels and labels[0] == str(first["index"]),
-              "the leftmost group is labelled with the first cell's index", str(labels))
+              "the leftmost group is labeled with the first cell's index", str(labels))
         check(len(labels or ()) == 2 and labels[1] != labels[0],
               "the shared palette is listed once, under the first cell that wears it", str(labels))
         check(seen.get("swatches") == F.ora_writer.nes_swatches(["FF36160F", "0F0F0F0F"]),

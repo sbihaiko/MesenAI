@@ -51,7 +51,7 @@ hires.txt + two OGGs) and asserts the whole build/pack/rename cycle:
   * #457: an index-keyed (CHR ROM) mirror cell is un-baked like a CHR RAM
     one, sheet and twin in lockstep, a crop an alias shares is un-baked once,
     and a second build leaves it alone;
-  * #456: a background key the recording keeps transparent at colour 0 is
+  * #456: a background key the recording keeps transparent at color 0 is
     rebuilt transparent there (sheet and twin), an opaque key and the
     artist's paint stay opaque, and a second build is byte-identical, also
     when two keys share a crop (a bank-swapping game's alias); a translucent
@@ -154,7 +154,7 @@ PAL_HEX = f"{PAL_WORD:08X}"
 
 
 def render_tile(shape: int, pixels, x: int, y: int, width: int, height: int):
-    """SheetRender::RenderTile: opaque on all four colour indexes."""
+    """SheetRender::RenderTile: opaque on all four color indexes."""
     colors = [NES_PALETTE[(PAL_WORD >> ((3 - c) * 8)) & 0x3F] | 0xFF000000 for c in range(4)]
     data = tile_bytes(shape)
     for row in range(8):
@@ -900,16 +900,16 @@ def muted_paint_tests(root: Path):
         ok("#338: untouched sheets holding the same key are not warned about")
 
 
-# `Core/NES/NesDefaultVideoFilter.cpp`'s 2C02 row for the four colours of
+# `Core/NES/NesDefaultVideoFilter.cpp`'s 2C02 row for the four colors of
 # PAL_HEX (0F 16 2A 30): the palette a recorded `screenNNN.orig.png` is drawn
 # with. The sheet fixtures above use a stand-in palette on purpose; a capture
-# has to carry the real colours, or it would not be the recorder's.
+# has to carry the real colors, or it would not be the recorder's.
 CAPTURE_RGB = (0x000000, 0xB53120, 0x5CE430, 0xFFFEFF)
 
 
 def capture_png(shapes, scale: int = 1) -> bytes:
     """A `screenNNN.orig.png`: a 256x240 backdrop with each (shape, x, y) of
-    `shapes` drawn in the 2C02 colours of PAL_HEX, nearest-upscaled by `scale`
+    `shapes` drawn in the 2C02 colors of PAL_HEX, nearest-upscaled by `scale`
     exactly as `HdPackBuilder::CaptureScreen` writes the twin."""
     pixels = [[0xFF101010] * 256 for _ in range(240)]
     for shape, x, y in shapes:
@@ -1383,7 +1383,7 @@ def flip_baked_key_tests(root: Path):
              f"unexpected {sorted(got - want)[:3]}")
 
     # A pack recorded before the ADR has no `source`. Its baked keys are
-    # recognised by the un-flip test and the build fails rather than emitting
+    # recognized by the un-flip test and the build fails rather than emitting
     # cells that would render nothing. Only a sprite sheet can carry a baked
     # flip, so that is where the detector has to keep firing.
     legacy, _v, _c = make_sheet_folder(root, "flip-baked-legacy", flip_baked=True,
@@ -1475,7 +1475,7 @@ def mirror_h_pixel_key_tests(root: Path):
     # to leave, but we need the round-trip to rewrite the baked pixels).
     paint(folder, "spr000.png", 0, 0, 8, color=0xFFA020F0)
     # Re-apply the baked flip over the paint so the sheet still looks mirrored
-    # the way a real kit cell does — paint() filled a flat colour; rebuild a
+    # the way a real kit cell does — paint() filled a flat color; rebuild a
     # mirrored pattern the artist would have seen, distinct from the unflipped
     # want.
     px = png_read(sheets / "spr000.png")
@@ -1536,7 +1536,7 @@ def condition_fallback_twin_tests(root: Path):
     folder, _v, cells = make_sheet_folder(root, "cond-fallback", sprite_sheet=True)
     # Key source: one tile under a spriteNearby condition, with its bare twin
     # (recorder order). A second tile under a condition only — build must
-    # synthesise the missing twin.
+    # synthesize the missing twin.
     key0, key1 = tile_hex(0), tile_hex(1)
     # HdPackLoader: <condition>name,spriteNearby,dx,dy,tileData,palette
     lines = ["<ver>107", "<scale>2", "<system>nes",
@@ -1561,7 +1561,7 @@ def condition_fallback_twin_tests(root: Path):
     else:
         fail(f"#256: key0 missing cond/bare twin: cond={has_cond} bare={has_bare}")
     if has_cond1 and has_bare1:
-        ok("#256: a conditional-only key source still gets a synthesised bare twin")
+        ok("#256: a conditional-only key source still gets a synthesized bare twin")
     else:
         fail(f"#256: key1 missing synthesised bare twin: cond={has_cond1} bare={has_bare1}")
 
@@ -1752,7 +1752,7 @@ def index_keyed_unflip_tests(root: Path):
 def _render_bg(shape: int, transparent0: bool):
     """RenderTile at 1x; `transparent0` is what HdPackBuilder::GenerateHdTile
     writes for a background key drawn over a behind-background sprite
-    (`TransparencyRequired`): colour index 0 left at alpha 0."""
+    (`TransparencyRequired`): color index 0 left at alpha 0."""
     out = blank(8, 8)
     render_tile(shape, out, 0, 0, 8, 8)
     if transparent0:
@@ -1765,12 +1765,12 @@ def _render_bg(shape: int, transparent0: bool):
 
 
 def backdrop_transparency_tests(root: Path):
-    """#456: a background key the recording keeps transparent at colour 0 (a
+    """#456: a background key the recording keeps transparent at color 0 (a
     behind-background sprite was drawn over it, `TransparencyRequired`) has to
-    stay transparent in the rebuilt pack. The sheet shows colour 0 as the
+    stay transparent in the rebuilt pack. The sheet shows color 0 as the
     opaque backdrop, so a rebuilt `textures/` layer that copied it painted the
     floor over Glass Joe. Keys the recording draws opaque stay opaque, and a
-    colour-0 pixel the artist repainted is paint, not backdrop."""
+    color-0 pixel the artist repainted is paint, not backdrop."""
     folder = root / "backdrop-transparency"
     tex = folder / "textures"
     sheets = tex / "sheets"
@@ -1787,7 +1787,7 @@ def backdrop_transparency_tests(root: Path):
         ["<ver>107", "<scale>1", "<system>nes", "<supportedRom>2A4E126D0286BEA0BF503C80A12352C57539F76B",
          "<img>old.png"] + [f"<tile>0,{tile_hex(s)},{PAL_HEX},{8 * i},0,1,N" for i, s in enumerate(shapes)])
         + "\n", encoding="utf-8")
-    # The sheet: every colour index opaque, as SheetRender draws a background cell.
+    # The sheet: every color index opaque, as SheetRender draws a background cell.
     sheet = blank(24, 8)
     for i, s in enumerate(shapes):
         for r, row in enumerate(_render_bg(s, False)):
@@ -1795,7 +1795,7 @@ def backdrop_transparency_tests(root: Path):
     write_pair(sheets, "metatiles", sheet, 1)
     (sheets / "metatiles.json").write_text(_one_cell_sidecar("metatiles", "metatiles", [
         f'{{ "tile": "{tile_hex(s)}", "palette": "{PAL_HEX}" }}' for s in shapes]), encoding="utf-8")
-    # The artist repaints one colour-0 pixel of C (and one ink pixel).
+    # The artist repaints one color-0 pixel of C (and one ink pixel).
     zero_c = next((r, c) for r in range(8) for c in range(8) if _render_bg(23, True)[r][c] == 0)
     ink_c = next((r, c) for r in range(8) for c in range(8) if _render_bg(23, True)[r][c] != 0)
     painted = png_read(sheets / "metatiles.png")
@@ -1821,7 +1821,7 @@ def backdrop_transparency_tests(root: Path):
         want_c[r][c] = 0xFFA020F0
     got_a, got_b, got_c = crop_of(21), crop_of(22), crop_of(23)
     if got_a == _render_bg(21, True):
-        ok("#456: a key the recording draws transparent at colour 0 is rebuilt transparent there")
+        ok("#456: a key the recording draws transparent at color 0 is rebuilt transparent there")
     else:
         fail(f"#456: key A's rebuilt crop is not the recording's transparency "
              f"({opaque(got_a)} of 64 px opaque, want {opaque(_render_bg(21, True))})")
@@ -1830,7 +1830,7 @@ def backdrop_transparency_tests(root: Path):
     else:
         fail(f"#456: key B (opaque in the recording) changed in the rebuild ({opaque(got_b)} of 64 px opaque)")
     if got_c == want_c:
-        ok("#456: a repainted colour-0 pixel stays paint; the untouched backdrop of that key goes transparent")
+        ok("#456: a repainted color-0 pixel stays paint; the untouched backdrop of that key goes transparent")
     else:
         fail(f"#456: key C mixed up the artist's paint and the backdrop "
              f"({opaque(got_c)} of 64 px opaque, want {opaque(want_c)})")
@@ -1913,8 +1913,8 @@ def backdrop_shared_crop_tests(root: Path):
 
 
 def backdrop_unbake_and_sprite_tests(root: Path):
-    """#456 with #255: a mirrored cell is un-baked before its colour 0 is
-    cleared, so the colour-0 positions are the unflipped tile's - the baked
+    """#456 with #255: a mirrored cell is un-baked before its color 0 is
+    cleared, so the color-0 positions are the unflipped tile's - the baked
     tile's would clear ink and leave backdrop, and the next build, reading a
     plain sidecar, would clear again. A sprite sheet is not a background crop
     and is never punched (test_mep_figure's #435 recipe caught both)."""
@@ -1946,9 +1946,9 @@ def backdrop_unbake_and_sprite_tests(root: Path):
     if run("build", str(folder)) is None:
         return
     if crop(png_read(sheets / "metatiles.png"), 0, 0, 8) == _render_bg(bg, True):
-        ok("#456: an un-baked mirror cell clears colour 0 at the unflipped tile's positions")
+        ok("#456: an un-baked mirror cell clears color 0 at the unflipped tile's positions")
     else:
-        fail("#456: the un-baked mirror cell was punched at the baked tile's colour-0 positions")
+        fail("#456: the un-baked mirror cell was punched at the baked tile's color-0 positions")
     if png_read(sheets / "spr000.png") == sprite:
         ok("#456: a sprite sheet is not a background crop and keeps its pixels")
     else:
@@ -2005,7 +2005,7 @@ def index_keyed_alias_unflip_tests(root: Path):
 def backdrop_translucent_paint_tests(root: Path):
     """#456 (PR #475 review): on a rebuild the key source's `<img>` is the
     artist's own sheet, so a translucent brush pixel is not the recorder's
-    `TransparencyRequired` signature (alpha 0 at a colour-0 position). Such a
+    `TransparencyRequired` signature (alpha 0 at a color-0 position). Such a
     key keeps its opaque backdrop."""
     folder = root / "backdrop-translucent-paint"
     tex = folder / "textures"
@@ -2037,7 +2037,7 @@ def backdrop_translucent_paint_tests(root: Path):
 
 
 def png_rgb(pixels) -> bytes:
-    """`png_rgba` without the alpha channel (colour type 2), as an editor saves an opaque sheet."""
+    """`png_rgba` without the alpha channel (color type 2), as an editor saves an opaque sheet."""
     rgba = png_rgba(pixels)
     height, width = len(pixels), len(pixels[0])
     raw = bytearray()
@@ -2055,7 +2055,7 @@ def png_rgb(pixels) -> bytes:
 
 def backdrop_rgb_sheet_tests(root: Path):
     """#456 (PR #475 review): an opaque working sheet saved as 8-bit RGB (no
-    alpha channel), with its twin, still gets colour 0 cleared on a
+    alpha channel), with its twin, still gets color 0 cleared on a
     see-through key - the sheet gains the alpha channel it needs."""
     folder = root / "backdrop-rgb-sheet"
     tex = folder / "textures"
@@ -2076,9 +2076,9 @@ def backdrop_rgb_sheet_tests(root: Path):
     if kinds != [6, 6]:
         fail(f"#456: an RGB sheet kept its opaque colour 0 (PNG colour types {kinds}, want RGBA)")
     elif png_read(sheets / "metatiles.png") == _render_bg(shape, True) == png_read(sheets / "metatiles.orig.png"):
-        ok("#456: an RGB sheet and its twin gain alpha and keep colour 0 transparent")
+        ok("#456: an RGB sheet and its twin gain alpha and keep color 0 transparent")
     else:
-        fail("#456: an RGB sheet was converted but colour 0 was not cleared")
+        fail("#456: an RGB sheet was converted but color 0 was not cleared")
 
 
 def painted_sprite_ownership_tests(root: Path):
@@ -2311,8 +2311,8 @@ def pack_extra_data_tests(root: Path, rom: Path):
     label is the disclosure, and losing it on export un-labels the pack), and
     the zip's membership is documented here as it stands: `folder.rglob("*")`
     ships every file under the folder, including a non-pack subfolder. Whether
-    `pack` should exclude anything is a decision (an ADR), not a behaviour this
-    test invents; what it pins is that the behaviour cannot change silently."""
+    `pack` should exclude anything is a decision (an ADR), not a behavior this
+    test invents; what it pins is that the behavior cannot change silently."""
     folder = make_author_folder(root, name="studio")
     if run("build", str(folder)) is None:
         return

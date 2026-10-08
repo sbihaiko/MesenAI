@@ -24,7 +24,7 @@ Given a `[Cheat]` submission issue (the Issue Form
                         scripts/test_cheat_decoder_parity.py);
       - `description`   one line, 1-80 characters, no links;
       - `duplicate`     no earlier live `cheat:valid` issue and no bundled
-                        entry has the same SHA-1 and the same normalised code;
+                        entry has the same SHA-1 and the same normalized code;
   * the console label (`console:nes`/`gb`/`gbc`/`sms`, ADR-0248 section 7);
   * the comment the workflow posts, naming every failed check and saying the
     code was "checked for form, not for effect";
@@ -125,7 +125,7 @@ def parse_form(body):
 
 
 def load_bundled(path=BUNDLED):
-    """(names by SHA-1, normalised codes by SHA-1) from the bundled NES list.
+    """(names by SHA-1, normalized codes by SHA-1) from the bundled NES list.
     Each entry is decoded the way the UI loads it; an entry the Core refuses
     has no effect to duplicate and is skipped."""
     names, codes = {}, {}
@@ -241,7 +241,7 @@ def decode_submission(console, code):
 
 def live_duplicate(sha1, normalised, number, live):
     """The lowest-numbered earlier live `cheat:valid` issue with the same SHA-1
-    and normalised code, else None. Earlier only: re-validating the first
+    and normalized code, else None. Earlier only: re-validating the first
     submission never makes it a duplicate of a later copy."""
     for issue in sorted(live, key=lambda i: i.get("number", 0)):
         other = issue.get("number", 0)

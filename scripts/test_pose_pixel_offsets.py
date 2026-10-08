@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Headless suite for ADR-0225 (F12.18): a pose keeps its pixel offsets.
 
-On `test_mep_figure`'s synthetic pack (a sprite vocabulary of solid-colour
+On `test_mep_figure`'s synthetic pack (a sprite vocabulary of solid-color
 cells at scale 2) with a `poses.json` whose tiles carry `px`/`py`/`z` in the
 shape Contra's player has (legs at y 14 overlapping the torso's bottom rows,
 a torso 4 px right of the legs, a foot 3 px off the grid). What is asserted:

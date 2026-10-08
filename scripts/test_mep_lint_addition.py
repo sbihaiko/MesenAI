@@ -178,8 +178,8 @@ ROM_SIDECAR = {"cells": [{"index": 0, "synthetic": True,
 
 def check_padded_index_tokens_are_one_key():
     """`000`/`00` and `217`/`0217` are one CHR index at <ver>103+ —
-    HdPackLoader::ReadTileData FromHex's both — so an <addition> spelt the
-    legacy way is keyed by a <tile> rule mep_build re-spelt (#382)."""
+    HdPackLoader::ReadTileData FromHex's both — so an <addition> spelled the
+    legacy way is keyed by a <tile> rule mep_build re-spelled (#382)."""
     items = pack([tile(REAL), tile(SYNTH, 8, 0),
                   addition(anchor=("000", REAL[1]), target=("217", SYNTH[1]))], ROM_SIDECAR)
     check(not messages(items, "error"),

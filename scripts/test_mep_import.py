@@ -140,7 +140,7 @@ def png_palette(width, height, indices, palette, trns=b""):
 
 
 def cell_png(cols, rows, scale, tag=0):
-    """A picture whose every `8*scale` cell is a distinct flat colour, so a
+    """A picture whose every `8*scale` cell is a distinct flat color, so a
     crop's pixels identify the cell the crop came from."""
     size = 8 * scale
     px = []
@@ -216,7 +216,7 @@ def test_png_codec(root: Path):
     else:
         ok("a palette PNG (color type 3) decodes through PLTE + tRNS to RGBA")
 
-    # 8-bit grey and RGB widen to RGBA too.
+    # 8-bit gray and RGB widen to RGBA too.
     grey = root / "grey.png"
     grey.write_bytes(png(struct.pack(">IIBBBBB", 2, 2, 8, 0, 0, 0, 0),
                          bytes([0, 7, 200, 0, 9, 250])))
@@ -224,7 +224,7 @@ def test_png_codec(root: Path):
     if tuple(img.px[:4]) != (7, 7, 7, 255):
         fail(f"grey PNG decoded to {tuple(img.px[:4])}, expected (7,7,7,255)")
     else:
-        ok("an 8-bit grey PNG widens to RGBA")
+        ok("an 8-bit gray PNG widens to RGBA")
 
     # A crop outside the image is None, not a short read.
     if img.block(0, 0, 3) is not None or img.block(-1, 0, 1) is not None:
@@ -861,8 +861,8 @@ def test_index_render(root: Path):
     """The render itself: a key's own 16 bytes through the key's own palette,
     at the pack's scale."""
     table = MI._nes_palette()
-    # Row 0 low plane 0x80 = one pixel of colour 1 at x=0; high plane 0x40 =
-    # one pixel of colour 2 at x=1. Everything else is colour 0.
+    # Row 0 low plane 0x80 = one pixel of color 1 at x=0; high plane 0x40 =
+    # one pixel of color 2 at x=1. Everything else is color 0.
     data = bytes([0x80, 0, 0, 0, 0, 0, 0, 0, 0x40, 0, 0, 0, 0, 0, 0, 0])
     pal = [0x0F, 0x19, 0x29, 0x08]
     hex_pal = "".join(f"{c:02X}" for c in pal)
@@ -878,17 +878,17 @@ def test_index_render(root: Path):
     flat_block = MI.render_pattern("00" * 16, hex_pal, 1)
     if len(flat_block) != 8 * 8 * 4 or any(flat_block[i:i + 4] != bytes(table[pal[0]]) + b"\xff"
                                           for i in range(0, len(flat_block), 4)):
-        fail("a zero pattern did not render as one flat colour-0 cell")
+        fail("a zero pattern did not render as one flat color-0 cell")
     else:
-        ok("a blank pattern renders as colour 0, opaque (a recorded cell's own convention)")
+        ok("a blank pattern renders as color 0, opaque (a recorded cell's own convention)")
 
-    # The key's palette decides the colours: the same bytes under another
+    # The key's palette decides the colors: the same bytes under another
     # palette is another picture.
     other = MI.render_pattern(data.hex().upper(), "00010203", 1)
     if other == MI.render_pattern(data.hex().upper(), hex_pal, 1):
         fail("two palettes rendered the same picture")
     else:
-        ok("the key's palette word decides the cell's colours")
+        ok("the key's palette word decides the cell's colors")
 
 
 def test_index_chr_ram(root: Path):
@@ -1293,7 +1293,7 @@ def test_index_range(root: Path):
         ok("a CHR ROM run adds no shape and writes no sheet")
 
     # The trap this filter is read through: `int(field, 16)` is not a
-    # normalisation, it is a reading. The same token, two `<ver>`s.
+    # normalization, it is a reading. The same token, two `<ver>`s.
     dec = write_pack(root, "dec", ["<ver>102", "<scale>2", "<tile>0,200,FF072235,0,0,1,N"])
     hexp = write_pack(root, "hexp", ["<ver>103", "<scale>2", "<tile>0,200,FF072235,0,0,1,N"])
     if (MI.read_index(dec / "textures" / "hires.txt", pack, rom)["palettes"],
@@ -1302,7 +1302,7 @@ def test_index_range(root: Path):
         fail("<ver> did not decide how the index field is read")
     else:
         ok("`200` is tile 200 below <ver>103 (in range) and 0x200 = 512 at 103+ (dropped): the "
-           "loader's own reading, not a hex normalisation")
+           "loader's own reading, not a hex normalization")
 
 
 def test_index_opens_no_png(root: Path):
@@ -1486,7 +1486,7 @@ def test_apply_ips():
     if out != bytes(19) + b"\x22\x22\x11" + bytes(2) or n != 2:
         fail(f"stream order/truncate: {out.hex()} ({n} records)")
     else:
-        ok("apply_ips applies records in stream order and honours the truncate offset")
+        ok("apply_ips applies records in stream order and honors the truncate offset")
     for what, blob, needle in (
             ("a BPS", b"BPS1" + bytes(20), "not an IPS"),
             ("a truncated record", b"PATCH" + ips_record(0, b"ab")[:4], "truncated"),

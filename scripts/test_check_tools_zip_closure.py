@@ -23,7 +23,7 @@ Assertions:
      copied list (this is how `library_job.py` and `replay_chain.sh` are
      required by `record_library.sh`);
   4. the guard still reports a synthetic miss, and the exclusion list is
-     documented, current and honoured.
+     documented, current and honored.
 
 Usage: python3 scripts/test_check_tools_zip_closure.py
 """
@@ -285,7 +285,7 @@ def test_synthetic_shell_dependency_miss_is_reported():
     ok("the guard reports what a staged shell tool invokes and the zip lacks")
 
 
-# --- 5. the exclusion list is documented, current and honoured -------------
+# --- 5. the exclusion list is documented, current and honored -------------
 def test_exclusions_are_documented_and_current():
     named = raw_guide_named_tools()
     stale = []
@@ -305,7 +305,7 @@ def test_exclusions_are_documented_and_current():
 def test_excluded_tools_are_not_required():
     named_tools = getattr(guard, "named_tools", None)
     if named_tools is None:
-        fail("check_tools_zip_closure.py has no named_tools(), so the exclusions cannot be honoured")
+        fail("check_tools_zip_closure.py has no named_tools(), so the exclusions cannot be honored")
         return
     wrongly_required = sorted(set(exclusions()) & set(named_tools()))
     if wrongly_required:

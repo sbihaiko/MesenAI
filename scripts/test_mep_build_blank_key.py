@@ -8,11 +8,11 @@ the spark is correct, but `mep_build` then saw the blank key's cell as painted
 too, and moved its rules off `hud.png` onto the painted `usr017` crop, so a tile
 the NES never draws started drawing magenta.
 
-The rule under test: an all-zero sprite tile (palette key `FF......`, colour 0
+The rule under test: an all-zero sprite tile (palette key `FF......`, color 0
 only) never claims its key through paint (ADR-0153 §4, amended 2026-09-25), and
 among its untouched crops one whose cell nobody painted wins over one whose
 cell was painted for another key. A background tile of the same all-zero data
-is not blank (colour 0 is the backdrop, which the NES draws), so it keeps the
+is not blank (color 0 is the backdrop, which the NES draws), so it keeps the
 ordinary rule. Synthetic sheets in a temp dir; no emulator, no ROM.
 """
 
@@ -162,7 +162,7 @@ def same_sheet_repeat_case(root: Path):
 
 def guard_cases(root: Path):
     """What must not change: a painted non-blank sprite tile still claims its
-    key over hud.png, and an all-zero *background* tile (colour 0 is the
+    key over hud.png, and an all-zero *background* tile (color 0 is the
     backdrop the NES draws) painted on its sheet still claims its key."""
     folder = make_folder(root, "guards", [(BODY, SPR_PAL), (BLANK, BG_PAL)])
     sheets = folder / "textures" / "sheets"

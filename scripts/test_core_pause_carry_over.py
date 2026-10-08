@@ -27,7 +27,7 @@ Each case loads the real MesenCore through ctypes in a child process (InitDll +
 InitializeEmu with no window, like the headless tests) and builds a synthetic
 NROM (scripts/gen_synthetic_nrom.py, no game data). The two ROMs differ by one
 byte in PRG space that is never executed - the game is a JMP-to-self - so they
-are distinct files without being distinct behaviour.
+are distinct files without being distinct behavior.
 
 The library is a build product (`make core`); when absent the file says so and
 exits 0. MESEN_CORE_LIB=<path> picks a specific build, which is how the
