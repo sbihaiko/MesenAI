@@ -67,10 +67,11 @@ namespace Mesen.ViewModels
 		//falls straight to its generic cover rather than having a name guessed from
 		//its file (ADR-0265 section 3, ADR-0003).
 		//
-		//The record travels whole rather than as a bare name because the console is
-		//part of the key the collection is asked under (ADR-0265 section 6), and the
-		//table is the only thing that knows it: BoxArtLibrary drops an answer filed
-		//under another machine rather than asking the wrong repository for it.
+		//The record travels whole rather than as a bare name because the console it
+		//carries is what picks the repository and the cache folder the cover comes
+		//from (ADR-0265 section 6), and the table is the only thing that knows it:
+		//BoxArtLibrary drops an answer only when the collection carries no CacheTag
+		//for that console - the one thing a cast of the two enums cannot say (#1067).
 		private static NoIntroRomName? NoIntroName(string sha1) => NoIntroNameTable.ForSha1(sha1);
 	}
 }
