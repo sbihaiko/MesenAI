@@ -16,13 +16,22 @@ using Xunit.Sdk;
 namespace Mesen.HeadlessTests;
 
 //#1078: the library sheet used to be a fixed 1000 px wide, so a non-maximized
-//window narrower than 1048 px drew a sheet wider than the window - centred, so
+//window narrower than that drew a sheet wider than the window - centred, so
 //BOTH edges fell outside it and the window clipped them: the header lost its
 //start ("ry · 40 games…"), the console filter lost All and NES, the first grid
-//column was cut at the left and *Browse a file…* at the right. The rule is
+//column was cut at the left and *Browse a file…* at the right.
+//
+//The width is W-P19's own 1100 px (scripts/render_gui_wireframes.py:
+//c.sheet(1100, 620)), capped at the window itself. There is no horizontal
+//gutter to subtract: the sheet's XAML Margin is "0 24", vertical only, and the
+//backdrop around it carries no horizontal padding. The rule is
 //LibrarySheetFit's (host-free, UI.Tests); this is the crossing - that the view
 //applies it, so every header control and the first grid column sit inside the
 //window at a width W-P19's own 1100 px sheet does not fit in.
+//
+//The narrow case is 900 px, not 1000: a fixed 1000 px sheet fits a 1000 px
+//window exactly, so a 1000 px case passed on the old code and never reproduced
+//#1078 at all.
 //
 //The wide case is here too, as the no-regression half: with room, the sheet is
 //W-P19's own 1100 px.
@@ -142,7 +151,7 @@ public class PlayerLibraryNarrowWindowTests : IDisposable
 	public void A_window_narrower_than_the_wireframes_sheet_keeps_the_sheet_and_its_contents_inside_it()
 	{
 		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
-		(MainWindow window, MainWindowViewModel _) = OpenLibrary(1000);
+		(MainWindow window, MainWindowViewModel _) = OpenLibrary(900);
 
 		//The sheet itself first: everything below is inside it, so this is the
 		//assertion that fails while the width is the fixed 1000 (#1078).
@@ -224,5 +233,27 @@ public class PlayerLibraryNarrowWindowTests : IDisposable
 		Control sheet = Named(window, "PlayerRomPickerSheet");
 		Assert.Equal(1100, sheet.Bounds.Width, 0.5);
 		AssertInsideHorizontally(window, "PlayerRomPickerSheet");
+	}
+
+	//W-P19b puts Clear at the search field's own right end: the x belongs to the
+	//box, not to the sheet. The row spans the sheet, so a Clear docked to the
+	//right end of it lands at the sheet's edge - 834 px from the box on the
+	//wireframes' own 1100 px sheet, measured - and reads as a sheet-wide control
+	//rather than this field's way out.
+	[AvaloniaFact]
+	public void The_search_clears_x_sits_at_the_fields_right_edge()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model) = OpenLibrary(1400);
+
+		//Clear only shows while a query is on.
+		model.RomPicker.SearchQuery = "met";
+		Pump();
+
+		Rect box = BoxIn(window, "RomPickerSearch");
+		Rect clear = BoxIn(window, "RomPickerSearchClear");
+		double gap = clear.Left - box.Right;
+		Assert.True(gap >= -0.5 && gap <= 8,
+			$"Clear {clear} sits {gap} px from the search box's right edge {box.Right}");
 	}
 }
