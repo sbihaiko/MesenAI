@@ -10,16 +10,16 @@ be handed over, and the only honest way to find one is to ask the emulator
 whether the pack's rules reach the screen at that frame.
 
 The probe below does that. It builds the pack once, then repaints in the sheet
-PNGs every crop the built `hires.txt` already names, each with a colour that
+PNGs every crop the built `hires.txt` already names, each with a color that
 encodes which rule it is, installs that as `mep/` beside the ROM, and renders
-the candidate seconds. A colour on screen is proof that rule is drawn there.
+the candidate seconds. A color on screen is proof that rule is drawn there.
 
 Painting the *cells of a sidecar* instead is the obvious first attempt and
 does not work: only 295 of Tetris's 1483 sidecar tiles become `<tile>` lines,
 so most of the paint lands on art no rule reads. That was measured, not
 guessed.
 
-The frame then has to be handed over clean - the probe's colours are not what
+The frame then has to be handed over clean - the probe's colors are not what
 the evaluator should see - so the pack is installed unpainted at the chosen
 second and the state is minted there.
 
@@ -36,7 +36,7 @@ scores the feature as broken when the dispatcher handed over two screens.
 The 2026-09-19 sweep paid for this twice. Bubble Bobble's tilemap holds the whole
 "Bubble Bobble" logo and the frame the same state renders holds none of it: that
 run built a throwaway pack with one cell per distinct key of the copy table, 195
-of them in 195 colours, and found exactly **2** on the rendered frame, both the
+of them in 195 colors, and found exactly **2** on the rendered frame, both the
 blank tile. Tetris named the same thing from the other side, its tilemap reading
 `LINES-001` / `SCORE 000085` against a frame reading `LINES-000` / `SCORE 000000`.
 
@@ -62,7 +62,7 @@ nothing, and the logo sitting in VRAM is never fetched. So:
   `<tile>` layer, and the recorder writes it opaque and the size of the screen
   (ADR-0050, ADR-0156), so on a second it matches, the frame *is* that PNG and
   every `<tile>` rule on it is invisible - no painted cell can reach the game
-  there. The colour count cannot see that on its own: the rule colours are
+  there. The color count cannot see that on its own: the rule colors are
   `(255, g, b)` and upscaled art carries pixels that match them by coincidence,
   which the capture's own pixels then hide. Tetris 2's F14.2 re-score is the
   measured case - a 40 s frame that is `screen002.png` came back "drawing 3
@@ -73,7 +73,7 @@ nothing, and the logo sitting in VRAM is never fetched. So:
   is owned is refused by name instead of handed over;
 - after the scan, `moment_agreement` measures the claim instead of asserting it:
   it re-renders the state with the texture layer off, redraws every copy-table
-  cell in the emulator's own colours, and counts how many of the frame's 8x8
+  cell in the emulator's own colors, and counts how many of the frame's 8x8
   blocks a copy-table key explains. The number is in `report.json` and in the
   per-game index the evaluator reads, and a frame that fails the gate is
   re-chosen from the next-best candidate rather than shipped;
@@ -98,7 +98,7 @@ nothing, and the logo sitting in VRAM is never fetched. So:
   as `mep/` with the recording's `auto/` wildcards set aside (#420);
 - the frame is handed over twice. Tetris's halves were both right and came from
   different layers: the frame PNG is rendered with the pack installed, and a
-  captured `<background>` frozen at a neighbouring moment paints an old scoreboard
+  captured `<background>` frozen at a neighboring moment paints an old scoreboard
   over it, while the tilemap reads the live PPU. `capture_drift` measures that in
   pixels and `frames/<game>-screen.png` is the same state with the texture layer
   off - the picture the copy table actually answers for.
@@ -160,7 +160,7 @@ MOMENT_CELLS = 0.50
 #is deliberately small.
 MOMENT_TRIES = 2
 
-#A screen that is this much one colour has no background layer on it: the PPU
+#A screen that is this much one color has no background layer on it: the PPU
 #can draw at most 64 sprite tiles of the frame's 960, so everything else is the
 #backdrop. Bubble Bobble's 2026-09-19 frame is 59 917 of 61 440 pixels black,
 #with the whole title logo sitting unfetched in the nametable behind it. Counting
@@ -225,7 +225,7 @@ def sheet_kind(pack, rel):
 
 
 def paint_probe(pack, work, block=32, background_only=True):
-    """Repaint every crop a rule names, each in its own colour, and every
+    """Repaint every crop a rule names, each in its own color, and every
     recorded screen flat.
 
     `background_only` drops the sprite sheets: the cold read is a background
@@ -240,9 +240,9 @@ def paint_probe(pack, work, block=32, background_only=True):
     (ADR-0050, ADR-0156, #494). Painting them flat does both halves of that -
     a rule behind a screen is not counted as drawn at all, and
     `capture_owned` can say which cells the screen owns - where leaving their
-    art in place leaves a rule colour findable by coincidence on a frame no
-    rule reaches. Returns the rule colours, the rule count, and
-    `{probe colour: name}` for the screens."""
+    art in place leaves a rule color findable by coincidence on a frame no
+    rule reaches. Returns the rule colors, the rule count, and
+    `{probe color: name}` for the screens."""
     images, rules = rules_of(pack)
     if background_only:
         sprites = {i for i, rel in enumerate(images)
@@ -309,7 +309,7 @@ def render(rom, seconds, prefix, load=None, save=None, flags=()):
 
 
 def backdrop_share(shot):
-    """The largest share of the screen one colour holds, 0..1."""
+    """The largest share of the screen one color holds, 0..1."""
     img = _repaint.read_png(shot)
     counts = {}
     for i in range(0, len(img.px), 4):
@@ -423,7 +423,7 @@ def choose_frame(rom, pack, out, candidates):
                 #The frame is a recorded screen, whole. It is opaque and drawn
                 #after the `<tile>` layer, so nothing painted on this second can
                 #reach the display, and the rules it hides are exactly the ones
-                #a colour count cannot see are gone (#494).
+                #a color count cannot see are gone (#494).
                 names = ", ".join(sorted(owned))
                 log("probe", f"t={t}s: {names} owns "
                              f"{sum(len(c) for c in owned.values())} cell(s) of this "
@@ -551,9 +551,9 @@ def dump_coverage(table):
 def tile_pixels(doc):
     """The 8x8 the PPU draws for one copy-table cell, as 24 bytes per row.
 
-    The palette word is four NES colour indices, and `NES_PALETTE` is the table
+    The palette word is four NES color indices, and `NES_PALETTE` is the table
     the emulator's own screenshots come out in - measured, not assumed: every
-    one of the 11 distinct colours in a `hdpack-off` render of Bubble Bobble's
+    one of the 11 distinct colors in a `hdpack-off` render of Bubble Bobble's
     state is an entry of it. So a tile can be compared to the screen by bytes."""
     data = bytes.fromhex(doc["tile"])
     if len(data) != 16:
@@ -576,7 +576,7 @@ def moment_agreement(shot, table):
 
     `shot` is the state re-rendered with the texture layer off, so it is the
     game's own 256x240 output at exactly the frame the scan read. Every distinct
-    copy-table cell is drawn in the emulator's colours and looked up by bytes
+    copy-table cell is drawn in the emulator's colors and looked up by bytes
     over the screen's 8x8 blocks, at each of the 64 fine-scroll alignments; the
     best alignment wins. Blank cells are counted apart, because a black attract
     frame is explained end to end by one blank key and explains nothing."""
@@ -643,7 +643,7 @@ def capture_drift(rom, pack, state, out, frame_png):
     """How much of the handed-over frame is a frozen capture, not this moment.
 
     A pack's `textures/backgrounds/screenNNN.png` is gated on three probe tiles
-    (ADR-0050, ADR-0156), so a capture frozen at a neighbouring moment can win on
+    (ADR-0050, ADR-0156), so a capture frozen at a neighboring moment can win on
     this frame and repaint it. Tetris's sweep run is the measured case: with the
     captures in place its frame reads `LINES-000` / `SCORE 000000` while the PPU
     state - the thing the tilemap dumps - reads `LINES-001` / `SCORE 000085`.
@@ -1059,7 +1059,7 @@ def main(argv=None):
     if not report["one_moment"]:
         log("warn", "no candidate second puts this pack's nametable on the screen "
                     "- the panel is handed over with the measurement above, and a "
-                    "run that finds nothing to recolour is measuring that")
+                    "run that finds nothing to recolor is measuring that")
 
     window = visible_window(frames / f"{safe}-screen.png", table)
     report["window"] = window

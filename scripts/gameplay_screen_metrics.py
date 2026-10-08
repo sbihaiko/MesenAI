@@ -5,7 +5,7 @@ Split out of the probe when it hit the 200-line guardrail. The seam is real,
 not arbitrary: everything here reads *pixels* out of the captured screens,
 while the probe itself reads sidecars and turns numbers into a verdict.
 
-`backgrounds/*.orig.png` are nearest-neighbour Nx replications of the native
+`backgrounds/*.orig.png` are nearest-neighbor Nx replications of the native
 256x240 frame, so sampling every Nth pixel recovers that frame exactly - which
 is what makes a stdlib-only implementation fast enough (91 packs in 5.9 s).
 """
@@ -29,7 +29,7 @@ MIN_SCREENS_FOR_CHURN = 5
 def _screen_tiles(path):
     """The 960 native 8x8 tiles of one captured screen, as RGB byte strings.
 
-    The captured screens are written at the pack's scale with nearest-neighbour
+    The captured screens are written at the pack's scale with nearest-neighbor
     replication, so sampling every Nth pixel recovers the native frame exactly.
     """
     bmp = mep_build._png_pixels(Path(path))

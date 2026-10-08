@@ -21,7 +21,7 @@ figures that touched) is not laid out at all, because both of its halves are
 entries of this same file and the artist would be painting a bystander.
 
 Every cell of a grid is padded to the grid's largest figure box and the figure
-is bottom-aligned and centred in it, so a row can be painted across without
+is bottom-aligned and centered in it, so a row can be painted across without
 re-measuring each phase.
 
 The sheets are ordinary ADR-0153 composed sheets (`usrNNN.png` +
@@ -81,7 +81,7 @@ def _sprites_classify_screen_fixed(pack) -> bool:
     `_SpriteNode.screen_fixed` defaults to False, so the loaded sidecar cannot
     tell "classified, not pinned" from "recorded before the ADR". The raw file
     can: the field is present on every node or on none. Absence is not a
-    licence to guess — it means the kit cannot separate a score digit from a
+    license to guess — it means the kit cannot separate a score digit from a
     figure, and has to say so."""
     try:
         doc = json.loads((Path(pack.sheets_dir) / "adjacency.json")
@@ -187,7 +187,7 @@ class KitBuilder:
     # -- art resolution ---------------------------------------------------
 
     def _has_art(self, node: int) -> bool:
-        """`Pack.has_node_art`, memoised: `poses.json` indexes the whole sprite
+        """`Pack.has_node_art`, memoized: `poses.json` indexes the whole sprite
         vocabulary while the sheets only draw the cells the recorder routed, so
         this is asked once per node and then thousands of times."""
         hit = self._art_ok.get(node)
@@ -197,7 +197,7 @@ class KitBuilder:
         return hit
 
     def drawable(self, pose):
-        """`{node: (dx, dy)}` normalised to the drawn figure's own top-left, or
+        """`{node: (dx, dy)}` normalized to the drawn figure's own top-left, or
         `{}` when no sheet draws any of its tiles. A member with no pixels is
         dropped rather than blanked — ADR-0164 §3's rule: a hole is honest."""
         tiles = {n: xy for n, xy in pose.tiles.items() if self._has_art(n)}
@@ -291,7 +291,7 @@ class KitBuilder:
         of `columns`, then split across sheets every `max_rows`.
 
         The bin is the figure's exact box, so a row is uniform and nothing is
-        padded to a neighbour's size — a 6x9 boss and a 1x2 pickup do not share
+        padded to a neighbor's size — a 6x9 boss and a 1x2 pickup do not share
         a cell size. Bins are ordered by their most-seen member and each bin
         keeps the file's most-seen-first order inside it, which is as close to
         "most-seen first" as binning can stay; a variant still follows its base,
@@ -355,7 +355,7 @@ class KitBuilder:
         out twice on a sheet — a tile two phases share is emitted in both cells
         — so `(pose, node)` is what names a cell, and `node` alone does not.
 
-        A figure is padded to **its own row's** box, centred horizontally and
+        A figure is padded to **its own row's** box, centered horizontally and
         aligned on its bottom row — poses of one animation share a baseline the
         way they share a floor on screen, so a row can be painted across without
         re-measuring each phase. The box is the row's, not the sheet's: a 6x9
@@ -392,7 +392,7 @@ class KitBuilder:
         return out, boxes
 
     def drawable_pixels(self, pose):
-        """`{node: (px, py)}` of the drawable tiles, normalised to the drawn
+        """`{node: (px, py)}` of the drawable tiles, normalized to the drawn
         figure's own pixel top-left (ADR-0225 §1; dx*8 on an older sidecar)."""
         tiles = {n: pose.pixels[n] for n in pose.tiles if self._has_art(n)}
         if not tiles:
@@ -404,7 +404,7 @@ class KitBuilder:
     def figure_rows(self, grid, unit: int = FIGURE_UNIT):
         """`[[(pose, ox, oy), ...], ...]` in 1x pixels: the same rows and
         columns as `placements`, each figure at pixel precision (ADR-0225 §2).
-        A row's box is its largest figure's pixel extent; figures are centred
+        A row's box is its largest figure's pixel extent; figures are centered
         and stand on the row's bottom edge (the baseline), and one empty cell
         (`SLOT_GAP * unit` px) separates two boxes and two rows — the margin
         between figures stays, only the gutter inside a figure is gone."""
@@ -483,7 +483,7 @@ def export_grid(pack, builder, grid, out_dir: Path, names=None):
     alternative would be phases with holes where the shared torso should be.
 
     No `context` is passed (ADR-0220 §3: present iff every cell has a stage
-    position): a sprite pose has no stage position in any recorded artefact —
+    position): a sprite pose has no stage position in any recorded artifact —
     `poses.json` and `adjacency.json` place a figure on the screen's floor
     bands, never on the stitched map — so a figure sheet's `.ora` carries four
     layers until a recording writes where a pose was seen on the stage."""
@@ -772,7 +772,7 @@ def _notes(pack, builder, grids, names, pack_arg):
     notes = [
         "Sprite surfaces (sheets/usr*.png) are grids of whole figures: one row is one "
         "animation, one column is one of its phases, read left to right. Each figure is "
-        "centred in a fixed box and stands on the same baseline as the rest of its row, so "
+        "centered in a fixed box and stands on the same baseline as the rest of its row, so "
         "a row can be repainted straight across without re-measuring each phase.",
         "Open the cycles first (a loop the recorder saw repeat), then the sequences (an "
         "ordered run that does not loop), then the grids of figures no run ordered — that "

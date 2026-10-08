@@ -184,7 +184,7 @@ def check_canonical_key():
     check(A.canonical_key((pattern + "00", pal), 108)[0] == pattern.upper(),
           "the loader reads 16 byte pairs and ignores the rest of a longer pattern")
     check(A.canonical_key(("0" * 30 + "01", pal), 108)[0] == "0" * 30 + "01",
-          "a pattern is never re-spelt as the index its digits would name")
+          "a pattern is never re-spelled as the index its digits would name")
     check(A.canonical_key(("00", "F161927"), 108) == ("00", "0F161927"),
           "the palette is FromHex'd too: padded to 8 digits")
     check(A.canonical_key(("zz", "xx"), 108) == ("ZZ", "XX"),

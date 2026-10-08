@@ -1,8 +1,8 @@
 """Find the four-quadrant mirror marker in control screenshots and read its
 orientation. Marker cell: TL red(200,0,0) | TR green(0,200,0) /
 BL blue(0,0,200) | BR white(220,220,220). H flip puts green left of red,
-V flip puts blue above red. Connected components over all four colours;
-per component the per-colour centroids decide the flip.
+V flip puts blue above red. Connected components over all four colors;
+per component the per-color centroids decide the flip.
 """
 import sys
 from collections import deque

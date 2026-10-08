@@ -1160,7 +1160,7 @@ def lint_nes_hires(src: Source, rel: str, rep: Report):
             elif imgs[idx] and scale and (x + 8 * scale > imgs[idx][0] or y + 8 * scale > imgs[idx][1]):
                 rep.warning(where, f"<tile> at ({x},{y}) is outside image #{idx} ({imgs[idx][0]}x{imgs[idx][1]}) — renders as fully transparent, load continues (HdPackTileInfo::Init bounds check)")
             # #382: compare the key as the loader parses it, not as the author
-            # spelt it — `000` and `00` are one CHR index at <ver>103+, and a
+            # spelled it — `000` and `00` are one CHR index at <ver>103+, and a
             # short token is decimal below that (HdPackLoader::ReadTileData).
             data, pal = mep_addition.canonical_key((tokens[1], tokens[2]), version)
             key = (data, pal, tuple(sorted(used)))

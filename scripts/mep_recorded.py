@@ -3,7 +3,7 @@
 A recorded pack's `textures/hires.txt` points every key at the recorder's own
 pattern pages (`chr/Chr_*.png`), which went through the pack's scale filter
 (xBRZ by default, `HdPackBuilder::GenerateHdTile`). A sheet crop is the raw
-tile upscaled nearest-neighbour (`SheetRender::RenderTile`). Pointing an
+tile upscaled nearest-neighbor (`SheetRender::RenderTile`). Pointing an
 untouched cell's key at its crop therefore changed what an unpainted rebuild
 rendered: 901 of 912 Castlevania rules drew other pixels than the recording.
 

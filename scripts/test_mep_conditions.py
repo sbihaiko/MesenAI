@@ -175,7 +175,7 @@ def test_a_dump_with_no_frames_is_refused_rather_than_read_as_empty():
 
 def test_routes_are_loaded_one_at_a_time_not_all_at_once():
     # Not a style point: six Contra recordings are ~1 GB of text and ~80 000
-    # retained frames, so a caller that materialises them runs out of memory on
+    # retained frames, so a caller that materializes them runs out of memory on
     # the slice's own bounded input.
     import inspect
     check(inspect.isgeneratorfunction(C.iter_routes),
@@ -480,7 +480,7 @@ def test_sprite_nearby_on_a_sprite_key_needs_no_join():
         c = C.parse_condition_line(f"<condition>n,spriteNearby,8,0,{U},{PAL}")
         v = C.evaluate(c, {(S, PALS)}, r)
         check(v.evaluable and v.state == "always held" and v.instances == 1,
-              "a sprite key's neighbour is read off the same OAM frame",
+              "a sprite key's neighbor is read off the same OAM frame",
               f"{v.state} {v.reason}")
         c = C.parse_condition_line(f"<condition>n,spriteNearby,8,0,{S},{PALS}")
         v = C.evaluate(c, {(U, PAL)}, r)

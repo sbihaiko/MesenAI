@@ -78,7 +78,7 @@ telling us the assumption is wrong.
 `StringUtilities::Split` (Utilities/StringUtilities.h) always pushes the
 remainder after the last delimiter, so `BizHawkMovie`'s
 `Split(line.substr(1), '|')` turns a BizHawk-style `|..|..|..|` into **four**
-columns, the last one empty — the behaviour reported at
+columns, the last one empty — the behavior reported at
 https://forums.nesdev.org/viewtopic.php?t=13844&start=270. In a release build
 the spurious column is harmless (`MesenMovie::SetInput` resets `_deviceIndex` to
 0 at the start of every poll row, so the extra column is simply never read), but

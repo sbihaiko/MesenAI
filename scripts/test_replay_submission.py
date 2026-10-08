@@ -345,7 +345,7 @@ def check_transient_fetch_is_no_verdict():
     verdict = next(st for st in steps if st.get("id") == "verdict")
     withdraw = next(st for st in steps if "Withdraw" in st.get("name", ""))
     if "EXIT_TRANSIENT" not in verdict["run"] and "75" not in verdict["run"]:
-        fail("AC-7 the verdict step recognises the transient exit code")
+        fail("AC-7 the verdict step recognizes the transient exit code")
         return
     if "steps.verdict.outputs.transient" not in str(withdraw.get("if", "")):
         fail(f"AC-7 the withdraw step skips a transient fetch failure: if={withdraw.get('if')!r}")

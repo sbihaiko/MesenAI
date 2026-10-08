@@ -39,7 +39,7 @@ import hashlib
 import json
 
 # Path segments / basenames excluded from the tree hash (ADR-0139): the
-# artefacts it names as "outside the discovered root".
+# artifacts it names as "outside the discovered root".
 _EXCLUDED_SEGMENTS = {"__MACOSX", "screenshots"}
 _EXCLUDED_BASENAMES = {".DS_Store"}
 
@@ -82,7 +82,7 @@ def digest_stream(handle, chunk_size: int = CHUNK) -> bytes:
 def _entry_digest(rel_path: str, value) -> bytes:
     """The 32-byte payload digest for one manifest entry. `value` is one of:
     the entry's bytes; a zero-arg callable returning them (pack.json needs
-    the bytes for canonicalisation, everything else is hashed as-is); or,
+    the bytes for canonicalization, everything else is hashed as-is); or,
     for non-pack.json entries, a zero-arg callable returning a binary file
     object -- hashed in CHUNK blocks so the pack is never held in RAM."""
     if isinstance(value, (bytes, bytearray, memoryview)):
@@ -103,7 +103,7 @@ def compute_tree_content_id(entries) -> str:
     files, where `value` is the entry's bytes, or a zero-arg callable that
     returns either the bytes or an open binary file object (see
     `_entry_digest`) -- the callable form lets a caller hash a large zip
-    member by member without materialising the whole pack. Rel paths use '/'
+    member by member without materializing the whole pack. Rel paths use '/'
     separators, relative to the root. Paths must be shorter than 256 bytes
     (the manifest stores the length in one byte). The manifest bytes are
     identical whichever form is used.

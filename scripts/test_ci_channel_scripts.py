@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""ADR-0204 §6: behaviour of the three scripts behind the `ci-latest` channel.
+"""ADR-0204 §6: behavior of the three scripts behind the `ci-latest` channel.
 
 - scripts/stage_ci_channel_assets.sh  - artifact dirs -> the six fixed asset
   names, all or nothing;

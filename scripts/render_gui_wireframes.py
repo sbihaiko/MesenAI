@@ -804,7 +804,7 @@ def w_p6():
     c.text(x0 + 86, y0 + 40, "Contra 80s", 19, 700, TEXT, "lm")
     c.text(x0 + 86, y0 + 62, "by Tastic · version 1.2 · CC BY-NC 4.0", 12.5, 400, TEXT2, "lm")
     # The pack's layers, one switch each, for this game only (a layer the pack
-    # lacks is a grey switch with "Not in this pack" under its name).
+    # lacks is a gray switch with "Not in this pack" under its name).
     g = (x0 + 24, y0 + 88, x1 - 24, y0 + 88 + 3 * 46)
     c.rrect(g, 12, fill=(248, 248, 250), outline=(232, 232, 236))
     for i, n in enumerate(("Textures", "Music", "ROM Patch")):

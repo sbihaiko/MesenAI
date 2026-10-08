@@ -31,7 +31,7 @@
 # caller falls back to dispatching build.yml.
 #
 # Only successful runs are candidates (status=success, re-checked on the
-# conclusion), so a failed or cancelled matrix can never feed a partial
+# conclusion), so a failed or canceled matrix can never feed a partial
 # channel. Candidates are tried newest first.
 set -euo pipefail
 

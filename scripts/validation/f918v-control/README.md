@@ -3,7 +3,7 @@
 Validator tooling, not a product or artist tool. It answers "which
 `hires.txt` rule won for this key in this frame?" from the pack side, with
 no change to `Core/`: the built pack is copied and each line class is
-re-pointed at a cell whose colour names the outcome (gated hit = cyan,
+re-pointed at a cell whose color names the outcome (gated hit = cyan,
 gated miss falling to the bare twin = magenta, no gate = orange,
 mirror-flagged key = solid four-quadrant marker whose order reads the OAM
 flip). Rationale and the run that used it:

@@ -38,7 +38,7 @@ PAGE = 16 * CELL
 PAL_A = "0F1628300"[:8]        # 0F 16 28 30
 PAL_B = "0F0616270"[:8]        # 0F 06 16 27
 
-# A palette the 2C02 table does not produce, to prove the tool reads its colours
+# A palette the 2C02 table does not produce, to prove the tool reads its colors
 # off the pack rather than assuming a table.
 CUSTOM = {0x16: (1, 2, 3, 0xFF)}
 
@@ -72,7 +72,7 @@ def packed_tile(i: int) -> bytes:
 
 
 def tile_bytes(i: int) -> bytes:
-    """A recognisable, non-degenerate 16-byte pattern per index."""
+    """A recognizable, non-degenerate 16-byte pattern per index."""
     lo = bytes(((i + r) * 37) & 0xFF for r in range(8))
     hi = bytes(((i * 5 + r * 11) ^ 0x5A) & 0xFF for r in range(8))
     return lo + hi
@@ -278,7 +278,7 @@ def states(doc):
 # per row), so nothing folds through an entry the tile never draws.
 FOLD_TILE = "CC" * 8 + "F0" * 8
 # The shape Zelda's fade rides on: `7F80808080808080FFFFFFFFFFFFFFFF` paints
-# only colours 2 and 3, which is why its 30 palettes collapse to ~7 cells.
+# only colors 2 and 3, which is why its 30 palettes collapse to ~7 cells.
 RAMP_TILE = "7F80808080808080" + "FFFFFFFFFFFFFFFF"
 
 
@@ -349,12 +349,12 @@ def test_two_colourways_of_one_pattern_are_never_folded():
 
 def test_a_rotated_ramp_is_not_a_fade():
     # FP class 1 of the corpus measurement: every entry keeps hue 0, so the
-    # structural rule fires, but the grey ramp is permuted rather than scaled.
-    # A multiplier preserves the ratios between a tile's colours; a rotation
+    # structural rule fires, but the gray ramp is permuted rather than scaled.
+    # A multiplier preserves the ratios between a tile's colors; a rotation
     # does not, and the drift gate is what catches it.
     kind, _b, drift = _fold("0F001030", "3F103000")
     check(kind is None,
-          "a rotated grey ramp is refused, not folded", f"kind={kind} drift={drift}")
+          "a rotated gray ramp is refused, not folded", f"kind={kind} drift={drift}")
 
 
 def test_one_entry_moving_while_the_others_hold_is_left_to_the_gate():
@@ -389,9 +389,9 @@ def test_a_palette_that_gets_brighter_is_never_a_fade_downwards():
 
 
 def test_only_the_indices_the_pattern_paints_are_compared():
-    # A pattern that paints colours 0 and 1 does not care what 2 and 3 hold,
+    # A pattern that paints colors 0 and 1 does not care what 2 and 3 hold,
     # and two palettes that differ only there are the same picture.
-    flat = "F000F000F000F000" + "0000000000000000"   # paints colours 0 and 1
+    flat = "F000F000F000F000" + "0000000000000000"   # paints colors 0 and 1
     check(K.painted_indices(flat) == [0, 1],
           "painted_indices reads the pattern, not the palette",
           str(K.painted_indices(flat)))
@@ -566,8 +566,8 @@ def test_the_fill_palette_is_read_off_the_pack_not_assumed():
         doc = sidecar(td / "kit", "Chr_00_0")
         check(doc["fillPalette"] == PAL_A,
               "the fill palette is the bank's most-recorded one", doc["fillPalette"])
-        # PAL_A's colour 1 is NES index 0x16, which the fixture renders in a
-        # colour the 2C02 table never produces.
+        # PAL_A's color 1 is NES index 0x16, which the fixture renders in a
+        # color the 2C02 table never produces.
         page = read_png(td / "kit" / "chr" / "Chr_00_0.png")
         fill = next(c for c in doc["cells"] if c["state"] == "fill")
         data = tile_bytes(fill["index"])
@@ -579,11 +579,11 @@ def test_the_fill_palette_is_read_off_the_pack_not_assumed():
                     found = True
                     check(page.get(fill["x"] + x * SCALE, fill["y"] + y * SCALE)
                           == CUSTOM[0x16],
-                          "a fill wears the pack's own colour for that palette index")
+                          "a fill wears the pack's own color for that palette index")
                     break
             if found:
                 break
-        check(found, "the fixture tile exercises colour 1")
+        check(found, "the fixture tile exercises color 1")
 
 
 def test_chr_ram_fills_only_what_a_prg_block_explains():
@@ -634,7 +634,7 @@ def test_the_legend_marks_evidence_fill_and_hole_apart():
             slot = next(s for s, v in st.items() if v == state)
             x, y = (slot % 16) * CELL, (slot // 16) * CELL
             ok = ok and legend.get(x, y) == rgba
-        check(ok, "each cell state gets its own legend colour")
+        check(ok, "each cell state gets its own legend color")
 
 
 def test_fill_rules_never_touch_the_pack_and_default_to_none():
@@ -867,7 +867,7 @@ def test_the_legend_gives_a_donated_cell_its_own_colour():
         legend = read_png(td / "kit" / "chr" / "Chr_00_0.legend.png")
         check(len({K.LEGEND_EVIDENCE, K.LEGEND_BORROWED, K.LEGEND_DONATED,
                    K.LEGEND_FOLDED, K.LEGEND_FILL, K.LEGEND_EMPTY}) == 6,
-              "the six cell states have six distinct legend colours")
+              "the six cell states have six distinct legend colors")
         ok = True
         for state, rgba in (("evidence", K.LEGEND_EVIDENCE),
                             ("borrowed", K.LEGEND_BORROWED),
@@ -875,7 +875,7 @@ def test_the_legend_gives_a_donated_cell_its_own_colour():
                             ("fill", K.LEGEND_FILL)):
             slot = next(s for s, v in st.items() if v == state)
             ok = ok and legend.get((slot % 16) * CELL, (slot // 16) * CELL) == rgba
-        check(ok, "a donated cell is painted its own colour, not green or amber")
+        check(ok, "a donated cell is painted its own color, not green or amber")
 
 
 def test_provenance_travels_into_the_fragment_and_its_notes():

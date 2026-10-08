@@ -564,13 +564,13 @@ def test_palettes_band_follows_first_use_and_labels_each_group():
     y0, h = rects[0]["y"], rects[0]["h"]
     first_colour = next(band.get(x, y0 + 1) for x in range(band.width)
                         if band.get(x, y0 + 1)[3] and band.get(x, y0 + 1) != mep_sentinel.SENTINEL_RGBA)
-    check(first_colour[:3] == sw[0][0], "the leftmost swatch is the first-used palette's first colour",
+    check(first_colour[:3] == sw[0][0], "the leftmost swatch is the first-used palette's first color",
           str(first_colour))
     first_x = next(x for x in range(band.width) if band.get(x, y0 + 1)[:3] == sw[0][0])
     holes = sum(1 for y in range(y0, y0 + h) for x in range(first_x) if band.get(x, y)[3] == 0)
     check(holes > 0, "the label is knocked out of the sentinel in front of its group")
     check(all(any(p == mep_sentinel.SENTINEL_RGBA for p in _pixels_in(band, r)) for r in rects if r["y"] == y0),
-          "a labelled band still leaves exact sentinel pixels in every first-row cell")
+          "a labeled band still leaves exact sentinel pixels in every first-row cell")
 
 
 def main():

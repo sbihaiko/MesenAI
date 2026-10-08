@@ -2,14 +2,14 @@
 
 `artist_bg_kit.py` decides what an artist is handed and what is thrown away, so
 the two decisions that must never drift are the two this suite pins: a cell
-that is one flat colour carries no art and is dropped *with its number said out
+that is one flat color carries no art and is dropped *with its number said out
 loud*, and cells that adjacency.json shows always sitting at the same offsets
 are one scenery element even when the recorder's own `objNNN` grouping split
 them across animation phases (the Contra base door sensor, the one background
 unit the 2026-09-13 human panel found missing).
 
 The fixture is a synthetic pack built here rather than `test_compose_engine`'s:
-that one paints every cell a single solid colour, which is exactly the input
+that one paints every cell a single solid color, which is exactly the input
 this tool exists to reject, so it cannot also be the input that proves the tool
 keeps anything.
 
@@ -208,10 +208,10 @@ def test_ink_ratio_separates_a_fill_from_a_drawing():
         by_node = {c["metatile"]: c for c in sheet.cells}
         flat = K.ink_ratio(K.cell_histogram(sheet, by_node[0]))
         drawn = K.ink_ratio(K.cell_histogram(sheet, by_node[3]))
-        check(flat == 0.0, "a cell of one colour has an ink ratio of exactly 0", str(flat))
+        check(flat == 0.0, "a cell of one color has an ink ratio of exactly 0", str(flat))
         check(drawn > 0.0, "a cell with a mark on it has ink", str(drawn))
         check(K.colour_name(K.cell_histogram(sheet, by_node[0]).most_common(1)[0][0])
-              == "#000000", "the fill colour is reported, not just the fact of it")
+              == "#000000", "the fill color is reported, not just the fact of it")
 
 
 def test_an_object_of_only_flat_cells_is_dropped_and_says_why():
@@ -222,7 +222,7 @@ def test_an_object_of_only_flat_cells_is_dropped_and_says_why():
               str(sorted(dropped)))
         why = dropped.get("obj000.png", "")
         check("2 cells" in why and "#000000" in why,
-              "the drop carries the cell count and the colour behind it", why)
+              "the drop carries the cell count and the color behind it", why)
         check(not any("obj000" in f["path"] for f in manifest["files"]),
               "and it is not emitted as a painting surface anyway")
 
@@ -305,7 +305,7 @@ def test_the_wall_never_fuses_into_one_unnameable_blob():
         _pack, _out, manifest = _kit(td)
         for entry in _by_unit(manifest, "element"):
             check(not ({"bg002", "bg003"} <= _ids(entry)),
-                  "a merely-frequent neighbour pair is not an element",
+                  "a merely-frequent neighbor pair is not an element",
                   str(sorted(_ids(entry))))
         check(len(_by_unit(manifest, "element")) == 1,
               "so the only element is the door, not the wall",

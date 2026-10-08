@@ -13,11 +13,11 @@ recording. Method, per pack:
 
   1. crop every `metatiles.orig.png` cell at 1x (the F5.4d pixel-exact twin);
   2. downsample every `backgrounds/screenNNN.orig.png` back to 256x240 (it is
-     a nearest-neighbour upscale by the pack scale, so this is exact);
+     a nearest-neighbor upscale by the pack scale, so this is exact);
   3. slide the sheet's grid over each screen - searching the pixel offset,
      since the vocabulary is cut relative to the fine scroll and the PNG is
      not - and record every position where a cell matches, compared
-     palette-agnostically (the vocabulary keys on shapes, not on colours).
+     palette-agnostically (the vocabulary keys on shapes, not on colors).
 
 It reports, per pack: cells that show up on no captured screen (they are
 gameplay content and stay on the sheet whatever the rule), cells that show up
@@ -55,14 +55,14 @@ SCREEN_H = 240
 
 def normalize(crop, unit):
     """Palette-agnostic fingerprint of a unit x unit RGB crop: each distinct
-    colour replaced by its first-appearance rank.
+    color replaced by its first-appearance rank.
 
     The vocabulary keys on *shapes* with the palette wildcarded
     (HdPackBuilder::ShapeIdFor), and a sheet cell is drawn with the first exact
     palette variant the recorder happened to see for that shape, which is not
     necessarily the one the captured screen was displaying. Comparing raw RGB
     therefore measures palette luck, not overlap: it scores The Legend of Zelda
-    at 0 of 219 cells. Ranking the colours compares what the vocabulary itself
+    at 0 of 219 cells. Ranking the colors compares what the vocabulary itself
     considers identity."""
     order = {}
     out = bytearray(unit * unit)
@@ -107,7 +107,7 @@ def screen_paths(sheet_dir):
 
 def downsample(path):
     """A captured screen back at 1x. CaptureScreen writes the twin as a plain
-    nearest-neighbour upscale, so dropping every scale-th pixel is exact."""
+    nearest-neighbor upscale, so dropping every scale-th pixel is exact."""
     image = Image.open(path).convert("RGB")
     scale = max(1, image.width // SCREEN_W)
     if scale == 1:
@@ -137,7 +137,7 @@ def match_screen(image, by_pixels, unit):
     land on any pixel offset within one metatile. Searching the offset is the
     difference between measuring the overlap and measuring the scroll: anchored
     on the sheet's own phase alone, Zelda scores 0 of 219 cells, which is an
-    artefact and not a finding. A coarse pass picks the offset, a full pass
+    artifact and not a finding. A coarse pass picks the offset, a full pass
     counts at it."""
     best = (0, 0)
     best_score = (-1, -1)
@@ -145,7 +145,7 @@ def match_screen(image, by_pixels, unit):
         for ox in range(unit):
             hits = scan(image, by_pixels, unit, ox, oy, 2)
             # Distinct cells first, total second. Total alone elects the
-            # degenerate offset: a flat cell (one colour, e.g. Zelda's sand)
+            # degenerate offset: a flat cell (one color, e.g. Zelda's sand)
             # matches at *every* offset, so summing hits picked an alignment
             # worth 139 matches of a single cell and reported the screen as
             # carrying one cell.

@@ -159,7 +159,7 @@ class GridFrame:
         self.fine = 0
         self.rows = [[EMPTY] * COLS for _ in range(ROWS)]
         # The ADR-0159 palette plane, parallel to `rows`. Shape ids wildcard
-        # the palette, so this is the only record of the colours a cell really
+        # the palette, so this is the only record of the colors a cell really
         # had; a dump written before F9.24 has no fourth field and every cell
         # stays UNKNOWN_PALETTE, which reads as "fall back to the shape's own".
         self.pals = [[UNKNOWN_PALETTE] * COLS for _ in range(ROWS)]
@@ -331,7 +331,7 @@ def hud_bands(frames, rows_all):
     the rest of the screen claims. A HUD is the only thing that answers yes on
     every scrolling step, and it must not be smeared across the panorama.
 
-    Only a *contiguous* band at the top and at the bottom is honoured, the same
+    Only a *contiguous* band at the top and at the bottom is honored, the same
     shape the recorder's own `HudRows`/`HudBottomRows` have, so a row of sky
     that happens to be uniform never punches a hole in the middle of a stage.
     A row that answered neither way — it abstained on every step, or its votes
@@ -381,7 +381,7 @@ class Region:
     0.02 of that position's sightings, the most-seen one for 0.98 — the player
     enters a scrolling stage, so the frame that first covers a world position is
     almost always a transitional one. Both are evidence; the majority is the
-    one an artist recognises as the stage."""
+    one an artist recognizes as the stage."""
 
     def __init__(self):
         self.cells = {}
@@ -464,8 +464,8 @@ def stitch(frames, hud_top, hud_bottom, quiet=False):
                 sid = row[c]
                 if sid == EMPTY:
                     continue
-                # A cell is its drawing *and* its colours: a tile a bank switch
-                # recoloured is a different piece of scenery, and collapsing the
+                # A cell is its drawing *and* its colors: a tile a bank switch
+                # recolored is a different piece of scenery, and collapsing the
                 # two would put one of them on the panorama under the other's
                 # palette (ADR-0159 amendment).
                 cur.see((wy, ox + c), (sid, pals[c]))
@@ -610,7 +610,7 @@ def render_tile(tile_hex: str, pal_hex: str) -> Image:
 
 
 def multi_palette_shapes(pack: Pack, shapes, used):
-    """Shape ids whose colour is an attribution rather than a record.
+    """Shape ids whose color is an attribution rather than a record.
 
     The dump interns a shape palette-agnostically and prints only the first
     palette it was seen with, so a tile the game drew under two palettes lands
@@ -673,7 +673,7 @@ def panorama_palettes(cells):
     """`(swatches, labels)` for the panorama's `palettes` band: first-use
     order in the panorama's **reading order** (row, then column - the order
     `build_panorama` emits cells, which is also their `index`), each group
-    labelled with the `index` of the first cell that wears it. Same contract
+    labeled with the `index` of the first cell that wears it. Same contract
     as `compose_engine.Pack.export` and `write_chr_surface`, so what
     `artist_kit_assemble.py` tells the artist about the band holds for every
     surface (2026-09-23 follow-up, defect (b))."""
@@ -1174,9 +1174,9 @@ def main(argv=None) -> int:
         "transitional one - measured on Contra's waterfall, the first variant holds for a median "
         "0.02 of a position's sightings and the most-seen one for 0.98.")
     notes.append(
-        "The recorded grid stream keys cells by a palette-agnostic shape, so their real colours "
+        "The recorded grid stream keys cells by a palette-agnostic shape, so their real colors "
         "come from the per-cell palette plane F9.24 added to the dump. A dump written before that "
-        "has no plane: its cells fall back to the shape's first-seen colours, carry "
+        "has no plane: its cells fall back to the shape's first-seen colors, carry "
         "\"paletteAttributed\": true and make their file seen: false.")
 
     out_dir.mkdir(parents=True, exist_ok=True)

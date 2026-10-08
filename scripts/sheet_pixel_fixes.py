@@ -11,17 +11,17 @@ Two corrections live here:
   art itself, so the crop has to hold the unflipped pixels. `flip_region`
   un-bakes one crop, `sidecar_drop_mirrors` clears the sidecar afterwards so
   a second build does not flip again.
-* **Keeping colour 0 transparent** (#456). `SheetRender` draws a background
-  cell with colour 0 opaque (a transparent colour 0 would punch holes in a
-  tree the artist paints). The recording itself keeps colour 0 transparent on
+* **Keeping color 0 transparent** (#456). `SheetRender` draws a background
+  cell with color 0 opaque (a transparent color 0 would punch holes in a
+  tree the artist paints). The recording itself keeps color 0 transparent on
   every background key a behind-background sprite was drawn over
   (`HdPackBuilder` `TransparencyRequired`, `HdPackTileInfo::ToRgb`), and that
   is what lets the sprite show through, as it does on hardware. A rebuilt
   crop that kept the opaque backdrop hid the sprite (Punch-Out!!: Glass Joe).
   `KeySourceAlpha` reads which keys the key source draws with an alpha-0
-  pixel at a colour-0 position (the recorder's signature, never a translucent
-  brush); `punch_backdrop` clears colour 0 in those crops wherever the sheet
-  still holds the twin's backdrop colour, so the artist's own paint stays.
+  pixel at a color-0 position (the recorder's signature, never a translucent
+  brush); `punch_backdrop` clears color 0 in those crops wherever the sheet
+  still holds the twin's backdrop color, so the artist's own paint stays.
   An RGB sheet gains an alpha channel first (`with_alpha`). The contract -
   inputs, side effects, exclusions, verification - is in `scripts/AGENTS.md`.
 
@@ -108,7 +108,7 @@ def sidecar_drop_mirrors(json_path: Path) -> int:
 class KeySourceAlpha:
     """Which `(tile, palette)` keys the key source draws with the recorder's
     `TransparencyRequired` signature: a fully transparent (alpha 0) pixel at a
-    colour-0 position of the key's tile, read off the crops its own
+    color-0 position of the key's tile, read off the crops its own
     `<img>`/`<tile>` lines point at, at its own `<scale>`. On a recording that
     is exactly the background keys `TransparencyRequired` marked; on a
     manifest a previous build wrote, it is the crops that build already
@@ -167,7 +167,7 @@ class KeySourceAlpha:
 
 
 def _colour0_positions(tile_hex: str) -> list:
-    """The (row, column) of every colour-0 pixel of a 32-hex 2bpp NES tile."""
+    """The (row, column) of every color-0 pixel of a 32-hex 2bpp NES tile."""
     data = bytes.fromhex(tile_hex)
     return [(r, c) for r in range(8) for c in range(8)
             if not ((data[r] >> (7 - c)) & 1 or (data[r + 8] >> (7 - c)) & 1)]
@@ -175,7 +175,7 @@ def _colour0_positions(tile_hex: str) -> list:
 
 def with_alpha(bmp):
     """`bmp` as 8-bit RGBA: an RGB bitmap (an editor's opaque working sheet)
-    gains a fully opaque alpha channel so `punch_backdrop` can clear colour 0
+    gains a fully opaque alpha channel so `punch_backdrop` can clear color 0
     in it (#456). RGBA and None come back as they are."""
     if bmp is None or bmp.channels != 3:
         return bmp
@@ -209,10 +209,10 @@ def see_through_places(placed, transparent) -> set:
 
 
 def punch_backdrop(bmp, ref, x: int, y: int, scale: int, tile_hex: str, palette: str) -> int:
-    """Clear colour 0 of the crop at sheet pixel `(x, y)` (#456): every pixel
-    at a colour-0 position of `tile_hex` that still holds the backdrop colour
+    """Clear color 0 of the crop at sheet pixel `(x, y)` (#456): every pixel
+    at a color-0 position of `tile_hex` that still holds the backdrop color
     becomes fully transparent, and so does that 1x pixel of the twin `ref`.
-    The backdrop colour is the twin's own pixel there; with no twin it is
+    The backdrop color is the twin's own pixel there; with no twin it is
     palette entry 0 in the default NES palette. A twin pixel that is already
     transparent was cleared by an earlier build, and is left alone - that is
     what makes a second build a no-op. Returns 1 when anything changed."""

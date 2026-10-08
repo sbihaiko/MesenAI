@@ -130,7 +130,7 @@ def parse_ppm_geometry(path):
 
 
 def parse_sprites_json(text):
-    """Validate and normalise one sprites.json into a plain dict. Raises
+    """Validate and normalize one sprites.json into a plain dict. Raises
     ValueError with a reader-facing message when the file is not what ADR-0169
     section 2 publishes (atomic rename means a torn file is impossible, but a
     foreign file is)."""
@@ -155,7 +155,7 @@ def parse_sprites_json(text):
 
 
 def parse_background_json(text):
-    """Validate and normalise one background.json into a plain dict (ADR-0169
+    """Validate and normalize one background.json into a plain dict (ADR-0169
     2026-09-08 update). tmpScroll is loopy "t" — the scroll the game wrote — the
     base the background must be laid out from; recordings produced before the
     field was renamed carried the same value under "videoRamAddr", so both keys
@@ -229,7 +229,7 @@ def decode_scroll_row(t):
 
 
 def parse_chrlatch_json(text):
-    """Validate and normalise one chrlatch.json into a plain dict (ADR-0169
+    """Validate and normalize one chrlatch.json into a plain dict (ADR-0169
     2026-09-08 "MMC2/MMC4 CHR-latch" update). Published only for a mapper
     whose CHR bank flips mid-frame via a tile-index latch (BaseMapper::
     HasChrBankLatch — Mike Tyson's/Super Mac's Punch-Out); its absence for
@@ -480,7 +480,7 @@ def build_sprite_planes(sprites, chr_bytes, show_front=True, show_behind=True):
     the viewer's checkboxes hide independently. A filtered-out sprite is
     skipped entirely, so it puts down no pixel and stays untouched (no bounding
     box either, since sprite_boxes reads touched). The mask bit
-    sprites['leftColumnClip'] is honoured (a sprite is not shown in the screen's
+    sprites['leftColumnClip'] is honored (a sprite is not shown in the screen's
     first 8 columns while it is set), because the frame above clips it too.
 
     Returns (plane, behind, touched): touched[i] says OAM sprite i put down at
@@ -718,7 +718,7 @@ class RecordViewerApp:
 
     The panes are the point, so they own every pixel the toolbars do not: each
     is a header line (title, and the PPU/geometry meta for that frame), a
-    canvas that fills whatever is left with the frame centred in it, and its
+    canvas that fills whatever is left with the frame centered in it, and its
     own layer toggles right under it. Both panes always draw at the same zoom
     — they exist to be compared pixel for pixel — and the zoom either fits the
     window or is the one the user picked. Every number and every string in
@@ -936,7 +936,7 @@ class RecordViewerApp:
 
     def _bind_keys(self):
         """Shortcuts for everything on the toolbars, so watching a run does not
-        mean travelling to a checkbox. Skipped while the path entry has focus —
+        mean traveling to a checkbox. Skipped while the path entry has focus —
         a path may contain any of these letters."""
         keys = {
             "<space>": self._toggle_pause,
@@ -1099,7 +1099,7 @@ class RecordViewerApp:
                 meta.grid(row=1, column=0, columnspan=3, sticky="e", padx=0)
 
     def _canvas_room(self):
-        """What both canvases can honour right now, minus their 1px border."""
+        """What both canvases can honor right now, minus their 1px border."""
         self.root.update_idletasks()
         return vl.shared_available([(c.winfo_width() - 4, c.winfo_height() - 4)
                                     for c in (self.composite_canvas, self.sprite_canvas)])
@@ -1111,7 +1111,7 @@ class RecordViewerApp:
 
     @staticmethod
     def _centre_image(canvas, image, tag):
-        """Draw a frame centred in its canvas, and return the image's top-left
+        """Draw a frame centered in its canvas, and return the image's top-left
         in canvas coordinates (the sprite-box overlay needs that origin)."""
         cw, ch = canvas.winfo_width(), canvas.winfo_height()
         canvas.delete(tag)
@@ -1384,7 +1384,7 @@ class RecordViewerApp:
                 chrfull, chrlatch, init_left, init_right, scanline_scroll)
             if not self.show_front_var.get() or not self.show_behind_var.get():
                 # The latch path draws every sprite as it fetches (the trigger
-                # tiles have to be walked in fetch order regardless); honour a
+                # tiles have to be walked in fetch order regardless); honor a
                 # layer checkbox by re-filtering after the fact instead.
                 for i, (_y0, _tile, attr, _x) in enumerate(sprites["oam"]):
                     behind_attr = bool(attr & 0x20)
@@ -1436,7 +1436,7 @@ class RecordViewerApp:
 
     def _draw_marks_current(self):
         # (Re)draw the sprite-bounds overlay from the last sprite data, at the
-        # current zoom and the image's centred origin — shared by a poll's
+        # current zoom and the image's centered origin — shared by a poll's
         # fresh frame, a resize, a zoom change and the "sprite boxes" toggle.
         self.composite_canvas.delete("spritemark")
         if self._last_mark_data is None or not self.mark_var.get() \

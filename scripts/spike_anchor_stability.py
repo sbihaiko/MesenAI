@@ -14,7 +14,7 @@ This spike sizes the exposure from the packs already on disk, with no
 recording. Method, per pack:
 
   1. downsample every `backgrounds/screenNNN.orig.png` back to 256x240 (it is
-     a nearest-neighbour upscale by the pack scale, so this is exact);
+     a nearest-neighbor upscale by the pack scale, so this is exact);
   2. call two screens *variants* of each other when they agree on at least
      `--variant-threshold` of their 960 8x8 blocks - i.e. they are the same
      screen with something changed on it;
@@ -278,11 +278,11 @@ def analyse(textures_dir, threshold):
 
 
 def shape_of(block):
-    """The block's palette-agnostic pattern: colours renumbered in order of
+    """The block's palette-agnostic pattern: colors renumbered in order of
     first appearance. The recorder's ShapeId is `HdTileKey::GetKey(true)` - the
     16 CHR bytes with `PaletteColors` wildcarded - and this is the closest an
-    offline pixel dump can get to it. It can only *under*-count recolours: when
-    a palette maps two colour indices onto the same RGB, the pattern collapses
+    offline pixel dump can get to it. It can only *under*-count recolors: when
+    a palette maps two color indices onto the same RGB, the pattern collapses
     and reads as a different shape where the recorder would still see one.
     """
     out = bytearray()
@@ -295,7 +295,7 @@ def shape_of(block):
 
 
 def analyse_recolour(textures_dir, threshold):
-    """Issue #164, third failure mode: a variant that only *recolours* the
+    """Issue #164, third failure mode: a variant that only *recolors* the
     anchor cell.
 
     ADR-0159 picks anchors from the cells no variant changes, but it reads
@@ -364,7 +364,7 @@ def analyse_recolour(textures_dir, threshold):
             if all(screens[other][i] == blocks[i] for i in cells):
                 continue
             stats["miss"] += 1
-            # every failing cell agrees on the shape: a pure recolour, which is
+            # every failing cell agrees on the shape: a pure recolor, which is
             # exactly what the retained grid stream cannot see
             if all(shapes[other][i] == shp[i] for i in cells):
                 stats["miss_recolour_only"] += 1
@@ -419,7 +419,7 @@ def main():
     ap.add_argument("--variant-threshold", type=float, default=0.90)
     ap.add_argument("--json", action="store_true")
     ap.add_argument("--recolour", action="store_true",
-                    help="issue #164 third mode: anchors a variant only recolours")
+                    help="issue #164 third mode: anchors a variant only recolors")
     args = ap.parse_args()
 
     dirs = find_texture_dirs(args.root)

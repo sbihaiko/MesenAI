@@ -1,4 +1,4 @@
-"""Classify a control-pack screenshot: colour census + Y|mid|B orientation scan.
+"""Classify a control-pack screenshot: color census + Y|mid|B orientation scan.
 
 Every human-layer cell renders as  Y(8) | mid(16) | B(8)  where mid is
   C (cyan)    = gated rule matched live

@@ -41,7 +41,7 @@ MARKER = "<!-- mep-meta -->"
 # The fence is located with the shared ADR-0138 §33 rule (`find_fenced_block`
 # in the stdlib-only leaf `mep_recipe_common`): the writer emits the
 # shortest backtick run longer than any run in the payload, so the reader
-# accepts an opener of 3+ backticks (bare or `json`-labelled) and matches
+# accepts an opener of 3+ backticks (bare or `json`-labeled) and matches
 # the closer by the same run length. A fixed three-backtick regex here
 # would silently truncate any block whose payload carries backticks.
 

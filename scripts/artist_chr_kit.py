@@ -67,7 +67,7 @@ other (`write_bank` implements it as one if/elif chain):
    pack's evidence, another palette rank of it;
 3. a cell another recording of the same ROM recorded — `donated`, `seen: true`
    because a real run really drew it, but not this pack's own evidence, so the
-   sidecar names the run it came from and the legend gives it its own colour;
+   sidecar names the run it came from and the legend gives it its own color;
 4. a cell read statically out of the ROM — `fill`, `seen: false`;
 5. nothing — `empty`, a hole this tool refuses to paint.
 
@@ -77,8 +77,8 @@ screen a key per step of the fade. Where two of those keys are the same picture
 at another brightness, the kit **folds** one onto the other: the artist paints
 one cell, the renderer rebuilds the rest from the `<tile>` row's Brightness
 column, and the recording keeps every key it had. Folding is a statement about
-colour only, decided off the NES palette (`compute_folds`), and a palette that
-changes any painted entry's hue is never folded — two colourways of one enemy
+color only, decided off the NES palette (`compute_folds`), and a palette that
+changes any painted entry's hue is never folded — two colorways of one enemy
 are two pictures, not one (ADR-0183 §3).
 
 Honesty rules this tool keeps:
@@ -95,7 +95,7 @@ Honesty rules this tool keeps:
   own page, marked `donated`, blue in the legend, and carries the donor's path,
   page and slot in `Chr_<n>.json`; a donor is refused unless its
   `<supportedRom>` sha1 is present and equal to this pack's;
-* a cell filled from the ROM is rendered nearest-neighbour (the recorder's own
+* a cell filled from the ROM is rendered nearest-neighbor (the recorder's own
   pages go through a smoothing filter, so the fill is visibly crisper) and is
   marked `seen: false` in `Chr_<n>.json`, amber in `Chr_<n>.legend.png`, and
   counted in the manifest fragment;
@@ -173,7 +173,7 @@ PACK_VERSION = 109
 # The palette a static fill is rendered under. It is a guess and it does not
 # have to be a good one: every static rule carries `defaultTile = Y`, which is
 # the per-rule palette wildcard (ADR-0210), so the shape matches whatever
-# colours the game puts it under. `Bank.fill_palette()` returns this same value
+# colors the game puts it under. `Bank.fill_palette()` returns this same value
 # when a bank has no recorded cell to vote, which is every bank here.
 STATIC_FILL_PALETTE = "0F001030"
 
@@ -183,7 +183,7 @@ STATIC_FILL_PALETTE = "0F001030"
 # recorded manifest; `scripts/mep_build.py` reads the same constant.
 PAGES_ONLY_MARK = "# mep-pages-only 1"
 
-# The colour the recorder leaves an unpainted cell (`0xFFFF00FF`, ARGB). A
+# The color the recorder leaves an unpainted cell (`0xFFFF00FF`, ARGB). A
 # static page starts as this and is then written cell by cell; any pixel still
 # wearing it would be a cell the ROM could not supply, which cannot happen on a
 # CHR ROM bank and is why the static kit reports 0 `empty`.
@@ -460,7 +460,7 @@ def collect_pages(pack: Pack) -> list[Page]:
             page.rows[page.slot_of_row(r)] = r
         page.is_chr_ram = rows[0].tile_data is not None
         page.palette = collections.Counter(r.palette for r in rows).most_common(1)[0][0]
-        # A handful of a page's cells can carry a neighbouring bank's id (the
+        # A handful of a page's cells can carry a neighboring bank's id (the
         # builder dedupes identical patterns across banks), so the page's bank
         # is the majority, not a unanimous vote.
         votes = collections.Counter(r.chr_bank_id for r in rows if r.chr_bank_id is not None)
@@ -508,7 +508,7 @@ def static_images(pages: list[Page]) -> dict:
     """The blank canvas each static page is drawn onto.
 
     A recorded page arrives as a PNG the recorder wrote; there is none here, so
-    the page starts as the recorder's own unpainted colour and every one of its
+    the page starts as the recorder's own unpainted color and every one of its
     256 cells is then written by the ROM fill. `orig` is the same canvas rather
     than `None`, so the twin ADR-0153 §3 requires comes out identical to the
     sheet — which is exactly what an untouched reference means here."""
@@ -517,7 +517,7 @@ def static_images(pages: list[Page]) -> dict:
         size = 16 * page.cell_px
         # Built as one buffer rather than pixel by pixel: a 32-bank ROM at
         # scale 4 is 16.7 M pixels, and the per-pixel form spent 9 of the
-        # slice's 10-second budget writing a colour that is about to be
+        # slice's 10-second budget writing a color that is about to be
         # overwritten.
         row = bytes(UNPAINTED_RGBA) * size
         out[page.name] = {role: Image(size, size, bytearray(row * size))
@@ -556,7 +556,7 @@ class Bank:
         self.identity_known = True
         self.fills: dict[int, dict] = {}
         self.notes: list[str] = []
-        self.transparent_rgba = None    # RGBA of colour 0 on a sprite bank
+        self.transparent_rgba = None    # RGBA of color 0 on a sprite bank
 
     def _kind(self):
         if self.primary.name.startswith("Chr_FFFFFFFF"):
@@ -578,7 +578,7 @@ class Bank:
         Rule: the most common palette among the *recorded* cells of this bank's
         rank-0 page — the page a fill lands on, and the palette that page mostly
         shows. It is a guess and is recorded as one: the pattern comes from the
-        ROM, the colours come from what this page was seen wearing."""
+        ROM, the colors come from what this page was seen wearing."""
         votes = collections.Counter()
         for page in self.pages:
             weight = 4 if page is self.primary else 1
@@ -664,7 +664,7 @@ def collect_banks(pack: Pack, pages: list[Page]) -> list[Bank]:
 
 
 def bitpairs(data: bytes):
-    """The 8x8 grid of 2-bit colour numbers of a 16-byte NES tile."""
+    """The 8x8 grid of 2-bit color numbers of a 16-byte NES tile."""
     out = []
     for y in range(8):
         lo, hi = data[y], data[y + 8]
@@ -744,7 +744,7 @@ def pattern_of(bank: Bank, index: int, rom: Rom):
 
 def learn_palette(banks, images, rom: Rom) -> PaletteTable:
     """Walk every recorded cell's reference pixels and record, per NES palette
-    index, the RGBA the recorder used — and per bank, whether colour 0 is drawn
+    index, the RGBA the recorder used — and per bank, whether color 0 is drawn
     transparent (a sprite bank) or opaque."""
     table = PaletteTable()
     for bank in banks:
@@ -1021,11 +1021,11 @@ def fill_from_prg(bank: Bank, rom: Rom, stats):
 
 def render_cell(data: bytes, palette_hex: str, table: PaletteTable,
                 transparent_rgba, scale: int) -> Image:
-    """An 8x8 tile at the page's scale, nearest neighbour.
+    """An 8x8 tile at the page's scale, nearest neighbor.
 
     The recorder runs its own cells through a smoothing filter; a fill is a
     guess, and leaving it crisp both avoids inventing edges the ROM does not
-    have and makes a fill recognisable at a glance next to recorded art."""
+    have and makes a fill recognizable at a glance next to recorded art."""
     pal = palette_indices(palette_hex)
     grid = bitpairs(data)
     tile = Image(8, 8)
@@ -1182,7 +1182,7 @@ def write_bank(bank: Bank, images, table, transparent_rgba, out_chr: Path,
                 # Another recording of the same ROM drew this tile. A real run
                 # really rendered it, so `seen` stays true — but it is not this
                 # pack's evidence, so the donor is named here and the cell gets
-                # its own legend colour.
+                # its own legend color.
                 donation = bank.donated[index]
                 donor, src_page, src_slot = (donation["donor"], donation["page"],
                                              donation["slot"])
@@ -1315,13 +1315,13 @@ def static_notes(rom_path: Path, cells: int, filled: int, rules: int) -> list:
         "those come from what a run observed and nothing was observed.",
         f"{filled} of {cells} cell(s) were read out of the file. A CHR ROM bank "
         "*is* 4 KB of the ROM, so the shape of every tile is exact — what is "
-        "missing is not accuracy, it is organisation.",
+        "missing is not accuracy, it is organization.",
         f"The colours are not. Every one of the {rules} <tile> row(s) in "
         "chr/fill-rules.hires.txt carries defaultTile=Y, the per-rule palette "
         "wildcard (ADR-0210): the shape matches whatever palette the game puts it "
         f"under, and the {STATIC_FILL_PALETTE} the page is *drawn* in is a "
         "placeholder for reading, never a claim.",
-        "A fill is rendered nearest-neighbour: the recorder smooths its own cells "
+        "A fill is rendered nearest-neighbor: the recorder smooths its own cells "
         "and these were never recorded, so they are deliberately crisp.",
         "This kit is a folder, not a pack, and nothing installs it. To paint: edit "
         "a page, copy chr/ into a pack folder's textures/ and run "
@@ -1684,7 +1684,7 @@ def run(pack_dir: Path, rom_path: Path, out_dir: Path, names_path, fill_rules,
         "the run never drew); "
         "red is a cell nothing could fill. Every non-green cell is spelled out "
         "in Chr_<n>.json, and a ROM fill is `seen: false` there.",
-        "A ROM fill is rendered nearest-neighbour under the bank's most-recorded "
+        "A ROM fill is rendered nearest-neighbor under the bank's most-recorded "
         "palette; the recorder smooths its own cells, so a fill is visibly "
         "crisper. The pattern is the ROM's; the palette is a guess.",
         f"{guessed} filled cell(s) wear a (pattern, palette) the pack never "
@@ -1693,7 +1693,7 @@ def run(pack_dir: Path, rom_path: Path, out_dir: Path, names_path, fill_rules,
         f"(palette already observed for that pattern) is {len(rules) if fill_rules == 'observed' else '-'}"
         f"; the permissive count (a rule per fill) would be {ruleable}. A rule with "
         "a wrong palette never matches and is harmless, but one that does match "
-        "would put a nearest-neighbour guess on screen in place of the pack's "
+        "would put a nearest-neighbor guess on screen in place of the pack's "
         "filtered art, and a sprite/background misread would punch a transparent "
         "hole — so hires.txt is left exactly as recorded.",
     ]
@@ -1733,7 +1733,7 @@ def run(pack_dir: Path, rom_path: Path, out_dir: Path, names_path, fill_rules,
             f"different picture and is never folded, and {fold_stats['refused']} "
             "candidate(s) that did keep their hues were still refused because more "
             f"than {HUE_DRIFT_GATE_DEG:.0f} deg of the residual was hue, which a "
-            "single multiplier cannot carry. Two colourways of one enemy stay two "
+            "single multiplier cannot carry. Two colorways of one enemy stay two "
             "cells (ADR-0183 §3); nothing is folded that the renderer cannot "
             "reconstruct.")
     if not rom.has_chr_rom:

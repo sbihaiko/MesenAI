@@ -27,7 +27,7 @@ Text is reduced before matching, because a mention is not a call:
     inside a string, and `scripts/core_unit_tests.cpp` contains
     "mtl_filter_chain_frame failed: ..." messages that would otherwise read as
     eight appliers - with `R"(...)"` raw strings blanked first, so an odd quote
-    inside one cannot desynchronise the walk;
+    inside one cannot desynchronize the walk;
   * a `//` comment continued with a backslash is followed to its real end.
 
 This is still a presence guard, and these are its limits, written down rather

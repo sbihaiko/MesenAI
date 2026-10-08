@@ -149,8 +149,8 @@ def test_exit_code_is_the_verdict(tmp: Path):
 
 # ---------------------------------------------------------------- F12.15 split (ADR-0224 §4)
 
-FLAT_TILE = "00" * 16                    # every pixel colour index 0
-DETAIL_TILE = "80" + "00" * 15           # one pixel of colour index 1, rest 0
+FLAT_TILE = "00" * 16                    # every pixel color index 0
+DETAIL_TILE = "80" + "00" * 15           # one pixel of color index 1, rest 0
 PAL_WORD = "0F300F0F"                    # index 0 black, index 1 white
 
 

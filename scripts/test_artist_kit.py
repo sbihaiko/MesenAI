@@ -160,7 +160,7 @@ def test_a_one_part_fusion_is_dropped_and_says_so():
 
 
 def test_every_figure_shares_the_rows_baseline():
-    """The alignment the tool exists for: pad to one box, centre across, and
+    """The alignment the tool exists for: pad to one box, center across, and
     put every figure's bottom row on the same line."""
     with tempfile.TemporaryDirectory() as td:
         pack = _kit_pack(Path(td), _doc_with_cycle())
