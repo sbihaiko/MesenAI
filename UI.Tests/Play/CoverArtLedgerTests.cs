@@ -97,6 +97,53 @@ namespace Mesen.Tests.Play
 			ledger.Clear();
 		}
 
+		//#1065: a query narrowing the grid takes a tile off the sheet while the
+		//rest stay exactly where they are - so the tile that goes has to hand its
+		//picture back on its own, and the tiles that stayed must be untouched.
+		//This is "covers of tiles dropped by a query are released", which is the
+		//ledger's half of the acceptance criterion: the sheet drops the tile, and
+		//the ledger is what the picture behind it belongs to.
+		[Fact]
+		public void The_picture_of_one_dropped_tile_is_handed_back_and_the_others_are_kept()
+		{
+			CoverArtLedger ledger = new();
+			Picture dropped = new();
+			Picture kept = new();
+			ledger.Track(dropped);
+			ledger.Track(kept);
+
+			ledger.Release(dropped);
+
+			Assert.Equal(1, dropped.HandedBack);
+			Assert.Equal(0, kept.HandedBack);
+		}
+
+		//Releasing is not a second Clear: the picture it handed back is no longer
+		//the ledger's, so the rebuild that finally replaces the grid must not hand
+		//the same picture back a second time.
+		[Fact]
+		public void A_released_picture_is_not_handed_back_again_by_the_next_rebuild()
+		{
+			CoverArtLedger ledger = new();
+			Picture dropped = new();
+			ledger.Track(dropped);
+
+			ledger.Release(dropped);
+			ledger.Clear();
+
+			Assert.Equal(1, dropped.HandedBack);
+		}
+
+		//A tile drawing the console colour has no picture of its own, which is the
+		//same "not a case the caller has to guard" as Track.
+		[Fact]
+		public void Releasing_a_cover_that_was_never_drawn_hands_back_nothing()
+		{
+			CoverArtLedger ledger = new();
+
+			ledger.Release(null);
+		}
+
 		//The sheet is closed for good: whatever is still being drawn goes back
 		//with it rather than waiting for a rebuild that will not come.
 		[Fact]

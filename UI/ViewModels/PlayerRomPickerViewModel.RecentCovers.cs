@@ -58,6 +58,8 @@ namespace Mesen.ViewModels
 		{
 			Tiles.Clear();
 			_tileByPath.Clear();
+			//The ring was on a container that is gone with the rest.
+			FocusTile = null;
 			_coverArt.Clear();
 		}
 

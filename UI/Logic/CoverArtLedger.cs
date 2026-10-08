@@ -30,6 +30,25 @@ public sealed class CoverArtLedger : IDisposable
 		}
 	}
 
+	//Hands back ONE picture, for a tile the grid is dropping while it lives on.
+	//
+	//#1065: a query narrowing the grid, or a canonical title that stops matching
+	//one, takes a tile off the sheet while the rest stay exactly where they are -
+	//so the rebuild's Clear is not the call that owns that picture any more. The
+	//ledger stops holding it in the same breath: a picture disposed here and still
+	//registered would be handed back a second time by the next Clear.
+	//
+	//A tile whose cover is the console colour hands over null, and this is the
+	//same "not a case the caller has to guard" as Track.
+	public void Release(IDisposable? art)
+	{
+		if(art is null) {
+			return;
+		}
+		_drawn.Remove(art);
+		art.Dispose();
+	}
+
 	//Hands back every cover registered since the last Clear, and keeps whatever
 	//is registered after this call: the caller rebuilds the grid in this order -
 	//release the old, track the new - so a picture still being drawn is never

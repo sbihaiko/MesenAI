@@ -157,6 +157,24 @@ namespace Mesen.Views
 			}
 		}
 
+		//#1065: the ring LEFT the grid, which the view-model has to know and only
+		//the view can answer - it is the difference between a player walking the
+		//grid and one parked on *Browse a file…*, and the sheet's live re-sort
+		//turns on exactly that difference (it may move a tile the player is on; it
+		//must never claim a ring that is not in the grid at all).
+		//
+		//A step from one tile to the next is a move INSIDE the grid and not a
+		//leave, and the order of the two events one focus change raises is the
+		//engine's rather than this handler's - so the DESTINATION is read, and the
+		//answer is the same whichever of them lands first.
+		private void OnTileBlurred(object? sender, FocusChangedEventArgs e)
+		{
+			if(e.NewFocusedElement is Control { DataContext: PlayerLibraryTile }) {
+				return;
+			}
+			Model?.ForgetTileFocus();
+		}
+
 		//#1032 (ADR-0264 Decision 11): *Browse a file…* steps into the folder
 		//browser ADR-0256 Decision 9 built, which is the same sheet's second
 		//surface rather than a second sheet.

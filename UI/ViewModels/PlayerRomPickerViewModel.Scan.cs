@@ -186,6 +186,11 @@ namespace Mesen.ViewModels
 			//of them because the scan that made the claim is long over.
 			_claims = _claims.AfterRingTaken();
 			LastFocusedTilePath = tile.Path;
+			//#1065: and the sheet's own half of the same fact - which surface's
+			//claim the ring is inside. The view clears it the moment the ring
+			//leaves the grid, so a re-sort can tell a ring the player is walking
+			//the grid with from one parked on *Browse a file...*.
+			FocusTile = tile;
 		}
 
 		//The scan of one open. The sheet is already up: this shows the wait, hands

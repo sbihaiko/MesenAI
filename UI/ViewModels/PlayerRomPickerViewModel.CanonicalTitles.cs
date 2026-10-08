@@ -224,17 +224,35 @@ namespace Mesen.ViewModels
 				if(!IsVisible || Mode != RomPickerMode.Library) {
 					return;
 				}
+				//A query reads the title, so while one is up any batch may change what
+				//it matches; without one only a tile that changes seat needs the grid.
+				bool reseat = !string.IsNullOrWhiteSpace(SearchQuery);
 				foreach((string path, string title) in batch) {
 					_titles.Resolve(path, title);
 					//A tile on screen is renamed in place, so its container and the
 					//ring on it survive; a game the query has filtered out has no
 					//tile and simply reads the new title when it comes back.
 					if(_tileByPath.TryGetValue(path, out PlayerLibraryTile? tile)) {
+						string old = tile.Title;
 						tile.Title = title;
+						//Whether the new title moves the tile is a question about its
+						//neighbours (log n); once one has moved, the whole grid is
+						//re-seated below anyway.
+						if(!reseat && old != title) {
+							reseat = !LibraryTileSeating.KeepsSeat(Tiles, tile, old, t => t.Title, t => t.Path, GameLibrary.PathComparer);
+						}
 					}
 				}
-				//A query that is on is not re-asked here: the next keystroke asks
-				//it of the titles resolved by then (_titles).
+				//#1065: and the grid takes the order those titles give it, in the
+				//same turn - a re-order, never a rebuild, so the containers (and
+				//the ring on one of them) survive it. It is the one path, and the
+				//same one a keystroke takes, so the grid a query narrows and the
+				//grid a title renames cannot disagree about where a game sits.
+				//A batch that moved nothing does not pay for it: at 20000 entries a
+				//pass per 16 titles is the sheet.
+				if(reseat) {
+					FillTiles();
+				}
 			});
 		}
 	}

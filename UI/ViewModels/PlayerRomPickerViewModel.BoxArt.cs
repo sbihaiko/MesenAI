@@ -139,7 +139,12 @@ namespace Mesen.ViewModels
 					return;
 				}
 				Dispatcher.UIThread.Post(() => {
-					if(token.IsCancellationRequested) {
+					//Two ways a finished download has nowhere to go: the grid it was
+					//started for is gone (the open's own lifetime), or the TILE is -
+					//which is what a query narrowing the grid does to a single tile
+					//while the sheet stays open (#1065). Neither is a picture the
+					//player is waiting for, so neither is drawn.
+					if(token.IsCancellationRequested || !IsDrawn(tile)) {
 						image.Dispose();
 					} else {
 						tile.ShowArt(cover.Kind, image);
@@ -149,6 +154,31 @@ namespace Mesen.ViewModels
 					}
 				});
 			});
+		}
+
+		//A tile left the grid while the sheet stays on it (#1065: a query narrows the
+		//grid, or a canonical title stops matching one). Its picture goes back here
+		//for the same reason a whole rebuild hands them back, and the path stops
+		//counting as asked: the tile a later query brings back for it is a NEW tile,
+		//and one that never asked would be one that stays generic forever.
+		//
+		//The download the tile had in flight is not cancelled - the open's lifetime
+		//outlives the tile, and other tiles are still waiting on their own - it is
+		//refused where it lands (IsDrawn).
+		public void ForgetCover(PlayerLibraryTile tile)
+		{
+			_coversAsked.Remove(tile.Path);
+			if(_coversDrawn.Remove(tile)) {
+				tile.ReleaseArt();
+			}
+		}
+
+		//Whether this very tile is the one the grid draws for its path RIGHT NOW: the
+		//sheet's own map of path to tile, asked by reference so a tile that was
+		//dropped and later rebuilt under the same path is not mistaken for it.
+		private bool IsDrawn(PlayerLibraryTile tile)
+		{
+			return _tileByPath.TryGetValue(tile.Path, out PlayerLibraryTile? drawn) && ReferenceEquals(drawn, tile);
 		}
 
 		private void CancelCovers()

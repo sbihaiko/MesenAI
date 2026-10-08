@@ -98,30 +98,131 @@ namespace Mesen.ViewModels
 		//are shown, never how many the player owns.
 		private void FillTiles()
 		{
-			ClearTiles();
-			if(Mode == RomPickerMode.Library && _hasLibrary) {
-				//The library in the order the scan answered it, with the query
-				//asked once per entry through the one rule that owns the question.
-				//A blank query keeps everything, which is what "no search yet"
-				//means (the rule's own Decision 4 case).
-				//The console filter narrows first (#1034, Decision 5), so the query
-				//searches the games of the segment that is up.
-				//Searched by the title the tile shows (ADR-0264 Decisions 4 and
-				//7): the canonical one once the pass has resolved it.
-				IReadOnlyList<LibraryGame> inConsole = LibraryConsoleFilter.Apply(_libraryGames, SelectedConsole, game => game.Entry.Console);
-				foreach(LibraryGame game in _titles.Search(inConsole, g => g.Entry, SearchQuery)) {
-					Tiles.Add(TileFor(game.Entry, game.Cover));
-				}
-				UpdateEmptyResult();
+			if(Mode != RomPickerMode.Library || !_hasLibrary) {
+				//No library behind the grid: the tiles that are there belong to a
+				//surface this visit no longer has, and the pictures they drew go
+				//with them.
+				ClearTiles();
+				return;
 			}
-			//TilesRevision is deliberately NOT bumped here, and the difference from
-			//the scan path is the whole point: a scan replaces the tiles under a
-			//ring that has nowhere else to go, while a query changes with the ring
-			//on the BOX - the player is typing in it. Re-claiming there would take
-			//the focus off the field on the first keystroke and leave the keyboard
-			//(or the pad keyboard) with nowhere to put the next one. The pad
-			//returns to the grid with Down, which RomPickerHeaderStep answers.
+			//The library in the order the grid DRAWS it, with the query asked once
+			//per entry through the one rule that owns the question. A blank query
+			//keeps everything, which is what "no search yet" means (the rule's own
+			//Decision 4 case).
+			//The console filter narrows first (#1034, Decision 5), so the query
+			//searches the games of the segment that is up.
+			//Searched by the title the tile shows (ADR-0264 Decisions 4 and 7): the
+			//canonical one once the canonical-title pass has resolved it - and
+			//ORDERED by it too, which is #1065: the scan sorted the grid by the file
+			//name, so a title that arrives while the sheet is open has to move its
+			//tile to the seat the title gives it.
+			IReadOnlyList<LibraryGame> inConsole = LibraryConsoleFilter.Apply(_libraryGames, SelectedConsole, game => game.Entry.Console);
+			IReadOnlyList<LibraryGame> shown = _titles.Search(inConsole, g => g.Entry, SearchQuery);
+			RestoreTiles(LibraryGridOrder.Sorted(shown,
+				game => _titles.TitleOf(game.Entry), game => game.Entry.Path, GameLibrary.PathComparer));
+			UpdateEmptyResult();
 		}
+
+		//The grid the two narrowings and the titles leave, reached by MOVING, adding
+		//and dropping the tiles that are already there rather than by rebuilding it
+		//(#1065).
+		//
+		//A rebuild is what this replaces, and the difference is the whole of the
+		//review that produced this issue (the five rounds on PR #1055): a rebuild
+		//hands the grid a new list, so every tile becomes a new container, the cover
+		//of every tile is released and decoded again, and the ring - which is a fact
+		//about CONTAINERS - is left on one the sheet has just thrown away. A move
+		//keeps the container, and the ring with it, which is what makes re-sorting
+		//under a player who is already walking the grid something the sheet may do at
+		//all (ADR-0264 Decision 1).
+		private void RestoreTiles(IReadOnlyList<LibraryGame> shown)
+		{
+			//The ring, read BEFORE anything moves. Whether the tile it is on survives
+			//is the one thing that decides whether the arbiter has to place the ring
+			//again - see the end of this method.
+			PlayerLibraryTile? ring = FocusTile;
+
+			//What the grid is to hold, so a tile the query dropped is recognized
+			//without a walk of the grid per game.
+			HashSet<string> keep = new(StringComparer.Ordinal);
+			foreach(LibraryGame game in shown) {
+				keep.Add(game.Entry.Path);
+			}
+
+			//The tiles the query (or the console segment) no longer keeps. Their
+			//containers go, and so does the picture behind each of them: a decoded
+			//screenshot nobody draws is an allocation outside the managed heap, and
+			//the ledger is what owns it (#1035). This is the release the review asked
+			//for by name - the dropped tile's cover goes with the tile.
+			for(int index = Tiles.Count - 1; index >= 0; index--) {
+				PlayerLibraryTile tile = Tiles[index];
+				if(keep.Contains(tile.Path)) {
+					continue;
+				}
+				Tiles.RemoveAt(index);
+				_tileByPath.Remove(tile.Path);
+				_coverArt.Release(tile.CoverArt);
+				//The downloaded cover too, and the download the tile had in flight
+				//(#1039): a picture nobody draws is an allocation the grid must not
+				//keep, whichever source it came from.
+				ForgetCover(tile);
+			}
+
+			//And now the order. The target sequence is walked once, each game's tile
+			//MOVED to the seat it belongs in and a game the grid does not hold yet
+			//inserted there. Every tile still in the grid sits at or after the seat
+			//being filled, so a move is always backwards and no seat is visited
+			//twice.
+			//Linear in the library (LibraryTileSeating): at 20000 entries a lookup per
+			//game is what froze the sheet.
+			Dictionary<string, LibraryGame> gameByPath = new(shown.Count, StringComparer.Ordinal);
+			List<string> order = new(shown.Count);
+			foreach(LibraryGame game in shown) {
+				gameByPath[game.Entry.Path] = game;
+				order.Add(game.Entry.Path);
+			}
+			LibraryTileSeating.Seat(Tiles, order,
+				path => _tileByPath.GetValueOrDefault(path),
+				path => TileFor(gameByPath[path].Entry, gameByPath[path].Cover),
+				Tiles.Move);
+
+			//TilesRevision is deliberately NOT bumped for a re-order, and the
+			//difference from the scan path is the whole point: a scan replaces the
+			//tiles under a ring that has nowhere else to go, while a MOVE carries the
+			//container - and the ring on it - to the tile's new seat. Nothing the
+			//player can feel happened, so nothing is claimed.
+			//
+			//The one tile that cannot keep its container is the one that left the
+			//grid, and the ring it was carrying has nowhere to be. That IS a claim -
+			//and it is made only when the ring was actually in the grid. A ring the
+			//player walked to *Browse a file...*, to Back or into the search box is
+			//not a tile, FocusTile is null, and the re-sort does not touch it (#1065
+			//acceptance criteria 1 and 4).
+			if(ring is not null && !(_tileByPath.TryGetValue(ring.Path, out PlayerLibraryTile? held) && ReferenceEquals(held, ring))) {
+				if(ReferenceEquals(FocusTile, ring)) {
+					FocusTile = null;
+				}
+				TilesRevision++;
+			}
+		}
+
+		//The tile the ring is on, or null when the ring is anywhere else - Back,
+		//*Browse a file...*, the search box, the console row, or nothing at all.
+		//
+		//It is state the VIEW reports and never a lookup: the sheet asks the window
+		//who has the focus every time it decides where to put it
+		//(PlayPadNavigationWiring), and this is the view-model's own half of the same
+		//fact - which surface's claim the ring is inside. A stale value here is a
+		//re-sort that takes the ring off *Browse a file...* for a grid the player is
+		//not in, which is exactly the defect the #1055 review found in its own
+		//FocusTile, so it is cleared the moment the ring leaves the grid
+		//(PlayerRomPickerView.OnTileBlurred).
+		public PlayerLibraryTile? FocusTile { get; private set; }
+
+		//The ring left the grid. A move from one tile to the next is not "leaving"
+		//and the view answers for it; what arrives here is the case where no tile of
+		//this sheet holds the ring any more.
+		public void ForgetTileFocus() => FocusTile = null;
 
 		//The named empty RESULT (Decision 4): a query that kept nothing says so,
 		//with the query shown, and the Clear action beside the box undoes it. Never
