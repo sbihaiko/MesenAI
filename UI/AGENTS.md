@@ -238,14 +238,19 @@ can be exercised by real xunit tests without Avalonia or the native
   would answer the first step and no other.
   `Enter` is the only place focus is taken, and always with
   `NavigationMethod.Directional`: that is what makes it a `:focus-visible`
-  focus, which is what paints `PlayerFocusRing`. **A control the theme paints
-  the ring on needs two things off, and `PlayerTheme.axaml` turns both off in
-  one rule** (`#1089`): Fluent's `AdornerLayer.DefaultFocusAdorner` — a 2 px
+  focus, which is what paints `PlayerFocusRing` on the pad's own carriers.
+  **A control the theme paints the ring on needs two things off, and
+  `PlayerTheme.axaml` turns both off in one rule** (`#1089`): Fluent's
+  `AdornerLayer.DefaultFocusAdorner` — a 2 px
   black frame over a 1 px white hairline — which `Control.cs` draws over any
   focused control that leaves `FocusAdorner` unset, and `ClipToBounds`, which
   Avalonia 12 turns on for every `TemplatedControl`, so the control ate its own
   outward bloom and only the framework's frame was left. A new ring carrier
-  goes in that rule's selector list. Before it, each surface posted
+  goes in that rule's selector list — and its clip has to be keyed on **the
+  pseudo-class that carrier's own ring is set on**, not on `:focus-visible` by
+  default: the field's ring is on plain `:focus` (`#1089` review 4), so a click
+  or a host's `Focus()` reached it with the clip still on and the pad's
+  `:focus-visible` lift never fired. Before it, each surface posted
   its own `Focus()` (the `MainWindow` constructor, `PlayEdgeFlowsWiring`,
   `PlayHomeView`, `StateGrid`) and they raced; #625's cross-window guard lives
   here once now.

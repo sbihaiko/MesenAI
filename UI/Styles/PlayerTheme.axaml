@@ -526,8 +526,13 @@
 	     - the W-P2 Continue press grew a second line of text the clip used to
 	     hide ("lines 2/1" in render-gate), and a long value in a field or a
 	     long popup label would spill past the rounded border the same way.
-	     Keyed on :focus-visible, the same pseudo-class the ring itself is set
-	     on, the clip is off exactly when the ring is on screen.
+	     Keyed on the same pseudo-class each ring is set on, the clip is off
+	     exactly when the ring is on screen. That is :focus-visible for every
+	     carrier but the field: the field's ring is on plain :focus (its own
+	     rule further down, #1089 review 4), so its clip is keyed on :focus
+	     too. Keying the field's clip on :focus-visible left it eating the
+	     ring on the one path that reaches the field without a pad - a click,
+	     or a host's Focus(), takes :focus with :focus-visible off.
 	     The `.popup` drop-down in Play is two controls on top of each other -
 	     a <ComboBox Classes="popup"> and the one a <c:EnumComboBox
 	     Classes="popup"> wraps - and both of them clip, the same bounds twice
@@ -536,7 +541,19 @@
 	     the ring while every other popup in the sheet is themed. The wrapper
 	     takes focus into its drop-down rather than on itself, so it answers
 	     :focus-within; the drop-down answers :focus-visible directly.-->
-	<Style Selector=".player Button:focus-visible, .player TextBox:focus-visible, .player ComboBox.popup:focus-visible, .player c|EnumComboBox.popup:focus-within, .player c|EnumComboBox.popup ComboBox#Dropdown:focus-visible, .player TabControl.segmented > TabItem:focus-visible">
+	<Style Selector=".player Button:focus-visible, .player TextBox:focus, .player ComboBox.popup:focus-visible, .player c|EnumComboBox.popup:focus-within, .player c|EnumComboBox.popup ComboBox#Dropdown:focus-visible, .player TabControl.segmented > TabItem:focus-visible">
+		<Setter Property="ClipToBounds" Value="False" />
+	</Style>
+	<!--#1089 (review 4): the field's own clip is not the only one over its ring.
+	     The ring is set on the field template's Border#PART_BorderElement, and
+	     two wrappers of that same template sit between the field and the border,
+	     each of them a TemplatedControl and each of them carrying the clip
+	     Avalonia 12 gives one - the validation pair, both the same bounds as the
+	     field. Lifting the field's clip leaves the ring inside them, which is
+	     what the render case reads: with the field focused and the clip lifted
+	     above, the band around it was still the window's colour. Keyed on the
+	     field's own ring pseudo-class, like the rule above. -->
+	<Style Selector=".player TextBox:focus /template/ DataValidationErrors, .player TextBox:focus /template/ DataValidationErrors /template/ ContentControl#InlineDataValidationContentControl">
 		<Setter Property="ClipToBounds" Value="False" />
 	</Style>
 	<!--Every button in Play, not a list of the five classes that happened to have
@@ -1571,6 +1588,19 @@
 	</Style>
 	<Style Selector=".player c|StateGridEntry.tiles.slot Button#TileButton.activeEntry /template/ Border#PART_Background">
 		<Setter Property="BoxShadow" Value="{StaticResource PlayerFocusRing}" />
+	</Style>
+	<!--#1089 (review 4): this ring is a class look, not a focus look - the slot
+	     grid binds the tile's `activeEntry` class to its IsActiveEntry - so the
+	     tile's :focus-visible lift above never fires for the slot the player is
+	     already on, and the tile's own clip (the .tiles rule) ate the ring the
+	     same way it ate the focused one. Same trade as the focused tile: the
+	     picture is not rounded to the radius while the active slot shows the
+	     ring, and the background is Black either way. -->
+	<Style Selector=".player c|StateGridEntry.tiles.slot Button#TileButton.activeEntry">
+		<Setter Property="ClipToBounds" Value="False" />
+	</Style>
+	<Style Selector=".player c|StateGridEntry.tiles.slot Button#TileButton.activeEntry /template/ Border#PART_Background">
+		<Setter Property="ClipToBounds" Value="False" />
 	</Style>
 	<Style Selector=".player c|StateGridEntry.tiles.slot TextBlock.title">
 		<Setter Property="Margin" Value="0 6 0 0" />

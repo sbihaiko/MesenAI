@@ -211,6 +211,117 @@ public class PlayerFocusRingRenderTests
 		}
 	}
 
+	//#1089 (review 4, audit of the other carriers): the switch, the option and
+	//the disclosure are ring carriers that do not read as "a Button" in the
+	//theme's rule list, and the clip lift names `.player Button:focus-visible`
+	//rather than each of them. They are covered only if Avalonia's type selector
+	//matches the family - CheckBox and RadioButton derive from ToggleButton,
+	//which derives from Button. This case is that claim, read as pixels: if the
+	//family is not matched, the switch clips its own ring the way the field did.
+	[AvaloniaFact]
+	public void A_focused_switch_draws_the_themes_ring_past_its_own_clip()
+	{
+		CheckBox toggle = new() { Classes = { "switch" }, IsChecked = true };
+		Window window = PlayWindow(new StackPanel { Margin = new Thickness(60), Children = { toggle } });
+		try {
+			toggle.Focus(NavigationMethod.Tab);
+			Pump();
+			Assert.True(toggle.IsFocused, "the switch did not take focus, so this case would prove nothing");
+
+			//The track, not the switch: the ring is on the track, and the track's
+			//own bounds are what the ring has to get past.
+			Border track = toggle.GetVisualDescendants().OfType<Border>().First(b => b.Name == "PART_Track");
+			Assert.Equal((BoxShadows)Application.Current!.FindResource("PlayerFocusRing")!, track.BoxShadow);
+
+			using Bitmap frame = PlayerRender.Capture(window);
+			PlayerRender.Save(frame, "focus-ring-switch");
+
+			AssertRingOutside(frame, window, track);
+		} finally {
+			window.Close();
+			Pump();
+		}
+	}
+
+	//#1089 (review 4, second carrier, same shape): a save slot that is the
+	//*active* entry carries PlayerFocusRing as a class look - the slot grid
+	//binds the tile's `activeEntry` class to its IsActiveEntry - and not as a
+	//focus look. So no focus is involved at all, and the tile's clip lift, keyed
+	//on :focus-visible, never fires: the ring is drawn with the clip that ate it
+	//still on. The focused-tile case above cannot see this - it takes the lift
+	//by being focused.
+	[AvaloniaFact]
+	public void The_active_save_slot_draws_the_themes_ring_past_the_tiles_clip()
+	{
+		StateGridEntry tile = new() {
+			Classes = { "tiles", "slot" },
+			Title = "Save 1",
+			Enabled = true,
+			IsActiveEntry = true
+		};
+		//A slot is Width/Height NaN and Stretch on purpose (it fills its cell), so
+		//the host has to give it a cell - in a StackPanel it lays out 0 high and
+		//there is no band around it to read.
+		Grid host = new() { Width = 300, Height = 200, Margin = new Thickness(60) };
+		host.Children.Add(tile);
+		Window window = PlayWindow(host);
+		try {
+			Button button = window.GetVisualDescendants().OfType<Button>().Single(b => b.Name == "TileButton");
+			Assert.True(button.Classes.Contains("activeEntry"),
+				"the tile did not take the active-entry class, so this case would prove nothing");
+			Assert.False(button.IsFocused, "the tile took focus, so this case would prove nothing");
+
+			using Bitmap frame = PlayerRender.Capture(window);
+			PlayerRender.Save(frame, "focus-ring-active-save-slot");
+
+			AssertRingOutside(frame, window, button);
+		} finally {
+			window.Close();
+			Pump();
+		}
+	}
+
+	//#1089 (review 4): the field is the one ring carrier in the theme whose ring
+	//is set on plain `:focus` - `.player TextBox:focus /template/
+	//Border#PART_BorderElement` - while every other carrier answers
+	//`:focus-visible`. A field focused by a pointer click, or by a host's
+	//`Focus()` (the same shape: no NavigationMethod), answers `:focus` with
+	//`:focus-visible` off, so a clip lifted on `:focus-visible` alone is still
+	//eating the ring while the ring is on screen. The unfocused overflow case
+	//above cannot see this: it holds under both rules.
+	[AvaloniaFact]
+	public void A_field_focused_without_the_keyboard_draws_the_themes_ring_past_its_own_clip()
+	{
+		TextBox field = new() {
+			Width = 200,
+			Height = 32,
+			HorizontalAlignment = HorizontalAlignment.Left,
+			Text = "Aspect Ratio"
+		};
+		Window window = PlayWindow(new StackPanel { Margin = new Thickness(60), Children = { field } });
+		try {
+			//No NavigationMethod: what a click sends and what a host's Focus()
+			//sends, so the field answers :focus and not :focus-visible.
+			field.Focus();
+			Pump();
+			Assert.True(field.IsFocused, "the field did not take focus, so this case would prove nothing");
+			IPseudoClasses classes = field.Classes;
+			Assert.True(classes.Contains(":focus"),
+				"the field is focused with no :focus pseudo-class, so its ring rule cannot have matched");
+			Assert.False(classes.Contains(":focus-visible"),
+				"the field answered :focus-visible, so this case says nothing about the plain-focus path");
+
+			using Bitmap frame = PlayerRender.Capture(window);
+			PlayerRender.Save(frame, "focus-ring-field-plain-focus");
+
+			AssertRingOutside(frame, window, field);
+		} finally {
+			window.Close();
+			Pump();
+		}
+	}
+
+
 	//#1089: a Player home / save-state tile (c:StateGridEntry.tiles) is the one
 	//press whose own rule turns ClipToBounds back ON - the tile clips its
 	//picture to the 10 px radius. The clip is the control's, so it eats the
