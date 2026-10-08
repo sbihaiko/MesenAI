@@ -25,7 +25,12 @@ namespace Mesen.HeadlessTests;
 //
 //Core-free: the sheet is shown in a plain window, no MainWindow, so this runs
 //without the native MesenCore (PlayFocusGlowTests' pattern). The list is filled
-//from the real Preferences list, which is what the sheet binds to.
+//from the real Preferences list, which is what the sheet binds to. That is also
+//why it is marked [NativeCoreFree] rather than joining the serial collection:
+//the one core path the walk finds is the view-model's own constructor building
+//its AddKnownGameFolder delegate, and no case here ever designates a games
+//folder, so the call is never made.
+[NativeCoreFree("PlayerRomPickerViewModel's constructor only builds its AddKnownGameFolder delegate; no case here designates a games folder")]
 public class PlayerLibraryFoldersListLayoutTests
 {
 	//The theme's row (PlayerTheme.axaml, Border.switch-row).
@@ -113,45 +118,61 @@ public class PlayerLibraryFoldersListLayoutTests
 		public static Harness Open(int folders)
 		{
 			string root = Path.Combine(Path.GetTempPath(), "mesen-1079-" + Guid.NewGuid().ToString("N"));
-			List<string> paths = new();
-			for(int i = 0; i < folders; i++) {
-				string path = Path.Combine(root, "folder-" + i);
-				Directory.CreateDirectory(path);
-				paths.Add(path);
-			}
-
 			List<string>? saved = ConfigManager.Config.Preferences.LibraryFolders;
-			ConfigManager.Config.Preferences.LibraryFolders = paths;
+			Window? window = null;
+			//Open mutates a global (the Preferences list) and a temp root, and it
+			//can throw before the Harness exists - a case that fails in setup has
+			//no Dispose to undo either, so the undo lives here too.
+			try {
+				List<string> paths = new();
+				for(int i = 0; i < folders; i++) {
+					string path = Path.Combine(root, "folder-" + i);
+					Directory.CreateDirectory(path);
+					paths.Add(path);
+				}
 
-			PlayerRomPickerViewModel model = new();
-			model.Open();
-			model.OpenFoldersSheet();
-			if(!model.IsFoldersSheetVisible) {
-				throw new InvalidOperationException("the sheet did not open, so this case would prove nothing");
+				ConfigManager.Config.Preferences.LibraryFolders = paths;
+
+				PlayerRomPickerViewModel model = new();
+				model.Open();
+				model.OpenFoldersSheet();
+				if(!model.IsFoldersSheetVisible) {
+					throw new InvalidOperationException("the sheet did not open, so this case would prove nothing");
+				}
+
+				PlayerRomPickerView view = new() { DataContext = model };
+				window = new Window() { Width = 1100, Height = 740, Content = view };
+				window.Classes.Add("player");
+				window.Classes.Add("play");
+				window.Show();
+				Pump();
+
+				Control sheet = window.GetVisualDescendants().OfType<Control>().First(c => c.Name == "RomPickerFoldersSheet");
+				ScrollViewer scroller = sheet.GetVisualDescendants().OfType<ScrollViewer>().First();
+				//The box the list is drawn in: the inset is behind the list, so this is
+				//the layer that carries the box's own height.
+				Control box = (Control)scroller.GetVisualParent()!;
+				//The rows, whatever they are made of: one per item container, which is
+				//the DataTemplate's own root.
+				IReadOnlyList<Visual> rows = scroller.GetVisualDescendants()
+					.OfType<Control>()
+					.Where(c => c.DataContext is PlayerLibraryFolderRow && c.GetVisualParent() is ContentPresenter)
+					.Cast<Visual>().ToList();
+				Button add = window.GetVisualDescendants().OfType<Button>().First(b => b.Name == "RomPickerAddFolder");
+
+				Assert.True(rows.Count == folders, $"the list drew {rows.Count} rows for {folders} folders");
+				return new Harness(root, saved, window, box, scroller, rows, add);
+			} catch {
+				window?.Close();
+				Pump();
+				ConfigManager.Config.Preferences.LibraryFolders = saved;
+				try {
+					Directory.Delete(root, true);
+				} catch {
+					//A case that failed before it built its tree leaves nothing to remove.
+				}
+				throw;
 			}
-
-			PlayerRomPickerView view = new() { DataContext = model };
-			Window window = new() { Width = 1100, Height = 740, Content = view };
-			window.Classes.Add("player");
-			window.Classes.Add("play");
-			window.Show();
-			Pump();
-
-			Control sheet = window.GetVisualDescendants().OfType<Control>().First(c => c.Name == "RomPickerFoldersSheet");
-			ScrollViewer scroller = sheet.GetVisualDescendants().OfType<ScrollViewer>().First();
-			//The box the list is drawn in: the inset is behind the list, so this is
-			//the layer that carries the box's own height.
-			Control box = (Control)scroller.GetVisualParent()!;
-			//The rows, whatever they are made of: one per item container, which is
-			//the DataTemplate's own root.
-			IReadOnlyList<Visual> rows = scroller.GetVisualDescendants()
-				.OfType<Control>()
-				.Where(c => c.DataContext is PlayerLibraryFolderRow && c.GetVisualParent() is ContentPresenter)
-				.Cast<Visual>().ToList();
-			Button add = window.GetVisualDescendants().OfType<Button>().First(b => b.Name == "RomPickerAddFolder");
-
-			Assert.True(rows.Count == folders, $"the list drew {rows.Count} rows for {folders} folders");
-			return new Harness(root, saved, window, box, scroller, rows, add);
 		}
 
 		//Offsets by walking the visual tree: Bounds are parent-relative, and these
