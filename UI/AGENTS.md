@@ -635,6 +635,54 @@ can be exercised by real xunit tests without Avalonia or the native
   `<MovieFolder>/Shared/`, and on Stop reveals the file and opens the
   pre-filled `[Replay]` issue form from the host-free `ReplayShare`
   (`UI.Tests/Recording/ReplayShareTests.cs`). No upload, no credential.
+- **Library folders — *Library folders…* on the Play sheet
+  (`UI/Logic/LibraryFolders`, `PlayerRomPickerViewModel.Folders`, ADR-0264
+  Decision 8).** The single `Preferences.GameFolder` the app already had seeds
+  a stored list and is not read again. The list persists as
+  `PreferencesConfig.LibraryFolders`, and **`null` and `[]` are different
+  states**: `null` means the preference was never seeded, `[]` that the player
+  emptied it. Only `null` seeds — `StoredLibraryFolders()` answers the stored
+  list, or `LibraryFolders.Seed` off `GameFolder` when the preference is
+  absent — and `SeedLibraryFolders()` writes that seed **only when it holds a
+  folder**, so a start with no games folder cannot become an emptied library
+  and a folder the player removed cannot come back on the next start. Every
+  edit goes through `CommitLibraryFolders`, which writes the preference and
+  re-reads `_folders` from it, and which deliberately does **not** reassign
+  `LibraryFolderSource`: that is a seam a caller or a test injects, and writing
+  it back destroyed the injected list.
+  The list rules are host-free in `UI/Logic/LibraryFolders.cs` — `Normalize`
+  (the one spelling a folder is stored as), `Seed`, `Add`, `Remove`, `Union`,
+  and `HeaderResourceId`, the plural rule behind the header's one sentence
+  *Your library · N games in M folders*. `M` is that list's own row count,
+  never the folders a scan happened to answer with. The comparison that decides
+  whether two folders are one is a parameter, not a constant
+  (`DefaultComparison`, and why `null` means the OS's own rule). Nothing there
+  reaches a disk or an Avalonia type — the `UI/Logic/` boundary above — which
+  is what lets `UI.Tests/Play/LibraryFoldersTests` pin every rule against
+  literals.
+  The host half is `PlayerRomPickerViewModel.Folders.cs`: the rows, the notice,
+  and the **two doors an add comes through**. A mouse raises the native folder
+  dialog (`AddFolderFromMouse`) — the mouse-reachability clause ADR-0256
+  Decision 6 leans on — while a pad uses the sheet's own folder browser,
+  because a native dialog owns the screen once it is up and the focus engine
+  cannot draw a ring in it; the bridge answers Confirm on *Add a folder…* with
+  `AddFolderFromPad`, which is the only reason one control can have two doors.
+  Removing is a list edit and nothing else: `LibraryFolders.Remove` has no file
+  API to call and the preference is the only write, so a folder taken out of
+  the library keeps every game in it. `IsFoldersSheetVisible` and
+  `IsLibrarySurfaceVisible` keep one surface of the sheet up at a time, and
+  `IsPickingLibraryFolder` is the browser's pick mode — a mode of one open, so
+  `Open()` resets it and a pick that ends on a game row disarms it before
+  `RomChosen` fires.
+  Headless wiring: `UI.HeadlessTests/PlayerLibraryFoldersTests` drives both
+  doors, the pad-only add and remove, B's one-step ascent and its cancel at the
+  roots (ADR-0256's stop rule), and the named empty states, with
+  `LibraryFolderSource` injected and `RunLibraryScanInline`/`RunScanInline`
+  keeping the scan in the `Open()` turn. A suite that drives the library
+  through `GameFolder` must hold `Preferences.LibraryFolders`, null it in the
+  constructor and restore it in `Dispose`: `Open()` now persists a seed, so a
+  saved list would otherwise win over the tree the case builds and the suite
+  would pass only on a machine that never used the feature.
 
 ## Player theme (ADR-0249)
 
@@ -865,3 +913,9 @@ drawn by `scripts/render_gui_wireframes.py`), not classic Mesen. The theme is
 
 (none — `Logic/` and `Services/` are convention-only subfolders, not
 separately governed subtrees)
+
+- **Library folders** — the Play sheet's *Library folders…* list, its
+  persistence and its two doors for an add (ADR-0264 Decision 8): the last
+  bullet under `## Local Contracts`, above. Its host-free rules are
+  `UI/Logic/LibraryFolders.cs` and its host half
+  `UI/ViewModels/PlayerRomPickerViewModel.Folders.cs`.

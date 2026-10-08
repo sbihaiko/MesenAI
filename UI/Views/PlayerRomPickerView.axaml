@@ -115,18 +115,23 @@
 				holds) and as the sheet's title when the browser is (a place, not a
 				count - so no count line and no *Browse a file…* there).-->
 				<DockPanel DockPanel.Dock="Top">
-					<Button Name="RomPickerBrowseFile" DockPanel.Dock="Right" Classes="secondary regular" Content="{l:Translate btnRomPickerBrowseFile}" Click="OnBrowseFile" IsVisible="{Binding IsLibraryMode}" />
 					<!--#1033 (ADR-0264 Decision 4): the library's search box, and the
 					way out of an empty result beside it. Docked after *Browse a file…*
 					so the box sits inside the header's own row, and hidden on the
 					browser, which is a folder walk and has nothing to search. Y puts
 					the ring here and opens ADR-0262's pad keyboard; typing here does
 					the same by hand, and the grid narrows either way.-->
+					<!--#1036 (ADR-0264 Decision 8): *Library folders…* sits beside
+					*Browse a file…*, and both belong to the library surface - the
+					folders sheet is the surface when it is up, so it hides them along
+					with the grid and the count rather than leaving two sheets with one
+					header between them.-->
+					<Button Name="RomPickerBrowseFile" DockPanel.Dock="Right" Classes="secondary regular" Content="{l:Translate btnRomPickerBrowseFile}" Click="OnBrowseFile" IsVisible="{Binding IsLibrarySurfaceVisible}" />
+					<Button Name="RomPickerLibraryFolders" DockPanel.Dock="Right" Classes="secondary regular" Margin="0 0 8 0" Content="{l:Translate btnRomPickerLibraryFolders}" Click="OnLibraryFolders" IsVisible="{Binding IsLibrarySurfaceVisible}" />
 					<Button Name="RomPickerSearchClear" DockPanel.Dock="Right" Classes="secondary regular" Content="{l:Translate btnRomPickerSearchClear}" Click="OnClearSearch" IsVisible="{Binding ShowSearchClear}" />
-					<TextBox Name="RomPickerSearch" DockPanel.Dock="Right" Width="240" Margin="0 0 8 0" VerticalAlignment="Center" Text="{Binding SearchQuery}" PlaceholderText="{l:Translate lblRomPickerSearchPlaceholder}" IsVisible="{Binding IsLibraryMode}" />
+					<TextBox Name="RomPickerSearch" DockPanel.Dock="Right" Width="240" Margin="0 0 8 0" VerticalAlignment="Center" Text="{Binding SearchQuery}" PlaceholderText="{l:Translate lblRomPickerSearchPlaceholder}" IsVisible="{Binding IsLibrarySurfaceVisible}" />
 					<StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
 						<TextBlock Name="RomPickerTitle" Classes="sheet-heading" Text="{Binding SheetHeading}" />
-						<TextBlock Name="RomPickerCount" Classes="footnote secondary" Text="{Binding CountText}" VerticalAlignment="Center" IsVisible="{Binding IsLibraryMode}" />
 					</StackPanel>
 				</DockPanel>
 				<TextBlock Classes="subhead secondary" DockPanel.Dock="Top" Text="{l:Translate lblRomPickerHint}" TextWrapping="Wrap" IsVisible="{Binding IsBrowseMode}" />
@@ -145,7 +150,7 @@
 					<!--(1) The library: the grid, and the one named empty state
 					(Decision 8) - a sentence with the next step, never a blank
 					grid.-->
-					<DockPanel IsVisible="{Binding IsLibraryMode}">
+					<DockPanel IsVisible="{Binding IsLibrarySurfaceVisible}">
 						<!--#1037 (ADR-0264 Decision 9): the scan is visible while it
 						runs. The indeterminate bar IS the animation (#734: every
 						wait the player can see shows a moving one), and it goes when
@@ -236,6 +241,37 @@
 							</ScrollViewer>
 						</DockPanel>
 					</Border>
+
+						<!--(3) *Library folders…* (#1036, ADR-0264 Decision 8): the folders
+						"Your library" scans, each row carrying the press that takes it out
+						of the list, and one press that adds a folder. The pad walks this list;
+						the mouse reaches the same rows, and the Add button is where the two
+						doors part - the native folder dialog with a mouse, the sheet's own
+						folder browser with a pad, because a native dialog owns the screen and
+						a pad cannot answer one. Removing takes the row out of the list and
+						touches nothing else: the folder and its games are the player's either
+						way.-->
+						<DockPanel Name="RomPickerFoldersSheet" IsVisible="{Binding IsFoldersSheetVisible}" Margin="0 14 0 0">
+							<TextBlock Classes="subhead secondary" DockPanel.Dock="Top" Text="{l:Translate lblRomPickerFoldersHint}" TextWrapping="Wrap" />
+							<!--What the last add or remove answered, said on the sheet rather
+							than in a dialog over it.-->
+							<TextBlock Name="RomPickerFoldersNotice" Classes="footnote" DockPanel.Dock="Top" Text="{Binding FoldersNoticeText}" TextWrapping="Wrap" Margin="0 10 0 0" IsVisible="{Binding FoldersNoticeText.Length}" />
+							<Button Name="RomPickerAddFolder" Classes="secondary regular" DockPanel.Dock="Bottom" HorizontalAlignment="Left" Margin="0 14 0 0" Content="{l:Translate btnRomPickerFoldersAdd}" Click="OnAddFolder" />
+							<Border Classes="inset" Margin="0 12 0 0">
+								<ScrollViewer MaxHeight="300" HorizontalScrollBarVisibility="Disabled">
+									<ItemsControl Name="RomPickerFoldersList" ItemsSource="{Binding LibraryFolderRows}" XYFocus.NavigationModes="Enabled">
+										<ItemsControl.ItemTemplate>
+											<DataTemplate x:DataType="vm:PlayerLibraryFolderRow">
+												<DockPanel>
+													<Button Name="RomPickerFolderRemove" Classes="plain small" DockPanel.Dock="Right" Content="{l:Translate btnRomPickerFolderRemove}" Click="OnRemoveFolder" />
+													<TextBlock Classes="title" Text="{Binding Label}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+												</DockPanel>
+											</DataTemplate>
+										</ItemsControl.ItemTemplate>
+									</ItemsControl>
+								</ScrollViewer>
+							</Border>
+						</DockPanel>
 				</Panel>
 			</DockPanel>
 		</Border>

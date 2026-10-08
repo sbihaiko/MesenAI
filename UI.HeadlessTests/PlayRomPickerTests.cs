@@ -34,6 +34,11 @@ public class PlayRomPickerTests : IDisposable
 	private readonly UiMode _uiMode = ConfigManager.Config.Preferences.UiMode;
 	private readonly Workspace _workspace = ConfigManager.Config.Preferences.Workspace;
 	private readonly bool _confirm = ConfigManager.Config.Preferences.ConfirmExitResetPower;
+	//#1036: these cases drive the picker through GameFolder, so a LibraryFolders
+	//list left in the real config by anyone who used the feature would win over it
+	//and the library cases would fail on that machine only. Held here and put back
+	//in Dispose, exactly as PlayerLibraryFoldersTests does.
+	private readonly List<string>? _libraryFolders = ConfigManager.Config.Preferences.LibraryFolders;
 
 	private readonly List<MainWindow> _windows = new();
 
@@ -83,6 +88,9 @@ public class PlayRomPickerTests : IDisposable
 			WaitUntilStopped();
 		}
 		Directory.CreateDirectory(_folder);
+		//First run for every case: the library these cases build comes from their
+		//own GameFolder, never from a list a previous run left in the config.
+		ConfigManager.Config.Preferences.LibraryFolders = null;
 	}
 
 	private static void WaitUntilStopped()
@@ -108,6 +116,7 @@ public class PlayRomPickerTests : IDisposable
 		prefs.UiMode = _uiMode;
 		prefs.Workspace = _workspace;
 		prefs.ConfirmExitResetPower = _confirm;
+		prefs.LibraryFolders = _libraryFolders;
 		ConfigManager.Config.Save();
 
 		try {

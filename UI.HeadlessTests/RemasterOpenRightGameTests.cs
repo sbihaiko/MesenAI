@@ -37,6 +37,7 @@ public class RemasterOpenRightGameTests : IDisposable
 	private readonly bool _autoInstall = ConfigManager.Config.EnhancementPacks.AutoInstallCommunityPacks;
 	private readonly string _gameFolder = ConfigManager.Config.Preferences.GameFolder;
 	private readonly bool _overrideGameFolder = ConfigManager.Config.Preferences.OverrideGameFolder;
+	private readonly List<string>? _libraryFolders = ConfigManager.Config.Preferences.LibraryFolders;
 	private readonly List<string> _folders = new();
 
 	public void Dispose()
@@ -48,6 +49,7 @@ public class RemasterOpenRightGameTests : IDisposable
 		prefs.PauseWhenInMenusAndConfig = _pauseInMenus;
 		prefs.GameFolder = _gameFolder;
 		prefs.OverrideGameFolder = _overrideGameFolder;
+		prefs.LibraryFolders = _libraryFolders;
 		ConfigManager.Config.EnhancementPacks.BootstrapEnhancementFolder = _bootstrap;
 		ConfigManager.Config.EnhancementPacks.AutoInstallCommunityPacks = _autoInstall;
 		if(NativeCore.IsAvailable) {
@@ -201,6 +203,7 @@ public class RemasterOpenRightGameTests : IDisposable
 		string projectA = MakeProject(TempFolder(), "game-a");
 		ConfigManager.Config.Preferences.GameFolder = folder;
 		ConfigManager.Config.Preferences.OverrideGameFolder = true;
+		ConfigManager.Config.Preferences.LibraryFolders = null;
 		model.Remaster.RecentRoms = () => new[] { romB };
 		PlayerRomPickerViewModel picker = model.Remaster.RightGamePicker;
 		picker.RunScanInline = true;

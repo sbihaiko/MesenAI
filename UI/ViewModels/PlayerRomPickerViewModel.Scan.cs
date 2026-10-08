@@ -442,9 +442,16 @@ namespace Mesen.ViewModels
 			//games" is a claim the scan has not made.
 			_scanEmptyText = LibraryEmptyText(PlayRomPicker.LibraryEmptyMessageId(_folders.Count, result.Entries.Count));
 			UpdateEmptyResult();
-			CountText = ResourceHelper.GetMessage("RomPickerLibraryCount",
-				CountLabel(result.Entries.Count, "RomPickerGameOne", "RomPickerGameMany"),
-				CountLabel(result.FolderCount, "RomPickerFolderOne", "RomPickerFolderMany"));
+			//#1036 (ADR-0264 Decision 8): M is the LIST's row count, not the folders
+			//that happened to answer with a game - the count describes the player's
+			//library, so a folder that holds no ROM (or one the scan has not reached
+			//yet) is still a folder the header names, and the sheet's own folder list
+			//is the one source of it.
+			//The header is ONE sentence - "Your library · N games in M folders" - and
+			//the plural rule is the host-free LibraryFolders.HeaderResourceId.
+			HeaderText = ResourceHelper.GetMessage(
+				LibraryFolders.HeaderResourceId(result.Entries.Count, _folders.Count),
+				result.Entries.Count, _folders.Count);
 			TruncatedText = result.Truncated
 				? ResourceHelper.GetMessage("RomPickerLibraryTruncated", GameLibrary.MaxEntries)
 				: "";

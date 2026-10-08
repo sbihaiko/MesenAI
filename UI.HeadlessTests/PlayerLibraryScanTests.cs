@@ -250,7 +250,7 @@ public class PlayerLibraryScanTests : IDisposable
 			Assert.Equal(new[] { "Contra", "Metroid", "Tetris" }, model.RomPicker.Tiles.Select(t => t.Title).ToArray());
 			Assert.False(window.FindNamed<ProgressBar>("RomPickerScanProgress").IsOnScreen(),
 				"the indicator is still on screen after the scan ended");
-			Assert.Contains("3 games", model.RomPicker.CountText);
+			Assert.Contains("3 games", model.RomPicker.HeaderText);
 		} finally {
 			//Never leave the scan's thread parked, whatever the case did above.
 			release.Set();
@@ -553,7 +553,10 @@ public class PlayerLibraryScanTests : IDisposable
 
 		Assert.Single(model.RomPicker.Tiles);
 		Assert.False(model.RomPicker.IsScanning, "a scan that threw left its wait on screen");
-		Assert.Equal("", model.RomPicker.CountText);
+		//The header is ONE sentence now (the #1036 review fix, rebased over
+		//#1037): a walk that threw leaves the title standing over the tiles it
+		//already showed, which is still not the false zero this case is about.
+		Assert.Equal("Your library", model.RomPicker.HeaderText);
 		Assert.Equal("", model.RomPicker.TruncatedText);
 		Assert.NotNull(window);
 	}
@@ -855,14 +858,14 @@ public class PlayerLibraryScanTests : IDisposable
 			model.RomPicker.RunLibraryScanInline = true;
 			Press(window, PadNavAction.Confirm);
 			Pump();
-			Assert.Contains("3 games", model.RomPicker.CountText);
+			Assert.Contains("3 games", model.RomPicker.HeaderText);
 
 			//The old walk finishes last, and the header is not its to write.
 			release.Set();
 			Thread.Sleep(200);
 			Pump();
-			Assert.Contains("3 games", model.RomPicker.CountText);
-			Assert.Contains("2 folders", model.RomPicker.CountText);
+			Assert.Contains("3 games", model.RomPicker.HeaderText);
+			Assert.Contains("2 folders", model.RomPicker.HeaderText);
 		} finally {
 			release.Set();
 		}

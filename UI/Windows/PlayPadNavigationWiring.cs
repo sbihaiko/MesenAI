@@ -275,10 +275,15 @@ namespace Mesen.Windows
 			//and the target is whichever surface's first control the mode names.
 			//Without the mode in the list, the press that steps into the browser
 			//would leave the ring on a tile the player can no longer see.
+			//#1036 (ADR-0264 Decision 8): *Library folders…* is a third surface of
+			//the same sheet, and FoldersRevision is watched beside the other two
+			//revisions for exactly their reason - its rows are rebuilt on an open,
+			//an add and a remove, and the container the ring was on went with the old
+			//ones. Without it a pad that removed a row would be left holding nothing.
 			focus.When(model.RomPicker,
 				[nameof(PlayerRomPickerViewModel.IsVisible), nameof(PlayerRomPickerViewModel.PathText),
 				 nameof(PlayerRomPickerViewModel.SuggestionRevision), nameof(PlayerRomPickerViewModel.Mode),
-				 nameof(PlayerRomPickerViewModel.TilesRevision)],
+				 nameof(PlayerRomPickerViewModel.TilesRevision), nameof(PlayerRomPickerViewModel.FoldersRevision)],
 				() => model.RomPicker.IsVisible, () => RomPickerFocusTarget(window, model),
 				() => Named(window, "PlayerRomPickerSheet"));
 
@@ -343,6 +348,13 @@ namespace Mesen.Windows
 		//the one control the sheet always has.
 		private static Control? RomPickerFocusTarget(MainWindow window, MainWindowViewModel model)
 		{
+			//#1036 (ADR-0264 Decision 8): the folders sheet's own way in is its
+			//*Add a folder…* - the sheet's primary action, and the one press that is
+			//not the removal of a folder the player already has. The rows below it
+			//are reached by moving up, which is what the engine's traversal is for.
+			if(model.RomPicker.IsFoldersSheetVisible) {
+				return Named(window, "RomPickerAddFolder") ?? Named(window, "RomPickerBack");
+			}
 			if(model.RomPicker.Mode == RomPickerMode.Library) {
 				//#1033: a scan landing bumps TilesRevision, which is a claim for the
 				//first tile - and the player who pressed Y (or is typing) before a
@@ -386,7 +398,7 @@ namespace Mesen.Windows
 				//lands on the control its empty sentence names, and Back stays
 				//the last resort, being the one control the sheet always has.
 				return RomPickerTile(window, model.RomPicker.LastFocusedTilePath, model.RomPicker.IsRestorePending)
-					?? Named(window, "RomPickerBrowseFile") ?? Named(window, "RomPickerBack");
+					?? Named(window, "RomPickerLibraryFolders") ?? Named(window, "RomPickerBrowseFile") ?? Named(window, "RomPickerBack");
 			}
 			return RomPickerFirstRow(window) ?? Named(window, "RomPickerBack");
 		}
@@ -464,7 +476,10 @@ namespace Mesen.Windows
 			//#1033: the search box is a header control too, so Down out of it comes
 			//back to the grid exactly as Down out of the buttons does - one step
 			//out, one step back, whichever control the ring was on.
-			if(action == PadNavAction.Down && focused.Name is "RomPickerBrowseFile" or "RomPickerBack" or "RomPickerSearch") {
+			//#1036 (ADR-0264 Decision 8) adds the third one the same way - the
+			//folders button that stands beside *Browse a file…* - by name and not by
+			//counting them, so every header control keeps answering as they arrive.
+			if(action == PadNavAction.Down && focused.Name is "RomPickerBrowseFile" or "RomPickerBack" or "RomPickerSearch" or "RomPickerLibraryFolders") {
 				//#1050 review finding 4: the grid is only a place to come back to
 				//while it is the surface that is UP. In the browser the sheet hides
 				//the grid rather than removing it, and Enter cannot focus what is
@@ -865,6 +880,17 @@ namespace Mesen.Windows
 				}
 
 				if(action == PadNavAction.Confirm && focused is TextBox field && field.IsEffectivelyEnabled && !field.IsReadOnly && OpenKeyboard(field)) {
+					return;
+				}
+				//#1036 (ADR-0264 Decision 8): *Add a folder…* has two doors and the
+				//press decides which one. The pointer's is the view's own handler (the
+				//native folder dialog, which is what a player at a desk expects); the
+				//pad's is the sheet's own folder browser, answered here BEFORE the
+				//activation because a native dialog owns the screen - the focus engine
+				//cannot draw a ring in it, so a cabinet with a pad and nothing else
+				//could not add a folder at all.
+				if(action == PadNavAction.Confirm && focused.Name == "RomPickerAddFolder") {
+					_model.RomPicker.AddFolderFromPad();
 					return;
 				}
 				if(action == PadNavAction.Confirm) {

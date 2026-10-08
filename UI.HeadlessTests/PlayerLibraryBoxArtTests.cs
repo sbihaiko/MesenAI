@@ -47,6 +47,7 @@ public class PlayerLibraryBoxArtTests : IDisposable
 	private readonly Workspace _workspace = ConfigManager.Config.Preferences.Workspace;
 	private readonly string? _gameFolder = ConfigManager.Config.Preferences.GameFolder;
 	private readonly bool _overrideGameFolder = ConfigManager.Config.Preferences.OverrideGameFolder;
+	private readonly List<string>? _libraryFolders = ConfigManager.Config.Preferences.LibraryFolders;
 	private readonly bool _downloadBoxArt = ConfigManager.Config.Preferences.DownloadBoxArt;
 
 	private readonly List<MainWindow> _windows = new();
@@ -75,6 +76,7 @@ public class PlayerLibraryBoxArtTests : IDisposable
 		prefs.Workspace = _workspace;
 		prefs.GameFolder = _gameFolder ?? "";
 		prefs.OverrideGameFolder = _overrideGameFolder;
+		prefs.LibraryFolders = _libraryFolders;
 		prefs.DownloadBoxArt = _downloadBoxArt;
 		ConfigManager.Config.Save();
 
@@ -104,6 +106,8 @@ public class PlayerLibraryBoxArtTests : IDisposable
 		}
 		ConfigManager.Config.Preferences.GameFolder = root;
 		ConfigManager.Config.Preferences.OverrideGameFolder = true;
+		//First run: the list has never been seeded, so it is seeded from this games folder.
+		ConfigManager.Config.Preferences.LibraryFolders = null;
 		return root;
 	}
 

@@ -36,6 +36,11 @@ public class PlayerLibraryRenderTests : IDisposable
 	private readonly Workspace _workspace = ConfigManager.Config.Preferences.Workspace;
 	private readonly string? _gameFolder = ConfigManager.Config.Preferences.GameFolder;
 	private readonly bool _overrideGameFolder = ConfigManager.Config.Preferences.OverrideGameFolder;
+	//#1036: the render is built from GameFolder, so a LibraryFolders list left in
+	//the real config by anyone who used the feature would win over it and the
+	//render's own identity asserts would fail on that machine only. Held here and
+	//put back in Dispose, exactly as PlayerLibraryFoldersTests does.
+	private readonly List<string>? _libraryFolders = ConfigManager.Config.Preferences.LibraryFolders;
 
 	private readonly List<MainWindow> _windows = new();
 	private readonly string _folder = Path.Combine(Path.GetTempPath(), "mesen-library-renders-" + Guid.NewGuid().ToString("N"));
@@ -46,6 +51,9 @@ public class PlayerLibraryRenderTests : IDisposable
 		PreferencesConfig prefs = ConfigManager.Config.Preferences;
 		prefs.GameFolder = "";
 		prefs.OverrideGameFolder = false;
+		//First run: the render is of the tree this case builds, never of a list a
+		//previous run of the feature left in the config.
+		prefs.LibraryFolders = null;
 	}
 
 	public void Dispose()
@@ -62,6 +70,7 @@ public class PlayerLibraryRenderTests : IDisposable
 		prefs.Workspace = _workspace;
 		prefs.GameFolder = _gameFolder ?? "";
 		prefs.OverrideGameFolder = _overrideGameFolder;
+		prefs.LibraryFolders = _libraryFolders;
 		ConfigManager.Config.Save();
 
 		try {
@@ -210,8 +219,7 @@ public class PlayerLibraryRenderTests : IDisposable
 		Assert.True(window.FindNamed<Border>("PlayerRomPickerSheet").IsOnScreen(), "the sheet is not on screen");
 		//Eleven games, none of them a row: the folders shaped the scan.
 		Assert.Equal(11, model.RomPicker.Tiles.Count);
-		Assert.Equal("Your library", model.RomPicker.HeaderText);
-		Assert.Equal("11 games in 1 folder", model.RomPicker.CountText);
+		Assert.Equal("Your library · 11 games in 1 folder", model.RomPicker.HeaderText);
 		Assert.True(window.FindNamed<ItemsControl>("RomPickerGrid").IsOnScreen(), "the grid is not on screen");
 		Assert.True(window.FindNamed<Button>("RomPickerBrowseFile").IsOnScreen(), "Browse a file… is not on the sheet");
 		Assert.True(window.FindNamed<Button>("RomPickerBack").IsOnScreen(), "Back is not on the sheet");
@@ -301,8 +309,7 @@ public class PlayerLibraryRenderTests : IDisposable
 		//being a picture of the narrowed library fails here rather than being
 		//noticed by whoever opens it next.
 		Assert.True(window.FindNamed<Border>("PlayerRomPickerSheet").IsOnScreen(), "the sheet is not on screen");
-		Assert.Equal("Your library", model.RomPicker.HeaderText);
-		Assert.Equal("13 games in 1 folder", model.RomPicker.CountText);
+		Assert.Equal("Your library · 13 games in 1 folder", model.RomPicker.HeaderText);
 		Assert.Equal("zel", box.Text ?? "");
 		Assert.Equal(
 			new[] { "The Legend of Zelda", "The Legend of Zelda - Oracle of Ages", "Zelda II - The Adventure of Link" },

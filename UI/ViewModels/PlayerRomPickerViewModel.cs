@@ -187,18 +187,22 @@ namespace Mesen.ViewModels
 		//ShowSearchClear rides the mode as well as the query (#1033): the Clear action
 		//is the library's, and the step into the browser has to take it off screen
 		//with the box it belongs to.
+		//#1036: the library SURFACE (PlayerRomPickerViewModel.Folders.cs) is this
+		//flag AND "the folders sheet is down", so the view binds the surface's own
+		//controls to the computed property - and it has to be told when this half of
+		//it changes.
 		[ObservableProperty]
 		[NotifyPropertyChangedFor(nameof(ShowSearchClear))]
+		[NotifyPropertyChangedFor(nameof(IsLibrarySurfaceVisible))]
 		public partial bool IsLibraryMode { get; private set; } = true;
 		[ObservableProperty] public partial bool IsBrowseMode { get; private set; }
 
-		//The library's two header lines: "Your library" and "<N> games in <M>
-		//folders" (Decision 8). The count is what the scan actually found, so a
+		//The library's header: "Your library" until the scan answers, then "Your
+		//library · <N> games in <M> folders" (Decision 8). The count is what the scan actually found, so a
 		//capped scan and a complete one read differently.
 		[ObservableProperty]
 		[NotifyPropertyChangedFor(nameof(SheetHeading))]
 		public partial string HeaderText { get; private set; } = "";
-		[ObservableProperty] public partial string CountText { get; private set; } = "";
 		//The one thing the header has to say about a capped scan: it stopped
 		//collecting (Decision 9). Never shown otherwise.
 		[ObservableProperty] public partial string TruncatedText { get; private set; } = "";
@@ -212,7 +216,12 @@ namespace Mesen.ViewModels
 		//single control the player reads either way - two TextBlocks swapping
 		//places would be two headings that happen to be exclusive, and the one the
 		//sheet's own case reads would be off screen half the time.
-		public string SheetHeading => Mode == RomPickerMode.Library ? HeaderText : Title;
+		//#1036 (ADR-0264 Decision 8): *Library folders…* is a surface of this sheet,
+		//so the heading is its own while it is up - the same one heading the player
+		//reads either way.
+		public string SheetHeading => IsFoldersSheetVisible
+			? ResourceHelper.GetMessage("RomPickerFoldersTitle")
+			: Mode == RomPickerMode.Library ? HeaderText : Title;
 
 		//The grid itself: one instance for the life of the view-model, mutated in
 		//place so a scan that lands while the sheet is up does not rebuild the
@@ -250,11 +259,11 @@ namespace Mesen.ViewModels
 		//A test runs the scan in the Open() turn instead of on the thread pool.
 		public bool RunScanInline { get; set; }
 
-		//#1032 (ADR-0264 Decision 8): the folders the library reads. The app has
-		//ONE games folder today, and the list is seeded from it; the multi-folder
-		//list *Library folders…* edits is its own slice, and it arrives by
-		//replacing this seam rather than by changing the scan.
-		public Func<IReadOnlyList<string>> LibraryFolderSource { get; set; } = ConfiguredLibraryFolders;
+		//#1032 (ADR-0264 Decision 8): the folders the library reads. #1036 arrived
+		//by replacing this seam's DEFAULT, exactly as that note said it would and
+		//without changing the scan: the stored list (Preferences.LibraryFolders,
+		//seeded once from the single games folder) is what the sheet reads now.
+		public Func<IReadOnlyList<string>> LibraryFolderSource { get; set; } = StoredLibraryFolders;
 		//The library scan and its own seams live in PlayerRomPickerViewModel.Scan.cs:
 		//#1037 made it a stream, and a stream is a lifetime of its own.
 		//
@@ -312,6 +321,15 @@ namespace Mesen.ViewModels
 		//(and if) it returns.
 		public void Open()
 		{
+			//#1036: the mode belongs to ONE open. A pick that outlived the open it
+			//was armed in would offer *Add this folder to your library* on the next
+			//*Browse a file…* where *Make this my games folder* belongs, and the
+			//press that means "name my games folder" would pop the folders sheet
+			//instead. Whatever closed the last open, this one starts clean.
+			IsPickingLibraryFolder = false;
+			IsFoldersSheetVisible = false;
+			FoldersNoticeText = "";
+			SeedLibraryFolders();
 			_roots = BuildRoots(GamesFolder);
 			_folder = null;
 			Title = ResourceHelper.GetMessage("RomPickerTitle");
@@ -355,7 +373,6 @@ namespace Mesen.ViewModels
 			//#1033 (ADR-0264 Decision 4): fresh visit, empty box and no entries
 			//from the previous scan (PlayerRomPickerViewModel.Search).
 			BeginLibraryVisit();
-			CountText = "";
 			TruncatedText = "";
 			EmptyText = "";
 			//The grid is going: the pictures the previous visit decoded go back
@@ -438,10 +455,29 @@ namespace Mesen.ViewModels
 			if(!IsVisible) {
 				return;
 			}
+			//#1036 (ADR-0264 Decision 8): *Library folders…* is a surface of this
+			//sheet, so B closes it back to the library rather than leaving the whole
+			//picker - the same step the sheet's own Back button takes.
+			if(IsFoldersSheetVisible) {
+				CloseFoldersSheet();
+				return;
+			}
 			//On the library there is nowhere back to: it is the sheet, so the
 			//step is the dismiss (ADR-0264 Decision 3, ADR-0256's stop rule).
 			if(Mode == RomPickerMode.Library) {
 				IsVisible = false;
+				return;
+			}
+			//#1036 (ADR-0264 Decision 8, and ADR-0256's stop rule that B is a STEP
+			//and not a dismiss): the browser is also the pad's door onto adding a
+			//library folder, and B there walks the same tree backwards one folder at
+			//a time. Only at the roots - where there is nowhere left to ascend to -
+			//is it the CANCEL of the pick: back to *Library folders…*, with the list
+			//as it was, rather than a step out of a sheet the player opened to do one
+			//thing. Cancelling one folder deep would throw the whole walk away and
+			//make the player start it again.
+			if(IsPickingLibraryFolder && _folder is null) {
+				CancelFolderPick();
 				return;
 			}
 			//The browser is INSIDE the sheet (Decision 11), so walking out of
@@ -482,6 +518,14 @@ namespace Mesen.ViewModels
 			}
 			switch(row.Kind) {
 				case RomPickerRowKind.Action:
+					//#1036 (ADR-0264 Decision 8): the action row is the press that
+					//acts on the folder it sits in, and which action that is depends
+					//on why the browser is up - adding a library folder, or naming
+					//the games folder.
+					if(IsPickingLibraryFolder) {
+						AddLibraryFolder(row.Path);
+						return;
+					}
 					MakeGamesFolder(row.Path);
 					return;
 				case RomPickerRowKind.Folder:
@@ -489,6 +533,10 @@ namespace Mesen.ViewModels
 					ShowFolder(row.Path);
 					return;
 				default:
+					//#1036: a game row ENDS whatever mode the browser was in. The
+					//sheet closes on the load, so the pick dies with it rather than
+					//staying armed behind it (see Open()).
+					IsPickingLibraryFolder = false;
 					IsVisible = false;
 					RomChosen?.Invoke(row.Path);
 					return;
@@ -496,8 +544,15 @@ namespace Mesen.ViewModels
 		}
 
 		//The game changed under it (another ROM opened, the device unplugged):
-		//the sheet goes without loading anything.
-		public void Hide() => IsVisible = false;
+		//the sheet goes without loading anything. Every mode goes with it - the
+		//sheet is not coming back where it was, and a pick left armed behind a
+		//sheet nobody can see is a mode with no surface (#1036).
+		public void Hide()
+		{
+			IsVisible = false;
+			IsPickingLibraryFolder = false;
+			IsFoldersSheetVisible = false;
+		}
 
 		//The action row's press: this folder becomes the games folder. It is the
 		//same two properties the classic Advanced Options row writes, saved the
@@ -582,13 +637,6 @@ namespace Mesen.ViewModels
 			return messageId is null ? "" : ResourceHelper.GetMessage(messageId);
 		}
 
-		//A counted noun: "1 game" and "11 games" are different words in English,
-		//and the header shows both counts on every visit.
-		private static string CountLabel(int count, string oneId, string manyId)
-		{
-			return ResourceHelper.GetMessage(count == 1 ? oneId : manyId, count);
-		}
-
 		private void ShowRoots()
 		{
 			PathText = "";
@@ -607,7 +655,14 @@ namespace Mesen.ViewModels
 			//posted, so it would survive either order today - this is so that it
 			//still does if it is ever made to answer in the same turn.
 			ReplaceRows(PlayRomPicker.FolderRows(
-				folder, GamesFolder, ResourceHelper.GetMessage("RomPickerMakeGamesFolder"), folders, files));
+				folder,
+				//#1036 (ADR-0264 Decision 8): the action row reads and does what the
+				//pick is for. In pick mode no folder is already "the one to make", so
+				//every folder offers the row - which is what lets a player walk to the
+				//folder they want and add THAT one.
+				IsPickingLibraryFolder ? null : GamesFolder,
+				ResourceHelper.GetMessage(IsPickingLibraryFolder ? "RomPickerAddThisFolder" : "RomPickerMakeGamesFolder"),
+				folders, files));
 			//Both lines belong to the state they were set in: the searching line
 			//belongs to the roots list, and a save notice belongs to the folder it
 			//was made in. A step clears them; a save sets the notice after this.
@@ -825,17 +880,6 @@ namespace Mesen.ViewModels
 		//action row keeps offering to designate one.
 		private static string? GamesFolder => GamesFolderChoice.Usable(
 			ConfigManager.Config.Preferences.OverrideGameFolder ? ConfigManager.Config.Preferences.GameFolder : null);
-
-		//#1032 (ADR-0264 Decision 8): the folders the library reads, seeded from
-		//the one games folder the app already has, so no player loses the folder
-		//they had set. A player who set none gets an EMPTY list, and an empty
-		//list is what the empty state is: the sheet tells them to add a library
-		//folder rather than showing a grid with nothing in it.
-		private static IReadOnlyList<string> ConfiguredLibraryFolders()
-		{
-			string? games = GamesFolder;
-			return games is null ? Array.Empty<string>() : new[] { games };
-		}
 
 		//The app's own ROM folder, beside its settings. Created on demand: a
 		//fresh install has no Roms folder, and a root that does not answer would

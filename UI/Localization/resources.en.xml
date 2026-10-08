@@ -41,6 +41,13 @@
 			    placeholder is the wireframe's own words (W-P19).-->
 			<Control ID="lblRomPickerSearchPlaceholder">Search games</Control>
 			<Control ID="btnRomPickerSearchClear">Clear</Control>
+			<!--#1036 (ADR-0264 Decision 8): *Library folders…* and the sheet it opens -
+			    the list, the press that adds a folder, and the press that takes one out
+			    of the list without touching the disk.-->
+			<Control ID="btnRomPickerLibraryFolders">Library folders…</Control>
+			<Control ID="lblRomPickerFoldersHint">Your library shows every game in these folders.</Control>
+			<Control ID="btnRomPickerFoldersAdd">Add a folder…</Control>
+			<Control ID="btnRomPickerFolderRemove">Remove</Control>
 		</Form>
 		<Form ID="PlayerPackPickerSheetView">
 			<Control ID="lblPackPickerRemembered">Remembered for this game. Change it any time from the pause menu.</Control>
@@ -2668,25 +2675,23 @@ E
 		     than from a plural form: "1 games" and "11 games in 1 folders" are
 		     both what a single template gets wrong, and a player reads this line
 		     on every visit. {0} = the games, {1} = the folders that answered. -->
-		<Message ID="RomPickerLibraryCount">{0} in {1}</Message>
-		<Message ID="RomPickerGameOne">1 game</Message>
-		<Message ID="RomPickerGameMany">{0} games</Message>
-		<Message ID="RomPickerFolderOne">1 folder</Message>
-		<Message ID="RomPickerFolderMany">{0} folders</Message>
 		<!-- Decision 9: a scan that hit LibraryScan.MaxEntries says so rather than
 		     silently dropping games. {0} = the cap. -->
 		<Message ID="RomPickerLibraryTruncated">Showing the first {0} games — the scan stopped at its limit.</Message>
-		<!-- Decision 8: the named empty state, and it names the NEXT STEP. This
-		     slice has no Library folders… control yet, so the step it can point
-		     at is the one that exists: the browser's own action row. -->
-		<Message ID="RomPickerLibraryNoFolders">No library folder yet. Pick a folder with Browse a file…, then choose Make this my games folder.</Message>
+		<!-- Decision 8: the named empty state, and it names the NEXT STEP - the two
+		     steps that now exist, named as the player reads them on screen: the
+		     header's own *Library folders…* control, then that sheet's *Add a
+		     folder…*. The browser's *Make this my games folder* is NOT one of them
+		     any more: it changes the single games folder, not the folder list, so
+		     pointing there left a player who followed it with an empty library. -->
+		<Message ID="RomPickerLibraryNoFolders">No library folder yet. Open Library folders…, then choose Add a folder….</Message>
 		<!-- #1060 (ADR-0264 Decision 8): the OTHER empty state - a library folder the
 		     scan answered nothing for (a library still being copied, a folder of
 		     notes, games on a stick that is not plugged in). It is a different fact
-		     from the one above and it names the same next step, for the same reason:
-		     the *Library folders…* control is slice #1035 and does not exist yet, so
-		     the step this sentence can point at is the one that does. -->
-		<Message ID="RomPickerLibraryEmpty">No games found in your library folder. Pick another folder with Browse a file…, then choose Make this my games folder.</Message>
+		     from the one above, and it names the same next step in the same words:
+		     once the list is stored, *Make this my games folder* no longer changes
+		     the library, so only Library folders… -> Add a folder… does. -->
+		<Message ID="RomPickerLibraryEmpty">No games found in your library folders. Open Library folders…, then choose Add a folder….</Message>
 		<!-- Decision 4 (#1033): the named empty RESULT - the other empty state again,
 		     and a different fact from the one above: the library answered, and the
 		     QUERY kept nothing. A query that finds nothing says so with the query in
@@ -2705,6 +2710,16 @@ E
 		     folder answers something too - so "will keep opening where you last
 		     played" was false here in both cases. -->
 		<Message ID="RomPickerGamesFolderEmpty">Saved. There are no games in that folder yet, so MesenAI is not using it for now.</Message>
+		<!-- #1036 (ADR-0264 Decision 8): the folders sheet's own heading, the answers an
+		     add can give, and the action row the folder browser shows while the sheet
+		     is picking a folder. The answers that did NOT change the list say why,
+		     rather than leaving a press that appears to do nothing. {0} = the folder. -->
+		<Message ID="RomPickerFoldersTitle">Library folders</Message>
+		<Message ID="RomPickerFolderAdded">{0} is now in your library.</Message>
+		<Message ID="RomPickerFolderAlreadyListed">{0} is already in your library.</Message>
+		<Message ID="RomPickerFolderInvalid">MesenAI cannot use that folder.</Message>
+		<Message ID="RomPickerFolderRemoved">Removed {0} from your library. Nothing was deleted from your disk.</Message>
+		<Message ID="RomPickerAddThisFolder">Add this folder to your library</Message>
 		<!-- The console a discovered library holds, shown first on its row in the
 		     picker's suggestion list. The IDs are `RomConsole` + the RomConsole
 		     member (UI/Logic/RomConsoleKinds.cs), so the enum and this file must

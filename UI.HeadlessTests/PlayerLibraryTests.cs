@@ -41,6 +41,11 @@ public class PlayerLibraryTests : IDisposable
 	private readonly bool _confirm = ConfigManager.Config.Preferences.ConfirmExitResetPower;
 	private readonly string? _gameFolder = ConfigManager.Config.Preferences.GameFolder;
 	private readonly bool _overrideGameFolder = ConfigManager.Config.Preferences.OverrideGameFolder;
+	//#1036: these cases drive the library through GameFolder, so a LibraryFolders
+	//list left in the real config by anyone who used the feature would win over it
+	//and the tile-count asserts would fail on that machine only. Held here and put
+	//back in Dispose, exactly as PlayerLibraryFoldersTests does.
+	private readonly List<string>? _libraryFolders = ConfigManager.Config.Preferences.LibraryFolders;
 
 	private readonly List<MainWindow> _windows = new();
 	private readonly string _folder = Path.Combine(Path.GetTempPath(), "mesen-1032-" + Guid.NewGuid().ToString("N"));
@@ -81,6 +86,9 @@ public class PlayerLibraryTests : IDisposable
 			WaitUntilStopped();
 		}
 		Directory.CreateDirectory(_folder);
+		//First run for every case: a stored list is the state these cases are not
+		//about, and the seed from GameFolder is what they build their tree on.
+		ConfigManager.Config.Preferences.LibraryFolders = null;
 	}
 
 	private static void WaitUntilStopped()
@@ -107,6 +115,7 @@ public class PlayerLibraryTests : IDisposable
 		prefs.ConfirmExitResetPower = _confirm;
 		prefs.GameFolder = _gameFolder ?? "";
 		prefs.OverrideGameFolder = _overrideGameFolder;
+		prefs.LibraryFolders = _libraryFolders;
 		ConfigManager.Config.Save();
 
 		try {
@@ -232,8 +241,7 @@ public class PlayerLibraryTests : IDisposable
 		//Three games, two of them one level down and one two levels down: the
 		//folders shape the scan, they are never rows.
 		Assert.Equal(new[] { "Contra", "Metroid", "Tetris" }, model.RomPicker.Tiles.Select(t => t.Title).ToArray());
-		Assert.Equal("Your library", model.RomPicker.HeaderText);
-		Assert.Contains("3 games", model.RomPicker.CountText);
+		Assert.Equal("Your library · 3 games in 1 folder", model.RomPicker.HeaderText);
 		Assert.True(window.FindNamed<ItemsControl>("RomPickerGrid").IsOnScreen(), "the grid is not on screen");
 
 		//And the header's own controls read as words: a key the locale files do
@@ -502,8 +510,12 @@ public class PlayerLibraryTests : IDisposable
 		Assert.DoesNotContain("[[", model.RomPicker.EmptyText);
 		TextBlock sentence = window.FindNamed<TextBlock>("RomPickerLibraryEmpty");
 		Assert.True(sentence.IsOnScreen(), "the empty state is not on screen");
-		//And it names the next step rather than the problem.
-		Assert.Contains("Browse a file", sentence.Text ?? "");
+		//And it names the next step rather than the problem - and the step is the
+		//one that works now (#1036): the header's *Library folders…*, then that
+		//sheet's *Add a folder…*. The browser's *Make this my games folder* changes
+		//the single games folder, not the list, so it is no longer what is named.
+		Assert.Contains("Library folders", sentence.Text ?? "");
+		Assert.Contains("Add a folder", sentence.Text ?? "");
 	}
 
 	//#1060: a library folder the scan answers with nothing is a BLANK GRID today -
@@ -544,13 +556,16 @@ public class PlayerLibraryTests : IDisposable
 		Assert.DoesNotContain("[[", model.RomPicker.EmptyText);
 		TextBlock sentence = window.FindNamed<TextBlock>("RomPickerLibraryEmpty");
 		Assert.True(sentence.IsOnScreen(), "the empty state is not on screen");
-		Assert.Contains("Browse a file", sentence.Text ?? "");
+		//The sentence names the step that works with a stored list (#1036): the
+		//header's *Library folders…*, then *Add a folder…*.
+		Assert.Contains("Library folders", sentence.Text ?? "");
+		Assert.Contains("Add a folder", sentence.Text ?? "");
 
-		//And the ring is on the step that sentence names: with no tile to play, the
-		//next press has to reach the action rather than the way out of the sheet.
-		WaitFor(() => (window.FocusManager?.GetFocusedElement() as Control)?.Name == "RomPickerBrowseFile",
-			$"the ring did not land on the next step the empty state names ({Focused(window)})");
-		Assert.True(window.FindNamed<Button>("RomPickerBrowseFile").IsOnScreen(), "the focused action is not on screen");
+		//And the ring is never left with nothing to press: with no tile to play, the
+		//next press reaches the step the sentence names, *Library folders…*.
+		WaitFor(() => (window.FocusManager?.GetFocusedElement() as Control)?.Name == "RomPickerLibraryFolders",
+			$"the ring did not land on the step the sentence names ({Focused(window)})");
+		Assert.True(window.FindNamed<Button>("RomPickerLibraryFolders").IsOnScreen(), "the focused action is not on screen");
 	}
 
 	//#1060 review finding 1: the sheet must not claim "no games found" while the

@@ -48,6 +48,7 @@ public class PlayerLibrarySearchTests : IDisposable
 	private readonly bool _confirm = ConfigManager.Config.Preferences.ConfirmExitResetPower;
 	private readonly string? _gameFolder = ConfigManager.Config.Preferences.GameFolder;
 	private readonly bool _overrideGameFolder = ConfigManager.Config.Preferences.OverrideGameFolder;
+	private readonly List<string>? _libraryFolders = ConfigManager.Config.Preferences.LibraryFolders;
 
 	private readonly List<MainWindow> _windows = new();
 	private readonly string _folder = Path.Combine(Path.GetTempPath(), "mesen-1033-" + Guid.NewGuid().ToString("N"));
@@ -113,6 +114,7 @@ public class PlayerLibrarySearchTests : IDisposable
 		prefs.ConfirmExitResetPower = _confirm;
 		prefs.GameFolder = _gameFolder ?? "";
 		prefs.OverrideGameFolder = _overrideGameFolder;
+		prefs.LibraryFolders = _libraryFolders;
 		ConfigManager.Config.Save();
 
 		try {
@@ -200,6 +202,7 @@ public class PlayerLibrarySearchTests : IDisposable
 		File.WriteAllBytes(Path.Combine(gb, "Super Mario Land (World).gb"), SyntheticNrom.Build());
 		ConfigManager.Config.Preferences.GameFolder = root;
 		ConfigManager.Config.Preferences.OverrideGameFolder = true;
+		ConfigManager.Config.Preferences.LibraryFolders = null;
 		return root;
 	}
 
@@ -273,7 +276,7 @@ public class PlayerLibrarySearchTests : IDisposable
 
 		//The header reads the LIBRARY, not the grid (Decision 8): a search narrows
 		//which games are on screen and never how many the player owns.
-		Assert.Equal("4 games in 1 folder", model.RomPicker.CountText);
+		Assert.Equal("Your library · 4 games in 1 folder", model.RomPicker.HeaderText);
 
 		//And the tiles the query kept are the tiles the grid draws.
 		Assert.Equal(new[] { "Super Mario Land" },

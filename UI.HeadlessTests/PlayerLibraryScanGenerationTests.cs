@@ -81,7 +81,7 @@ public class PlayerLibraryScanGenerationTests
 		WaitFor(() => picker.Tiles.Any(tile => tile.Title == "Tetris"),
 			"the second folder's scan never reached the grid");
 		Assert.Equal(new[] { "Tetris" }, Titles(picker));
-		string count = picker.CountText;
+		string count = picker.HeaderText;
 
 		//Only now does the abandoned scan answer. The wait is on the answer
 		//itself, not on a stopwatch: the case must not read the grid before the
@@ -92,7 +92,7 @@ public class PlayerLibraryScanGenerationTests
 		Settle();
 
 		Assert.Equal(new[] { "Tetris" }, Titles(picker));
-		Assert.Equal(count, picker.CountText);
+		Assert.Equal(count, picker.HeaderText);
 	}
 
 	//#1032 (ADR-0264 Decision 11) review finding 2: the suggestion walk is
