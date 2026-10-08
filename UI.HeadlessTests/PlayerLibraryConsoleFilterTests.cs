@@ -359,6 +359,76 @@ public class PlayerLibraryConsoleFilterTests : IDisposable
 		}, "the filter's rebuild did not put the ring back on a game of the narrowed grid");
 	}
 
+	//#1066: the same rule on the path that actually leaves a claim standing. A
+	//restore waits on a game whose file is gone, the player walks the ring off
+	//Back to another header control, and the scan ends without the restore
+	//landing: the finish is the sheet's own bump (IsFinishFallback), which the
+	//arbiter answers by keeping the player's ring. RB's rebuild is the filter's
+	//bump, not the scan's, so the claim must not still be readable for it.
+	[AvaloniaFact]
+	public void The_filters_rebuild_re_claims_the_grid_after_a_restore_that_never_landed()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		LibraryRoot();
+
+		(MainWindow window, MainWindowViewModel model) = OpenLibrary();
+		WaitFor(() => !model.RomPicker.IsScanning, "the scan did not finish");
+
+		//The game the player left on, and then its file is gone from the library.
+		PlayerLibraryTile remembered = model.RomPicker.Tiles.First(tile => tile.Path.Contains(NesContra));
+		model.RomPicker.RememberFocus(remembered);
+		string nesMario = model.RomPicker.Tiles.First(tile => tile.Path.Contains(NesMario)).Path;
+		string gbMario = model.RomPicker.Tiles.First(tile => tile.Path.Contains(GameBoyMario)).Path;
+		model.RomPicker.Hide();
+		Pump();
+		File.Delete(remembered.Path);
+
+		//The next visit's scan answers the two games that are left, then is held
+		//before it ends: the batch has landed and the restore is still pending, so
+		//the ring is parked on Back and the player can walk it off.
+		using ManualResetEventSlim release = new(false);
+		model.RomPicker.RunLibraryScanInline = false;
+		model.RomPicker.LibraryScanStreamSource = (folders, list, onBatch) => {
+			LibraryEntry[] games = {
+				new(nesMario, RomConsole.Nes, NesMario),
+				new(gbMario, RomConsole.GameBoy, GameBoyMario)
+			};
+			onBatch(games);
+			release.Wait();
+			return new LibraryScanResult(games, 1, false);
+		};
+		model.RomPicker.Open();
+		WaitFor(() => model.RomPicker.Tiles.Count == 2 && model.RomPicker.IsScanning, "the batch did not land behind the held scan");
+		Assert.True(model.RomPicker.IsRestorePending, "the restore is not pending behind the held scan");
+		WaitFor(() => (window.FocusManager?.GetFocusedElement() as Control)?.Name == "RomPickerBack", "the ring did not park on Back while the restore waits");
+
+		//Off Back, onto another header control.
+		Control? moved = null;
+		foreach(PadNavAction step in new[] { PadNavAction.Up, PadNavAction.Down, PadNavAction.Left, PadNavAction.Right }) {
+			Press(window, step);
+			Control? focused = window.FocusManager?.GetFocusedElement() as Control;
+			if(focused?.Name?.StartsWith("RomPicker") == true && focused.Name != "RomPickerBack" && focused.DataContext is not PlayerLibraryTile) {
+				moved = focused;
+				break;
+			}
+		}
+		Assert.NotNull(moved);
+
+		release.Set();
+		WaitFor(() => !model.RomPicker.IsScanning, "the held scan did not finish");
+		Pump();
+		Assert.True(model.RomPicker.IsFinishFallback, "the scan did not end on the finish fallback this case is about");
+		Assert.Equal(moved!.Name, (window.FocusManager?.GetFocusedElement() as Control)?.Name);
+
+		PressShoulder(window, "Pad1 R1");
+		Assert.Equal(RomConsole.Nes, model.RomPicker.SelectedConsole);
+
+		WaitFor(() => {
+			Control? focused = window.FocusManager?.GetFocusedElement() as Control;
+			return focused is not null && focused.FindAncestorOfType<ItemsControl>() is { Name: "RomPickerGrid" };
+		}, "the filter's rebuild kept the ring on " + moved.Name + " instead of re-claiming the grid");
+	}
+
 	//#1034 (ADR-0264 Decision 5): the row and the grid are the same decision -
 	//what the segment says is what the grid draws. A segment that moved on its
 	//own would be the defect this case exists to catch.
