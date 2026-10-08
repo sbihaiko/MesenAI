@@ -1,10 +1,13 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
+using Avalonia.Threading;
 using Mesen.Config;
 using Mesen.Logic;
 using Mesen.ViewModels;
+using Mesen.Views;
 using Xunit;
 
 namespace Mesen.HeadlessTests;
@@ -22,9 +25,11 @@ namespace Mesen.HeadlessTests;
 //(PlayerRomPickerViewModel.Folders), and ShowLibrary's early return when there
 //is no folder to read at all.
 //
-//View-model state only, built directly as PlayerRomPickerModeTests builds it:
-//both folder sources are stubbed, the scan never touches a disk and no window
-//is opened, so the cases run with or without the native core.
+//The view model is built directly as PlayerRomPickerModeTests builds it: both
+//folder sources are stubbed and the scan never touches a disk. The cases then
+//realize PlayerRomPickerView in a headless window and read the text the named
+//RomPickerTitle control shows, so a view that loses its title binding fails
+//here too; they run with or without the native core.
 [NativeCoreFree("PlayerRomPickerViewModel's constructor only builds its AddKnownGameFolder delegate; both folder sources are stubbed here and no case designates a games folder")]
 public class PlayerLibraryEmptyHeaderTests : IDisposable
 {
@@ -76,6 +81,16 @@ public class PlayerLibraryEmptyHeaderTests : IDisposable
 		};
 	}
 
+	//The view over the picker, realized in a window: the header is read off the
+	//control the player reads it from, not off the view model behind it.
+	private static (Window Window, TextBlock Title) Realize(PlayerRomPickerViewModel picker)
+	{
+		Window window = new() { Content = new PlayerRomPickerView { DataContext = picker }, Width = 1000, Height = 700 };
+		window.Show();
+		Dispatcher.UIThread.RunJobs();
+		return (window, window.FindNamed<TextBlock>("RomPickerTitle"));
+	}
+
 	//A folder list that is stored and then emptied: the list is non-null from
 	//the start, so opening the sheet seeds nothing and writes nothing.
 	private void StoreFolderList(params string[] folders)
@@ -94,15 +109,25 @@ public class PlayerLibraryEmptyHeaderTests : IDisposable
 		StoreFolderList(folders.ToArray());
 
 		PlayerRomPickerViewModel picker = Picker(folders);
-		picker.Open();
-		picker.OpenFoldersSheet();
-		Assert.Single(picker.LibraryFolderRows);
+		(Window window, TextBlock title) = Realize(picker);
+		try {
+			picker.Open();
+			picker.OpenFoldersSheet();
+			Assert.Single(picker.LibraryFolderRows);
 
-		picker.RemoveLibraryFolder(picker.LibraryFolderRows.Single());
+			picker.RemoveLibraryFolder(picker.LibraryFolderRows.Single());
+			//The folders sheet is still up, so the title shows the sheet's own
+			//heading; closing it returns to the library surface.
+			picker.CloseFoldersSheet();
+			Dispatcher.UIThread.RunJobs();
 
-		Assert.Empty(picker.LibraryFolderRows);
-		Assert.Empty(picker.Tiles);
-		Assert.Equal(EmptyLibraryHeader, picker.HeaderText);
+			Assert.Empty(picker.LibraryFolderRows);
+			Assert.Empty(picker.Tiles);
+			Assert.Equal(EmptyLibraryHeader, picker.HeaderText);
+			Assert.Equal(EmptyLibraryHeader, title.Text);
+		} finally {
+			window.Close();
+		}
 	}
 
 	//(b) The library opens with no folder to read at all: the same sentence,
@@ -113,10 +138,17 @@ public class PlayerLibraryEmptyHeaderTests : IDisposable
 		StoreFolderList();
 
 		PlayerRomPickerViewModel picker = Picker(Array.Empty<string>());
-		picker.Open();
+		(Window window, TextBlock title) = Realize(picker);
+		try {
+			picker.Open();
+			Dispatcher.UIThread.RunJobs();
 
-		Assert.True(picker.IsLibraryMode, "the sheet did not open on the library surface");
-		Assert.Empty(picker.Tiles);
-		Assert.Equal(EmptyLibraryHeader, picker.HeaderText);
+			Assert.True(picker.IsLibraryMode, "the sheet did not open on the library surface");
+			Assert.Empty(picker.Tiles);
+			Assert.Equal(EmptyLibraryHeader, picker.HeaderText);
+			Assert.Equal(EmptyLibraryHeader, title.Text);
+		} finally {
+			window.Close();
+		}
 	}
 }
