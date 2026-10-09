@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Runtime.InteropServices;
 using System.Threading;
 using Avalonia;
@@ -96,6 +98,24 @@ internal static class PlayerRender
 	public static string DriftBaselinePath(string wId) => OperatingSystem.IsMacOS()
 		? CommittedRenderPath(wId)
 		: Path.Combine(RepoFolder("UI.Tests", "Theme", "PlayerRenders", "linux"), wId + ".png");
+
+	//#968: the wireframes draw the macOS window, where the shell bar extends
+	//under the traffic lights and starts 80 px in (ShellTitleBar.ExtendsIntoTitleBar).
+	//Off macOS - the Linux render-gate runner, ADR-0191 - the bar is not
+	//inset, so its badge sits left of the title-bar region and the ink box
+	//moves (16 px on the runner). Only that kind is tolerated, only there:
+	//the region's colour and text lines stay gated against the wireframe, and
+	//the drift check holds the whole region to the Linux baseline.
+	private const string NoTrafficLightInset = "no traffic-light inset off macOS";
+
+	public static IReadOnlyList<KnownDeviation> DeviationsOnThisHost(string wId)
+	{
+		IReadOnlyList<KnownDeviation> known = PlayerWireframe.KnownDeviationsOf(wId);
+		if(OperatingSystem.IsMacOS() || known.Any(k => k.Region == "title bar" && k.Kind == PlayerWireframe.InkBox)) {
+			return known;
+		}
+		return known.Append(new KnownDeviation("title bar", PlayerWireframe.InkBox, NoTrafficLightInset, false)).ToArray();
+	}
 
 	private static string RepoFolder(params string[] parts)
 	{
