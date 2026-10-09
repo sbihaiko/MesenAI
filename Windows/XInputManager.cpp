@@ -158,7 +158,9 @@ bool XInputManager::PlayTick(uint8_t gamepadPort)
 	XINPUT_VIBRATION tick = {};
 	tick.wRightMotorSpeed = 0x6000;
 	tick.wLeftMotorSpeed = 0x6000;
-	XInputSetState(gamepadPort, &tick);
+	if(XInputSetState(gamepadPort, &tick) != ERROR_SUCCESS) {
+		return false;
+	}
 	_tickStopAt[gamepadPort] = GetTickCount64() + 40;
 	return true;
 }

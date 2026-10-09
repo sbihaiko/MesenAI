@@ -362,7 +362,9 @@ uint32_t LinuxGameController::GetProductId()
 
 bool LinuxGameController::HasRumble()
 {
-	return _rumbleEffect != nullptr;
+	//Aimable means the tick can play: a pad whose force-feedback slots ran out
+	//before the tick effect was uploaded cannot tick, so it is not reported.
+	return _rumbleEffect != nullptr && _tickEffect != nullptr;
 }
 
 /*

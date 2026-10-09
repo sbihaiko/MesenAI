@@ -6421,6 +6421,8 @@ namespace
 		Check(!hasRumble.empty() && hasRumble.find("_enableForceFeedback") == string::npos
 			&& hasRumble.find("_rumbleEffect") != string::npos,
 			"#1106: Linux HasRumble reports the effect setup, true on an idle pad");
+		Check(hasRumble.find("_tickEffect") != string::npos,
+			"#1106: Linux HasRumble needs the tick effect too, so an aimable pad can always tick");
 		string linuxTick = HapticBackendBody(linux, "bool LinuxGameController::PlayTick()");
 		Check(!linuxTick.empty() && linuxTick.find("_enableForceFeedback") == string::npos,
 			"#1106: Linux PlayTick does not wait for a button press");
@@ -6434,6 +6436,12 @@ namespace
 		Check(winRefresh.find("SetForceFeedback((uint8_t)i, 0, 0)") == string::npos
 			&& winRefresh.find("_desiredRumble") != string::npos,
 			"#1106: Windows tick expiry restores the desired rumble instead of silencing the pad");
+		string winTick = HapticBackendBody(win, "bool XInputManager::PlayTick(uint8_t");
+		size_t winTickSet = winTick.find("XInputSetState");
+		size_t winTickArm = winTick.find("_tickStopAt");
+		Check(winTickSet != string::npos && winTick.find("ERROR_SUCCESS") != string::npos
+			&& winTickArm != string::npos && winTickSet < winTickArm,
+			"#1106: Windows PlayTick checks XInputSetState and arms the tick expiry only after it succeeded");
 		string winSet = HapticBackendBody(win, "void XInputManager::SetForceFeedback(uint8_t");
 		Check(winSet.find("_desiredRumble") != string::npos,
 			"#1106: Windows remembers each slot's requested rumble");
