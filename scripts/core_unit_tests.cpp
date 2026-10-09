@@ -117,6 +117,10 @@
 #include "Shared/Audio/ReplacementMuteMask.h"
 #include "Shared/Audio/AsyncAudioDeviceOpen.h"
 #include "Shared/Audio/MenuSoundStream.h"
+#include "Shared/Audio/MenuSoundHost.h"
+#include "Shared/Audio/MenuSoundSinkHealth.h"
+#include "Shared/Audio/MenuSoundDeviceResolve.h"
+#include "Shared/Audio/MenuSoundAudioSubsystem.h"
 #include "Utilities/Base64.h"
 #include "Utilities/FolderUtilities.h"
 #include "Utilities/JsonReader.h"
@@ -17449,6 +17453,68 @@ namespace
 		}
 		return true;
 	}
+
+	//Core/Shared/SettingTypes.h's AudioBackendType as the int the host-free
+	//MenuSoundHost::Arming carries: Default=0, Wasapi=1, DirectSound=2, Sdl2=3.
+	//This suite links nothing but the core, so the enum itself is not included;
+	//EmuApiWrapper.cpp static_asserts that the two still agree.
+	constexpr int TestBackendWasapi = 1;
+	constexpr int TestBackendDirectSound = 2;
+
+	//A stream owns its sink, so a re-arm destroys the fake device the old stream
+	//was holding. This proxy keeps the fake alive in the pool, which is what lets
+	//a case ask what became of the device the old stream let go of.
+	class PooledMenuSoundSink final : public IMenuSoundSink
+	{
+	public:
+		explicit PooledMenuSoundSink(std::shared_ptr<FakeMenuSoundSink> sink) : _sink(std::move(sink)) {}
+
+		void SetReader(IMenuSoundReader* reader) override { _sink->SetReader(reader); }
+		void BeginOpen() override { _sink->BeginOpen(); }
+		bool TryTakeOpen(bool& opened) override { return _sink->TryTakeOpen(opened); }
+		void Unpause() override { _sink->Unpause(); }
+		void Pause() override { _sink->Pause(); }
+		bool IsAlive() const override { return _sink->IsAlive(); }
+		uint32_t BufferFrames() const override { return _sink->BufferFrames(); }
+		void Release() override { _sink->Release(); }
+
+	private:
+		std::shared_ptr<FakeMenuSoundSink> _sink;
+	};
+
+	//The test's device pool: one fake device per arming the host asks for, so a
+	//case can assert that a settings change produced a new device and that the
+	//next blip landed on it.
+	class FakeMenuSoundDevicePool
+	{
+	public:
+		std::unique_ptr<IMenuSoundSink> Create(const MenuSoundHost::Arming& arming)
+		{
+			Devices.push_back(arming.Device);
+			Backends.push_back(arming.Backend);
+			auto sink = std::make_shared<FakeMenuSoundSink>();
+			Sinks.push_back(sink.get());
+			_owned.push_back(std::move(sink));
+			return std::make_unique<PooledMenuSoundSink>(_owned.back());
+		}
+
+		std::vector<std::string> Devices;
+		std::vector<int> Backends;
+		std::vector<FakeMenuSoundSink*> Sinks;
+
+	private:
+		std::vector<std::shared_ptr<FakeMenuSoundSink>> _owned;
+	};
+
+	std::unique_ptr<MenuSoundHost> MakeMenuSoundHost(std::shared_ptr<FakeMenuSoundDevicePool> pool, std::shared_ptr<FakeMenuSoundPolicy> policy)
+	{
+		return std::make_unique<MenuSoundHost>(
+			[pool](const MenuSoundHost::Arming& arming) { return pool->Create(arming); },
+			[policy]() { return policy->AudioEnabled.load(); },
+			[policy]() { return policy->MasterVolume.load(); },
+			[policy]() { return policy->GameRunning.load(); },
+			[](const std::string&) {});
+	}
 }
 
 void TestTheMenuSoundQueueReadsAsSilenceOnceItIsEmpty()
@@ -17597,6 +17663,240 @@ void TestAFailedMenuSoundOpenKeepsTheRowHidden()
 	Check(!stream->IsAvailable() && device->Unpauses.load() == 0, "menu sound: a failed stream never unpauses a device");
 
 	stream->Stop();
+}
+
+void TestAPickedDeviceChangeReArmsTheMenuSoundStream()
+{
+	auto policy = std::make_shared<FakeMenuSoundPolicy>();
+	auto pool = std::make_shared<FakeMenuSoundDevicePool>();
+	auto host = MakeMenuSoundHost(pool, policy);
+
+	host->Apply({"Front Speakers", TestBackendWasapi});
+	Check(pool->Sinks.size() == 1, "menu sound: the first arming opens one device", std::to_string(pool->Sinks.size()));
+	FakeMenuSoundSink* first = pool->Sinks[0];
+	Check(WaitForMenuSound([&]() { return host->IsAvailable(); }), "menu sound: the stream comes up on the device that was armed");
+
+	std::vector<int16_t> blip = MenuSoundBlip(2400);
+	Check(host->Submit(blip.data(), 2400, MenuSoundsTestRate), "menu sound: the armed device accepts a blip");
+	Check(WaitForMenuSound([&]() { return first->Unpauses.load() == 1; }), "menu sound: the blip plays on the armed device");
+
+	//The player picks another output device: the next blip must come out of the
+	//device they picked (D2), and the old device must be let go - released by its
+	//own stream's thread, never by the apply path that asked for the change (D4).
+	host->Apply({"USB Headset", TestBackendWasapi});
+	Check(pool->Sinks.size() == 2, "menu sound: a device change opens a new device", std::to_string(pool->Sinks.size()));
+	Check(pool->Devices.size() == 2 && pool->Devices[1] == "USB Headset", "menu sound: the new device is the one the player picked");
+	Check(first->Releases.load() == 1, "menu sound: the old device is released on a re-arm", std::to_string(first->Releases.load()));
+	Check(first->ReleasedOnThread == first->OwnerThread && first->OwnerThread != std::this_thread::get_id(),
+		"menu sound: the old device is released on the old stream's own thread, not on the apply path's (D4)");
+
+	//The rest of the case needs the new device to exist; a re-arm that opened
+	//nothing has already failed the check above, and reporting that is the test's
+	//job rather than dereferencing whatever the pool happens to hold.
+	FakeMenuSoundSink* second = pool->Sinks.size() > 1 ? pool->Sinks[1] : nullptr;
+	Check(second != nullptr, "menu sound: the re-arm produced a device to play the next blip on");
+	if(second != nullptr) {
+		Check(WaitForMenuSound([&]() { return host->IsAvailable(); }), "menu sound: the capability follows the re-armed stream");
+		Check(host->Submit(blip.data(), 2400, MenuSoundsTestRate), "menu sound: the re-armed stream accepts the next blip");
+		Check(WaitForMenuSound([&]() { return second->Unpauses.load() == 1; }), "menu sound: the next blip plays on the device the player picked");
+		Check(first->Unpauses.load() == 1, "menu sound: the old device is never unpaused again");
+		second->Pump(2400);
+		Check(second->Pumped.size() == 4800 && second->Pumped[0] == 1000,
+			"menu sound: the blip's own frames come out of the new device",
+			std::to_string(second->Pumped.empty() ? 0 : second->Pumped[0]));
+	}
+
+	host->Stop();
+	Check(second != nullptr && second->Releases.load() == 1, "menu sound: stopping the host releases the armed device");
+}
+
+void TestABackendChangeToAnApiWithNoMenuSinkDisarmsTheStream()
+{
+	auto policy = std::make_shared<FakeMenuSoundPolicy>();
+	auto pool = std::make_shared<FakeMenuSoundDevicePool>();
+	//DirectSound has no menu sink: the factory answers "none" for it, which is
+	//D9's unavailable answer rather than a route through another audio API.
+	auto host = std::make_unique<MenuSoundHost>(
+		[pool](const MenuSoundHost::Arming& arming) -> std::unique_ptr<IMenuSoundSink> {
+			return arming.Backend == TestBackendDirectSound ? nullptr : pool->Create(arming);
+		},
+		[policy]() { return policy->AudioEnabled.load(); },
+		[policy]() { return policy->MasterVolume.load(); },
+		[policy]() { return policy->GameRunning.load(); },
+		[](const std::string&) {});
+
+	host->Apply({"", TestBackendWasapi});
+	FakeMenuSoundSink* wasapi = pool->Sinks[0];
+	Check(WaitForMenuSound([&]() { return host->IsAvailable(); }), "menu sound: the stream comes up on the backend the player picked");
+
+	//Switching the backend to one with no menu sink: the blips must not keep
+	//coming out of the API the player just left (D9), so the capability goes away
+	//and the row hides instead.
+	host->Apply({"", TestBackendDirectSound});
+	Check(wasapi->Releases.load() == 1, "menu sound: the old backend's device is released when the backend changes",
+		std::to_string(wasapi->Releases.load()));
+	Check(!host->IsAvailable(), "menu sound: a backend with no menu sink answers unavailable");
+	std::vector<int16_t> blip = MenuSoundBlip(32);
+	Check(!host->Submit(blip.data(), 32, MenuSoundsTestRate), "menu sound: a blip submitted after that change is a no-op");
+
+	//Back to a backend that has one: the stream comes back on a fresh device.
+	host->Apply({"", TestBackendWasapi});
+	Check(pool->Sinks.size() == 2, "menu sound: picking a backend with a sink again arms a new device", std::to_string(pool->Sinks.size()));
+	Check(WaitForMenuSound([&]() { return host->IsAvailable(); }), "menu sound: the capability comes back on the new device");
+
+	host->Stop();
+}
+
+void TestAnUnchangedArmingLeavesTheRunningMenuSoundStreamAlone()
+{
+	auto policy = std::make_shared<FakeMenuSoundPolicy>();
+	auto pool = std::make_shared<FakeMenuSoundDevicePool>();
+	auto host = MakeMenuSoundHost(pool, policy);
+
+	host->Apply({"Speakers", TestBackendWasapi});
+	FakeMenuSoundSink* device = pool->Sinks[0];
+	Check(WaitForMenuSound([&]() { return host->IsAvailable(); }), "menu sound: the stream comes up once the device opens");
+
+	//Every settings save runs this path: a save that did not touch the device or
+	//the backend must not churn the device the player is listening through.
+	host->Apply({"Speakers", TestBackendWasapi});
+	host->Apply({"Speakers", TestBackendWasapi});
+	Check(pool->Sinks.size() == 1, "menu sound: an unchanged arming does not open a second device", std::to_string(pool->Sinks.size()));
+	Check(device->Releases.load() == 0, "menu sound: an unchanged arming does not release the running device");
+	Check(host->IsAvailable(), "menu sound: the stream stays up across an unchanged apply");
+
+	host->Stop();
+}
+
+void TestAMenuSoundSubsystemInitThatFailsFailsTheOpen()
+{
+	int attempts = 0;
+	MenuSoundAudioSubsystem subsystem;
+	auto failInit = [&]() {
+		attempts++;
+		return -1;
+	};
+
+	//SDL_InitSubSystem answers nonzero when the audio subsystem did not come up,
+	//and the open has to fail with it instead of opening against an uninitialized
+	//subsystem (D9 - the capability answers unavailable and the row stays hidden).
+	Check(!subsystem.Ensure(failInit), "menu sound: a subsystem init that returned nonzero fails");
+	Check(subsystem.Failed(), "menu sound: the failed init is remembered, so the open can be refused with it");
+	Check(attempts == 1, "menu sound: a failed init is attempted once", std::to_string(attempts));
+
+	//A second ask must not be a retry: it would be the same call against the same
+	//uninitialized subsystem, and it would be one more unchecked open.
+	Check(!subsystem.Ensure(failInit), "menu sound: a latched failure keeps failing");
+	Check(attempts == 1, "menu sound: a latched failure is not retried", std::to_string(attempts));
+}
+
+void TestAMenuSoundSubsystemInitRunsOnceForTheSession()
+{
+	int attempts = 0;
+	auto init = [&]() {
+		attempts++;
+		return 0;
+	};
+	MenuSoundAudioSubsystem subsystem;
+
+	//The arming caller runs it first and the stream's own thread asks again when
+	//its open begins: SDL_InitSubSystem is not thread-safe and the emulator's own
+	//audio-init path runs the same call, so the second ask must find the result
+	//instead of running the init again.
+	Check(subsystem.Ensure(init), "menu sound: an init that returned zero brings the subsystem up");
+	Check(subsystem.Ensure(init), "menu sound: a second ask finds the subsystem already up");
+	Check(attempts == 1, "menu sound: the subsystem init runs exactly once", std::to_string(attempts));
+	Check(!subsystem.Failed(), "menu sound: a subsystem that came up is not a failed one");
+}
+
+void TestTheMenuSoundDeviceIsTheOneThePlayerPicked()
+{
+	std::vector<std::string> byId;
+	int defaults = 0;
+	auto getById = [&](const std::string& id) {
+		byId.push_back(id);
+		return id == "USB Headset";
+	};
+	auto getDefault = [&]() {
+		defaults++;
+		return true;
+	};
+
+	//The player picked a device and it is there: that is the device opened, looked
+	//up by its own id, and the default endpoint is never consulted (D2 - the blip
+	//goes out through "the output device the player already picked").
+	Check(MenuSoundDeviceResolve::Resolve("USB Headset", getById, getDefault),
+		"menu sound: a configured device that is present resolves");
+	Check(byId.size() == 1 && byId[0] == "USB Headset", "menu sound: the configured device is looked up by its own id",
+		byId.empty() ? "no lookup" : byId[0]);
+	Check(defaults == 0, "menu sound: the default endpoint is not touched when the configured device resolved",
+		std::to_string(defaults));
+
+	//The configured device is gone - unplugged since the app started: the same
+	//fallback the game device takes (WasapiSoundManager::Initialize).
+	byId.clear();
+	auto gone = [&](const std::string& id) {
+		byId.push_back(id);
+		return false;
+	};
+	Check(MenuSoundDeviceResolve::Resolve("USB Headset", gone, getDefault),
+		"menu sound: a configured device that is gone falls back to the default endpoint");
+	Check(byId.size() == 1 && defaults == 1,
+		"menu sound: the fallback asks for the configured device first and then for the default one",
+		"byId " + std::to_string(byId.size()) + ", default " + std::to_string(defaults));
+
+	//Nothing configured is the default endpoint, with no lookup by id at all.
+	byId.clear();
+	Check(MenuSoundDeviceResolve::Resolve("", getById, getDefault), "menu sound: no configured device resolves to the default endpoint");
+	Check(byId.empty() && defaults == 2, "menu sound: an empty configured id never looks a device up by id",
+		"byId " + std::to_string(byId.size()) + ", default " + std::to_string(defaults));
+
+	//Neither endpoint is there: the resolution fails, which is the sink's
+	//failed-open path (D9 - the row stays hidden rather than opening elsewhere).
+	Check(!MenuSoundDeviceResolve::Resolve("Gone", [](const std::string&) { return false; }, []() { return false; }),
+		"menu sound: with neither endpoint there the resolution fails");
+}
+
+void TestAStoppedSdlAudioDeviceIsNotAlive()
+{
+	MenuSoundSinkHealth health;
+
+	//SDL's three device statuses. A device that is merely paused is alive - this
+	//sink parks its device paused between blips and unpauses it per blip (D8) - so
+	//only "stopped" means the device went away.
+	health.ObservedAudioStatus(MenuSoundSinkHealth::AudioPlaying);
+	Check(health.IsAlive(), "menu sound: a device SDL reports as playing is alive");
+	health.ObservedAudioStatus(MenuSoundSinkHealth::AudioPaused);
+	Check(health.IsAlive(), "menu sound: a paused device is alive, because the sink parks it paused between blips");
+	health.ObservedAudioStatus(MenuSoundSinkHealth::AudioStopped);
+	Check(!health.IsAlive(), "menu sound: a device SDL reports as stopped is a dead device (D9)");
+
+	Check(MenuSoundSinkHealth::AudioStopped == 0x1010 && MenuSoundSinkHealth::AudioPlaying == 0x1011
+		&& MenuSoundSinkHealth::AudioPaused == 0x1012,
+		"menu sound: the SDL audio statuses are the values SDL_AudioStatus defines");
+}
+
+void TestAWsapiAudioClientInvalidatedIsDeadForGood()
+{
+	MenuSoundSinkHealth health;
+
+	//WASAPI answers with an HRESULT and only one code means the device is gone: a
+	//call that failed on anything else is a call the owner retries, not a device
+	//that left.
+	health.ObservedResult(0);
+	Check(health.IsAlive(), "menu sound: a WASAPI call that succeeded leaves the device alive");
+	health.ObservedResult((int32_t)0x88890001);
+	Check(health.IsAlive(), "menu sound: a WASAPI failure that is not the invalidated code leaves the device alive");
+	health.ObservedResult(MenuSoundSinkHealth::DeviceInvalidated);
+	Check(!health.IsAlive(), "menu sound: an invalidated audio client is a dead device (D9)");
+	Check(MenuSoundSinkHealth::DeviceInvalidated == (int32_t)0x88890004,
+		"menu sound: the latched code is AUDCLNT_E_DEVICE_INVALIDATED");
+
+	//One-way, like the capability it feeds: the device does not come back under
+	//the same stream, so no later success revives it.
+	health.ObservedResult(0);
+	health.ObservedAudioStatus(MenuSoundSinkHealth::AudioPlaying);
+	Check(!health.IsAlive(), "menu sound: a device that went invalidated never comes back under the same stream");
 }
 
 void TestADeadMenuSoundDeviceFlipsTheCapabilityBack()
@@ -18174,6 +18474,14 @@ int main()
 	TestTheMenuSoundSettleIsDerivedFromTheQueuedFrameCount();
 	TestTheMenuSoundStreamIsArmedAtStartAndNeverLazily();
 	TestAFailedMenuSoundOpenKeepsTheRowHidden();
+	TestAPickedDeviceChangeReArmsTheMenuSoundStream();
+	TestABackendChangeToAnApiWithNoMenuSinkDisarmsTheStream();
+	TestAnUnchangedArmingLeavesTheRunningMenuSoundStreamAlone();
+	TestAMenuSoundSubsystemInitThatFailsFailsTheOpen();
+	TestAMenuSoundSubsystemInitRunsOnceForTheSession();
+	TestTheMenuSoundDeviceIsTheOneThePlayerPicked();
+	TestAStoppedSdlAudioDeviceIsNotAlive();
+	TestAWsapiAudioClientInvalidatedIsDeadForGood();
 	TestADeadMenuSoundDeviceFlipsTheCapabilityBack();
 	TestReleasingTheMenuSoundDeviceNeverTouchesTheStreamAgain();
 	TestTheMenuSoundGateAndVolumeAreTheOnesTheAdrNames();
