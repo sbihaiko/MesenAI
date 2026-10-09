@@ -328,6 +328,8 @@ namespace Mesen.Windows
 				"RomPickerLibraryFolders" => PlayBarDeclarations.LibraryFolders,
 				"RomPickerBrowseFile" => PlayBarDeclarations.BrowseFile,
 				"RomPickerSearch" => PlayBarDeclarations.SearchField,
+				"RomPickerBack" => PlayBarDeclarations.BackButton,
+				"RomPickerSearchClear" => PlayBarDeclarations.SearchClear,
 				_ => PlayBarDeclarations.Library
 			};
 		}

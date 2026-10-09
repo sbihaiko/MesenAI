@@ -107,5 +107,16 @@ namespace Mesen.Tests.Play
 			Assert.Equal("A BarSearch     LB / RB BarConsole     B BarBack",
 				PlayActionBar.Text(PlayBarDeclarations.SearchField, PlayInputDevice.Controller, PadFamily.Xbox, false, key => key));
 		}
+
+		//A on Back leaves the library and A on the search's clear button empties the
+		//query: the bar says so instead of falling back to the tile's Play.
+		[Fact]
+		public void The_library_Back_and_Clear_search_buttons_name_what_A_does_not_Play()
+		{
+			Assert.Equal("A BarBack     Y BarSearch     LB / RB BarConsole",
+				PlayActionBar.Text(PlayBarDeclarations.BackButton, PlayInputDevice.Controller, PadFamily.Xbox, false, key => key));
+			Assert.Equal("A BarClearSearch     Y BarSearch     LB / RB BarConsole     B BarBack",
+				PlayActionBar.Text(PlayBarDeclarations.SearchClear, PlayInputDevice.Controller, PadFamily.Xbox, false, key => key));
+		}
 	}
 }

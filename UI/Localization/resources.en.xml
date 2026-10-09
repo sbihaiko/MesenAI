@@ -2260,6 +2260,7 @@
 		<Message ID="BarLibraryFolders">Library folders</Message>
 		<Message ID="BarBrowseFile">Browse a file</Message>
 		<Message ID="BarSearch">Search</Message>
+		<Message ID="BarClearSearch">Clear search</Message>
 		<Message ID="BarConsole">Console</Message>
 		<Message ID="BarKeyboardMove">Move</Message>
 		<Message ID="BarKeyboardPress">Press key</Message>

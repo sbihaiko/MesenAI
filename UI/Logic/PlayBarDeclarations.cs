@@ -52,6 +52,21 @@ public static class PlayBarDeclarations
 		new PlayBarEntry(PlayAction.Back, "BarBack"),
 	};
 
+	//A on the header's Back leaves the library, and A on the search's clear button
+	//empties the query: neither plays, so the bar names what A does.
+	public static readonly IReadOnlyList<PlayBarEntry> BackButton = new[] {
+		new PlayBarEntry(PlayAction.Confirm, "BarBack"),
+		new PlayBarEntry(PlayAction.Search, "BarSearch"),
+		new PlayBarEntry(PlayAction.ConsoleFilter, "BarConsole"),
+	};
+
+	public static readonly IReadOnlyList<PlayBarEntry> SearchClear = new[] {
+		new PlayBarEntry(PlayAction.Confirm, "BarClearSearch"),
+		new PlayBarEntry(PlayAction.Search, "BarSearch"),
+		new PlayBarEntry(PlayAction.ConsoleFilter, "BarConsole"),
+		new PlayBarEntry(PlayAction.Back, "BarBack"),
+	};
+
 	//The folder browser and Library folders… inside the same sheet: no search,
 	//no console row to cycle.
 	public static readonly IReadOnlyList<PlayBarEntry> Browser = new[] {
