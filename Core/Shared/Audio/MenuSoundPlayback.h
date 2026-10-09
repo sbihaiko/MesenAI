@@ -1,5 +1,10 @@
 #pragma once
 #include "pch.h"
+#include <mutex>
+#include <thread>
+#include <condition_variable>
+#include <functional>
+#include <chrono>
 #include "Core/Shared/Interfaces/IAudioDevice.h"
 
 //Host-free half of SoundMixer::PlayMenuSound: renders the menu blip at the
@@ -34,22 +39,91 @@ public:
 		return out;
 	}
 
-	//configured: whether the device already runs at outputRate/stereo (owned by
-	//the caller, set here once the priming write has been issued).
-	static void Play(IAudioDevice* device, bool& configured, const int16_t* samples, uint32_t frameCount, uint32_t sourceRate, uint32_t outputRate, uint32_t masterVolume)
+	//The format the device was last primed for. Values, not a flag: a changed
+	//output rate or AudioLatency makes the device reset on the next PlayBuffer.
+	struct State
+	{
+		uint32_t Rate = 0;
+		uint32_t Latency = 0;
+	};
+
+	//Returns how long the blip plays, in ms (0 when nothing was queued).
+	static uint32_t Play(IAudioDevice* device, State& state, const int16_t* samples, uint32_t frameCount, uint32_t sourceRate, uint32_t outputRate, uint32_t masterVolume, uint32_t latency = 0)
 	{
 		vector<int16_t> rendered = Render(samples, frameCount, sourceRate, outputRate, masterVolume);
 		if(rendered.empty()) {
-			return;
+			return 0;
 		}
 
-		if(!configured) {
+		if(state.Rate != outputRate || state.Latency != latency) {
 			//Configure the device in the output format first; the reset this
 			//triggers drops only this silent frame, not the blip.
 			int16_t silence[2] = {};
 			device->PlayBuffer(silence, 1, outputRate, true);
-			configured = true;
+			state.Rate = outputRate;
+			state.Latency = latency;
 		}
 		device->PlayBuffer(rendered.data(), (uint32_t)(rendered.size() / 2), outputRate, true);
+		return (uint32_t)((uint64_t)(rendered.size() / 2) * 1000 / outputRate);
+	}
+};
+
+//PlayBuffer starts the device once enough audio is queued and the device loops
+//its ring until told otherwise, so with no game running nothing would ever stop
+//it. This pauses the device once the last blip has drained. The pause runs under
+//the caller's device lock and is skipped when stillIdle() says a game took over.
+class MenuSoundSettler
+{
+private:
+	std::mutex& _lock;
+	std::condition_variable _cv;
+	std::thread _thread;
+	bool _stop = false;
+	bool _pending = false;
+	std::chrono::steady_clock::time_point _deadline;
+	IAudioDevice* _device = nullptr;
+	std::function<bool()> _stillIdle;
+
+	void Run()
+	{
+		std::unique_lock<std::mutex> lk(_lock);
+		while(!_stop) {
+			if(!_pending) {
+				_cv.wait(lk);
+			} else if(_cv.wait_until(lk, _deadline) == std::cv_status::timeout && _pending && !_stop && std::chrono::steady_clock::now() >= _deadline) {
+				_pending = false;
+				if(_stillIdle()) {
+					_device->Pause();
+				}
+			}
+		}
+	}
+
+public:
+	explicit MenuSoundSettler(std::mutex& deviceLock) : _lock(deviceLock) {}
+
+	~MenuSoundSettler()
+	{
+		{
+			std::lock_guard<std::mutex> lk(_lock);
+			_stop = true;
+		}
+		_cv.notify_all();
+		if(_thread.joinable()) {
+			_thread.join();
+		}
+	}
+
+	//Caller holds the device lock.
+	void Schedule(IAudioDevice* device, uint32_t delayMs, std::function<bool()> stillIdle)
+	{
+		_device = device;
+		_stillIdle = stillIdle;
+		_deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(delayMs);
+		_pending = true;
+		if(!_thread.joinable()) {
+			_thread = std::thread([this]() { Run(); });
+		}
+		_cv.notify_all();
 	}
 };

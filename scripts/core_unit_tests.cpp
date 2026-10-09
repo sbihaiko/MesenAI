@@ -17681,8 +17681,10 @@ namespace {
 			}
 			FramesQueued += bufferSize;
 		}
-		void Stop() override {}
-		void Pause() override {}
+		uint32_t Stops = 0;
+		std::atomic<uint32_t> Pauses{0};
+		void Stop() override { Stops++; }
+		void Pause() override { Pauses++; }
 		void ProcessEndOfFrame() override {}
 		string GetAvailableDevices() override { return ""; }
 		void SetAudioDevice(string) override {}
@@ -17693,21 +17695,21 @@ namespace {
 static void TestTheFirstMenuSoundReachesAFreshDevice()
 {
 	ResettingAudioDevice device;
-	bool configured = false;
+	MenuSoundPlayback::State configured;
 	vector<int16_t> blip(48000 / 10 * 2, 1000);
-	MenuSoundPlayback::Play(&device, configured, blip.data(), 4800, 48000, 48000, 100);
+	MenuSoundPlayback::Play(&device, configured, blip.data(), 4800, 48000, 48000, 100, 30);
 	Check(device.FramesQueued == 4800, "MenuSound: the first blip is queued, not dropped by the device's reset");
-	MenuSoundPlayback::Play(&device, configured, blip.data(), 4800, 48000, 48000, 100);
+	MenuSoundPlayback::Play(&device, configured, blip.data(), 4800, 48000, 48000, 100, 30);
 	Check(device.Resets == 1 && device.FramesQueued == 9600, "MenuSound: later blips cause no further reset");
 }
 
 static void TestAMenuSoundIsRenderedAtTheConfiguredOutputRate()
 {
 	ResettingAudioDevice device;
-	bool configured = false;
+	MenuSoundPlayback::State configured;
 	vector<int16_t> blip(48000 / 10 * 2, 1000);
 	for(int i = 0; i < 3; i++) {
-		MenuSoundPlayback::Play(&device, configured, blip.data(), 4800, 48000, 44100, 100);
+		MenuSoundPlayback::Play(&device, configured, blip.data(), 4800, 48000, 44100, 100, 30);
 	}
 	Check(device.Rate == 44100 && device.Resets == 1, "MenuSound: a 44.1 kHz output resets once, not per blip");
 	Check(device.FramesQueued == 3 * 4410, "MenuSound: the blip is resampled to 4410 frames at 44.1 kHz");
@@ -17716,8 +17718,47 @@ static void TestAMenuSoundIsRenderedAtTheConfiguredOutputRate()
 	Check(half.size() == 4410 * 2 && half[100] == 500, "MenuSound: master volume scales the resampled PCM");
 }
 
+static void TestAMenuSoundIsReprimedWhenTheRateOrLatencyChanges()
+{
+	ResettingAudioDevice device;
+	MenuSoundPlayback::State state;
+	vector<int16_t> blip(4800 * 2, 1000);
+	MenuSoundPlayback::Play(&device, state, blip.data(), 4800, 48000, 48000, 100, 30);
+	device.Rate = 44100; //a game opened the device at another rate
+	MenuSoundPlayback::Play(&device, state, blip.data(), 4800, 48000, 48000, 100, 60);
+	Check(device.Rate == 48000 && device.FramesQueued == 9600, "MenuSound: a changed AudioLatency re-primes, so the blip is not dropped");
+}
+
+static void TestAMenuSoundEndsWithThePausedDevice()
+{
+	ResettingAudioDevice device;
+	MenuSoundPlayback::State state;
+	std::mutex lock;
+	vector<int16_t> blip(480 * 2, 1000);
+	{
+		MenuSoundSettler settler(lock);
+		{
+			std::lock_guard<std::mutex> g(lock);
+			uint32_t ms = MenuSoundPlayback::Play(&device, state, blip.data(), 480, 48000, 48000, 100, 30);
+			settler.Schedule(&device, ms + 20, []() { return true; });
+		}
+		Check(device.Pauses == 0, "MenuSound: the device is not paused while the blip still plays");
+		std::this_thread::sleep_for(std::chrono::milliseconds(300));
+		Check(device.Pauses == 1, "MenuSound: the device is paused once the blip has drained");
+
+		{
+			std::lock_guard<std::mutex> g(lock);
+			settler.Schedule(&device, 20, []() { return false; });
+		}
+		std::this_thread::sleep_for(std::chrono::milliseconds(200));
+		Check(device.Pauses == 1, "MenuSound: a game that took over is not paused by the blip's settle");
+	}
+}
+
 int main()
 {
+	TestAMenuSoundIsReprimedWhenTheRateOrLatencyChanges();
+	TestAMenuSoundEndsWithThePausedDevice();
 	TestTheForcedPatchOverrideFollowsTheSettingUntilTheRomIsSuppressed();
 	TestALoadRecordsTheForcedPatchAndTheNextLoadStartsClean();
 	TestOnlyARomWithAForcedPatchCanBeSuppressed();
