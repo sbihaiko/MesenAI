@@ -1,8 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
 using System.Linq;
 using System.Threading;
+using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
 using Avalonia.Input;
@@ -34,8 +36,11 @@ public class PlayKeyboardMenuSoundsTests : IDisposable
 	private readonly Workspace _workspace = ConfigManager.Config.Preferences.Workspace;
 	private readonly bool _confirm = ConfigManager.Config.Preferences.ConfirmExitResetPower;
 	private readonly bool _menuSounds = ConfigManager.Config.Audio.MenuSounds;
+	private readonly bool _pauseInBackground = ConfigManager.Config.Preferences.PauseWhenInBackground;
+	private readonly bool _pauseInMenus = ConfigManager.Config.Preferences.PauseWhenInMenusAndConfig;
 	private readonly List<MainWindow> _windows = new();
 	private readonly List<MenuSoundKind> _played = new();
+	private string? _tempFolder;
 	private KeyCombination? _overlayBinding;
 	private KeyCombination? _overlayBinding2;
 
@@ -82,6 +87,20 @@ public class PlayKeyboardMenuSoundsTests : IDisposable
 	public void Dispose()
 	{
 		MenuSoundOutput.SetSinkForTest(null);
+		//The cases that load a game leave it loaded, and the next case's window
+		//would come up over a running core (#790) - so the core is stopped here,
+		//while the window that was showing it is still up, the way the pad path's
+		//own case does it (MenuSoundsTests).
+		if(NativeCore.IsAvailable && EmuApi.IsRunning()) {
+			EmuApi.Stop();
+			Stopwatch clock = Stopwatch.StartNew();
+			while(EmuApi.IsRunning() && clock.ElapsedMilliseconds < 5000) {
+				Thread.Sleep(10);
+			}
+		}
+		if(_tempFolder != null && Directory.Exists(_tempFolder)) {
+			Directory.Delete(_tempFolder, true);
+		}
 		if(_overlayBinding != null) {
 			ShortcutKeyInfo overlay = ConfigManager.Config.Preferences.ShortcutKeys.Find(sk => sk.Shortcut == EmulatorShortcut.ToggleOverlay)!;
 			overlay.KeyCombination = _overlayBinding;
@@ -98,6 +117,8 @@ public class PlayKeyboardMenuSoundsTests : IDisposable
 		prefs.UiMode = _uiMode;
 		prefs.Workspace = _workspace;
 		prefs.ConfirmExitResetPower = _confirm;
+		prefs.PauseWhenInBackground = _pauseInBackground;
+		prefs.PauseWhenInMenusAndConfig = _pauseInMenus;
 		ConfigManager.Config.Audio.MenuSounds = _menuSounds;
 		ConfigManager.Config.Save();
 	}
@@ -108,18 +129,24 @@ public class PlayKeyboardMenuSoundsTests : IDisposable
 		Dispatcher.UIThread.RunJobs();
 	}
 
-	private MainWindow ShowPlayHome()
+	private MainWindow ShowPlayHome() => ShowPlayHome(out _);
+
+	private MainWindow ShowPlayHome(out MainWindowViewModel model)
 	{
 		BindOverlayToEsc();
 		PreferencesConfig prefs = ConfigManager.Config.Preferences;
 		prefs.UiMode = UiMode.Player;
 		prefs.Workspace = Workspace.Play;
 		prefs.ConfirmExitResetPower = false;
+		//The case below needs the game to KEEP running when the window is not the
+		//active one, which is the state a headless run is always in.
+		prefs.PauseWhenInBackground = false;
+		prefs.PauseWhenInMenusAndConfig = false;
 
 		MainWindow window = new() { Width = 1100, Height = 740 };
 		window.ShowStarted();
 		_windows.Add(window);
-		MainWindowViewModel model = Assert.IsType<MainWindowViewModel>(window.DataContext);
+		model = Assert.IsType<MainWindowViewModel>(window.DataContext);
 		Stopwatch clock = Stopwatch.StartNew();
 		while(model.MainMenu.HelpMenuItems.Count == 0) {
 			if(clock.ElapsedMilliseconds > 30000) {
@@ -160,6 +187,35 @@ public class PlayKeyboardMenuSoundsTests : IDisposable
 		}
 		overlay.KeyCombination = new KeyCombination() { Key1 = (ushort)Avalonia.Input.Key.Escape };
 		overlay.KeyCombination2 = new KeyCombination();
+	}
+
+	private static void WaitFor(Func<bool> condition, string failure)
+	{
+		Stopwatch clock = Stopwatch.StartNew();
+		while(!condition()) {
+			if(clock.ElapsedMilliseconds > 30000) {
+				throw new XunitException(failure);
+			}
+			Dispatcher.UIThread.RunJobs();
+			Thread.Sleep(20);
+		}
+		Dispatcher.UIThread.RunJobs();
+	}
+
+	//A real game in the real core, running unpaused, the way
+	//PauseOverlayViewTests arranges one (a synthetic NROM, so no ROM ships with
+	//the repo).
+	private void LoadGame(MainWindowViewModel model)
+	{
+		string folder = Path.Combine(Path.GetTempPath(), "mesen-1127-" + Guid.NewGuid().ToString("N"));
+		Directory.CreateDirectory(folder);
+		_tempFolder = folder;
+		string rom = Path.Combine(folder, "synthetic-nrom.nes");
+		File.WriteAllBytes(rom, SyntheticNrom.Build());
+		Assert.True(EmuApi.LoadRom(rom, string.Empty), $"the core refused to load {rom}");
+		WaitFor(() => EmuApi.IsRunning() && model.RomInfo.Format != RomFormat.Unknown, "the ROM never reported as loaded");
+		EmuApi.Resume();
+		WaitFor(() => !EmuApi.IsPaused() && !model.IsGamePaused && !model.RecentGames.Visible, "the game never ran unpaused");
 	}
 
 	private void PressPad(MainWindow window, PadNavAction action)
@@ -213,5 +269,70 @@ public class PlayKeyboardMenuSoundsTests : IDisposable
 		PressKey(window, PhysicalKey.ArrowDown);
 
 		Assert.Equal(new[] { MenuSoundKind.Move, MenuSoundKind.Move }, _played);
+	}
+
+	//The gate reads the state the press LEFT, not the state it found: a Confirm
+	//that resumes a game leaves it running unpaused, and MenuSounds.ShouldPlay
+	//refuses a blip over a running game. The pad's Confirm on that press is
+	//silent for exactly this reason (PlayPadNavigationWiring reads the gate after
+	//Apply), so the keyboard's must be too - "the same hook" means the same
+	//answer, not merely the same call.
+	//
+	//The tunnel handler this window answers keys on runs BEFORE the focused
+	//control activates, so a gate read there finds the game still paused, sounds
+	//the blip, and lets the resume happen under it.
+	[AvaloniaFact]
+	public void Confirm_that_resumes_the_game_is_silent_like_the_pads()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		ConfigManager.Config.Audio.MenuSounds = true;
+		MainWindow window = ShowPlayHome(out MainWindowViewModel model);
+		LoadGame(model);
+
+		//Esc over a running game: W-P4 opens and the game pauses, which is the
+		//one state a blip is allowed in.
+		model.TogglePlayerOverlay();
+		WaitFor(() => model.IsGamePaused, "the overlay did not pause the game");
+		Assert.True(window.FindNamed<Button>("OverlayResumeButton").IsFocused, "Resume did not take the focus");
+		_played.Clear();
+
+		PressKey(window, PhysicalKey.Enter);
+		WaitFor(() => !EmuApi.IsPaused() && !model.IsGamePaused, "Enter on Resume did not resume the game");
+		Pump();
+
+		Assert.Empty(_played);
+	}
+
+	//A held key is one press for Confirm (#1080's rule, the one the Esc arm
+	//above already applies): the OS repeats it as more KeyDowns with no KeyUp
+	//between, and the pad's own Confirm does not repeat either
+	//(PadNavRepeat.Held deliberately skips Confirm and Back). The arrows are left
+	//to repeat on purpose - each repeat is Avalonia's own move of the ring, the
+	//keyboard's counterpart of the pad's held direction.
+	//
+	//The row is the Save states one, whose sheet takes a button: the game stays
+	//paused across both KeyDowns, so the gate stays open and the repeat guard is
+	//the only thing that can silence the second one.
+	[AvaloniaFact]
+	public void A_held_enter_sounds_once()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		ConfigManager.Config.Audio.MenuSounds = true;
+		MainWindow window = ShowPlayHome(out MainWindowViewModel model);
+		LoadGame(model);
+
+		model.TogglePlayerOverlay();
+		WaitFor(() => model.IsGamePaused, "the overlay did not pause the game");
+		PressKey(window, PhysicalKey.ArrowDown);
+		Assert.True(window.FindNamed<Button>("OverlaySaveStatesButton").IsFocused, "ArrowDown did not reach the Save states row");
+		_played.Clear();
+
+		//What the OS sends for a held key: a second KeyDown, no KeyUp between.
+		window.KeyPressQwerty(PhysicalKey.Enter, RawInputModifiers.None);
+		Pump();
+		window.KeyPressQwerty(PhysicalKey.Enter, RawInputModifiers.None);
+		Pump();
+
+		Assert.Equal(new[] { MenuSoundKind.Confirm }, _played);
 	}
 }
