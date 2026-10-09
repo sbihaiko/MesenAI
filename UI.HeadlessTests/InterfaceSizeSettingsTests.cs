@@ -1,8 +1,6 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
-using Avalonia.Controls;
-using Avalonia.Headless.XUnit;
 using Mesen.Config;
 using Mesen.Logic;
 using Mesen.ViewModels;
@@ -11,8 +9,9 @@ using Xunit;
 namespace Mesen.HeadlessTests;
 
 //#1111 (spec #1102): the Interface size preference and the Display row's
-//scope. The factor and step rules are host-free (UI.Tests/Play/InterfaceSizeTests).
-[Collection(NativeCoreCollection.Name)]
+//scope. The factor and step rules are host-free (UI.Tests/Play/InterfaceSizeTests);
+//these need PreferencesConfig and the settings view model, which UI.Tests cannot
+//compile, but they open no window and touch no native code, so no collection.
 public class InterfaceSizeSettingsTests
 {
 	[Fact]

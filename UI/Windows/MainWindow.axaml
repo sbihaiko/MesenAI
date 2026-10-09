@@ -179,8 +179,6 @@
 			<!--ADR-0249: in Player mode PlayWorkspace is the theme's scope (`player`,
 			Play's tint); Advanced keeps the classic look.-->
 			<Panel Name="PlayWorkspace" IsVisible="{Binding IsPlayWorkspace}" Classes.player="{Binding Config.Preferences.UiMode, Converter={StaticResource EnumMatchConverter}, ConverterParameter={x:Static lg:UiMode.Player}}">
-				<ContentControl Background="#181818" Content="{Binding RecentGames}" IsVisible="{Binding RecentGames.Visible}" />
-
 				<!--"Sim, quadro congelado" (2026-10-03): the native picture is hidden
 				under W-P4 and its sheets (PlayGameLayer), so the frame the game
 				stopped on stands in for it, blurred like W-P4's render, in the live
@@ -224,8 +222,17 @@
 				<!--#1111 (spec #1102): Interface size. Everything of Play's chrome - the
 				scrim, the pause overlay and every sheet - sits under one layout
 				transform; the game picture, its paused frame and the Scale row do not.-->
-				<LayoutTransformControl Name="PlayChromeRoot" LayoutTransform="{Binding Config.Preferences.InterfaceSize, Converter={x:Static c:InterfaceSizeTransformConverter.Instance}}">
+				<LayoutTransformControl Name="PlayChromeRoot">
+					<LayoutTransformControl.LayoutTransform>
+						<MultiBinding Converter="{x:Static c:PlayInterfaceSizeTransformConverter.Instance}">
+							<Binding Path="Config.Preferences.InterfaceSize" />
+							<Binding Path="Shell.Active" />
+						</MultiBinding>
+					</LayoutTransformControl.LayoutTransform>
 					<Panel>
+						<!--Home (W-P1/W-P2) is part of the chrome: it scales with it.-->
+						<ContentControl Name="PlayHomeHost" Background="#181818" Content="{Binding RecentGames}" IsVisible="{Binding RecentGames.Visible}" />
+
 						<!--W-P4: the game stays behind the overlay, dimmed.-->
 						<Border Name="PlayerOverlayScrim" Classes="scrim">
 							<Border.IsVisible>

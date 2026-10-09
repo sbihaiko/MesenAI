@@ -35,25 +35,6 @@ namespace Mesen.Controls
 		public static void SetTintText(AvaloniaObject target, IBrush? value) => target.SetValue(TintTextProperty, value);
 	}
 
-	//#1111: Preferences.InterfaceSize -> the layout transform at the root of
-	//Play's chrome (a LayoutTransformControl, so the chrome re-lays out at the
-	//new size instead of being stretched). The game picture is not under it.
-	public class InterfaceSizeTransformConverter : IValueConverter
-	{
-		public static readonly InterfaceSizeTransformConverter Instance = new();
-
-		public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
-		{
-			double factor = PlayerInterfaceSize.Factor(value is InterfaceSize size ? size : InterfaceSize.Standard);
-			return new ScaleTransform(factor, factor);
-		}
-
-		public object? ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
-		{
-			throw new NotSupportedException();
-		}
-	}
-
 	//#1111, ADR-0269 Decision 3: the layers above the workspaces (Settings, the
 	//load card, the BIOS and tool sheets) also show in Remaster and Share, which
 	//keep their own size - they read Interface size only while Play is active.

@@ -6,6 +6,7 @@ using Avalonia.Controls.Primitives;
 using Avalonia.Headless.XUnit;
 using Avalonia.Media;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using Mesen.Config;
 using Mesen.Interop;
 using Mesen.Logic;
@@ -112,6 +113,45 @@ public class InterfaceSizeLayoutTests : IDisposable
 		Assert.True(topLeft.Y >= 0 && topLeft.X >= 0, $"Done starts at {topLeft} on {tab}");
 		Assert.True(bottomRight.Y <= window.Bounds.Height && bottomRight.X <= window.Bounds.Width, $"Done ends at {bottomRight} in a {window.Bounds.Size} window on {tab}");
 		model.ClosePlayerSettings();
+	}
+
+	//Decision 6, the other half: at 1.5 in 1024x640 the rows do not fit, so the
+	//page scrolls (extent past viewport) while Done sits outside that scroller -
+	//pinned, focusable and enabled, so the pad lands on it however far the page is.
+	[AvaloniaFact]
+	public void The_page_scrolls_at_the_largest_size_and_the_pad_can_reach_done()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model) = Show(Workspace.Play, InterfaceSize.ExtraLarge);
+		window.OpenPlayerSettingsSheet();
+		Settle(window);
+		window.FindNamed<TabControl>("PlayerSettingsTabs").SelectedIndex = PlayerSettingsEssentials.IndexOf(ConfigWindowTab.Display);
+		Settle(window);
+
+		Assert.Equal(1.5, ScaleOf(window, "PlayerSettingsLayerScale"));
+		ScrollViewer page = window.FindNamed<TabControl>("PlayerSettingsTabs").FindAll<ScrollViewer>().First(s => s.Classes.Contains("pageScroll") && s.IsOnScreen());
+		Assert.True(page.Extent.Height > page.Viewport.Height, $"Page extent {page.Extent} fits its viewport {page.Viewport}: nothing scrolls");
+
+		Button done = window.FindNamed<Button>("btnPlayerSettingsDone");
+		Assert.False(done.GetVisualAncestors().Contains(page), "Done sits inside the scrolling page");
+		Assert.True(done.Focusable && done.IsEffectivelyEnabled && done.IsHitTestVisible);
+		Assert.True(done.Focus());
+		model.ClosePlayerSettings();
+	}
+
+	//Decision 3: Home (W-P1/W-P2) is part of the chrome - it scales through
+	//PlayChromeRoot's transform, with no transform of its own.
+	[AvaloniaFact]
+	public void Home_scales_with_the_play_chrome()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, _) = Show(Workspace.Play, InterfaceSize.ExtraLarge);
+		Settle(window);
+
+		Control home = window.FindNamed<Control>("PlayHomeHost");
+		Assert.Equal(1.5, ScaleOf(window, "PlayChromeRoot"));
+		Assert.Contains(window.FindNamed<LayoutTransformControl>("PlayChromeRoot"), home.GetVisualAncestors());
+		Assert.Equal(1.5, home.TransformToVisual(window)!.Value.M11);
 	}
 
 	//W-P10: Look's Hold to Compare shares Done's row, left of it - the page's
