@@ -33,16 +33,24 @@ public class InterfaceSizeLayoutTests : IDisposable
 		ConfigManager.Config.Preferences.InterfaceSize = _size;
 	}
 
-	private static (MainWindow Window, MainWindowViewModel Model) Show(Workspace workspace, InterfaceSize size)
+	private static (MainWindow Window, MainWindowViewModel Model) Show(Workspace workspace, InterfaceSize size, double width = 1024, double height = 640)
 	{
 		ConfigManager.Config.Preferences.UiMode = WorkspaceShell.UiModeFor(workspace);
 		ConfigManager.Config.Preferences.Workspace = workspace;
 		ConfigManager.Config.Preferences.InterfaceSize = size;
 		//The window's default size on a desktop; the headless host's own is smaller.
-		MainWindow main = new() { Width = 1024, Height = 640 };
+		MainWindow main = new() { Width = width, Height = height };
 		main.ShowStarted();
 		Dispatcher.UIThread.RunJobs();
 		return (main, Assert.IsType<MainWindowViewModel>(main.DataContext));
+	}
+
+	//A control's box in the window's own coordinates, transform included.
+	private static Rect BoxIn(Control control, MainWindow window)
+	{
+		Point topLeft = control.TranslatePoint(new Point(0, 0), window)!.Value;
+		Point bottomRight = control.TranslatePoint(new Point(control.Bounds.Width, control.Bounds.Height), window)!.Value;
+		return new Rect(topLeft.X, topLeft.Y, bottomRight.X - topLeft.X, bottomRight.Y - topLeft.Y);
 	}
 
 	private static double ScaleOf(MainWindow window, string layer)
@@ -139,6 +147,70 @@ public class InterfaceSizeLayoutTests : IDisposable
 		Rect doneBox = new(done.TranslatePoint(new Point(0, 0), window)!.Value, done.Bounds.Size);
 		Assert.True(doneBox.Right <= window.Bounds.Width, $"Done's right edge {doneBox.Right} is past the {window.Bounds.Width} window");
 		Assert.True(doneBox.Bottom <= window.Bounds.Height, $"Done's bottom edge {doneBox.Bottom} is past the {window.Bounds.Height} window");
+		model.ClosePlayerSettings();
+	}
+
+	//#1123 (ADR-0269 Decision 6, the width half): the height is capped against
+	//the transformed room the host gives the sheet, the width was not - a fixed
+	//480 px became 720 at 1.5 and hung off both sides of the window's own
+	//512x505 starting size. The width is capped the same way, so the sheet's
+	//rendered box stays inside the window at both sizes the ADR guarantees.
+	[AvaloniaTheory]
+	[InlineData(1024, 640)]
+	[InlineData(512, 505)]
+	public void The_sheet_width_is_capped_and_stays_inside_the_window(double width, double height)
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model) = Show(Workspace.Play, InterfaceSize.ExtraLarge, width, height);
+		window.OpenPlayerSettingsSheet();
+		Settle(window);
+
+		Rect sheet = BoxIn(window.FindNamed<Border>("PlayerSettingsSheet"), window);
+		Assert.True(sheet.Left >= 0 && sheet.Right <= window.Bounds.Width, $"The sheet {sheet} is not inside a {window.Bounds.Size} window");
+		//The uncapped 480 * 1.5 = 720 must never be drawn when the window cannot
+		//hold it: the cap leaves the sheet a margin inside the window.
+		Assert.True(sheet.Width <= window.Bounds.Width - 32, $"The sheet is {sheet.Width} wide in a {window.Bounds.Width} window: the 1.5 factor is not capped");
+		//...and the cap never shrinks a sheet the window can hold: at the ADR's
+		//guaranteed 1024x640 the sheet is still the whole 480 at 1.5.
+		if(width >= 1024) {
+			Assert.Equal(720, sheet.Width, 0);
+		}
+		//A narrower sheet clips nothing: the page rows still fit across it, the
+		//page's own scroller being vertical only. (The strip narrows its
+		//segments by PlayerSettingsEssentials.SegmentWidth, a rule UI.Tests
+		//pins host-free; here it only has to leave every tab on screen.)
+		ScrollViewer page = window.FindNamed<TabControl>("PlayerSettingsTabs").FindAll<ScrollViewer>().First(s => s.Classes.Contains("pageScroll") && s.IsOnScreen());
+		Assert.True(page.Extent.Width <= page.Viewport.Width + 0.5, $"The page is {page.Extent.Width} wide in a {page.Viewport.Width} viewport: its rows are clipped");
+		Assert.All(window.FindNamed<TabControl>("PlayerSettingsTabs").FindAll<TabItem>(), t => Assert.True(t.IsOnScreen() && t.Bounds.Width > 0, $"{t.Name} has no room in the strip"));
+		model.ClosePlayerSettings();
+	}
+
+	//#1123: the cap follows the room, so it shrinks with the window instead of
+	//leaving Done past the right edge - on every tab, at the largest size, in
+	//the window's own starting size.
+	[AvaloniaTheory]
+	[InlineData(ConfigWindowTab.Display)]
+	[InlineData(ConfigWindowTab.Look)]
+	[InlineData(ConfigWindowTab.Audio)]
+	[InlineData(ConfigWindowTab.Input)]
+	[InlineData(ConfigWindowTab.System)]
+	public void Done_stays_inside_the_small_window_at_the_largest_size(ConfigWindowTab tab)
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model) = Show(Workspace.Play, InterfaceSize.ExtraLarge, 512, 505);
+		window.OpenPlayerSettingsSheet();
+		Settle(window);
+		int index = PlayerSettingsEssentials.IndexOf(tab);
+		Assert.True(index >= 0, $"{tab} is not a tab of the Play settings strip");
+		window.FindNamed<TabControl>("PlayerSettingsTabs").SelectedIndex = index;
+		Settle(window);
+
+		Button done = window.FindNamed<Button>("btnPlayerSettingsDone");
+		Assert.True(done.IsOnScreen(), $"Done is off screen on {tab}");
+		Rect doneBox = BoxIn(done, window);
+		Assert.True(doneBox.Left >= 0 && doneBox.Top >= 0, $"Done starts at {doneBox.TopLeft} on {tab}");
+		Assert.True(doneBox.Right <= window.Bounds.Width, $"Done's right edge {doneBox.Right} is past the {window.Bounds.Width} window on {tab}");
+		Assert.True(doneBox.Bottom <= window.Bounds.Height, $"Done's bottom edge {doneBox.Bottom} is past the {window.Bounds.Height} window on {tab}");
 		model.ClosePlayerSettings();
 	}
 

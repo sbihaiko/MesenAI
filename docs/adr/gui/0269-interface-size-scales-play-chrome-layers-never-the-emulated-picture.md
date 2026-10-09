@@ -5,6 +5,12 @@
   The decision comes from the spec on issue #1102 (slice 5, "Interface size").
   Amended 2026-10-09 (Decisions 2 and 6) by the same panel after the #1119
   circuit breaker, pick quoted verbatim: **"Narrow PR #1119 on 1024x640: the settings-sheet and four-layer mechanism ship, the minimum-width cap and the pill scale are follow-ups #1123 and #1124."**
+  Decision 6's guarantee was widened 2026-10-09 by the width cap of issue #1123
+  (the follow-up the panel's pick above names), whose acceptance criteria are
+  the owner's own: the cap goes against the transformed room the way the height
+  already did, a headless test pins it in the 512x505 starting window, and this
+  Decision names the guaranteed size. No new panel pick: the work is what #1123
+  asked for.
   Nothing is implemented by this ADR; PR #1119 implements it and must match
   Decisions 3 and 6.
 - Date: 2026-10-09
@@ -49,11 +55,18 @@ Nothing in Play is sized for a TV three meters away. Settings › Display has a
    2.
 6. **A surface that no longer fits at 1.5 scrolls**; nothing is clipped. The
    ScrollViewer sits around the page rows of the surface; the Done row (and Back)
-   stays pinned outside it, so it is always reachable. A headless test pins this
-   at factor 1.5 with the window at the PRD's smallest drawn size, ~1024x640 (spec
-   #1102; PRD Part B wireframes): the rows scroll and the Done row is fully on
-   screen and reachable. Smaller windows (down to the 160x144 floor) are not
-   guaranteed; see #1123.
+   stays pinned outside it, so it is always reachable. Both sides of the sheet's
+   box are capped against the room its host gives it — the height was, the width
+   is since #1123 — so the sheet shrinks with the window instead of hanging off
+   it at a larger size; 480 stays the width wherever it fits.
+   **The guaranteed size is the window's own starting size, 512x505, at every
+   size including Extra large (1.5)**, and still the PRD's drawn size, ~1024x640
+   (spec #1102; PRD Part B wireframes). A headless test pins both ends at factor
+   1.5: at 1024x640 the rows scroll and the Done row is fully on screen and
+   reachable; at 512x505 the sheet is capped to the room (310 px of the 342 the
+   host gives it, 465 px drawn) and Done is inside the window on every tab.
+   Windows below 512x505, down to the 160x144 floor — the width the window's own
+   `MinWidth`/`MinHeight` allow — are not guaranteed.
 
 ## Consequences
 
