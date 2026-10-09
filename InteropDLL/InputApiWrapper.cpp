@@ -147,6 +147,18 @@ extern "C"
 		return false;
 	}
 
+	//#1106: whether pad `index` (the GetGamepadInfo ordinal) can take a haptic
+	//tick on its own, and the tick itself; DirectInput pads are never aimable.
+	DllExport bool __stdcall IsGamepadAimable(uint32_t index)
+	{
+		return _keyManager && _keyManager->IsGamepadAimable(index);
+	}
+
+	DllExport bool __stdcall TickGamepad(uint32_t index)
+	{
+		return _keyManager && _keyManager->TickGamepad(index);
+	}
+
 	DllExport void __stdcall GetKeyName(uint16_t keyCode, char* outKeyName, uint32_t maxLength)
 	{
 		StringUtilities::CopyToBuffer(KeyManager::GetKeyName(keyCode), outKeyName, maxLength);

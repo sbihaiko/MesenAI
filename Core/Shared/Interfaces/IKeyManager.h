@@ -144,6 +144,37 @@ public:
 	//not an error.
 	virtual bool SetGamepadLight(uint32_t index, uint8_t r, uint8_t g, uint8_t b) { return false; }
 
+	//#1106 (spec #1102): a short haptic tick on ONE connected pad, for menu focus
+	//feedback. Only macOS GameController pads that report haptics are aimable.
+	//Windows (XInput, DirectInput) and Linux (evdev) report every pad as not
+	//aimable and run no tick code; each gets its own follow-up (#1121, #1122).
+	//`index` is the one GetGamepadInfo takes. The shared rule lives here so every
+	//backend answers it the same way; a backend only supplies PlayGamepadTick.
+	static bool IsAimable(const GamepadInfo& info)
+	{
+		switch(info.Backend) {
+			case GamepadBackend::GameController:
+				return info.HasRumble;
+			default:
+				return false;
+		}
+	}
+
+	bool IsGamepadAimable(uint32_t index)
+	{
+		GamepadInfo info;
+		return GetGamepadInfo(index, info) && IsAimable(info);
+	}
+
+	//False, with the backend untouched, when the pad is not aimable.
+	bool TickGamepad(uint32_t index)
+	{
+		return IsGamepadAimable(index) && PlayGamepadTick(index);
+	}
+
+	//Backend hook: fire the tick on pad `index`, already known to be aimable.
+	virtual bool PlayGamepadTick(uint32_t index) { return false; }
+
 	//One byte of a player colour on the 0..1 scale GameController's GCColor takes.
 	static constexpr float LightChannel(uint8_t value) { return value / 255.0f; }
 };

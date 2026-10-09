@@ -28,6 +28,9 @@ private:
 #pragma clang diagnostic pop
 	CHHapticEngine* _haptics;
 	id<CHHapticPatternPlayer> _player;
+	//#1106: the menu tick's own player, kept apart from _player so a tick never
+	//cuts a rumble effect short. Held until the next tick so it outlives playback.
+	id<CHHapticPatternPlayer> _tickPlayer;
 
 	bool _buttonState[24] = {};
 	int16_t _axisState[4] = {};
@@ -56,6 +59,10 @@ public:
 	//available for force feedback.
 	std::string GetName();
 	bool HasRumble();
+
+	//#1106: one short transient haptic pulse on this pad. False when the pad has
+	//no haptic engine or the pulse could not be built or started.
+	bool PlayTick();
 
 	//#925: light the pad in a player colour through GCController.light. False
 	//when the pad has no light (`light` is nil on an Xbox pad - not an error).

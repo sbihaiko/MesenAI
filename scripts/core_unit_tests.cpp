@@ -6288,6 +6288,127 @@ namespace
 			"#925: a byte between scales linearly (0x7A -> 122/255)");
 	}
 
+	//#1106 (spec #1102): the host can fire a short haptic tick on ONE connected
+	//pad and says whether it can. Aimable = macOS GameController with haptics
+	//present. Windows (XInput, DirectInput) and Linux (evdev) report every pad as
+	//not aimable and run no tick code (#1121, #1122 are the follow-ups). The backends are not linked into this suite,
+	//so a fake key manager stands in for each one and the shared rule is driven
+	//through IKeyManager's public surface; what the fake records is the routing.
+	void TestAPadIsAimableOnlyWhereTheHostCanAddressItsHaptics()
+	{
+		struct FakePad { GamepadBackend Backend; bool HasRumble; };
+		struct FakeKeyManager : IKeyManager
+		{
+			vector<FakePad> Pads;
+			vector<uint32_t> Ticked;
+
+			void RefreshState() override {}
+			void UpdateDevices() override {}
+			bool IsMouseButtonPressed(MouseButton) override { return false; }
+			bool IsKeyPressed(uint16_t) override { return false; }
+			vector<uint16_t> GetPressedKeys() override { return {}; }
+			string GetKeyName(uint16_t) override { return ""; }
+			uint16_t GetKeyCode(string) override { return 0; }
+			bool SetKeyState(uint16_t, bool) override { return false; }
+			void ResetKeyState() override {}
+			void SetDisabled(bool) override {}
+
+			uint32_t GetConnectedGamepadCount() override { return (uint32_t)Pads.size(); }
+			bool GetGamepadInfo(uint32_t index, GamepadInfo& info) override
+			{
+				if(index >= Pads.size()) {
+					return false;
+				}
+				info.Backend = Pads[index].Backend;
+				info.HasRumble = Pads[index].HasRumble;
+				return true;
+			}
+			bool PlayGamepadTick(uint32_t index) override { Ticked.push_back(index); return true; }
+		};
+
+		//A backend that overrides nothing of this inherits "not aimable".
+		struct BareKeyManager : IKeyManager
+		{
+			void RefreshState() override {}
+			void UpdateDevices() override {}
+			bool IsMouseButtonPressed(MouseButton) override { return false; }
+			bool IsKeyPressed(uint16_t) override { return false; }
+			vector<uint16_t> GetPressedKeys() override { return {}; }
+			string GetKeyName(uint16_t) override { return ""; }
+			uint16_t GetKeyCode(string) override { return 0; }
+			bool SetKeyState(uint16_t, bool) override { return false; }
+			void ResetKeyState() override {}
+			void SetDisabled(bool) override {}
+		};
+		BareKeyManager bare;
+		Check(!bare.IsGamepadAimable(0) && !bare.TickGamepad(0),
+			"#1106: a backend that implements nothing reports no pad aimable and ticks nothing");
+
+		FakeKeyManager km;
+		km.Pads = {
+			{ GamepadBackend::GameController, true },
+			{ GamepadBackend::GameController, false },
+			{ GamepadBackend::XInput, true },
+			{ GamepadBackend::DirectInput, false },
+			{ GamepadBackend::DirectInput, true },
+			{ GamepadBackend::Evdev, true },
+			{ GamepadBackend::Evdev, false },
+			{ GamepadBackend::None, true },
+		};
+
+		Check(km.IsGamepadAimable(0), "#1106: a macOS pad that reports haptics is aimable");
+		Check(!km.IsGamepadAimable(1), "#1106: a macOS pad without haptics is not aimable");
+		Check(!km.IsGamepadAimable(2), "#1106: a Windows XInput pad is not aimable (tick deferred, #1121)");
+		Check(!km.IsGamepadAimable(3), "#1106: a DirectInput pad is not aimable");
+		Check(!km.IsGamepadAimable(4),
+			"#1106: ...even if it claimed rumble: DirectInput never ticks");
+		Check(!km.IsGamepadAimable(5), "#1106: a Linux evdev pad is not aimable (tick deferred, #1122)");
+		Check(!km.IsGamepadAimable(6), "#1106: a Linux pad without force feedback is not aimable");
+		Check(!km.IsGamepadAimable(7), "#1106: a pad with no backend is not aimable");
+		Check(!km.IsGamepadAimable(8), "#1106: an index past the connected pads is not aimable");
+
+		Check(km.TickGamepad(0) && km.Ticked == vector<uint32_t>({ 0 }),
+			"#1106: a tick reaches the backend once, on the macOS pad that was asked for");
+		km.Ticked.clear();
+		Check(!km.TickGamepad(1) && !km.TickGamepad(2) && !km.TickGamepad(3) && !km.TickGamepad(4)
+			&& !km.TickGamepad(5) && !km.TickGamepad(6) && !km.TickGamepad(7) && !km.TickGamepad(8)
+			&& km.Ticked.empty(),
+			"#1106: a pad that is not aimable answers false and the backend is never called");
+	}
+
+	//#1106: the macOS tick keeps its player state sound. The backend is platform
+	//code the suite does not link, so this reads the source and pins the shape.
+	string ReadBackendSource(const char* path)
+	{
+		std::ifstream in(path, std::ios::in | std::ios::binary);
+		std::stringstream ss;
+		ss << in.rdbuf();
+		return ss.str();
+	}
+
+	string HapticBackendBody(const string& src, const string& signature)
+	{
+		size_t at = src.find(signature);
+		if(at == string::npos) {
+			return "";
+		}
+		size_t open = src.find('{', at);
+		size_t end = src.find("\n}", open);
+		return open == string::npos || end == string::npos ? "" : src.substr(open, end - open);
+	}
+
+	void TestTheMacHapticTickKeepsItsStateSound()
+	{
+		string mac = ReadBackendSource("MacOS/MacOSGameController.mm");
+		Check(!mac.empty(), "#1106: the macOS backend source is readable");
+		Check(mac.find("\t_tickPlayer = nil;") != string::npos,
+			"#1106: macOS _tickPlayer starts as nil, so the first tick releases nothing");
+		string macDtor = HapticBackendBody(mac, "MacOSGameController::~MacOSGameController()");
+		Check(macDtor.find("[_tickPlayer stopAtTime") != string::npos
+			&& macDtor.find("[_tickPlayer release]") != string::npos,
+			"#1106: macOS destructor stops and releases the tick player");
+	}
+
 	void TestPadChordFiresOnWhicheverPadIsInHand()
 	{
 		Check(PadChordFires({ PadKey(0, kPadSelectButton), PadKey(0, kPadStartButton) }),
@@ -17757,6 +17878,8 @@ TestW6TheFiltersAcceptTheExtendedFrame();
 	TestSupersetStillShadowsTheExemptShortcut();
 	TestTheNoKeySentinelIsNeverAKey();
 	TestAPadLightIsANoOpUnlessTheBackendHasOne();
+	TestAPadIsAimableOnlyWhereTheHostCanAddressItsHaptics();
+	TestTheMacHapticTickKeepsItsStateSound();
 	TestPadChordFiresOnWhicheverPadIsInHand();
 	TestTheWholePadFamilyAnswersTheChord();
 	TestPadChordIsNotAnsweredAcrossPadFamilies();
