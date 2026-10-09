@@ -50,10 +50,17 @@ public static class PlayerSettingsEssentials
 	//puts there.
 	public static double SheetHeight(ConfigWindowTab tab) => tab switch {
 		ConfigWindowTab.Look or ConfigWindowTab.System => 480,
-		//#1105: Audio's fourth row (Menu sounds) needs one more row's height.
-		ConfigWindowTab.Audio => 388,
+		//#1105: Audio's fourth row (Menu sounds) needs one more row's height, but
+		//only while the host can play it.
+		ConfigWindowTab.Audio when MenuSoundsAvailable() => 388,
 		_ => 340
 	};
+
+	//#1105: the Menu sounds row is shown only while the host reports an audio path
+	//for it (App wires EmuApi.MenuSoundsAvailable). None exists yet (the audio path is its
+	//own ADR), so today the row is hidden and Audio keeps its three rows. A test
+	//swaps this seam to exercise the row.
+	public static Func<bool> MenuSoundsAvailable { get; set; } = () => false;
 
 	//#852: the strip's segment width. ADR-0249's sheet is 480 px wide behind
 	//19 px of padding a side, and the reference mockups (docs/media/
@@ -78,8 +85,9 @@ public static class PlayerSettingsEssentials
 		return Math.Min(MaxSegment, available / count);
 	}
 
-	//PRD rule 2: an inset list of at most four rows per essentials tab (spec
-	//#1102: Audio gains Menu sounds).
+	//PRD rule 2: an inset list of at most three rows per essentials tab; Audio
+	//is the one exception, with a fourth (Menu sounds) only while the host
+	//reports it available (#1105).
 	public const int MaxRows = 4;
 
 	private static readonly PlayerSettingsRow[] DisplayRows = {
@@ -90,10 +98,11 @@ public static class PlayerSettingsEssentials
 	private static readonly PlayerSettingsRow[] AudioRows = {
 		new("Sound", PlayerSettingsRowKind.Switch),
 		new("Volume", PlayerSettingsRowKind.Slider),
-		new("OutputDevice", PlayerSettingsRowKind.Picker),
-		//#1105: soft sounds on move / confirm / back, off until turned on.
-		new("MenuSounds", PlayerSettingsRowKind.Switch)
+		new("OutputDevice", PlayerSettingsRowKind.Picker)
 	};
+	//#1105: soft sounds on move / confirm / back, off until turned on.
+	private static readonly PlayerSettingsRow[] AudioRowsWithMenuSounds = AudioRows
+		.Append(new("MenuSounds", PlayerSettingsRowKind.Switch)).ToArray();
 	//Per-player controller types live in each console's own config, so the
 	//essentials are what is console-independent: which pads are connected,
 	//rumble strength and stick deadzone (InputConfig).
@@ -106,7 +115,7 @@ public static class PlayerSettingsEssentials
 	//The rows of a tab's inset list; Look has its own W-P10 page (empty here).
 	public static IReadOnlyList<PlayerSettingsRow> Rows(ConfigWindowTab tab) => tab switch {
 		ConfigWindowTab.Display => DisplayRows,
-		ConfigWindowTab.Audio => AudioRows,
+		ConfigWindowTab.Audio => MenuSoundsAvailable() ? AudioRowsWithMenuSounds : AudioRows,
 		ConfigWindowTab.Input => ControlsRows,
 		_ => Array.Empty<PlayerSettingsRow>()
 	};

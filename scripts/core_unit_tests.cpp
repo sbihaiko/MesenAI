@@ -122,7 +122,6 @@
 #include "Utilities/miniz.h"
 #include "Utilities/sha256.h"
 #include "Utilities/Video/LibrashaderUtilities.h"
-#include "Core/Shared/Audio/MenuSoundPlayback.h"
 #include <algorithm>
 #include <atomic>
 #include <chrono>
@@ -17659,150 +17658,8 @@ namespace
 	}
 }
 
-
-//--- Menu sound playback (#1105) ---------------------------------------------
-//An audio device that, like SdlSoundManager, starts as 44.1 kHz mono and resets
-//(dropping the buffer it was handed) when PlayBuffer's format differs.
-namespace {
-	class ResettingAudioDevice : public IAudioDevice
-	{
-	public:
-		uint32_t Rate = 44100;
-		bool Stereo = false;
-		uint32_t Resets = 0;
-		uint32_t FramesQueued = 0;
-		//Like SdlSoundManager the reopen is asynchronous: writes are dropped until
-		//the open completes, and only WaitUntilReady() completes it here.
-		bool Opening = false;
-		void WaitUntilReady() override { Opening = false; }
-		void PlayBuffer(int16_t*, uint32_t bufferSize, uint32_t sampleRate, bool isStereo) override
-		{
-			if(Opening) {
-				return;
-			}
-			if(Rate != sampleRate || Stereo != isStereo) {
-				Rate = sampleRate;
-				Stereo = isStereo;
-				Resets++;
-				Opening = true;
-				return;
-			}
-			FramesQueued += bufferSize;
-		}
-		uint32_t Stops = 0;
-		std::atomic<uint32_t> Pauses{0};
-		void Stop() override { Stops++; }
-		void Pause() override { Pauses++; }
-		void ProcessEndOfFrame() override {}
-		string GetAvailableDevices() override { return ""; }
-		void SetAudioDevice(string) override {}
-		AudioStatistics GetStatistics() override { return AudioStatistics(); }
-	};
-}
-
-static void TestTheFirstMenuSoundReachesAFreshDevice()
-{
-	ResettingAudioDevice device;
-	MenuSoundPlayback::State configured;
-	vector<int16_t> blip(48000 / 10 * 2, 1000);
-	MenuSoundPlayback::Play(&device, configured, blip.data(), 4800, 48000, 48000, 100, 30);
-	Check(device.FramesQueued == 4800, "MenuSound: the first blip is queued, not dropped by the device's reset");
-	MenuSoundPlayback::Play(&device, configured, blip.data(), 4800, 48000, 48000, 100, 30);
-	Check(device.Resets == 1 && device.FramesQueued == 9600, "MenuSound: later blips cause no further reset");
-}
-
-static void TestAMenuSoundIsRenderedAtTheConfiguredOutputRate()
-{
-	ResettingAudioDevice device;
-	MenuSoundPlayback::State configured;
-	vector<int16_t> blip(48000 / 10 * 2, 1000);
-	for(int i = 0; i < 3; i++) {
-		MenuSoundPlayback::Play(&device, configured, blip.data(), 4800, 48000, 44100, 100, 30);
-	}
-	Check(device.Rate == 44100 && device.Resets == 1, "MenuSound: a 44.1 kHz output resets once, not per blip");
-	Check(device.FramesQueued == 3 * 4410, "MenuSound: the blip is resampled to 4410 frames at 44.1 kHz");
-
-	vector<int16_t> half = MenuSoundPlayback::Render(blip.data(), 4800, 48000, 44100, 50);
-	Check(half.size() == 4410 * 2 && half[100] == 500, "MenuSound: master volume scales the resampled PCM");
-}
-
-static void TestAMenuSoundIsReprimedWhenTheRateOrLatencyChanges()
-{
-	ResettingAudioDevice device;
-	MenuSoundPlayback::State state;
-	vector<int16_t> blip(4800 * 2, 1000);
-	MenuSoundPlayback::Play(&device, state, blip.data(), 4800, 48000, 48000, 100, 30);
-	device.Rate = 44100; //a game opened the device at another rate
-	MenuSoundPlayback::Play(&device, state, blip.data(), 4800, 48000, 48000, 100, 60);
-	Check(device.Rate == 48000 && device.FramesQueued == 9600, "MenuSound: a changed AudioLatency re-primes, so the blip is not dropped");
-}
-
-static void TestAMenuSoundEndsWithThePausedDevice()
-{
-	ResettingAudioDevice device;
-	MenuSoundPlayback::State state;
-	std::mutex lock;
-	vector<int16_t> blip(480 * 2, 1000);
-	{
-		MenuSoundSettler settler(lock);
-		{
-			std::lock_guard<std::mutex> g(lock);
-			uint32_t ms = MenuSoundPlayback::Play(&device, state, blip.data(), 480, 48000, 48000, 100, 30);
-			settler.Schedule(ms + 20, [&device]() { device.Pause(); });
-		}
-		Check(device.Pauses == 0, "MenuSound: the device is not paused while the blip still plays");
-		std::this_thread::sleep_for(std::chrono::milliseconds(300));
-		Check(device.Pauses == 1, "MenuSound: the device is paused once the blip has drained");
-
-		{
-			std::lock_guard<std::mutex> g(lock);
-			settler.Schedule(20, []() {});
-		}
-		std::this_thread::sleep_for(std::chrono::milliseconds(200));
-		Check(device.Pauses == 1, "MenuSound: a game that took over is not paused by the blip's settle");
-	}
-}
-
-static void TestACancelledMenuSoundSettleNeverTouchesAFreedDevice()
-{
-	//SoundMixer::RegisterAudioDevice cancels the settle; the callback reads the
-	//registered device at fire time, so a device freed after the cancel is never called.
-	std::mutex lock;
-	IAudioDevice* registered = nullptr;
-	std::atomic<uint32_t> calls{0};
-	{
-		MenuSoundSettler settler(lock);
-		{
-			std::lock_guard<std::mutex> g(lock);
-			registered = new ResettingAudioDevice();
-			settler.Schedule(30, [&]() { if(registered) { registered->Pause(); calls++; } });
-		}
-		{
-			std::lock_guard<std::mutex> g(lock);
-			settler.Cancel();
-			delete registered;
-			registered = nullptr;
-		}
-		std::this_thread::sleep_for(std::chrono::milliseconds(150));
-		Check(calls == 0, "MenuSound: a cancelled settle does not fire after its device is freed");
-
-		{
-			std::lock_guard<std::mutex> g(lock);
-			registered = new ResettingAudioDevice();
-			settler.Schedule(30, [&]() { if(registered) { registered->Pause(); calls++; } });
-			delete registered;
-			registered = nullptr; //a swap without a cancel: the callback sees no device
-		}
-		std::this_thread::sleep_for(std::chrono::milliseconds(150));
-		Check(calls == 0, "MenuSound: the settle reads the device at fire time, not a cached pointer");
-	}
-}
-
 int main()
 {
-	TestAMenuSoundIsReprimedWhenTheRateOrLatencyChanges();
-	TestAMenuSoundEndsWithThePausedDevice();
-	TestACancelledMenuSoundSettleNeverTouchesAFreedDevice();
 	TestTheForcedPatchOverrideFollowsTheSettingUntilTheRomIsSuppressed();
 	TestALoadRecordsTheForcedPatchAndTheNextLoadStartsClean();
 	TestOnlyARomWithAForcedPatchCanBeSuppressed();
@@ -18350,9 +18207,6 @@ TestW6TheFiltersAcceptTheExtendedFrame();
 	TestAKeyUpFollowsTheRouteOfItsOwnDown();
 	TestEveryOtherPressIsStillTheCores();
 	TestTheOverlayRuleIsTheBindings();
-
-	TestTheFirstMenuSoundReachesAFreshDevice();
-	TestAMenuSoundIsRenderedAtTheConfiguredOutputRate();
 
 	printf("\n%d/%d cases passed\n", gCases - gFailures, gCases);
 	return gFailures == 0 ? 0 : 1;

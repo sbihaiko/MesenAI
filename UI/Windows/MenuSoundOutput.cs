@@ -4,9 +4,9 @@ using Mesen.Logic;
 
 namespace Mesen.Windows
 {
-	//#1105: where a menu sound leaves the app - the core's existing audio device
-	//(EmuApi.PlayMenuSound), not a second mixer. A headless case swaps the sink
-	//to assert the call, since a headless build has no device to hear.
+	//#1105: where a menu sound leaves the app - the host entry point
+	//(EmuApi.PlayMenuSound), which answers "not available" until the audio path
+	//exists. A headless case swaps the sink to assert the call.
 	public static class MenuSoundOutput
 	{
 		private static Action<MenuSoundKind> _sink = ToDevice;
@@ -15,6 +15,16 @@ namespace Mesen.Windows
 		{
 			short[] pcm = MenuSounds.Render(kind);
 			EmuApi.PlayMenuSound(pcm, (uint)(pcm.Length / 2), MenuSounds.SampleRate);
+		}
+
+		//The host capability; a build without the core answers "not available".
+		public static bool HostAvailable()
+		{
+			try {
+				return EmuApi.MenuSoundsAvailable();
+			} catch(Exception ex) when(ex is DllNotFoundException or EntryPointNotFoundException) {
+				return false;
+			}
 		}
 
 		public static void Play(MenuSoundKind kind) => _sink(kind);

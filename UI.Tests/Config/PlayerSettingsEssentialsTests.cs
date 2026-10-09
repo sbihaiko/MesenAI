@@ -1,3 +1,4 @@
+using System;
 using System.Linq;
 using Mesen.Logic;
 using Xunit;
@@ -105,8 +106,7 @@ namespace Mesen.Tests.Config
 			Assert.Equal(expected, PlayDisplaySettings.Nearest(items, current));
 		}
 	
-		//W-P8: Display and Controls are a 340 px sheet (three rows; Audio, 388 with
-		//Menu sounds - #1105 -
+		//W-P8: Display, Audio and Controls are the same 340 px sheet (three rows,
 		//then the hint or the "More in Options..." link, then Done); Look is
 		//W-P10's taller 480 px sheet, and ADR-0256 Decision 8's System tab needs
 		//the same room - two storage choices with their folder lines, two
@@ -114,7 +114,7 @@ namespace Mesen.Tests.Config
 		[Theory]
 		[InlineData(ConfigWindowTab.Display, 340)]
 		[InlineData(ConfigWindowTab.Look, 480)]
-		[InlineData(ConfigWindowTab.Audio, 388)]
+		[InlineData(ConfigWindowTab.Audio, 340)]
 		[InlineData(ConfigWindowTab.Input, 340)]
 		[InlineData(ConfigWindowTab.System, 480)]
 		public void Each_tab_has_its_sheet_height(ConfigWindowTab tab, double height)
@@ -124,11 +124,11 @@ namespace Mesen.Tests.Config
 
 		//The bug: Audio and Controls embedded the whole classic option pages
 		//(sub-tabs, per-console button row, scrollbars). Now each essentials tab
-		//is a short inset list in the Display pattern: at most 4 rows (PRD rule
+		//is a short inset list in the Display pattern: at most 3 rows (PRD rule
 		//2 leaves room for the link), and no classic page.
 		[Theory]
 		[InlineData(ConfigWindowTab.Display, 3)]
-		[InlineData(ConfigWindowTab.Audio, 4)]
+		[InlineData(ConfigWindowTab.Audio, 3)]
 		[InlineData(ConfigWindowTab.Input, 3)]
 		public void Each_list_tab_has_three_rows_and_no_classic_page(ConfigWindowTab tab, int rows)
 		{
@@ -144,11 +144,40 @@ namespace Mesen.Tests.Config
 			Assert.Empty(PlayerSettingsEssentials.Rows(ConfigWindowTab.Look));
 		}
 
+		//#1105: the Menu sounds row follows the host capability; no host audio path
+		//exists yet, so by default Audio keeps three rows in the 340 px sheet.
 		[Fact]
-		public void Audio_rows_are_sound_volume_output_device_and_menu_sounds()
+		public void Menu_sounds_row_is_hidden_while_the_host_reports_it_unavailable()
 		{
-			Assert.Equal(new[] { "Sound", "Volume", "OutputDevice", "MenuSounds" }, PlayerSettingsEssentials.Rows(ConfigWindowTab.Audio).Select(r => r.Id));
-			Assert.Equal(new[] { PlayerSettingsRowKind.Switch, PlayerSettingsRowKind.Slider, PlayerSettingsRowKind.Picker, PlayerSettingsRowKind.Switch }, PlayerSettingsEssentials.Rows(ConfigWindowTab.Audio).Select(r => r.Kind));
+			Func<bool> original = PlayerSettingsEssentials.MenuSoundsAvailable;
+			try {
+				PlayerSettingsEssentials.MenuSoundsAvailable = () => false;
+				Assert.DoesNotContain("MenuSounds", PlayerSettingsEssentials.Rows(ConfigWindowTab.Audio).Select(r => r.Id));
+				Assert.Equal(340, PlayerSettingsEssentials.SheetHeight(ConfigWindowTab.Audio));
+			} finally {
+				PlayerSettingsEssentials.MenuSoundsAvailable = original;
+			}
+		}
+
+		[Fact]
+		public void Menu_sounds_row_is_the_fourth_audio_row_when_the_host_reports_it_available()
+		{
+			Func<bool> original = PlayerSettingsEssentials.MenuSoundsAvailable;
+			try {
+				PlayerSettingsEssentials.MenuSoundsAvailable = () => true;
+				Assert.Equal(new[] { "Sound", "Volume", "OutputDevice", "MenuSounds" }, PlayerSettingsEssentials.Rows(ConfigWindowTab.Audio).Select(r => r.Id));
+				Assert.Equal(388, PlayerSettingsEssentials.SheetHeight(ConfigWindowTab.Audio));
+				Assert.True(PlayerSettingsEssentials.Rows(ConfigWindowTab.Audio).Count <= PlayerSettingsEssentials.MaxRows);
+			} finally {
+				PlayerSettingsEssentials.MenuSoundsAvailable = original;
+			}
+		}
+
+		[Fact]
+		public void Audio_rows_are_sound_volume_and_output_device()
+		{
+			Assert.Equal(new[] { "Sound", "Volume", "OutputDevice" }, PlayerSettingsEssentials.Rows(ConfigWindowTab.Audio).Select(r => r.Id));
+			Assert.Equal(new[] { PlayerSettingsRowKind.Switch, PlayerSettingsRowKind.Slider, PlayerSettingsRowKind.Picker }, PlayerSettingsEssentials.Rows(ConfigWindowTab.Audio).Select(r => r.Kind));
 		}
 
 		[Fact]

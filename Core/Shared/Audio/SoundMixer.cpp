@@ -4,7 +4,6 @@
 #include "Shared/Emulator.h"
 #include "Shared/EmuSettings.h"
 #include "Shared/Audio/SoundResampler.h"
-#include "Shared/Audio/MenuSoundPlayback.h"
 #include "Shared/RewindManager.h"
 #include "Shared/Video/VideoRenderer.h"
 #include "Shared/Audio/WaveRecorder.h"
@@ -29,20 +28,13 @@ SoundMixer::SoundMixer(Emulator* emu)
 
 SoundMixer::~SoundMixer()
 {
-	_menuSettler.reset();
 	delete[] _sampleBuffer;
 	delete[] _pitchAdjustBuffer;
 }
 
 void SoundMixer::RegisterAudioDevice(IAudioDevice* audioDevice)
 {
-	std::lock_guard<std::mutex> lock(_deviceLock);
 	_audioDevice = audioDevice;
-	if(_menuSettler) {
-		//A settle scheduled for the previous device must not outlive it.
-		_menuSettler->Cancel();
-	}
-	_menuState = MenuSoundPlayback::State();
 }
 
 void SoundMixer::RegisterAudioProvider(IAudioProvider* provider)
@@ -70,7 +62,6 @@ void SoundMixer::StopAudio(bool clearBuffer)
 {
 	shared_ptr<IAudioDevice> soundManager = _emu->GetSoundManager();
 	if(soundManager) {
-		std::lock_guard<std::mutex> lock(_deviceLock);
 		if(clearBuffer) {
 			soundManager->Stop();
 		} else {
@@ -165,10 +156,7 @@ void SoundMixer::PlayAudioBuffer(int16_t* samples, uint32_t sampleCount, uint32_
 
 		//Only send the audio to the device if the emulation is running
 		//(this is to prevent playing an audio blip when loading a save state)
-		std::lock_guard<std::mutex> deviceLock(_deviceLock);
 		if(!_emu->IsPaused() && _audioDevice) {
-			//The game may leave the device in another format than the menu blip's.
-			_menuState = MenuSoundPlayback::State();
 			if(cfg.EnableAudio) {
 				uint32_t emulationSpeed = _emu->GetSettings()->GetEmulationSpeed();
 				if(emulationSpeed > 0 && emulationSpeed < 100) {
@@ -187,35 +175,6 @@ void SoundMixer::PlayAudioBuffer(int16_t* samples, uint32_t sampleCount, uint32_
 			} else {
 				_audioDevice->Stop();
 			}
-		}
-	}
-}
-
-void SoundMixer::PlayMenuSound(int16_t* samples, uint32_t frameCount, uint32_t sampleRate)
-{
-	//Runs on the UI thread. The check and the write sit under the device lock that
-	//PlayAudioBuffer takes too, so a game resuming mid-blip waits instead of
-	//writing the ring (or resetting the device) concurrently.
-	std::lock_guard<std::mutex> lock(_deviceLock);
-	//While a game runs unpaused PlayAudioBuffer owns the device; a second writer
-	//would interleave into the game's stream.
-	bool gameRunning = _emu->IsRunning() && !_emu->IsPaused();
-	AudioConfig cfg = _emu->GetSettings()->GetAudioConfig();
-	if(!gameRunning && _audioDevice && cfg.EnableAudio) {
-		//The device is the one the game uses, so the master volume and the
-		//configured output rate apply here too.
-		uint32_t ms = MenuSoundPlayback::Play(_audioDevice, _menuState, samples, frameCount, sampleRate, cfg.SampleRate, cfg.MasterVolume, cfg.AudioLatency);
-		if(ms > 0) {
-			if(!_menuSettler) {
-				_menuSettler.reset(new MenuSoundSettler(_deviceLock));
-			}
-			//The device loops its ring once started; pause it when the blip has drained.
-			//The callback runs under _deviceLock and reads the device then.
-			_menuSettler->Schedule(ms + 50, [this]() {
-				if(_audioDevice && !(_emu->IsRunning() && !_emu->IsPaused())) {
-					_audioDevice->Pause();
-				}
-			});
 		}
 	}
 }

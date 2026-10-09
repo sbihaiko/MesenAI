@@ -7,7 +7,7 @@ public enum MenuSoundKind { Move, Confirm, Back }
 //#1105 (spec #1102 slice 6): the optional soft sounds on move / confirm / back
 //(Settings › Audio › Menu sounds, off on a new install). The set is rendered
 //here - three short sine blips, so nothing binary ships - at one fixed low
-//level, and goes out through the core's existing audio device. Pure, so the
+//level, and goes out through the host entry point, which answers "not available" until the audio path exists (its own ADR). Pure, so the
 //rules are pinned host-free in UI.Tests/Play/MenuSoundsTests.
 public static class MenuSounds
 {

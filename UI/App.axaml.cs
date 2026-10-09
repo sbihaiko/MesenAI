@@ -50,6 +50,7 @@ namespace Mesen
 
 		public override void OnFrameworkInitializationCompleted()
 		{
+			PlayerSettingsEssentials.MenuSoundsAvailable = MenuSoundOutput.HostAvailable;
 			if(ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop) {
 				//Test if the core can be loaded, and display an error message popup if not
 				try {

@@ -3,7 +3,6 @@
 #include "Core/Shared/Interfaces/IAudioDevice.h"
 #include "Utilities/safe_ptr.h"
 #include "Utilities/Audio/HermiteResampler.h"
-#include "Shared/Audio/MenuSoundPlayback.h"
 
 class Emulator;
 class Equalizer;
@@ -19,11 +18,6 @@ class SoundMixer
 {
 private:
 	IAudioDevice* _audioDevice;
-	//Serializes every write to the audio device: the emu thread (PlayAudioBuffer,
-	//StopAudio) and the UI thread (PlayMenuSound).
-	std::mutex _deviceLock;
-	MenuSoundPlayback::State _menuState;
-	unique_ptr<MenuSoundSettler> _menuSettler;
 	vector<IAudioProvider*> _audioProviders;
 	Emulator* _emu;
 	unique_ptr<Equalizer> _equalizer;
@@ -57,8 +51,6 @@ public:
 
 	void PlayAudioBuffer(int16_t* samples, uint32_t sampleCount, uint32_t sourceRate);
 	void StopAudio(bool clearBuffer = false);
-	//#1105: a short interface sound, straight to the audio device. Dropped while a game runs unpaused.
-	void PlayMenuSound(int16_t* samples, uint32_t frameCount, uint32_t sampleRate);
 
 	void RegisterAudioDevice(IAudioDevice* audioDevice);
 

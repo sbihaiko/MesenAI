@@ -3235,16 +3235,15 @@ classic pages)**
  │  Sound            [x]            │   │  Controllers   2 controllers connected │
  │  Volume     ──────●──── 100      │   │  Rumble        ───●─────────  5        │
  │  Output device [Speakers   ▾]    │   │  Stick deadzone ──●────────  2         │
- │  Menu sounds      [x]            │   │                                        │
  │  More in Options…                │   │  More in Options…                      │
 ```
 
-Audio and Controls follow Display's pattern exactly: one inset list of
-46 px rows (Controls three in the 340 px sheet, Audio four in a 388 px sheet), no scrollbars, no sub-tabs. They used to
+Audio and Controls follow Display's pattern exactly: one inset list of three
+46 px rows in the same 340 px sheet, no scrollbars, no sub-tabs. They used to
 embed the whole classic option pages (General/Equalizer/Advanced and
 General/Display/Test sub-tabs, a per-console button row, two scrollbars),
 which broke rule 2. **Audio** is Sound (the Enable Audio switch), Volume
-(0–100), Output device and Menu sounds (#1105); equalizer, reverb, crossfeed, latency and sample
+(0–100) and Output device; equalizer, reverb, crossfeed, latency and sample
 rate stay in Options. **Controls** is what is console-independent: which pads
 are connected, Rumble strength (0 is off) and Stick deadzone; per-console
 controller types and button mapping stay in Options. Every row is bound to the
@@ -3253,7 +3252,7 @@ device that is not enumerated now, a volume) shows as the current item and
 opening the tab never rewrites it. The hint's line carries **More in
 Options…**, which expands to that tab's classic page exactly as Look's
 *More in Options…* does (Display keeps the hint, as it has nothing to expand
-to). Elements: tab strip, 3 rows (Audio 4), More in Options…, Done = 6 (Audio 7). ✔
+to). Elements: tab strip, 3 rows, More in Options…, Done = 6. ✔
 
 **W-P9 — A pack installs while the game starts (a HUD pill, not a dialog)**
 

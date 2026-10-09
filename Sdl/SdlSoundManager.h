@@ -14,7 +14,6 @@ public:
 	static SdlSoundManager* Create(Emulator* emu);
 
 	void PlayBuffer(int16_t* soundBuffer, uint32_t bufferSize, uint32_t sampleRate, bool isStereo);
-	void WaitUntilReady();
 	void Pause();
 	void Stop();
 
