@@ -230,7 +230,7 @@ public class PlayActionBarViewTests : IDisposable
 		Assert.Equal("A Open a game", Bar(window));
 		Press(window, "A");
 		WaitFor(() => model.RomPicker.IsVisible, "A on Open a game… did not open the sheet");
-		Assert.Equal("A Play     Y Search     LB / RB Console     B Back", Bar(window));
+		Assert.Equal("A Library folders     Y Search     LB / RB Console     B Back", Bar(window));
 
 		//Y opens the search box and, with it, the shared on-screen keyboard: the
 		//bar shows the keyboard's own entries, not "B Back" over a cancel.
@@ -239,7 +239,7 @@ public class PlayActionBarViewTests : IDisposable
 		Assert.Equal("D-pad Move     A Press key     B Cancel", Bar(window));
 		Press(window, "B");
 		Assert.Null(PlayPadNavigationWiring.KeyboardForTest(window));
-		Assert.Equal("A Play     Y Search     LB / RB Console     B Back", Bar(window));
+		Assert.Equal("A Search     LB / RB Console     B Back", Bar(window));
 
 		//B leaves the sheet and the home's bar is back.
 		Press(window, "B");
@@ -260,9 +260,9 @@ public class PlayActionBarViewTests : IDisposable
 			(MainWindow window, MainWindowViewModel model) = ShowPlay();
 			model.RecentGames.Init(GameScreenMode.RecentGames);
 			WaitFor(() => Focused(window) == "PlayHomeOpenRomPrimary" || Focused(window) == "PlayHomeContinueButton", "the home opened without a focus");
-			Control opener = window.FindControl<Control>(Focused(window) ?? "")!;
-			model.RomPicker.Show();
+			model.RomPicker.Open();
 			WaitFor(() => model.RomPicker.IsVisible && Focused(window) == "RomPickerLibraryFolders", "the empty library did not park the ring on Library folders…");
+			Press(window, "Select");
 			string bar = Bar(window);
 			Assert.DoesNotContain("A Play", bar);
 			Assert.StartsWith("A Library folders", bar);

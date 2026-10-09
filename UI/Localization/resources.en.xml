@@ -2257,6 +2257,8 @@
 		<Message ID="BarSelect">Select</Message>
 		<Message ID="BarResume">Resume</Message>
 		<Message ID="BarBack">Back</Message>
+		<Message ID="BarLibraryFolders">Library folders</Message>
+		<Message ID="BarBrowseFile">Browse a file</Message>
 		<Message ID="BarSearch">Search</Message>
 		<Message ID="BarConsole">Console</Message>
 		<Message ID="BarKeyboardMove">Move</Message>

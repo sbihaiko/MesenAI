@@ -301,7 +301,7 @@ namespace Mesen.Windows
 				 nameof(PlayerRomPickerViewModel.TilesRevision), nameof(PlayerRomPickerViewModel.FoldersRevision)],
 				() => model.RomPicker.IsVisible, () => RomPickerFocusTarget(window, model),
 				() => Named(window, "PlayerRomPickerSheet"),
-				() => model.RomPicker.IsLibrarySurfaceVisible ? PlayBarDeclarations.Library : PlayBarDeclarations.Browser);
+				() => model.RomPicker.IsLibrarySurfaceVisible ? LibraryDeclaration(window) : PlayBarDeclarations.Browser);
 
 			//The content area under all of them: the home's primary action, the
 			//Continue button, the slot grid over a game. It is not a claim (it is
@@ -317,6 +317,19 @@ namespace Mesen.Windows
 					: model.RecentGames.ShowRecentsHome ? HomeDeclaration(window)
 					: PlayBarDeclarations.None
 					: PlayBarDeclarations.None);
+		}
+
+		//The library's A is the focused control's, as the home's is: a tile plays,
+		//but the header actions open what they name.
+		private static IReadOnlyList<PlayBarEntry> LibraryDeclaration(MainWindow window)
+		{
+			Control? focused = TopLevel.GetTopLevel(window)?.FocusManager?.GetFocusedElement() as Control;
+			return focused?.Name switch {
+				"RomPickerLibraryFolders" => PlayBarDeclarations.LibraryFolders,
+				"RomPickerBrowseFile" => PlayBarDeclarations.BrowseFile,
+				"RomPickerSearch" => PlayBarDeclarations.SearchField,
+				_ => PlayBarDeclarations.Library
+			};
 		}
 
 		//The recents home's A is the focused control's, not the surface's: Continue

@@ -29,6 +29,29 @@ public static class PlayBarDeclarations
 		new PlayBarEntry(PlayAction.Back, "BarBack"),
 	};
 
+	//The library's header actions: A opens the action the ring is on, so the bar
+	//names it instead of the tile's Play (PlayPadNavigationWiring picks by focus).
+	public static readonly IReadOnlyList<PlayBarEntry> LibraryFolders = new[] {
+		new PlayBarEntry(PlayAction.Confirm, "BarLibraryFolders"),
+		new PlayBarEntry(PlayAction.Search, "BarSearch"),
+		new PlayBarEntry(PlayAction.ConsoleFilter, "BarConsole"),
+		new PlayBarEntry(PlayAction.Back, "BarBack"),
+	};
+
+	public static readonly IReadOnlyList<PlayBarEntry> BrowseFile = new[] {
+		new PlayBarEntry(PlayAction.Confirm, "BarBrowseFile"),
+		new PlayBarEntry(PlayAction.Search, "BarSearch"),
+		new PlayBarEntry(PlayAction.ConsoleFilter, "BarConsole"),
+		new PlayBarEntry(PlayAction.Back, "BarBack"),
+	};
+
+	//A on the search box enters it, so Search is the Confirm and Y is not repeated.
+	public static readonly IReadOnlyList<PlayBarEntry> SearchField = new[] {
+		new PlayBarEntry(PlayAction.Confirm, "BarSearch"),
+		new PlayBarEntry(PlayAction.ConsoleFilter, "BarConsole"),
+		new PlayBarEntry(PlayAction.Back, "BarBack"),
+	};
+
 	//The folder browser and Library folders… inside the same sheet: no search,
 	//no console row to cycle.
 	public static readonly IReadOnlyList<PlayBarEntry> Browser = new[] {
