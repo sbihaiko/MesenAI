@@ -8,7 +8,6 @@ namespace Mesen.HeadlessTests;
 //#1112: the Menu tick is off until the player turns it on. InputConfig is a UI
 //type (UI.Tests is host-free and cannot compile it), but these cases never touch
 //the host, so they stay out of the native-core collection.
-[NativeCoreFree("Reads InputConfig's default and a deserialized settings file; no config write reaches the native core.")]
 public class MenuTickDefaultTests
 {
 	[Fact]

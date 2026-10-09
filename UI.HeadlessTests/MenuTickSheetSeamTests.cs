@@ -10,7 +10,7 @@ namespace Mesen.HeadlessTests;
 //so two reads at two moments (the row's visibility at build, the height on every
 //tab change) could disagree: a 388 px sheet with no row, or a 340 px one with four.
 [NativeCoreFree("Drives the Controls view-model through injected pad and device sources and a swapped aimable seam; no config write reaches the native core.")]
-[Collection("PlayerSettingsSeams")]
+[Collection(PlayerSettingsSeamsCollection.Name)]
 public class MenuTickSheetSeamTests : System.IDisposable
 {
 	private readonly System.Func<bool> _original = PlayerSettingsEssentials.MenuTickAimable;

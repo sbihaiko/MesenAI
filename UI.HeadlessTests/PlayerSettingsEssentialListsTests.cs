@@ -19,6 +19,7 @@ namespace Mesen.HeadlessTests;
 //link in the hint's place, the same 340 px sheet. The rules live host-free in
 //UI.Tests/Config/PlayerSettingsEssentialsTests; this checks the XAML crossing.
 [NativeCoreFree("Binds the Audio and Controls essentials with injected device and pad sources; nothing here changes a value, so no config write reaches the native core.")]
+[Collection(PlayerSettingsSeamsCollection.Name)]
 public class PlayerSettingsEssentialListsTests
 {
 	private static readonly string[] Devices = { "Speakers", "Headset" };
