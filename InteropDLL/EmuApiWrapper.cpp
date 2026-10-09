@@ -267,6 +267,18 @@ extern "C"
 		_emu->ProcessAudioPlayerAction(p);
 	}
 
+	//#1105: the host has no menu-sound audio path yet (its own ADR); these report
+	//"not available" without touching a device or a lock.
+	DllExport bool __stdcall PlayMenuSound(int16_t* samples, uint32_t frameCount, uint32_t sampleRate)
+	{
+		return false;
+	}
+
+	DllExport bool __stdcall MenuSoundsAvailable()
+	{
+		return false;
+	}
+
 	DllExport void __stdcall GetArchiveRomList(char* filename, char* outBuffer, uint32_t maxLength)
 	{
 		std::ostringstream out;

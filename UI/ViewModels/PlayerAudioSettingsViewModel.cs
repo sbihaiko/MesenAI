@@ -21,6 +21,8 @@ namespace Mesen.ViewModels
 		//The snapshot Cancel/IsDirty compare against (as AudioConfigViewModel's).
 		public AudioConfig OriginalConfig { get; }
 		public List<string> Devices { get; }
+		//#1105: the Menu sounds row is hidden until the host has an audio path.
+		public bool MenuSoundsAvailable { get; } = PlayerSettingsEssentials.MenuSoundsAvailable();
 
 		[ObservableProperty] public partial double Volume { get; set; }
 		[ObservableProperty] public partial string? SelectedDevice { get; set; }

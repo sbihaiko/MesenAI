@@ -50,7 +50,7 @@ public class PlayerSettingsEssentialListsTests
 		Assert.True(list.Bounds.Width <= sheet.FindNamed<Border>("PlayerSettingsSheet").Bounds.Width, "no horizontal overflow");
 		Assert.Equal(340, sheet.FindNamed<Border>("PlayerSettingsSheet").Bounds.Height, 0.5);
 		Assert.Equal(PlayerSettingsEssentials.Rows(group == "AudioSettingsGroup" ? ConfigWindowTab.Audio : ConfigWindowTab.Input).Count,
-			list.FindAll<DockPanel>().Count(d => d.Classes.Contains("setting-row")));
+			list.FindAll<DockPanel>().Count(d => d.IsVisible && d.Classes.Contains("setting-row")));
 		Assert.True(sheet.FindNamed<Button>("btnPlayerSettingsMoreInOptions").IsOnScreen());
 		Assert.False(sheet.FindNamed<TextBlock>("lblPlayerSettingsEverythingElse").IsOnScreen());
 	}

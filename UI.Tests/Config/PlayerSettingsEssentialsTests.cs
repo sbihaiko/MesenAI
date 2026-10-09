@@ -1,3 +1,4 @@
+using System;
 using System.Linq;
 using Mesen.Logic;
 using Xunit;
@@ -141,6 +142,35 @@ namespace Mesen.Tests.Config
 		{
 			Assert.False(PlayerSettingsEssentials.EmbedsClassicPage(ConfigWindowTab.Look));
 			Assert.Empty(PlayerSettingsEssentials.Rows(ConfigWindowTab.Look));
+		}
+
+		//#1105: the Menu sounds row follows the host capability; no host audio path
+		//exists yet, so by default Audio keeps three rows in the 340 px sheet.
+		[Fact]
+		public void Menu_sounds_row_is_hidden_while_the_host_reports_it_unavailable()
+		{
+			Func<bool> original = PlayerSettingsEssentials.MenuSoundsAvailable;
+			try {
+				PlayerSettingsEssentials.MenuSoundsAvailable = () => false;
+				Assert.DoesNotContain("MenuSounds", PlayerSettingsEssentials.Rows(ConfigWindowTab.Audio).Select(r => r.Id));
+				Assert.Equal(340, PlayerSettingsEssentials.SheetHeight(ConfigWindowTab.Audio));
+			} finally {
+				PlayerSettingsEssentials.MenuSoundsAvailable = original;
+			}
+		}
+
+		[Fact]
+		public void Menu_sounds_row_is_the_fourth_audio_row_when_the_host_reports_it_available()
+		{
+			Func<bool> original = PlayerSettingsEssentials.MenuSoundsAvailable;
+			try {
+				PlayerSettingsEssentials.MenuSoundsAvailable = () => true;
+				Assert.Equal(new[] { "Sound", "Volume", "OutputDevice", "MenuSounds" }, PlayerSettingsEssentials.Rows(ConfigWindowTab.Audio).Select(r => r.Id));
+				Assert.Equal(388, PlayerSettingsEssentials.SheetHeight(ConfigWindowTab.Audio));
+				Assert.True(PlayerSettingsEssentials.Rows(ConfigWindowTab.Audio).Count <= PlayerSettingsEssentials.MaxRows);
+			} finally {
+				PlayerSettingsEssentials.MenuSoundsAvailable = original;
+			}
 		}
 
 		[Fact]

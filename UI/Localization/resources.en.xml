@@ -1026,6 +1026,7 @@
 			<Control ID="lblAudioSound">Sound</Control>
 			<Control ID="lblAudioVolume">Volume</Control>
 			<Control ID="lblAudioOutput">Output device</Control>
+			<Control ID="lblAudioMenuSounds">Menu sounds</Control>
 		</Form>
 		<Form ID="PlayerControlsSettingsView">
 			<Control ID="lblControlsControllers">Controllers</Control>

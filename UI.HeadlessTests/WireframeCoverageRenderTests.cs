@@ -223,11 +223,30 @@ public class WireframeCoverageRenderTests : IDisposable
 		Assert.IsType<ToggleSwitch>(sheet.FindNamed<ToggleButton>("chkAudioEnabled"));
 		Assert.True(sheet.FindNamed<Slider>("sldAudioVolume").IsOnScreen());
 		Assert.True(sheet.FindNamed<ComboBox>("cboAudioDevice").IsOnScreen());
+		Assert.False(sheet.FindNamed<ToggleButton>("chkAudioMenuSounds").IsOnScreen(), "Menu sounds stays hidden until the host reports it available (#1105)");
 		Assert.True(sheet.FindNamed<Button>("btnPlayerSettingsMoreInOptions").IsOnScreen());
 		Assert.True(sheet.FindNamed<Button>("btnPlayerSettingsDone").IsOnScreen());
 		Assert.DoesNotContain(sheet.FindAll<ScrollBar>(), s => s.IsOnScreen());
 
 		PlayerRender.Save(PlayerRender.Capture(window), "W-P8b");
+	}
+
+	//#1105: the Menu sounds row appears only through the host capability seam.
+	[AvaloniaFact]
+	public void Settings_audio_shows_the_menu_sounds_row_when_the_host_reports_it_available()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		Func<bool> original = PlayerSettingsEssentials.MenuSoundsAvailable;
+		try {
+			PlayerSettingsEssentials.MenuSoundsAvailable = () => true;
+			(MainWindow window, MainWindowViewModel model) = ShowPlay();
+			Border sheet = OpenSettings(window, model, ConfigWindowTab.Audio);
+
+			Assert.Equal(388, sheet.Bounds.Height, 0.5);
+			Assert.True(sheet.FindNamed<ToggleButton>("chkAudioMenuSounds").IsOnScreen());
+		} finally {
+			PlayerSettingsEssentials.MenuSoundsAvailable = original;
+		}
 	}
 
 	//W-P8c: Controls is the same list - the connected pads, Rumble, Stick
