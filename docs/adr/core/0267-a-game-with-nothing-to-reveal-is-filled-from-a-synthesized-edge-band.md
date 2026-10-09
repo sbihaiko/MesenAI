@@ -224,8 +224,12 @@ frame reaches the composer the moment C2 ships, and the buffers have to be able 
 Consequences; **C3** §3/§4's rule (`WidescreenFallback::SupportsWidescreen`, `WidescreenSupportRule`) and
 the reworded reason string; **C4** the wiring tests, in `UI.HeadlessTests/PlaySheetsViewTests.cs`;
 **C5** the MEP §5.5 wording that admits a host-synthesized edge band — it must land with or before
-C2 or the host ships against its own published spec, and **the MEP version declaration is decided
-in a follow-up before stage C** (#1090; this ADR names no version number and weighs no bump).
+C2 or the host ships against its own published spec. **Version (owner decision 2026-10-09, #1090,
+option A, verbatim: "A"):** packs keep declaring `mep: 1.x`; there is no major bump. The §5.5
+wording lands as a minor revision of MEP-v1 that *clarifies the scope* of the ban (a host MUST NOT
+synthesize widescreen *art*; a per-row edge band derived from the picture's own pixels is not
+authored art), so an older host that follows the old wording keeps loading the same packs and no
+pack has to declare a version a host would refuse.
 
 ## Consequences
 
@@ -235,14 +239,14 @@ in a follow-up before stage C** (#1090; this ADR names no version number and wei
   dead SMS sentence, the one promising a fallback §3 forbids, stays as accepted until stage 2 (C)
   replaces it. If C is ever dropped, correcting that sentence in place — option A's edit — becomes
   the piece still owed, and the ADR register would then hold a §2 clause no option of record amends.
-- **MEP-v1 §5.5 needs a revision if C is picked, and the version it lands under is deferred.** The
+- **MEP-v1 §5.5 needs a revision if C is picked, and it lands as a minor, not a major (#1090, decided 2026-10-09).** The
   section says hosts "MUST NOT synthesize widescreen art on their own". That rule is about a host
   inventing a pack section's authored content; an edge band derived per row from the picture's own
   pixels is not authored art, but the permission has to be written down, or the next reader reads
   C as a spec violation. Writing it down relaxes a normative `MUST NOT`, so the revision is a
-  semantic change rather than a new optional field — but **the MEP version declaration is decided
-  in a follow-up before stage C** (filed as #1090), and this ADR names no version number and weighs
-  no bump. C adds
+  clarification of scope rather than a new optional field, and **it ships as a minor revision of
+  MEP-v1** (owner decision 2026-10-09, #1090, option A: packs keep declaring `mep: 1.x`, no major
+  bump, so older hosts — which MUST refuse an unknown major — do not refuse any pack). C adds
   no pack section and no manifest field, and this ADR does not amend the spec. C therefore carries
   two deliverables: the code slices below, and the §5.5 wording that admits a host-synthesized edge
   band while keeping the ban on synthesized *art*. Landing C without that revision leaves a host
