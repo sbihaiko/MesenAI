@@ -1019,9 +1019,9 @@ def w_p8d():
     c = base("play", "Contra (USA) · pack Contra 80s 1.2", (52, 199, 89))
     pause_panel(c)
     b = settings_sheet(c, 0, 386)
-    inset_rows(c, b, [("Full screen", "switch", True), ("Aspect ratio", "popup", "Auto"),
+    inset_rows(c, b, [("Full screen", "switch", False), ("Aspect ratio", "popup", "Auto"),
                       ("Scale", "popup", "3\u00d7"), ("Interface size", "popup", "Standard")],
-               "Scale sizes the picture; Interface size sizes the menus")
+               "Everything else: Classic \u203a Settings")
     c.caption("W-P8d", "Play \u2014 settings \u203a Display with Interface size (chrome only, never the picture)", 6)
     return c
 

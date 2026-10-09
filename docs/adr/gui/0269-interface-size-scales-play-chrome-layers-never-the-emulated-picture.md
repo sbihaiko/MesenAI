@@ -36,7 +36,9 @@ Nothing in Play is sized for a TV three meters away. Settings › Display has a
    settings sheet layer, the load-wait host and the BIOS/ROM/tool sheet layer.
    Each applies the factor only when the active workspace is Play, so Remaster
    and Share never read it. No control carries its own size multiplier, so a new
-   surface is scaled by being inside one of those layers.
+   surface is scaled by being inside one of those layers. Toasts live under the
+   Play chrome root and scale with it; the one exception is the pack-install
+   pill, deferred to #1124.
 4. **ADR-0249's token drift test stays valid.** The tokens (colors, radii, type
    sizes) remain the values `scripts/render_gui_wireframes.py` declares; the
    factor multiplies the rendered result and never rewrites a token. The
