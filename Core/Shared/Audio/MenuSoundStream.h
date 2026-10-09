@@ -23,6 +23,13 @@
 //  * an open that runs off the caller's thread and is never awaited by it (D9);
 //  * a reader that emits silence once its queue is empty, never the last block
 //    again (D3) - which is what makes a late pause cost nothing.
+//
+//#1153 makes the third rule hold for the teardown too: Stop never joins. It
+//publishes the stream away, signals the owner thread and detaches it, and that
+//thread runs the release on its way out (D4). The caller is the settings-apply
+//path - the UI thread - and a device that takes seconds to answer its own open
+//(#733) must not hold it there. The thread therefore keeps the stream alive by
+//holding a reference to it, which is why the class is shared-owned.
 
 //ADR-0270 D3: the device's own reader. The sink's audio callback (SDL) or poll
 //loop (WASAPI) pulls frames here, on the device's thread. Safe to call without
@@ -76,7 +83,7 @@ public:
 	virtual void Release() = 0;
 };
 
-class MenuSoundStream final : public IMenuSoundReader
+class MenuSoundStream final : public IMenuSoundReader, public std::enable_shared_from_this<MenuSoundStream>
 {
 public:
 	//The blip set is rendered at UI/Logic/MenuSounds.cs's SampleRate and the UI is
@@ -103,7 +110,11 @@ public:
 	//once and is never awaited - the caller is the UI thread.
 	void Start();
 
-	//Stops the owner thread and releases the device on it. Idempotent.
+	//D9 (#1153): takes the stream out of service and returns - it never joins the
+	//owner thread, never waits on the device and never blocks the caller. The
+	//device is released by that thread on its way out, which is what keeps a
+	//settings apply on the UI thread free of a device whose open is still
+	//running. Idempotent.
 	void Stop();
 
 	//D9: true only while the stream is up. Answerable from any thread at any time,
@@ -187,23 +198,34 @@ inline void MenuSoundStream::Start()
 
 	_started = true;
 	_running.store(true, std::memory_order_release);
-	_thread = std::thread([this]() { OwnerLoop(); });
+	//D9 (#1153): the owner thread holds a reference to the stream for as long as
+	//it runs, so a stop that detaches it cannot leave the thread writing into a
+	//stream the caller has already forgotten. The release path is that thread's
+	//own exit, and the object outlives it.
+	std::shared_ptr<MenuSoundStream> self = shared_from_this();
+	_thread = std::thread([self]() { self->OwnerLoop(); });
 }
 
 inline void MenuSoundStream::Stop()
 {
-	if(!_started) {
-		return;
-	}
-
 	_started = false;
-	//The owner thread's exit path releases the device, so by the time this returns
-	//the sink has joined its own open worker and its own reader.
+	//The capability goes false here and not on the owner thread: a caller that
+	//stopped the stream has stopped it, whatever the open it is abandoning is
+	//still doing (D9).
+	_available.store(false, std::memory_order_release);
+
+	//And then the thread is let go, never joined. This runs on the caller's
+	//thread - the settings apply path, the UI thread - and the old device's open
+	//can still be running for seconds (#733), which is exactly the wait D9 and
+	//#1153 forbid. The owner thread's own exit path releases the sink (D4), so
+	//the device is still closed exactly once, just not here.
 	_running.store(false, std::memory_order_release);
 	if(_thread.joinable()) {
-		_thread.join();
+		//Detached rather than joined, including when this is the owner thread's
+		//own last reference unwinding: a std::thread destroyed while joinable
+		//terminates the process, and nothing here is waiting for it anyway.
+		_thread.detach();
 	}
-	_available.store(false, std::memory_order_release);
 }
 
 inline bool MenuSoundStream::Submit(const int16_t* pcm, uint32_t frameCount, uint32_t sampleRate)
@@ -306,6 +328,15 @@ inline void MenuSoundStream::OwnerLoop()
 	bool opened = false;
 	while(_running.load(std::memory_order_acquire) && !_sink->TryTakeOpen(opened)) {
 		std::this_thread::sleep_for(std::chrono::milliseconds(1));
+	}
+
+	//#1153: the open outlives the stream whenever the caller stops it mid-open -
+	//which is the case a re-arm that does not wait creates - and a stop that
+	//landed must win. Publishing the capability here would answer "available"
+	//after the caller already saw it go away, so the stream is released instead.
+	if(!_running.load(std::memory_order_acquire)) {
+		_sink->Release();
+		return;
 	}
 
 	if(!opened) {

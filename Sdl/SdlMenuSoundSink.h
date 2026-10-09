@@ -167,9 +167,14 @@ public:
 	void Release() override
 	{
 		if(_deviceOpen.IsPending()) {
-			//The open can outlive the stream: Wait() joins it here, on the owner
-			//thread, so the device it returns is closed rather than leaked with a
-			//callback pointing at a stream that is going away.
+			//The open can outlive the stream - #1153's re-arm takes a stream whose
+			//own open is still running and detaches its thread rather than joining
+			//it (MenuSoundStream::Stop) - so the wait lands here instead: on the
+			//owner thread, which is the stream's own exit path and never the caller
+			//that asked for the stop (D9). Waiting is what makes the device safe to
+			//close: SDL hands the id back only once the open finished, and closing
+			//it any earlier would leave the callback pointing at a stream that is
+			//going away.
 			_deviceOpen.Wait();
 			_deviceOpen.TryTake(_audioDeviceID);
 		}

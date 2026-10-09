@@ -17423,9 +17423,12 @@ namespace
 		return blip;
 	}
 
-	std::unique_ptr<MenuSoundStream> MakeMenuSoundStream(std::unique_ptr<FakeMenuSoundSink> sink, std::shared_ptr<FakeMenuSoundPolicy> policy)
+	//Shared-owned, like the host builds it: the stream's owner thread keeps a
+	//reference to the stream so a stop can detach that thread instead of joining
+	//it (D9, #1153).
+	std::shared_ptr<MenuSoundStream> MakeMenuSoundStream(std::unique_ptr<FakeMenuSoundSink> sink, std::shared_ptr<FakeMenuSoundPolicy> policy)
 	{
-		return std::make_unique<MenuSoundStream>(
+		return std::make_shared<MenuSoundStream>(
 			std::move(sink),
 			[policy]() { return policy->AudioEnabled.load(); },
 			[policy]() { return policy->MasterVolume.load(); },
@@ -17912,6 +17915,18 @@ void TestADefaultDeviceSpelledTwoWaysDoesNotReArm()
 	Check(pool->Sinks.size() == 2, "menu sound: a device that is not the default still re-arms", std::to_string(pool->Sinks.size()));
 	Check(pool->Devices.size() == 2 && pool->Devices[1] == "USB Headset", "menu sound: the re-armed device is the one the player picked");
 
+	//The rule behind it, at the unit: one default endpoint, two spellings, and a
+	//real device name that is not one of them.
+	Check(MenuSoundArming{"", TestBackendWasapi} == MenuSoundArming{"Default", TestBackendWasapi},
+		"menu sound: an empty device name and \"Default\" are the same arming");
+	Check(MenuSoundArming{MenuSoundDeviceResolve::DefaultDeviceName, TestBackendWasapi}
+		== MenuSoundArming{"", TestBackendWasapi},
+		"menu sound: the arming spells the default endpoint with the same name the resolver does");
+	Check(MenuSoundArming{"Default", TestBackendWasapi} != MenuSoundArming{"USB Headset", TestBackendWasapi},
+		"menu sound: a device that is not the default is a different arming");
+	Check(MenuSoundArming{"", TestBackendWasapi} != MenuSoundArming{"", TestBackendDirectSound},
+		"menu sound: the same device on another backend is a different arming");
+
 	host->Stop();
 }
 
@@ -18002,6 +18017,56 @@ void TestTheMenuSoundDeviceIsTheOneThePlayerPicked()
 	//failed-open path (D9 - the row stays hidden rather than opening elsewhere).
 	Check(!MenuSoundDeviceResolve::Resolve("Gone", [](const std::string&) { return false; }, []() { return false; }),
 		"menu sound: with neither endpoint there the resolution fails");
+}
+
+//#1153: the description the config holds is not the id the enumerator wants.
+//WasapiSoundManager::SetAudioDevice converts one into the other before it opens
+//the game's device, and the menu sink has to make the same conversion - asking
+//IMMDeviceEnumerator::GetDevice for a "device id" that is really a friendly name
+//fails for every device on the machine, "Default" included, and leaves the blips
+//on the default endpoint while the game plays on the device the player picked.
+void TestTheMenuSoundDeviceNameResolvesToAnEndpointId()
+{
+	std::vector<std::string> lookedUp;
+	auto idForName = [&](const std::string& name) -> std::string {
+		lookedUp.push_back(name);
+		return name == "USB Headset" ? "{0.0.0.00000000}.{usb}" : std::string();
+	};
+
+	//The device the player picked: its description becomes the endpoint id, which
+	//is the one GetDevice opens.
+	Check(MenuSoundDeviceResolve::ToEndpointId("USB Headset", idForName) == "{0.0.0.00000000}.{usb}",
+		"menu sound: a picked device's description is converted to its endpoint id");
+	Check(lookedUp.size() == 1 && lookedUp[0] == "USB Headset",
+		"menu sound: the description is what the enumeration is asked for",
+		lookedUp.empty() ? "<none>" : lookedUp[0]);
+
+	//The two spellings of the default endpoint are the default endpoint, and
+	//neither is a device to look up: an empty id is what the game device resolves
+	//to GetDefaultAudioEndpoint.
+	Check(MenuSoundDeviceResolve::ToEndpointId("Default", idForName).empty(),
+		"menu sound: \"Default\" is the default endpoint, not a device to look up");
+	Check(MenuSoundDeviceResolve::ToEndpointId("", idForName).empty(), "menu sound: an empty name is the default endpoint");
+	Check(lookedUp.size() == 1, "menu sound: the default endpoint is never looked up as a device", std::to_string(lookedUp.size()));
+
+	//A description the machine no longer has resolves to nothing, which is the
+	//"the configured one is gone" answer the game device takes to the default one.
+	Check(MenuSoundDeviceResolve::ToEndpointId("Gone Speakers", idForName).empty(),
+		"menu sound: a device that is gone has no id, so the default endpoint answers");
+	Check(lookedUp.size() == 2, "menu sound: a description that is not the default is looked up");
+
+	//And the id that conversion produced is the endpoint the choice opens.
+	Check(MenuSoundDeviceResolve::Resolve(
+			MenuSoundDeviceResolve::ToEndpointId("USB Headset", idForName),
+			[&](const std::string& id) { return id == "{0.0.0.00000000}.{usb}"; },
+			[]() { return false; }),
+		"menu sound: the converted id is the endpoint the sink asks for");
+
+	//The set of names that count as "the default endpoint" is the rule the sink's
+	//resolution and the host's arming-equality both read.
+	Check(MenuSoundDeviceResolve::IsDefaultDeviceName("") && MenuSoundDeviceResolve::IsDefaultDeviceName("Default")
+		&& !MenuSoundDeviceResolve::IsDefaultDeviceName("USB Headset"),
+		"menu sound: the default endpoint is exactly \"\" and \"Default\"");
 }
 
 void TestAStoppedSdlAudioDeviceIsNotAlive()
@@ -18632,6 +18697,7 @@ int main()
 	TestAMenuSoundSubsystemInitThatFailsFailsTheOpen();
 	TestAMenuSoundSubsystemInitRunsOnceForTheSession();
 	TestTheMenuSoundDeviceIsTheOneThePlayerPicked();
+	TestTheMenuSoundDeviceNameResolvesToAnEndpointId();
 	TestAStoppedSdlAudioDeviceIsNotAlive();
 	TestAWsapiAudioClientInvalidatedIsDeadForGood();
 	TestADeadMenuSoundDeviceFlipsTheCapabilityBack();
