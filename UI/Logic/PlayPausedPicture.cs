@@ -31,9 +31,15 @@ public static class PlayFrozenFrame
 	//last frame while paused, so a later capture would be the same picture),
 	//dropped when nothing covers the game any more (it resumed) or the game is
 	//gone - a previous game's frame never shows behind the next one's sheets.
-	public static FrozenFrameStep Next(bool holding, bool surfaceOverGame, bool gameLoaded, bool pictureOut = true)
+	//
+	//`gameOnScreen` is the picture the frozen frame stands in for actually being
+	//the one on screen: the game view showing the game and not the home over it.
+	//It defaults to true so a caller that does not know says the ordinary thing,
+	//but the caller that does must say it: while the load card holds an open the
+	//home is still up, and there is no picture of the game to freeze yet.
+	public static FrozenFrameStep Next(bool holding, bool surfaceOverGame, bool gameLoaded, bool gameOnScreen = true, bool pictureOut = true)
 	{
-		bool wanted = surfaceOverGame && gameLoaded && pictureOut;
+		bool wanted = surfaceOverGame && gameLoaded && pictureOut && gameOnScreen;
 		if(wanted && !holding) {
 			return FrozenFrameStep.Capture;
 		}

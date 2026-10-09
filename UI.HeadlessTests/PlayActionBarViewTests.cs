@@ -345,6 +345,41 @@ public class PlayActionBarViewTests : IDisposable
 		Assert.Equal("A Select     B Resume", Bar(window));
 	}
 
+	//#1155: the same count 1 -> 0 through the door the app uses - the poll that
+	//notices the pad leaving (#1109, PlayEdgeFlowsWiring -> TickPadLoss), which
+	//pauses into W-P4 by itself and writes the reason on it. The case above moves
+	//the count under a bar that is already up; this one has the loss open the
+	//surface, so what the bar names is what the pause produced and not a state
+	//the case put the overlay in. The step the original case does and a bare
+	//count change does not is the pause: TickPadLoss sees an unpaused game.
+	[AvaloniaFact]
+	public void A_pad_that_leaves_pauses_into_the_overlay_and_the_bar_names_the_keyboard()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model) = ShowPauseOverlay();
+
+		//A pad press puts a pad in hand (the bar names its buttons), and the
+		//poll's own last count is seeded with it.
+		Press(window, "Select");
+		model.TickPadLoss();
+		Assert.False(model.IsPlayerOverlayVisible, "a pad tick with the count unchanged opened W-P4");
+
+		//1 -> 0 with the game running: the pad left.
+		model.ConnectedGamepadCount = () => 0;
+		model.TickPadLoss();
+		WaitForOverlayFocus(window);
+		Assert.True(model.IsPlayerOverlayVisible, "the pad loss did not open W-P4");
+		Assert.True(EmuApi.IsPaused(), "the pad loss did not pause the game");
+		Assert.Equal("Enter Select     Esc Resume", Bar(window));
+
+		//0 -> 1: the pad is back. The line is rewritten and the game STAYS paused
+		//(ADR-0254's answer for a focus regain, #1109's for a pad).
+		model.ConnectedGamepadCount = () => 1;
+		model.TickPadLoss();
+		Assert.True(EmuApi.IsPaused(), "the pad coming back resumed the game");
+		Assert.Equal("A Select     B Resume", Bar(window));
+	}
+
 	private (MainWindow Window, MainWindowViewModel Model) ShowPauseOverlay()
 	{
 		(MainWindow window, MainWindowViewModel model) = ShowPlay();

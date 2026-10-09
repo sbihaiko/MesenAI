@@ -67,6 +67,28 @@ namespace Mesen.Tests.Play
 			Assert.Equal(FrozenFrameStep.Keep, PlayFrozenFrame.Next(false, true, true, pictureOut: false));
 			Assert.False(PlayFrozenFrame.Shows(true, false, false, true, pictureOut: false));
 		}
+
+		//ADR-0254, #1129: the load card of an OPEN covers the home, and #734 keeps
+		//the home up over the card until the game's first picture. So during that
+		//card the game is not the thing on screen: `FrameCaptureApi.CaptureFrame`
+		//would take the core's last frame - the previous game's, or an unpainted
+		//one - and hold it as W-P4's picture (#1155: the focus pause did exactly
+		//that, because the decision ran before the core's own GamePaused
+		//notification had reached the UI thread to cut the picture wait short).
+		[Fact]
+		public void A_pause_while_the_load_card_covers_the_home_takes_no_frame()
+		{
+			Assert.Equal(FrozenFrameStep.Keep, PlayFrozenFrame.Next(false, surfaceOverGame: true, gameLoaded: true, gameOnScreen: false));
+		}
+
+		//The reload half of the same input: the card there is over a game that IS
+		//on screen (PlayLoadWait.ShowsReloadFor), so its last picture is exactly
+		//the one the frame stands in for and the capture stands.
+		[Fact]
+		public void A_pause_while_the_load_card_covers_the_game_keeps_its_frame()
+		{
+			Assert.Equal(FrozenFrameStep.Capture, PlayFrozenFrame.Next(false, surfaceOverGame: true, gameLoaded: true, gameOnScreen: true));
+		}
 	}
 
 	//"Seguir o render" (2026-10-03): a sheet opened from W-P4 leaves the card
