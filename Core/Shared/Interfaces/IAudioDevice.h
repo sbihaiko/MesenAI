@@ -17,6 +17,9 @@ public:
 	virtual void Stop() = 0;
 	virtual void Pause() = 0;
 	virtual void ProcessEndOfFrame() = 0;
+	//Blocks until a reconfigure started by PlayBuffer (a device that opens in the
+	//background) has finished, so the next PlayBuffer is not dropped.
+	virtual void WaitUntilReady() {}
 
 	virtual string GetAvailableDevices() = 0;
 	virtual void SetAudioDevice(string deviceName) = 0;

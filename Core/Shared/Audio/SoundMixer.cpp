@@ -38,6 +38,10 @@ void SoundMixer::RegisterAudioDevice(IAudioDevice* audioDevice)
 {
 	std::lock_guard<std::mutex> lock(_deviceLock);
 	_audioDevice = audioDevice;
+	if(_menuSettler) {
+		//A settle scheduled for the previous device must not outlive it.
+		_menuSettler->Cancel();
+	}
 	_menuState = MenuSoundPlayback::State();
 }
 
@@ -206,7 +210,12 @@ void SoundMixer::PlayMenuSound(int16_t* samples, uint32_t frameCount, uint32_t s
 				_menuSettler.reset(new MenuSoundSettler(_deviceLock));
 			}
 			//The device loops its ring once started; pause it when the blip has drained.
-			_menuSettler->Schedule(_audioDevice, ms + 50, [this]() { return !(_emu->IsRunning() && !_emu->IsPaused()); });
+			//The callback runs under _deviceLock and reads the device then.
+			_menuSettler->Schedule(ms + 50, [this]() {
+				if(_audioDevice && !(_emu->IsRunning() && !_emu->IsPaused())) {
+					_audioDevice->Pause();
+				}
+			});
 		}
 	}
 }

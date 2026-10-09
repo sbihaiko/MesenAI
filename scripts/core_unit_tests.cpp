@@ -17671,12 +17671,20 @@ namespace {
 		bool Stereo = false;
 		uint32_t Resets = 0;
 		uint32_t FramesQueued = 0;
+		//Like SdlSoundManager the reopen is asynchronous: writes are dropped until
+		//the open completes, and only WaitUntilReady() completes it here.
+		bool Opening = false;
+		void WaitUntilReady() override { Opening = false; }
 		void PlayBuffer(int16_t*, uint32_t bufferSize, uint32_t sampleRate, bool isStereo) override
 		{
+			if(Opening) {
+				return;
+			}
 			if(Rate != sampleRate || Stereo != isStereo) {
 				Rate = sampleRate;
 				Stereo = isStereo;
 				Resets++;
+				Opening = true;
 				return;
 			}
 			FramesQueued += bufferSize;
@@ -17740,7 +17748,7 @@ static void TestAMenuSoundEndsWithThePausedDevice()
 		{
 			std::lock_guard<std::mutex> g(lock);
 			uint32_t ms = MenuSoundPlayback::Play(&device, state, blip.data(), 480, 48000, 48000, 100, 30);
-			settler.Schedule(&device, ms + 20, []() { return true; });
+			settler.Schedule(ms + 20, [&device]() { device.Pause(); });
 		}
 		Check(device.Pauses == 0, "MenuSound: the device is not paused while the blip still plays");
 		std::this_thread::sleep_for(std::chrono::milliseconds(300));
@@ -17748,10 +17756,45 @@ static void TestAMenuSoundEndsWithThePausedDevice()
 
 		{
 			std::lock_guard<std::mutex> g(lock);
-			settler.Schedule(&device, 20, []() { return false; });
+			settler.Schedule(20, []() {});
 		}
 		std::this_thread::sleep_for(std::chrono::milliseconds(200));
 		Check(device.Pauses == 1, "MenuSound: a game that took over is not paused by the blip's settle");
+	}
+}
+
+static void TestACancelledMenuSoundSettleNeverTouchesAFreedDevice()
+{
+	//SoundMixer::RegisterAudioDevice cancels the settle; the callback reads the
+	//registered device at fire time, so a device freed after the cancel is never called.
+	std::mutex lock;
+	IAudioDevice* registered = nullptr;
+	std::atomic<uint32_t> calls{0};
+	{
+		MenuSoundSettler settler(lock);
+		{
+			std::lock_guard<std::mutex> g(lock);
+			registered = new ResettingAudioDevice();
+			settler.Schedule(30, [&]() { if(registered) { registered->Pause(); calls++; } });
+		}
+		{
+			std::lock_guard<std::mutex> g(lock);
+			settler.Cancel();
+			delete registered;
+			registered = nullptr;
+		}
+		std::this_thread::sleep_for(std::chrono::milliseconds(150));
+		Check(calls == 0, "MenuSound: a cancelled settle does not fire after its device is freed");
+
+		{
+			std::lock_guard<std::mutex> g(lock);
+			registered = new ResettingAudioDevice();
+			settler.Schedule(30, [&]() { if(registered) { registered->Pause(); calls++; } });
+			delete registered;
+			registered = nullptr; //a swap without a cancel: the callback sees no device
+		}
+		std::this_thread::sleep_for(std::chrono::milliseconds(150));
+		Check(calls == 0, "MenuSound: the settle reads the device at fire time, not a cached pointer");
 	}
 }
 
@@ -17759,6 +17802,7 @@ int main()
 {
 	TestAMenuSoundIsReprimedWhenTheRateOrLatencyChanges();
 	TestAMenuSoundEndsWithThePausedDevice();
+	TestACancelledMenuSoundSettleNeverTouchesAFreedDevice();
 	TestTheForcedPatchOverrideFollowsTheSettingUntilTheRomIsSuppressed();
 	TestALoadRecordsTheForcedPatchAndTheNextLoadStartsClean();
 	TestOnlyARomWithAForcedPatchCanBeSuppressed();

@@ -60,6 +60,9 @@ public:
 			//triggers drops only this silent frame, not the blip.
 			int16_t silence[2] = {};
 			device->PlayBuffer(silence, 1, outputRate, true);
+			//A device that reopens in the background drops writes until the open
+			//finishes; wait so the blip is not sent into a pending open.
+			device->WaitUntilReady();
 			state.Rate = outputRate;
 			state.Latency = latency;
 		}
@@ -71,7 +74,9 @@ public:
 //PlayBuffer starts the device once enough audio is queued and the device loops
 //its ring until told otherwise, so with no game running nothing would ever stop
 //it. This pauses the device once the last blip has drained. The pause runs under
-//the caller's device lock and is skipped when stillIdle() says a game took over.
+//the caller's device lock. The settle callback owns the device lookup (it runs
+//under that lock and reads the registered device then), so no device pointer is
+//held across the delay.
 class MenuSoundSettler
 {
 private:
@@ -81,8 +86,7 @@ private:
 	bool _stop = false;
 	bool _pending = false;
 	std::chrono::steady_clock::time_point _deadline;
-	IAudioDevice* _device = nullptr;
-	std::function<bool()> _stillIdle;
+	std::function<void()> _settle;
 
 	void Run()
 	{
@@ -92,14 +96,18 @@ private:
 				_cv.wait(lk);
 			} else if(_cv.wait_until(lk, _deadline) == std::cv_status::timeout && _pending && !_stop && std::chrono::steady_clock::now() >= _deadline) {
 				_pending = false;
-				if(_stillIdle()) {
-					_device->Pause();
-				}
+				_settle();
 			}
 		}
 	}
 
 public:
+	//Caller holds the device lock. Drops a settle that has not fired yet.
+	void Cancel()
+	{
+		_pending = false;
+	}
+
 	explicit MenuSoundSettler(std::mutex& deviceLock) : _lock(deviceLock) {}
 
 	~MenuSoundSettler()
@@ -115,10 +123,9 @@ public:
 	}
 
 	//Caller holds the device lock.
-	void Schedule(IAudioDevice* device, uint32_t delayMs, std::function<bool()> stillIdle)
+	void Schedule(uint32_t delayMs, std::function<void()> settle)
 	{
-		_device = device;
-		_stillIdle = stillIdle;
+		_settle = settle;
 		_deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(delayMs);
 		_pending = true;
 		if(!_thread.joinable()) {

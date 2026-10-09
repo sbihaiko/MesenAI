@@ -79,7 +79,7 @@ public static class PlayerSettingsEssentials
 	}
 
 	//PRD rule 2: an inset list of at most four rows per essentials tab (spec
-	//#1102: Audio gains Menu sounds, Display gains Interface size).
+	//#1102: Audio gains Menu sounds).
 	public const int MaxRows = 4;
 
 	private static readonly PlayerSettingsRow[] DisplayRows = {

@@ -15,6 +15,7 @@ SdlSoundManager::SdlSoundManager(Emulator* emu)
 
 SdlSoundManager::~SdlSoundManager()
 {
+	_emu->GetSoundMixer()->RegisterAudioDevice(nullptr);
 	Release();
 }
 
@@ -175,6 +176,14 @@ void SdlSoundManager::WriteToBuffer(uint8_t* input, uint32_t len)
 		_writePosition = len - remainingBytes;
 	}
 }
+void SdlSoundManager::WaitUntilReady()
+{
+	if(_deviceOpen.IsPending()) {
+		_deviceOpen.Wait();
+		_deviceOpen.TryTake(_audioDeviceID);
+	}
+}
+
 void SdlSoundManager::PlayBuffer(int16_t* soundBuffer, uint32_t sampleCount, uint32_t sampleRate, bool isStereo)
 {
 	if(_deviceOpen.IsPending() && !_deviceOpen.TryTake(_audioDeviceID)) {
