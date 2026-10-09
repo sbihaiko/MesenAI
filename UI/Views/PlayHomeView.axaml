@@ -75,6 +75,12 @@
 					</StackPanel>
 				</DockPanel>
 			</Border>
+			<!--#1110 (ADR-0268, W-P20): the Favorites shelf, between Continue and Recent;
+			not drawn while the list has no file that exists, so Home is W-P2 as today.-->
+			<TextBlock Name="PlayHomeFavoritesHeader" DockPanel.Dock="Top" Classes="headline" Text="{l:Translate lblPlayHomeFavoritesHeader}" Margin="0 0 0 8" IsVisible="{Binding ShowFavorites}" />
+			<Panel Name="PlayHomeFavoritesGrid" DockPanel.Dock="Top" IsVisible="{Binding ShowFavorites}" VerticalAlignment="Top" Height="172" Margin="0 0 0 14">
+				<c:StateGrid Classes="tiles" Entries="{Binding FavoriteEntries}" Title="" Mode="{Binding Mode}" />
+			</Panel>
 			<TextBlock DockPanel.Dock="Top" Classes="headline" Text="{l:Translate lblPlayHomeRecentHeader}" Margin="0 0 0 8" IsVisible="{Binding ShowHomeGrid}" />
 			<!--StateGrid names its own root ("root", for its ElementName bindings),
 			so the test handle is the Panel around it. `tiles`: one row of

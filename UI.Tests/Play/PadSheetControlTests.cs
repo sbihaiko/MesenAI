@@ -31,8 +31,8 @@ public class PadSheetControlTests
 
 	private static Dictionary<string, ushort> BuildKeyCodes(bool padOnly = false)
 	{
-		string[] pad = { "Up", "Down", "Left", "Right", "A", "B", "Y" };
-		string[] joy = { "DPad Up", "DPad Down", "DPad Left", "DPad Right", "But2", "But3", "But4" };
+		string[] pad = { "Up", "Down", "Left", "Right", "A", "B", "Y", "X" };
+		string[] joy = { "DPad Up", "DPad Down", "DPad Left", "DPad Right", "But2", "But3", "But4", "But1" };
 		Dictionary<string, ushort> codes = new();
 		for(int device = 0; device < 4; device++) {
 			for(int i = 0; i < pad.Length; i++) {
@@ -63,6 +63,16 @@ public class PadSheetControlTests
 	public void The_search_button_is_the_familys_own(PadFamily family, string expected)
 	{
 		Assert.Equal(KeyCode(expected), PadNavControls.SheetCode(family, 0, PadSheetControl.Search, KeyCode));
+	}
+
+	//#1110 (ADR-0268 Decision 1): X is Favorite - the pad's left face button on an
+	//Xbox pad and the square on a DualShock (the preset's SNES Y, Joy But1).
+	[Theory]
+	[InlineData(PadFamily.Xbox, "Pad1 X")]
+	[InlineData(PadFamily.Ps4, "Joy1 But1")]
+	public void The_favorite_button_is_the_familys_own(PadFamily family, string expected)
+	{
+		Assert.Equal(KeyCode(expected), PadNavControls.SheetCode(family, 0, PadSheetControl.Favorite, KeyCode));
 	}
 
 	//The second spelling, for the same reason NamesOf has one: which spelling a

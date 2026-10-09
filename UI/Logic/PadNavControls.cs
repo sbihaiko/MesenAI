@@ -44,7 +44,10 @@ public readonly record struct PadNavMapping(ushort Up, ushort Down, ushort Left,
 //control" means.
 public enum PadSheetControl
 {
-	Search
+	Search,
+	//#1110 (ADR-0268): X toggles Favorite on a focused cover - a surface's own
+	//control, so it lives here and not among the six the pad navigates with.
+	Favorite
 }
 
 public static class PadNavControls
@@ -183,7 +186,8 @@ public static class PadNavControls
 	//triangle on But4. A player reading "Y Search" on the sheet presses the
 	//button the pad prints Y on, whichever preset the first run applied.
 	public static readonly (PadSheetControl Control, string Xbox, string Ps4)[] SheetControls = {
-		(PadSheetControl.Search, "Y", "But4")
+		(PadSheetControl.Search, "Y", "But4"),
+		(PadSheetControl.Favorite, "X", "But1")
 	};
 
 	//The names to ask the host for one sheet control, the family's own spelling

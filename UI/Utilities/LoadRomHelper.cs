@@ -165,7 +165,7 @@ namespace Mesen.Utilities
 		}
 
 		//The ROM a .rgd names (RomInfo.txt), or null when it cannot be read.
-		private static RecentGameRom? ReadRecentGameRom(string recentFile)
+		public static RecentGameRom? ReadRecentGameRom(string recentFile)
 		{
 			try {
 				using ZipArchive zip = ZipFile.OpenRead(recentFile);

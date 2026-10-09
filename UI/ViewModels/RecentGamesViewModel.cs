@@ -47,6 +47,11 @@ namespace Mesen.ViewModels
 		private int _previewGeneration;
 		[ObservableProperty] public partial List<RecentGameInfo> HomeGridEntries { get; private set; } = new List<RecentGameInfo>();
 		[ObservableProperty] public partial bool ShowHomeGrid { get; private set; }
+		//#1110 (ADR-0268 Decision 4): W-P20's Favorites shelf, between Continue and
+		//Recent. Empty - and not drawn - when the list has no file that exists, so
+		//Home stays W-P2 as it is today.
+		[ObservableProperty] public partial List<RecentGameInfo> FavoriteEntries { get; private set; } = new List<RecentGameInfo>();
+		[ObservableProperty] public partial bool ShowFavorites { get; private set; }
 
 		public RecentGamesViewModel()
 		{
@@ -147,6 +152,7 @@ namespace Mesen.ViewModels
 			ShowSlotTiles = !isPlayerHome && Mode != GameScreenMode.RecentGames && ConfigManager.Config.Preferences.UiMode == UiMode.Player;
 			HomeGridEntries = ShowRecentsHome ? PlayHome.RecentGrid(entries) : new List<RecentGameInfo>();
 			ShowHomeGrid = HomeGridEntries.Count > 0;
+			RefreshFavorites();
 
 			FirstRunOrientation = ShowFirstRunHome ? OrientationText() : "";
 			if(ShowRecentsHome) {
@@ -157,6 +163,18 @@ namespace Mesen.ViewModels
 				ContinueSubtitle = "";
 			}
 			LoadContinuePreview(ShowRecentsHome ? entries[0].FileName : null);
+		}
+
+		//#1110: the shelf is the Favorites list, newest first, minus the entries whose
+		//ROM file is gone (PlayFavorites keeps those and only stops handing them out).
+		//Called when the home is built and after X toggles a favorite.
+		public void RefreshFavorites()
+		{
+			PlayFavorites favorites = ConfigManager.Config.PlayerEnhancements.Favorites;
+			FavoriteEntries = ShowRecentsHome
+				? favorites.ForShelf(File.Exists).Select(path => new RecentGameInfo() { RomPath = path, Name = Path.GetFileNameWithoutExtension(path) }).ToList()
+				: new List<RecentGameInfo>();
+			ShowFavorites = FavoriteEntries.Count > 0;
 		}
 
 		//Read off the UI thread (the recent file is a zip); a newer home wins.
@@ -259,14 +277,20 @@ namespace Mesen.ViewModels
 		public int StateIndex { get; set; } = -1;
 		public string Name { get; set; } = "";
 		public bool SaveMode { get; set; } = false;
+		//#1110: a Favorites tile is a library path, not a recent-game file.
+		public string RomPath { get; set; } = "";
 
 		public bool IsEnabled()
 		{
-			return SaveMode || File.Exists(FileName);
+			return RomPath.Length > 0 ? File.Exists(RomPath) : SaveMode || File.Exists(FileName);
 		}
 
 		public void Load()
 		{
+			if(RomPath.Length > 0) {
+				LoadRomHelper.LoadFile(RomPath);
+				return;
+			}
 			if(StateIndex > 0) {
 				Task.Run(() => {
 					//Run in another thread to prevent deadlocks etc. when emulator notifications are processed UI-side
