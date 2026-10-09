@@ -31,6 +31,18 @@ namespace Mesen.HeadlessTests;
 //observation from a real MainWindow, so they self-skip without the core and
 //the evidence of a pass is the filtered class run with MESEN_CORE_LIB set.
 //
+//Two limits of what the walk proves, stated so nobody over-reads a green run:
+//  - Every_surface_is_walked_or_named_as_a_gap only compares this file's own
+//    constants; it is not wiring evidence. The wiring pin is
+//    The_wiring_registers_the_claims_the_walk_accounts_for, which skips in CI
+//    (no core), so the filtered class run with MESEN_CORE_LIB is the evidence.
+//  - What the surfaces in NotWalkedYet declare on the shared bar is unknown:
+//    whether each is on the bar or off it (#1108's list) is not asserted until
+//    the walk opens it, so that list is a gap for #1108 as well as for the walk.
+//  - SettingsDisplay is in NotWalkedYet on purpose: its tab strip is not walkable
+//    from this harness (Right on a tab does not move the ring and the page is
+//    rebuilt under the walk), and the walk used to start on the Home under it.
+//
 //Scale: every live case is parameterized by the interface size (1.0 = Standard,
 //1.5 = Extra large, #1111), so a size can never strand the pad.
 [Collection(NativeCoreCollection.Name)]
@@ -48,7 +60,7 @@ public class PlayPadWalkTests : IDisposable
 	//Registered claims in PlayPadNavigationWiring.RegisterSurfaces plus the
 	//content area, by the surface's name. Walked surfaces have an opener below;
 	//a surface here that is not walked is a gap the next ticket closes.
-	public static readonly string[] WalkedSurfaces = { "Home", "HomeFirstRun", "PauseOverlay", "SaveStates", "Enhancements", "Library", "ToolSheetAbout", "SettingsDisplay" };
+	public static readonly string[] WalkedSurfaces = { "Home", "HomeFirstRun", "PauseOverlay", "SaveStates", "Enhancements", "Library", "ToolSheetAbout" };
 
 	//Registered claims whose opener needs state this harness does not build yet
 	//(a loaded pack, a cheat database, a failed load...). Named so the list
@@ -57,13 +69,15 @@ public class PlayPadWalkTests : IDisposable
 	public static readonly string[] NotWalkedYet = {
 		"QuitGameConfirm", "SelectRomSheet", "ShaderSheet", "BiosSheet", "ControllerSetup", "SettingsSystemTab",
 		"ControllerSheet", "PackDepSheet", "PackPicker", "PackDetail", "Cheats", "Replays",
+		"SettingsDisplay",
 	};
 
 	//Surfaces that have no declaration on the shared bar yet (Declared() is
 	//null). Home and the shared bar's own surfaces are on it; these are the
 	//remainder of #1108's list, and a surface that joins the bar must leave
 	//this list (the test fails on a stale entry as well as on a new one).
-	public static readonly string[] KnownBarGaps = { "SaveStates", "Enhancements", "ToolSheetAbout", "SettingsDisplay" };
+	public static readonly string[] KnownBarGaps = { "SaveStates", "Enhancements", "ToolSheetAbout" };
+
 
 	private const int ClaimsInWiring = 18;
 
@@ -164,10 +178,6 @@ public class PlayPadWalkTests : IDisposable
 			case "ToolSheetAbout":
 				model.ToolSheet.OpenAbout();
 				return (window, model, () => model.ToolSheet.IsVisible, false);
-			case "SettingsDisplay":
-				ConfigViewModel settings = new(ConfigWindowTab.Display, playerMode: true, audioDevices: () => new[] { "Speakers" }, connectedPads: () => 0);
-				model.OpenPlayerSettings(settings);
-				return (window, model, () => model.IsPlayerSettingsVisible, false);
 			default:
 				throw new ArgumentException("no opener for " + surface);
 		}
@@ -176,7 +186,10 @@ public class PlayPadWalkTests : IDisposable
 	private PadWalkObservation Walk(string surface, MainWindow window, MainWindowViewModel model, Func<bool> isUp, bool isRoot)
 	{
 		Arbiter focus = new(window);
-		WaitFor(() => isUp() && window.FocusManager?.GetFocusedElement() is Control, () => $"{surface} never took the focus");
+		//A surface's own claim has to have landed (it names a root) before the walk
+		//starts; otherwise the focus is still the content area's and the walk would
+		//be of the Home under the surface.
+		WaitFor(() => isUp() && window.FocusManager?.GetFocusedElement() is Control && (isRoot || focus.SearchRoot() is not null), () => $"{surface} never took the focus");
 		Control start = Canonical((Control)window.FocusManager!.GetFocusedElement()!);
 		Control root = focus.SearchRoot() ?? RootOf(window, surface, start);
 
@@ -186,17 +199,24 @@ public class PlayPadWalkTests : IDisposable
 		Queue<Control> frontier = new(new[] { start });
 		List<(string, IReadOnlyList<PlayBarEntry>?)> bar = new();
 		Dictionary<Control, bool> seenForBar = new();
+		bool coverFocused = false;
 
 		//Edges: with the focus on a node, one pad press per direction. The press
 		//is the only thing that moves the ring between nodes; Focus() only sets
 		//the node a press is made from, which is where the player would be.
 		while(frontier.Count > 0 && reached.Count < 200) {
 			Control node = frontier.Dequeue();
+			//Moving across a tab strip swaps the tab's content for a new tree: a
+			//node of the old one is gone and is reached again as its twin.
+			if(!node.IsAttachedToVisualTree()) {
+				continue;
+			}
 			foreach(PadNavAction direction in new[] { PadNavAction.Down, PadNavAction.Right, PadNavAction.Up, PadNavAction.Left }) {
 				Land(window, node);
 				if(!seenForBar.ContainsKey(node)) {
 					seenForBar[node] = true;
 					bar.Add((Label(node), focus.Declared()));
+					coverFocused |= Arbiter.CoverHasFocus(model, node);
 				}
 				Press(window, direction);
 				if(window.FocusManager?.GetFocusedElement() is Control focusedNext && Canonical(focusedNext) is Control next && next != node && root.IsVisualAncestorOf(next) && reached.Add(next)) {
@@ -206,7 +226,7 @@ public class PlayPadWalkTests : IDisposable
 			}
 		}
 
-		HashSet<PlayAction> available = Available(window, root);
+		HashSet<PlayAction> available = Available(window, model, root, interactive, coverFocused);
 		bool? backLeft = null;
 		Land(window, start);
 		Press(window, PadNavAction.Back);
@@ -239,6 +259,13 @@ public class PlayPadWalkTests : IDisposable
 
 		public IReadOnlyList<PlayBarEntry>? Declared() => (IReadOnlyList<PlayBarEntry>?)Type.GetMethod("Declared")!.Invoke(_instance, null);
 		public Control? SearchRoot() => (Control?)Type.GetMethod("SearchRoot")!.Invoke(_instance, null);
+		//PlayFavoriteCover is internal too: a cover is what it gives a path for.
+		public static bool CoverHasFocus(MainWindowViewModel model, Control focused)
+		{
+			Type cover = typeof(MainWindow).Assembly.GetType("Mesen.Windows.PlayFavoriteCover", true)!;
+			return cover.GetMethod("PathOf", BindingFlags.Public | BindingFlags.Static)!.Invoke(null, new object?[] { model, focused }) is string;
+		}
+
 		public int ClaimCount => ((System.Collections.ICollection)Type.GetField("_claims", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(_instance)!).Count;
 	}
 
@@ -250,6 +277,9 @@ public class PlayPadWalkTests : IDisposable
 			.Where(c => c.Focusable && c.IsEffectivelyVisible && c.IsEffectivelyEnabled && c.IsTabStop)
 			.Where(c => !c.GetVisualAncestors().TakeWhile(a => a != root).Any(a => a is ComboBox or Slider or TextBox))
 			.Where(c => c is not ListBoxItem item || !item.GetVisualDescendants().OfType<Button>().Any())
+			//The library's console chips are one ListBox the pad enters with the
+			//ConsoleFilter action (the bar's own entry), not with the D-pad.
+			.Where(c => c is not ListBoxItem || c.FindAncestorOfType<ListBox>()?.Name != "RomPickerConsoleFilter")
 			.ToList();
 	}
 
@@ -267,19 +297,29 @@ public class PlayPadWalkTests : IDisposable
 		return window.GetVisualDescendants().OfType<Control>().FirstOrDefault(c => c.Name == "PlayHomeHost") ?? window;
 	}
 
-	//What the surface can really do, read off its live controls. Confirm is any
-	//focus on an interactive control; Search and the console row are the
-	//library's own named controls; Favorite has no surface yet (#1110 adds one
-	//and extends this).
-	private static HashSet<PlayAction> Available(MainWindow window, Control root)
+	//What the surface can really do, read off its live controls. Confirm needs an
+	//interactive control to press; Back needs a surface to leave (the content
+	//area is the root); Search and the console row are the library's own named
+	//controls, looked up under the surface's root; Favorite is what
+	//PlayFavoriteCover.Declare adds, i.e. some walked focus resolved to a cover.
+	private static HashSet<PlayAction> Available(MainWindow window, MainWindowViewModel model, Control root, IReadOnlyCollection<Control> interactive, bool coverFocused)
 	{
-		HashSet<PlayAction> available = new() { PlayAction.Confirm, PlayAction.Back };
-		bool Visible(string name) => window.GetVisualDescendants().OfType<Control>().Any(c => c.Name == name && c.IsEffectivelyVisible);
+		HashSet<PlayAction> available = new();
+		if(interactive.Count > 0) {
+			available.Add(PlayAction.Confirm);
+		}
+		if(root != window && root.Name != "PlayHomeHost") {
+			available.Add(PlayAction.Back);
+		}
+		bool Visible(string name) => root.GetVisualDescendants().OfType<Control>().Any(c => c.Name == name && c.IsEffectivelyVisible);
 		if(Visible("RomPickerSearch")) {
 			available.Add(PlayAction.Search);
 		}
 		if(Visible("RomPickerConsoleFilter")) {
 			available.Add(PlayAction.ConsoleFilter);
+		}
+		if(coverFocused) {
+			available.Add(PlayAction.Favorite);
 		}
 		return available;
 	}
@@ -389,6 +429,9 @@ public class PlayPadWalkTests : IDisposable
 		Avalonia.Threading.Dispatcher.UIThread.RunJobs();
 	}
 
+	//Recent-game files as the Core writes them, down to the RomInfo.txt that names
+	//a ROM that exists on disk, so a Home cover resolves to a library path (the
+	//Favorite action's precondition, PlayFavoriteCover.PathOf).
 	private static void SeedRecents(params string[] games)
 	{
 		string folder = ConfigManager.RecentGamesFolder;
@@ -396,10 +439,17 @@ public class PlayPadWalkTests : IDisposable
 		foreach(string stale in System.IO.Directory.GetFiles(folder, "*.rgd")) {
 			System.IO.File.Delete(stale);
 		}
+		string roms = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "padwalk-roms");
+		System.IO.Directory.CreateDirectory(roms);
 		DateTime written = DateTime.Now;
 		foreach(string game in games) {
+			string rom = System.IO.Path.Combine(roms, game + ".nes");
+			System.IO.File.WriteAllText(rom, "rom");
 			string file = System.IO.Path.Combine(folder, game + ".rgd");
-			System.IO.File.WriteAllText(file, "");
+			using(System.IO.Compression.ZipArchive zip = System.IO.Compression.ZipFile.Open(file, System.IO.Compression.ZipArchiveMode.Create)) {
+				using System.IO.StreamWriter writer = new(zip.CreateEntry("RomInfo.txt").Open());
+				writer.Write(game + "\n" + rom + "\x1\n");
+			}
 			System.IO.File.SetLastWriteTime(file, written);
 			written = written.AddMinutes(-1);
 		}

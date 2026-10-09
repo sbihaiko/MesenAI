@@ -60,12 +60,24 @@ namespace Mesen.Tests.Play
 		}
 
 		[Fact]
-		public void A_favorite_entry_fails_until_a_surface_has_the_action()
+		public void A_favorite_entry_fails_when_no_cover_has_the_focus()
 		{
+			//The bar declares Favorite, but the walk found no cover under any focus,
+			//so Available lacks it (PlayFavoriteCover.Declare adds it only on a cover).
 			PadWalkObservation o = Clean() with {
 				BarByFocus = new[] { ("A", (IReadOnlyList<PlayBarEntry>?)new[] { new PlayBarEntry(PlayAction.Favorite, "BarFavorite") }) },
 			};
 			Assert.Contains(PadWalk.Judge(o), p => p.Contains("names Favorite"));
+		}
+
+		[Fact]
+		public void A_favorite_entry_passes_when_a_cover_has_the_focus()
+		{
+			PadWalkObservation o = Clean() with {
+				BarByFocus = new[] { ("A", (IReadOnlyList<PlayBarEntry>?)new[] { new PlayBarEntry(PlayAction.Favorite, "BarFavorite") }) },
+				Available = new HashSet<PlayAction> { PlayAction.Confirm, PlayAction.Back, PlayAction.Favorite },
+			};
+			Assert.Empty(PadWalk.Judge(o));
 		}
 	}
 }
