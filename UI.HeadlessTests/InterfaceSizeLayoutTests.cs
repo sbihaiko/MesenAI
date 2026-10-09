@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using Avalonia;
+using Avalonia.Automation;
+using Avalonia.Automation.Peers;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Headless.XUnit;
@@ -494,7 +496,8 @@ public class InterfaceSizeLayoutTests : IDisposable
 	//guaranteed 512x505 at 1.5 leaves the note about 14 px of the row, which is
 	//no room at all; there the note takes the line above, on the page's own
 	//width. This walks both ends: the same note, in the row at one size and on
-	//its own line at the other.
+	//its own line at the other - and asserts the note is drawn whole in both,
+	//which is findings 1, 3 and 4 of the #1163 review.
 	[AvaloniaTheory]
 	[InlineData(1024, 640, false)]
 	[InlineData(512, 505, true)]
@@ -533,6 +536,24 @@ public class InterfaceSizeLayoutTests : IDisposable
 		}
 		Assert.False(noteBox.Intersects(BoxIn(done, window)), $"The note {noteBox} covers Done");
 		Assert.False(noteBox.Intersects(holdBox), $"The note {noteBox} covers Hold to Compare {holdBox}");
+
+		//Finding 1 and 4 of the #1163 review: the note is drawn whole in *either*
+		//branch, the row's and its own line. It asks for no ellipsis, and the room
+		//it was given covers every line its text needs there - which is what a
+		//one-line, ellipsized row fell short of, and what nothing else in this
+		//file catches off the reflowed size.
+		Assert.Equal(TextTrimming.None, note.TextTrimming);
+		double needed = WrappedHeight(note, note.Bounds.Width);
+		Assert.True(note.Bounds.Height + 1 >= needed, $"\"{note.Text}\" needs {needed:0.#} px in the {note.Bounds.Width:0.#} the note was given and is drawn in {note.Bounds.Height:0.#}");
+
+		//Finding 3 of the same review: the reserve line the footer is kept at is
+		//drawn for no one - the other of the tab's two lines is measured with it
+		//and never shown - so it is out of the automation tree (a screen reader
+		//would otherwise read the hint and the reason at once, one of them the
+		//opposite of what the tab says) and takes no hit.
+		TextBlock reserve = window.FindNamed<TextBlock>("txtLookCompareReserve");
+		Assert.False(reserve.IsHitTestVisible, "The reserve line takes hits");
+		Assert.Equal(AccessibilityView.Raw, AutomationProperties.GetAccessibilityView(reserve));
 		model.ClosePlayerSettings();
 	}
 
