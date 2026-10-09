@@ -639,6 +639,8 @@ namespace Mesen.Windows
 			{
 				_window = window;
 				_model = model;
+				_model.InHandDevice = InHand;
+				_model.PlayActionBarDeclaration = BarDeclaration;
 			}
 
 			//#1104: what ADR-0256 Decision 6 calls the pad in hand: a connected pad
@@ -654,8 +656,6 @@ namespace Mesen.Windows
 
 			private void RefreshActionBar()
 			{
-				_model.InHandDevice = InHand;
-				_model.PlayActionBarDeclaration = BarDeclaration;
 				_model.RefreshPlayActionBar(BarDeclaration(), _keyboard is not null);
 			}
 
