@@ -116,6 +116,7 @@
 #include "NES/HdPacks/OggMixer.h"
 #include "Shared/Audio/ReplacementMuteMask.h"
 #include "Shared/Audio/AsyncAudioDeviceOpen.h"
+#include "Shared/Audio/MenuSoundStream.h"
 #include "Utilities/Base64.h"
 #include "Utilities/FolderUtilities.h"
 #include "Utilities/JsonReader.h"
@@ -17279,6 +17280,424 @@ void TestAPendingAudioDeviceOpenIsWaitedForBeforeTheOwnerGoesAway()
 	Check(logged && calls->size() == 4, "audio open: an opener destroyed mid-open finishes the open first");
 }
 
+//--- ADR-0270 (issue #1126): the menu blip's own output stream. The fake sink is
+//the device: it records what the stream's owner thread asked of it, and its
+//reader is driven either by hand (Pump, the test's device callback) or by a
+//thread that hammers Read, which is how the device-change case proves nothing
+//touches the stream once the owner has released the device.
+namespace
+{
+	//UI/Logic/MenuSounds.cs's SampleRate, which is the only rate the seam carries.
+	constexpr uint32_t MenuSoundsTestRate = 48000;
+
+	struct FakeMenuSoundPolicy
+	{
+		std::atomic<bool> AudioEnabled{true};
+		std::atomic<uint32_t> MasterVolume{100};
+		std::atomic<bool> GameRunning{false};
+	};
+
+	class FakeMenuSoundSink final : public IMenuSoundSink
+	{
+	public:
+		void SetReader(IMenuSoundReader* reader) override { Reader.store(reader); }
+
+		void BeginOpen() override
+		{
+			BeginOpens++;
+			OwnerThread = std::this_thread::get_id();
+		}
+
+		bool TryTakeOpen(bool& opened) override
+		{
+			//A slow device answers late - here, from the owner thread's own polling,
+			//which is what the stream must never do on the caller's thread (D9).
+			int delay = OpenDelayMs.exchange(0);
+			if(delay > 0) {
+				std::this_thread::sleep_for(std::chrono::milliseconds(delay));
+			}
+			opened = OpenSucceeds.load();
+			return true;
+		}
+
+		void Unpause() override
+		{
+			Unpauses++;
+			UnpausedAt = std::chrono::steady_clock::now();
+			Unpaused.store(true);
+		}
+
+		void Pause() override
+		{
+			Pauses++;
+			PausedAt = std::chrono::steady_clock::now();
+			Unpaused.store(false);
+		}
+
+		bool IsAlive() const override { return Alive.load(); }
+		uint32_t BufferFrames() const override { return BufferedFrames.load(); }
+
+		void Release() override
+		{
+			Releases++;
+			ReleasedOnThread = std::this_thread::get_id();
+			//D4: the sink joins its own reader before the device is freed, so the
+			//stream can be destroyed while a reader is running.
+			Hammering.store(false);
+			if(_hammer.joinable()) {
+				_hammer.join();
+			}
+			Released.store(true);
+			Reader.store(nullptr);
+		}
+
+		//The test's device callback: reads frames and appends them, so a case can
+		//assert what the device actually received.
+		void Pump(uint32_t frames)
+		{
+			std::vector<int16_t> out((size_t)frames * 2, 0);
+			IMenuSoundReader* reader = Reader.load();
+			if(reader != nullptr) {
+				reader->ReadMenuSound(out.data(), frames);
+			}
+			Pumped.insert(Pumped.end(), out.begin(), out.end());
+			Pumps++;
+		}
+
+		void StartHammering()
+		{
+			Hammering.store(true);
+			_hammer = std::thread([this]() {
+				std::vector<int16_t> out(128 * 2, 0);
+				while(Hammering.load()) {
+					IMenuSoundReader* reader = Reader.load();
+					if(reader != nullptr) {
+						reader->ReadMenuSound(out.data(), 128);
+						Reads++;
+					}
+					std::this_thread::sleep_for(std::chrono::microseconds(200));
+				}
+			});
+		}
+
+		std::atomic<uint32_t> BeginOpens{0};
+		std::atomic<int> OpenDelayMs{0};
+		std::atomic<bool> OpenSucceeds{true};
+		std::atomic<bool> Alive{true};
+		std::atomic<uint32_t> BufferedFrames{0};
+		std::atomic<uint32_t> Unpauses{0};
+		std::atomic<uint32_t> Pauses{0};
+		std::atomic<uint32_t> Releases{0};
+		std::atomic<bool> Unpaused{false};
+		std::atomic<bool> Released{false};
+		std::atomic<IMenuSoundReader*> Reader{nullptr};
+		std::atomic<uint32_t> Reads{0};
+
+		std::thread::id OwnerThread;
+		std::thread::id ReleasedOnThread;
+		std::chrono::steady_clock::time_point UnpausedAt;
+		std::chrono::steady_clock::time_point PausedAt;
+
+		std::vector<int16_t> Pumped;
+		uint32_t Pumps = 0;
+
+	private:
+		std::thread _hammer;
+		std::atomic<bool> Hammering{false};
+	};
+
+	//A blip whose every frame is a known pair, so a case can tell "the blip came
+	//out" from "silence came out" by value and not only by length.
+	std::vector<int16_t> MenuSoundBlip(uint32_t frames, int16_t value = 1000)
+	{
+		std::vector<int16_t> blip((size_t)frames * 2);
+		for(size_t i = 0; i < blip.size(); i += 2) {
+			blip[i] = value;
+			blip[i + 1] = (int16_t)-value;
+		}
+		return blip;
+	}
+
+	std::unique_ptr<MenuSoundStream> MakeMenuSoundStream(std::unique_ptr<FakeMenuSoundSink> sink, std::shared_ptr<FakeMenuSoundPolicy> policy)
+	{
+		return std::make_unique<MenuSoundStream>(
+			std::move(sink),
+			[policy]() { return policy->AudioEnabled.load(); },
+			[policy]() { return policy->MasterVolume.load(); },
+			[policy]() { return policy->GameRunning.load(); },
+			[](const std::string&) {});
+	}
+
+	bool WaitForMenuSound(const std::function<bool()>& condition, int timeoutMs = 5000)
+	{
+		auto start = std::chrono::steady_clock::now();
+		while(!condition()) {
+			if(ElapsedMs(start) > timeoutMs) {
+				return false;
+			}
+			std::this_thread::sleep_for(std::chrono::milliseconds(1));
+		}
+		return true;
+	}
+
+	bool AllSilent(const std::vector<int16_t>& samples)
+	{
+		for(int16_t sample : samples) {
+			if(sample != 0) {
+				return false;
+			}
+		}
+		return true;
+	}
+}
+
+void TestTheMenuSoundQueueReadsAsSilenceOnceItIsEmpty()
+{
+	auto policy = std::make_shared<FakeMenuSoundPolicy>();
+	auto sink = std::make_unique<FakeMenuSoundSink>();
+	FakeMenuSoundSink* device = sink.get();
+	auto stream = MakeMenuSoundStream(std::move(sink), policy);
+	stream->Start();
+	Check(WaitForMenuSound([&]() { return stream->IsAvailable(); }), "menu sound: the stream comes up once the device opens");
+
+	//D3: with nothing queued the reader emits silence - it never repeats the last
+	//block, which is what the game ring does and what a late pause would replay.
+	device->Pump(64);
+	Check(device->Pumped.size() == 128 && AllSilent(device->Pumped), "menu sound: an empty queue reads as silence, never the last block again");
+
+	std::vector<int16_t> blip = MenuSoundBlip(9600);
+	Check(stream->Submit(blip.data(), 9600, MenuSoundsTestRate), "menu sound: one blip is accepted");
+	Check(WaitForMenuSound([&]() { return device->Unpauses.load() == 1; }), "menu sound: the queued blip unpauses the device");
+
+	device->Pump(9600);
+	Check(device->Pumped.size() == 128 + 19200 && device->Pumped[128] == 1000 && device->Pumped[129] == -1000,
+		"menu sound: the queued blip is what the device reads, frame by frame from its start");
+	Check(device->Pumped[128 + 19198] == 1000 && device->Pumped[128 + 19199] == -1000,
+		"menu sound: the whole blip is read out, to its last frame");
+
+	//The next read finds the blip drained: silence, and not the blip again (D3/D5).
+	device->Pump(32);
+	Check(device->Pumped.size() == 128 + 19200 + 64 && AllSilent(std::vector<int16_t>(device->Pumped.begin() + 128 + 19200, device->Pumped.end())),
+		"menu sound: a drained blip is not replayed to the device");
+
+	stream->Stop();
+}
+
+void TestAMenuBlipInFlightDropsTheNextSubmit()
+{
+	auto policy = std::make_shared<FakeMenuSoundPolicy>();
+	auto sink = std::make_unique<FakeMenuSoundSink>();
+	FakeMenuSoundSink* device = sink.get();
+	auto stream = MakeMenuSoundStream(std::move(sink), policy);
+	stream->Start();
+	Check(WaitForMenuSound([&]() { return stream->IsAvailable(); }), "menu sound: the stream comes up once the device opens");
+
+	std::vector<int16_t> blip = MenuSoundBlip(4800);
+	Check(stream->Submit(blip.data(), 4800, MenuSoundsTestRate), "menu sound: the first blip is accepted");
+
+	//D5: at most one blip exists at a time and it is whole, so a submit while one
+	//is queued or playing is dropped rather than stacked into a machine-gun.
+	Check(!stream->Submit(blip.data(), 4800, MenuSoundsTestRate), "menu sound: a submit while a blip is queued is dropped, not stacked");
+
+	//The queue is emptied as the device drains it, so the next blip is accepted.
+	Check(WaitForMenuSound([&]() { return device->Unpauses.load() == 1; }), "menu sound: the queued blip unpauses the device");
+	for(int i = 0; i < 60; i++) {
+		device->Pump(80);
+	}
+	Check(stream->Submit(blip.data(), 4800, MenuSoundsTestRate), "menu sound: a drained queue accepts the next blip");
+
+	stream->Stop();
+}
+
+void TestTheMenuSoundSettleIsDerivedFromTheQueuedFrameCount()
+{
+	auto policy = std::make_shared<FakeMenuSoundPolicy>();
+	auto sink = std::make_unique<FakeMenuSoundSink>();
+	FakeMenuSoundSink* device = sink.get();
+	auto stream = MakeMenuSoundStream(std::move(sink), policy);
+	stream->Start();
+	Check(WaitForMenuSound([&]() { return stream->IsAvailable(); }), "menu sound: the stream comes up once the device opens");
+
+	//D8: the delay is the submitted frame count at the blip's own rate plus the
+	//sink's own buffer - here a buffer of zero, so the blip's own duration is what
+	//is left. Two frame counts, so a fixed constant cannot pass both.
+	std::vector<int16_t> shortBlip = MenuSoundBlip(1200);
+	Check(stream->Submit(shortBlip.data(), 1200, MenuSoundsTestRate), "menu sound: the short blip is accepted");
+	Check(WaitForMenuSound([&]() { return device->Pauses.load() == 1; }), "menu sound: the short blip's settle ends in a pause");
+	long long shortMs = ElapsedMs(device->UnpausedAt);
+
+	std::vector<int16_t> longBlip = MenuSoundBlip(9600);
+	Check(stream->Submit(longBlip.data(), 9600, MenuSoundsTestRate), "menu sound: the long blip is accepted");
+	Check(WaitForMenuSound([&]() { return device->Pauses.load() == 2; }), "menu sound: the long blip's settle ends in a pause");
+	long long longMs = ElapsedMs(device->UnpausedAt);
+	printf("      menu sound settle: 1200 frames -> %lld ms, 9600 frames -> %lld ms (device buffer 0)\n", shortMs, longMs);
+
+	Check(shortMs >= 10 && shortMs <= 400,
+		"menu sound: a 25 ms blip parks the device after the blip, not before it", std::to_string(shortMs) + " ms");
+	Check(longMs >= shortMs + 100,
+		"menu sound: the settle delay is derived from the queued frame count, not a fixed constant",
+		std::to_string(shortMs) + " ms vs " + std::to_string(longMs) + " ms");
+	Check(device->Pauses.load() == 2 && device->Unpauses.load() == 2, "menu sound: the device parks paused once per blip and never stays running");
+
+	stream->Stop();
+}
+
+void TestTheMenuSoundStreamIsArmedAtStartAndNeverLazily()
+{
+	auto policy = std::make_shared<FakeMenuSoundPolicy>();
+	auto sink = std::make_unique<FakeMenuSoundSink>();
+	FakeMenuSoundSink* device = sink.get();
+	auto stream = MakeMenuSoundStream(std::move(sink), policy);
+
+	//Before arming there is no stream at all, and the capability answers false
+	//without opening anything (D9).
+	Check(!stream->IsAvailable(), "menu sound: the capability is false before the stream is armed");
+	std::vector<int16_t> blip = MenuSoundBlip(32);
+	Check(!stream->Submit(blip.data(), 32, MenuSoundsTestRate), "menu sound: a submit before the stream is armed is a no-op");
+
+	//A device that takes 600 ms to answer must not hold the caller: arming is not
+	//lazy, so the open is already running when the first press arrives, and the
+	//press itself never waits for it (D9).
+	device->OpenDelayMs.store(600);
+	auto start = std::chrono::steady_clock::now();
+	stream->Start();
+	long long armMs = ElapsedMs(start);
+	Check(armMs < 100, "menu sound: arming returns before a slow device answers", std::to_string(armMs) + " ms");
+	Check(!stream->IsAvailable(), "menu sound: the capability is false while the open is still running");
+
+	auto press = std::chrono::steady_clock::now();
+	Check(!stream->Submit(blip.data(), 32, MenuSoundsTestRate), "menu sound: a press during the open is refused, not queued");
+	long long pressMs = ElapsedMs(press);
+	Check(pressMs < 50, "menu sound: a press during the open never waits for it", std::to_string(pressMs) + " ms");
+
+	Check(WaitForMenuSound([&]() { return stream->IsAvailable(); }), "menu sound: the capability turns true once the device opened");
+	Check(device->BeginOpens.load() == 1, "menu sound: the device is opened once, at arming");
+	Check(stream->Submit(blip.data(), 32, MenuSoundsTestRate),
+		"menu sound: the open that finished late drops no blip - the stream is armed before the first press");
+
+	stream->Stop();
+	Check(!stream->IsAvailable(), "menu sound: the capability is false once the stream stops");
+}
+
+void TestAFailedMenuSoundOpenKeepsTheRowHidden()
+{
+	auto policy = std::make_shared<FakeMenuSoundPolicy>();
+	auto sink = std::make_unique<FakeMenuSoundSink>();
+	FakeMenuSoundSink* device = sink.get();
+	device->OpenSucceeds.store(false);
+	auto stream = MakeMenuSoundStream(std::move(sink), policy);
+	stream->Start();
+
+	Check(WaitForMenuSound([&]() { return device->Releases.load() == 1; }), "menu sound: a device that fails to open is released");
+	Check(!stream->IsAvailable(), "menu sound: a failed open leaves the Menu sounds row hidden (D9)");
+
+	std::vector<int16_t> blip = MenuSoundBlip(32);
+	Check(!stream->Submit(blip.data(), 32, MenuSoundsTestRate), "menu sound: with no device a submit is a no-op");
+	std::this_thread::sleep_for(std::chrono::milliseconds(50));
+	Check(!stream->IsAvailable() && device->Unpauses.load() == 0, "menu sound: a failed stream never unpauses a device");
+
+	stream->Stop();
+}
+
+void TestADeadMenuSoundDeviceFlipsTheCapabilityBack()
+{
+	auto policy = std::make_shared<FakeMenuSoundPolicy>();
+	auto sink = std::make_unique<FakeMenuSoundSink>();
+	FakeMenuSoundSink* device = sink.get();
+	auto stream = MakeMenuSoundStream(std::move(sink), policy);
+	stream->Start();
+	Check(WaitForMenuSound([&]() { return stream->IsAvailable(); }), "menu sound: the stream comes up once the device opens");
+
+	//D9: a stream that dies mid-session flips the capability back to false and
+	//makes submits no-ops.
+	device->Alive.store(false);
+	Check(WaitForMenuSound([&]() { return !stream->IsAvailable(); }), "menu sound: a device that dies mid-session flips the capability back to false");
+	Check(device->Releases.load() == 1, "menu sound: a dead device is released once");
+
+	std::vector<int16_t> blip = MenuSoundBlip(32);
+	Check(!stream->Submit(blip.data(), 32, MenuSoundsTestRate), "menu sound: a dead stream refuses every submit");
+
+	stream->Stop();
+}
+
+void TestReleasingTheMenuSoundDeviceNeverTouchesTheStreamAgain()
+{
+	auto policy = std::make_shared<FakeMenuSoundPolicy>();
+	auto sink = std::make_unique<FakeMenuSoundSink>();
+	FakeMenuSoundSink* device = sink.get();
+
+	std::thread::id caller = std::this_thread::get_id();
+	auto stream = MakeMenuSoundStream(std::move(sink), policy);
+	stream->Start();
+	Check(WaitForMenuSound([&]() { return stream->IsAvailable(); }), "menu sound: the stream comes up once the device opens");
+
+	//The device's reader runs while the stream is torn down underneath it: the
+	//sink joins it inside Release, and the owner thread that called Release is the
+	//one that joined it (D4).
+	std::vector<int16_t> blip = MenuSoundBlip(4800);
+	stream->Submit(blip.data(), 4800, MenuSoundsTestRate);
+	device->StartHammering();
+	Check(WaitForMenuSound([&]() { return device->Reads.load() > 0; }), "menu sound: the fake device's reader is running before the stream goes away");
+
+	stream->Stop();
+
+	Check(device->Releases.load() == 1, "menu sound: the device is released exactly once",
+		"releases " + std::to_string(device->Releases.load()) + ", unpauses " + std::to_string(device->Unpauses.load()));
+	Check(device->ReleasedOnThread == device->OwnerThread && device->OwnerThread != caller,
+		"menu sound: the device is released on the stream's own thread, not the caller's (D4)");
+
+	//The strongest form of the use-after-free check: once the stream is gone, its
+	//reader cannot be called again.
+	uint32_t readsAtTeardown = device->Reads.load();
+	std::this_thread::sleep_for(std::chrono::milliseconds(60));
+	Check(device->Reads.load() == readsAtTeardown,
+		"menu sound: nothing reads the stream after its owner released the device",
+		std::to_string(readsAtTeardown) + " -> " + std::to_string(device->Reads.load()));
+}
+
+void TestTheMenuSoundGateAndVolumeAreTheOnesTheAdrNames()
+{
+	auto policy = std::make_shared<FakeMenuSoundPolicy>();
+	auto sink = std::make_unique<FakeMenuSoundSink>();
+	FakeMenuSoundSink* device = sink.get();
+	auto stream = MakeMenuSoundStream(std::move(sink), policy);
+	stream->Start();
+	Check(WaitForMenuSound([&]() { return stream->IsAvailable(); }), "menu sound: the stream comes up once the device opens");
+
+	//D6: audio off means the app is silent, game and menu alike - the submit is
+	//refused outright and nothing is queued.
+	policy->AudioEnabled.store(false);
+	std::vector<int16_t> blip = MenuSoundBlip(32);
+	Check(!stream->Submit(blip.data(), 32, MenuSoundsTestRate), "menu sound: with the audio off the blip is refused outright");
+	policy->AudioEnabled.store(true);
+
+	//D7: the stream's own cut - a blip queued while a game runs unpaused is never
+	//started, and the device is never unpaused for it.
+	policy->GameRunning.store(true);
+	Check(stream->Submit(blip.data(), 32, MenuSoundsTestRate), "menu sound: a blip is queued while a game runs");
+	//The owner thread polls every millisecond, so give it a few to make the cut,
+	//then assert the device was never unpaused for it: the blip the game's own
+	//audio would carry is dropped rather than played (D7).
+	std::this_thread::sleep_for(std::chrono::milliseconds(100));
+	Check(device->Unpauses.load() == 0 && device->Pauses.load() == 0,
+		"menu sound: a blip queued while a game runs unpaused never starts, and the device is never unpaused for it");
+	policy->GameRunning.store(false);
+
+	//D6: the master volume applies, with the game path's arithmetic, applied only
+	//while it is below 100 - and the audio player's own volume never enters here.
+	policy->MasterVolume.store(50);
+	std::vector<int16_t> scaled = MenuSoundBlip(2400);
+	Check(stream->Submit(scaled.data(), 2400, MenuSoundsTestRate), "menu sound: the blip is accepted again once the game is not running");
+	Check(WaitForMenuSound([&]() { return device->Unpauses.load() == 1; }), "menu sound: the blip unpauses the device once the game stops");
+	device->Pump(2400);
+	Check(device->Pumped.size() == 4800 && device->Pumped[0] == 500 && device->Pumped[1] == -500 && device->Pumped[4798] == 500,
+		"menu sound: MasterVolume scales the blip at fill time, the same arithmetic the game path uses",
+		std::to_string(device->Pumped.empty() ? 0 : device->Pumped[0]));
+
+	policy->MasterVolume.store(100);
+	stream->Stop();
+}
+
 //--- Player-style system toast (user's decision 2026-10-03, "Estilizar o HUD
 //do Core"): HudToastLayout is the pure half of SystemHud's Player card - the
 //W-P3/W-P9 geometry, glyph choice, colors, text mapping and word wrap. The
@@ -17748,6 +18167,16 @@ int main()
 	TestAnAudioDeviceThatFailsFallsBackToTheDefaultDevice();
 	TestStartingAnAudioDeviceOpenDoesNotWaitForASlowDevice();
 	TestAPendingAudioDeviceOpenIsWaitedForBeforeTheOwnerGoesAway();
+
+	//ADR-0270 (issue #1126): the menu blip's own stream, driven against a fake sink.
+	TestTheMenuSoundQueueReadsAsSilenceOnceItIsEmpty();
+	TestAMenuBlipInFlightDropsTheNextSubmit();
+	TestTheMenuSoundSettleIsDerivedFromTheQueuedFrameCount();
+	TestTheMenuSoundStreamIsArmedAtStartAndNeverLazily();
+	TestAFailedMenuSoundOpenKeepsTheRowHidden();
+	TestADeadMenuSoundDeviceFlipsTheCapabilityBack();
+	TestReleasingTheMenuSoundDeviceNeverTouchesTheStreamAgain();
+	TestTheMenuSoundGateAndVolumeAreTheOnesTheAdrNames();
 
 	TestMepPackManagerGettersReturnCopies();
 	TestNoPackPreferenceTurnsEveryPackOffButTheSibling();

@@ -14,6 +14,7 @@
 #include "Core/Shared/CheatManager.h"
 #include "Core/Shared/DebuggerRequest.h"
 #include "Core/Shared/EnhancementPacks/MepPackManager.h"
+#include "Core/Shared/Audio/MenuSoundStream.h"
 #include "Core/NES/NesConsole.h"
 #include "Core/NES/HdPacks/HdPackBuilder.h"
 #include "Core/Netplay/GameClient.h"
@@ -25,16 +26,19 @@
 #ifdef _WIN32
 	#include "Windows/Renderer.h"
 	#include "Windows/SoundManager.h"
+	#include "Windows/WasapiMenuSoundSink.h"
 	#include "Windows/WindowsKeyManager.h"
 	#include "Windows/WindowsMouseManager.h"
 #elif __APPLE__
 	#include "MacOS/MacOSMetalRenderer.h"
 	#include "Sdl/SdlSoundManager.h"
+	#include "Sdl/SdlMenuSoundSink.h"
 	#include "MacOS/MacOSKeyManager.h"
 	#include "MacOS/MacOSMouseManager.h"
 #else
 	#include "Linux/LinuxOglRenderer.h"
 	#include "Sdl/SdlSoundManager.h"
+	#include "Sdl/SdlMenuSoundSink.h"
 	#include "Linux/LinuxKeyManager.h"
 	#include "Linux/LinuxMouseManager.h"
 #endif
@@ -54,6 +58,11 @@
 unique_ptr<IKeyManager>& _keyManager = *new unique_ptr<IKeyManager>();
 unique_ptr<IMouseManager>& _mouseManager = *new unique_ptr<IMouseManager>();
 unique_ptr<Emulator>& _emu = *new unique_ptr<Emulator>(new Emulator());
+//ADR-0270 (issue #1126): the menu blip's own output stream (D2). Heap-allocated
+//and never destroyed for the same reason as the holders above (#621): a host that
+//exits without Release() must not have the stream torn down under a thread that
+//is still in flight.
+unique_ptr<MenuSoundStream>& _menuSoundStream = *new unique_ptr<MenuSoundStream>();
 bool _softwareRenderer = false;
 
 static void* _windowHandle = nullptr;
@@ -114,6 +123,37 @@ IAudioDevice* InitSoundManager()
 #endif
 }
 
+//ADR-0270 D9 (issue #1126): the menu stream is armed here, at app start, and
+//never lazily by the first blip - a lazy open drops that blip, which is the
+//defect of #1117 the panel rejected. The sink follows the backend the game
+//device would use; a backend with no menu sink answers unavailable rather than
+//routing the blip through an audio API the player did not pick.
+void InitMenuSoundStream()
+{
+	if(_menuSoundStream) {
+		return;
+	}
+
+#ifdef _WIN32
+	unique_ptr<IMenuSoundSink> sink(new WasapiMenuSoundSink(_emu.get()));
+#else
+	unique_ptr<IMenuSoundSink> sink(new SdlMenuSoundSink(_emu.get()));
+#endif
+
+	Emulator* emu = _emu.get();
+	_menuSoundStream.reset(new MenuSoundStream(
+		std::move(sink),
+		//D6: audio off means the app is silent, game and menu alike; the volume is
+		//always cfg.MasterVolume, never the audio player's and never the game
+		//path's ducking rules.
+		[emu]() { return emu->GetSettings()->GetAudioConfig().EnableAudio; },
+		[emu]() { return emu->GetSettings()->GetAudioConfig().MasterVolume; },
+		//D7: the stream's own cut, on the predicate the caller's gate uses.
+		[emu]() { return emu->IsRunning() && !emu->IsPaused(); },
+		[](const string& message) { MessageManager::Log(message); }));
+	_menuSoundStream->Start();
+}
+
 extern "C"
 {
 	DllExport bool __stdcall TestDll()
@@ -149,6 +189,14 @@ extern "C"
 			//Upstream 3924215 passed these crossed (noVideo gated audio, noAudio gated
 			//video); each flag gates its own device here.
 			_emu->SetAudioVideoInitCallback(noAudio ? nullptr : InitSoundManager, noVideo ? nullptr : InitRenderer);
+
+			//ADR-0270 D9: the stream exists only when the host asked for audio at
+			//all - the same flag that gates the game device. The headless test
+			//runner passes noAudio: true, so there the capability is false and the
+			//Audio sheet keeps its three rows.
+			if(!noAudio) {
+				InitMenuSoundStream();
+			}
 
 			if(!noInput) {
 #ifdef _WIN32
@@ -267,16 +315,23 @@ extern "C"
 		_emu->ProcessAudioPlayerAction(p);
 	}
 
-	//#1105: the host has no menu-sound audio path yet (its own ADR); these report
-	//"not available" without touching a device or a lock.
+	//ADR-0270 D1 (issue #1126): the seam is unchanged - one whole blip, frameCount
+	//frames of interleaved stereo int16 at sampleRate, exactly as
+	//UI/Logic/MenuSounds.cs rendered it. D4: the caller may only submit; opening,
+	//unpausing, settling, pausing and releasing belong to the stream's own thread.
 	DllExport bool __stdcall PlayMenuSound(int16_t* samples, uint32_t frameCount, uint32_t sampleRate)
 	{
-		return false;
+		if(!_menuSoundStream) {
+			return false;
+		}
+		return _menuSoundStream->Submit(samples, frameCount, sampleRate);
 	}
 
+	//D9: true only while the stream is up, so a failed open leaves the Menu sounds
+	//row hidden. Answerable from any thread without opening anything.
 	DllExport bool __stdcall MenuSoundsAvailable()
 	{
-		return false;
+		return _menuSoundStream && _menuSoundStream->IsAvailable();
 	}
 
 	DllExport void __stdcall GetArchiveRomList(char* filename, char* outBuffer, uint32_t maxLength)
@@ -350,6 +405,14 @@ extern "C"
 		if(_emu) {
 			_emu->Stop(true);
 			_emu->Release();
+		}
+
+		if(_menuSoundStream) {
+			//ADR-0270 D4: Stop joins the stream's owner thread, which releases the
+			//device on its way out. Stopping before the emulator goes away keeps the
+			//menu device out of the game device's teardown.
+			_menuSoundStream->Stop();
+			_menuSoundStream.reset();
 		}
 
 		_keyManager.reset();
