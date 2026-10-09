@@ -2,6 +2,7 @@
 	xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
 	xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
 	xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+	xmlns:c="using:Mesen.Controls"
 	xmlns:l="using:Mesen.Localization"
 	xmlns:v="using:Mesen.Views"
 	xmlns:vm="using:Mesen.ViewModels"
@@ -40,6 +41,7 @@
 		Classes="sheet"
 		Width="480"
 		Height="{Binding PlayerSheetHeight}"
+		MaxHeight="{Binding $parent[UserControl].Bounds.Height, Converter={x:Static c:RoomLeftConverter.Instance}, ConverterParameter=32}"
 		HorizontalAlignment="Center"
 		VerticalAlignment="Top"
 		Margin="0 24 0 0"
@@ -63,6 +65,16 @@
 			Look (ADR-0246). The XAML names below keep the older `PlayerDisplay`
 			/ `PlayerLook` spelling; only the labels follow the strip.-->
 			<TabControl Grid.Row="1" Name="PlayerSettingsTabs" Classes="segmented" Classes.look="{Binding IsPlayerVideoTab}" SelectedIndex="{Binding PlayerTabIndex, Mode=TwoWay}" Padding="0 18 0 0">
+				<!--ADR-0269 Decision 6: the page rows scroll when the sheet is
+				capped by the window (a larger Interface size); the strip above and
+				Done below stay put.-->
+				<TabControl.ContentTemplate>
+					<DataTemplate>
+						<ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+							<ContentControl Content="{Binding}" />
+						</ScrollViewer>
+					</DataTemplate>
+				</TabControl.ContentTemplate>
 				<TabItem Name="tabPlayerWindow" Header="{l:Translate tabDisplay}" Content="{Binding Display}" />
 				<TabItem Name="tabPlayerVideo" Header="{l:Translate tabLook}" Content="{Binding Look}" />
 				<TabItem Name="tabPlayerAudio" Header="{l:Translate tabAudio}" Content="{Binding PlayerAudio}" />

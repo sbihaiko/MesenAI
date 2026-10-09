@@ -136,8 +136,6 @@ namespace Mesen.Tests.Config
 			Assert.False(PlayerSettingsEssentials.EmbedsClassicPage(tab));
 			Assert.Equal(rows, PlayerSettingsEssentials.Rows(tab).Count);
 			Assert.True(PlayerSettingsEssentials.Rows(tab).Count <= PlayerSettingsEssentials.MaxRowsFor(tab));
-			//strip + rows + Done + the Settings link: PRD rule 2's 7 elements.
-			Assert.True(1 + rows + 1 + 1 <= 7);
 		}
 
 		[Fact]

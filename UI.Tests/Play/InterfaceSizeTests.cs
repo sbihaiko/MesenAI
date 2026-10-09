@@ -31,13 +31,13 @@ public class InterfaceSizeTests
 		Assert.Equal(expected, PlayerInterfaceSize.Step(from, delta));
 	}
 
-	//§13.3 rule 2: strip + 4 rows + Done = 6 (7 with Exit full screen).
+	//§13.3 rule 2: strip + 4 rows + Done = 6 (7 with Exit full screen); the count
+	//itself is rendered in UI.HeadlessTests/InterfaceSizeLayoutTests.
 	[Fact]
-	public void The_display_sheet_has_four_rows_inside_the_element_budget()
+	public void The_display_sheet_has_four_rows_in_order()
 	{
 		IReadOnlyList<PlayerSettingsRow> rows = PlayerSettingsEssentials.Rows(ConfigWindowTab.Display);
 		Assert.Equal(new[] { "Fullscreen", "AspectRatio", "Scale", "InterfaceSize" }, rows.Select(r => r.Id).ToArray());
-		Assert.True(1 + rows.Count + 1 + 1 <= 7);
 	}
 
 	[Theory]

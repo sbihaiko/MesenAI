@@ -448,7 +448,13 @@
 			<!--ADR-0249 (W-P8, W-P10): W-P4's Settings, a sheet in this window.
 			ADR-0250: also every task door's Settings… (Tools ⋯ or the macOS app
 			menu), so it sits above the workspaces with its own Player scope.-->
-			<LayoutTransformControl LayoutTransform="{Binding Config.Preferences.InterfaceSize, Converter={x:Static c:InterfaceSizeTransformConverter.Instance}}">
+			<LayoutTransformControl Name="PlayerSettingsLayerScale">
+				<LayoutTransformControl.LayoutTransform>
+					<MultiBinding Converter="{x:Static c:PlayInterfaceSizeTransformConverter.Instance}">
+						<Binding Path="Config.Preferences.InterfaceSize" />
+						<Binding Path="Shell.Active" />
+					</MultiBinding>
+				</LayoutTransformControl.LayoutTransform>
 				<Panel Name="PlayerSettingsLayer" IsVisible="{Binding IsPlayerSettingsVisible}" Classes.player="{Binding Config.Preferences.UiMode, Converter={StaticResource EnumMatchConverter}, ConverterParameter={x:Static lg:UiMode.Player}}">
 					<Panel IsEnabled="{Binding !IsShaderSheetVisible}">
 						<v:PlayerSettingsSheetView Name="PlayerSettingsSheetHost" DataContext="{Binding PlayerSettings}" />
@@ -461,7 +467,13 @@
 			<!--#734: the load card's layer sits above every workspace: an open
 			shows it in Play, a reload wherever the game is on screen (Play,
 			Remaster's and Share's game views), in that workspace's tint.-->
-			<LayoutTransformControl LayoutTransform="{Binding Config.Preferences.InterfaceSize, Converter={x:Static c:InterfaceSizeTransformConverter.Instance}}">
+			<LayoutTransformControl Name="LoadWaitScale">
+				<LayoutTransformControl.LayoutTransform>
+					<MultiBinding Converter="{x:Static c:PlayInterfaceSizeTransformConverter.Instance}">
+						<Binding Path="Config.Preferences.InterfaceSize" />
+						<Binding Path="Shell.Active" />
+					</MultiBinding>
+				</LayoutTransformControl.LayoutTransform>
 				<Panel Name="LoadWaitHost" Classes.player="{Binding Config.Preferences.UiMode, Converter={StaticResource EnumMatchConverter}, ConverterParameter={x:Static lg:UiMode.Player}}" Classes.remaster="{Binding IsRemasterGameView}" Classes.share="{Binding IsShareGameView}">
 					<!--#734: the load card (W-P9's HUD pill shape), from an open or a
 					reload to the game's first picture (Logic/PlayLoadWait). It is a
@@ -494,7 +506,13 @@
 			<!--G.5 (W-P13), ADR-0249: the BIOS sheet asks in whichever workspace
 			started the load (Play, or Remaster/Share opening a disk game), so it
 			sits above every workspace with its own Player scope (Play's tint).-->
-			<LayoutTransformControl LayoutTransform="{Binding Config.Preferences.InterfaceSize, Converter={x:Static c:InterfaceSizeTransformConverter.Instance}}">
+			<LayoutTransformControl Name="BiosSheetScale">
+				<LayoutTransformControl.LayoutTransform>
+					<MultiBinding Converter="{x:Static c:PlayInterfaceSizeTransformConverter.Instance}">
+						<Binding Path="Config.Preferences.InterfaceSize" />
+						<Binding Path="Shell.Active" />
+					</MultiBinding>
+				</LayoutTransformControl.LayoutTransform>
 				<Panel Name="BiosSheetLayer" Classes.player="{Binding Config.Preferences.UiMode, Converter={StaticResource EnumMatchConverter}, ConverterParameter={x:Static lg:UiMode.Player}}">
 					<v:PlayBiosSheetView Name="PlayBiosSheetHost" DataContext="{Binding BiosSheet}" IsVisible="{Binding IsVisible}" />
 					<!--ADR-0249 (W-P5 sheet shape): an archive's games, from any workspace's open.-->
