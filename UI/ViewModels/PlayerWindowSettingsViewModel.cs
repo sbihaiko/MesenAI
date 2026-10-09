@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Mesen.Config;
+using Mesen.Localization;
 using Mesen.Logic;
 using Mesen.Utilities;
 
@@ -10,6 +11,12 @@ namespace Mesen.ViewModels
 {
 	//One row of W-P8's Scale popup.
 	public sealed record PlayerScaleChoice(double Value, string Label)
+	{
+		public override string ToString() => Label;
+	}
+
+	//One row of the Interface size popup (#1111).
+	public sealed record PlayerInterfaceSizeChoice(InterfaceSize Value, string Label)
 	{
 		public override string ToString() => Label;
 	}
@@ -35,12 +42,24 @@ namespace Mesen.ViewModels
 		public Enum[] AspectRatios { get; }
 		public List<PlayerScaleChoice> Scales { get; }
 
+		//#1111: Interface size scales Play's chrome only; it never reaches
+		//_setScale, which is the picture's Scale row.
+		public PreferencesConfig Preferences { get; }
+		public List<PlayerInterfaceSizeChoice> InterfaceSizes { get; } = Enum.GetValues<InterfaceSize>().Select(s => new PlayerInterfaceSizeChoice(s, ResourceHelper.GetEnumText(s))).ToList();
+
 		[ObservableProperty] public partial bool IsFullscreen { get; set; }
 		[ObservableProperty] public partial PlayerScaleChoice? SelectedScale { get; set; }
+		[ObservableProperty] public partial PlayerInterfaceSizeChoice? SelectedInterfaceSizeChoice { get; set; }
 
-		public PlayerWindowSettingsViewModel(VideoConfig config, bool isFullscreen, double currentScale, Action toggleFullscreen, Action<double> setScale)
+		public InterfaceSize SelectedInterfaceSize {
+			get => SelectedInterfaceSizeChoice?.Value ?? InterfaceSize.Standard;
+			set => SelectedInterfaceSizeChoice = InterfaceSizes.FirstOrDefault(c => c.Value == value) ?? InterfaceSizes[0];
+		}
+
+		public PlayerWindowSettingsViewModel(VideoConfig config, bool isFullscreen, double currentScale, Action toggleFullscreen, Action<double> setScale, PreferencesConfig? preferences = null)
 		{
 			Config = config;
+			Preferences = preferences ?? new PreferencesConfig();
 			_toggleFullscreen = toggleFullscreen;
 			_setScale = setScale;
 
@@ -55,6 +74,7 @@ namespace Mesen.ViewModels
 			//Never blank: under 1× the nearest offered scale shows (W-P8).
 			double selected = PlayDisplaySettings.Nearest(values, current);
 			SelectedScale = Scales.First(s => s.Value == selected);
+			SelectedInterfaceSize = Preferences.InterfaceSize;
 			_loading = false;
 
 			if(!Avalonia.Controls.Design.IsDesignMode) {
@@ -75,6 +95,13 @@ namespace Mesen.ViewModels
 		{
 			if(!_loading) {
 				_toggleFullscreen();
+			}
+		}
+
+		partial void OnSelectedInterfaceSizeChoiceChanged(PlayerInterfaceSizeChoice? value)
+		{
+			if(!_loading && value != null) {
+				Preferences.InterfaceSize = value.Value;
 			}
 		}
 

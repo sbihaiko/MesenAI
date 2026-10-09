@@ -11,6 +11,9 @@ public enum PadValueKind
 	None,
 	Slider,
 	Popup,
+	//A drop-down that also steps in place on Left/Right (Settings › Display ›
+	//Interface size, #1111); otherwise a Popup.
+	Stepper,
 	Hold
 }
 
@@ -54,7 +57,7 @@ public static class PlayPadValueRules
 					PadNavAction.Right => new(PadValueVerb.Step, 1),
 					_ => new(PadValueVerb.None)
 				};
-			case PadValueKind.Popup when popupOpen:
+			case PadValueKind.Popup or PadValueKind.Stepper when popupOpen:
 				return action switch {
 					PadNavAction.Up => new(PadValueVerb.Walk, -1),
 					PadNavAction.Down => new(PadValueVerb.Walk, 1),
@@ -62,6 +65,13 @@ public static class PlayPadValueRules
 					PadNavAction.Back => new(PadValueVerb.Cancel),
 					PadNavAction.None => new(PadValueVerb.None),
 					_ => new(PadValueVerb.Consume)
+				};
+			case PadValueKind.Stepper:
+				return action switch {
+					PadNavAction.Left => new(PadValueVerb.Step, -1),
+					PadNavAction.Right => new(PadValueVerb.Step, 1),
+					PadNavAction.Confirm => new(PadValueVerb.Open),
+					_ => new(PadValueVerb.None)
 				};
 			case PadValueKind.Popup:
 				return action == PadNavAction.Confirm ? new(PadValueVerb.Open) : new(PadValueVerb.None);

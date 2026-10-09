@@ -13,6 +13,7 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
+using Avalonia.Media;
 using Mesen.Config;
 using Mesen.Controls;
 using Mesen.Interop;
@@ -768,7 +769,7 @@ public class PlayPadNavigationTests : IDisposable
 		//Down through the Window page and off its last row, then Left along
 		//Done's row: the walk a player makes with the D-pad.
 		List<string?> walk = new() { FocusedName(window) };
-		PadNavAction[] presses = { PadNavAction.Down, PadNavAction.Down, PadNavAction.Down, PadNavAction.Down, PadNavAction.Down, PadNavAction.Left };
+		PadNavAction[] presses = { PadNavAction.Down, PadNavAction.Down, PadNavAction.Down, PadNavAction.Down, PadNavAction.Down, PadNavAction.Down, PadNavAction.Left };
 		foreach(PadNavAction press in presses) {
 			if(FocusedName(window) == "btnPlayerSettingsExitFullscreen") {
 				break;
@@ -1200,6 +1201,98 @@ public class PlayPadNavigationTests : IDisposable
 		Assert.Equal(3, settings.Display.SelectedScale!.Value);
 		WaitFor(() => scale.IsFocused, "the focus did not come back to the drop-down after the commit");
 		AssertRing(scale);
+		model.ClosePlayerSettings();
+	}
+
+	//#1111 (spec #1102): Left / Right on the Interface size row steps it in
+	//place, applied at once - what the player sees is the row's text and the
+	//chrome's size, with the game's Scale row untouched.
+	[AvaloniaFact]
+	public void The_pad_steps_the_interface_size_with_left_and_right_and_the_chrome_follows()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		List<double> written = new();
+		PreferencesConfig preferences = ConfigManager.Config.Preferences;
+		InterfaceSize before = preferences.InterfaceSize;
+		preferences.InterfaceSize = InterfaceSize.Standard;
+		try {
+			(MainWindow window, MainWindowViewModel model, ConfigViewModel settings) = ShowSettingsTab(ConfigWindowTab.Display,
+				() => new PlayerWindowSettingsViewModel(new VideoConfig(), false, 2, () => { }, written.Add, preferences));
+			//From the strip, the pad walks down the page to the row: Down never
+			//runs along the tabs instead.
+			window.FindNamed<Control>("tabPlayerWindow").Focus(NavigationMethod.Directional);
+			Pump();
+			ComboBox size = window.FindNamed<ComboBox>("cboDisplayInterfaceSize");
+			for(int i = 0; i < 5 && !size.IsFocused; i++) {
+				Press(window, PadNavAction.Down);
+			}
+			Assert.True(size.IsFocused, $"the D-pad never reached Interface size ({FocusedName(window)})");
+			LayoutTransformControl chrome = window.FindNamed<LayoutTransformControl>("PlayChromeRoot");
+			Assert.Equal(1.0, ((ScaleTransform)chrome.LayoutTransform!).ScaleX);
+
+			Press(window, PadNavAction.Right);
+			Assert.Equal("Large", size.SelectedItem?.ToString());
+			Assert.Equal(1.25, ((ScaleTransform)chrome.LayoutTransform!).ScaleX);
+			Press(window, PadNavAction.Right);
+			Assert.Equal(1.5, ((ScaleTransform)chrome.LayoutTransform!).ScaleX);
+			Press(window, PadNavAction.Right);
+			Assert.Equal(1.5, ((ScaleTransform)chrome.LayoutTransform!).ScaleX);
+			Press(window, PadNavAction.Left);
+			Assert.Equal(1.25, ((ScaleTransform)chrome.LayoutTransform!).ScaleX);
+
+			Assert.False(size.IsDropDownOpen);
+			Assert.Empty(written);
+			Assert.Equal(2, settings.Display!.SelectedScale!.Value);
+			model.ClosePlayerSettings();
+		} finally {
+			preferences.InterfaceSize = before;
+		}
+	}
+
+	//#1111: the Settings sheet is part of Play's chrome too, so Extra large
+	//renders it about 1.5x bigger than Standard.
+	[AvaloniaFact]
+	public void The_settings_sheet_renders_bigger_at_extra_large()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		PreferencesConfig preferences = ConfigManager.Config.Preferences;
+		InterfaceSize before = preferences.InterfaceSize;
+		preferences.InterfaceSize = InterfaceSize.Standard;
+		try {
+			(MainWindow window, MainWindowViewModel model, _) = ShowSettingsTab(ConfigWindowTab.Display);
+			Control sheet = window.FindNamed<Control>("PlayerSettingsSheetHost");
+			double standard = sheet.TransformToVisual(window)!.Value.M11;
+
+			preferences.InterfaceSize = InterfaceSize.ExtraLarge;
+			Pump();
+			double extra = sheet.TransformToVisual(window)!.Value.M11;
+
+			Assert.Equal(1.5, extra / standard, 2);
+			model.ClosePlayerSettings();
+		} finally {
+			preferences.InterfaceSize = before;
+		}
+	}
+
+	//#1111: Down from a tab goes into that tab's page - the strip's tabs sit
+	//side by side, so the engine alone may answer with the neighbouring tab.
+	[AvaloniaTheory]
+	[InlineData(ConfigWindowTab.Display, "tabPlayerWindow")]
+	[InlineData(ConfigWindowTab.Audio, "tabPlayerAudio")]
+	[InlineData(ConfigWindowTab.Input, "tabPlayerControls")]
+	public void Down_from_a_settings_tab_walks_into_its_page(ConfigWindowTab tab, string tabName)
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model, _) = ShowSettingsTab(tab);
+		TabControl strip = window.FindNamed<TabControl>("PlayerSettingsTabs");
+		window.FindNamed<Control>(tabName).Focus(NavigationMethod.Directional);
+		Pump();
+		Press(window, PadNavAction.Down);
+
+		Control? focused = window.FocusManager?.GetFocusedElement() as Control;
+		Assert.NotNull(focused);
+		Assert.IsNotType<TabItem>(focused);
+		Assert.True(focused!.GetVisualAncestors().Contains(strip), $"Down left the page ({FocusedName(window)})");
 		model.ClosePlayerSettings();
 	}
 

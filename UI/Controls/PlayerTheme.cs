@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using Avalonia;
 using Avalonia.Controls;
@@ -32,6 +33,41 @@ namespace Mesen.Controls
 		public static void SetTintSoft(AvaloniaObject target, IBrush? value) => target.SetValue(TintSoftProperty, value);
 		public static IBrush? GetTintText(AvaloniaObject target) => target.GetValue(TintTextProperty);
 		public static void SetTintText(AvaloniaObject target, IBrush? value) => target.SetValue(TintTextProperty, value);
+	}
+
+	//#1111, ADR-0269 Decision 3: the layers above the workspaces (Settings, the
+	//load card, the BIOS and tool sheets) also show in Remaster and Share, which
+	//keep their own size - they read Interface size only while Play is active.
+	//Values: [InterfaceSize, active Workspace].
+	public class PlayInterfaceSizeTransformConverter : IMultiValueConverter
+	{
+		public static readonly PlayInterfaceSizeTransformConverter Instance = new();
+
+		public object? Convert(IList<object?> values, Type targetType, object? parameter, CultureInfo culture)
+		{
+			bool inPlay = values.Count > 1 && values[1] is Workspace.Play;
+			double factor = inPlay && values[0] is InterfaceSize size ? PlayerInterfaceSize.Factor(size) : 1.0;
+			return new ScaleTransform(factor, factor);
+		}
+	}
+
+	//#1111, ADR-0269 Decision 6: a sheet's height cap - the room its host gives
+	//it (already in the transformed space) less the ConverterParameter's margin.
+	public class RoomLeftConverter : IValueConverter
+	{
+		public static readonly RoomLeftConverter Instance = new();
+
+		public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+		{
+			double room = value is double height ? height : double.PositiveInfinity;
+			double margin = parameter is string text ? double.Parse(text, CultureInfo.InvariantCulture) : 0;
+			return room > margin ? room - margin : double.PositiveInfinity;
+		}
+
+		public object? ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
+		{
+			throw new NotSupportedException();
+		}
 	}
 
 	//Workspace -> its badge glyph (PlayerIconPlay / PlayerIconRemaster /

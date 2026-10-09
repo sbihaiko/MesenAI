@@ -182,7 +182,7 @@ namespace Mesen.ViewModels
 					break;
 				case ConfigWindowTab.Display:
 					_originalVideo ??= ConfigManager.Config.Video.Clone();
-					Display ??= AddDisposable(_createDisplay?.Invoke() ?? new PlayerWindowSettingsViewModel(ConfigManager.Config.Video, false, 0, () => { }, _ => { }));
+					Display ??= AddDisposable(_createDisplay?.Invoke() ?? new PlayerWindowSettingsViewModel(ConfigManager.Config.Video, false, 0, () => { }, _ => { }, ConfigManager.Config.Preferences));
 					break;
 				case ConfigWindowTab.Look:
 					_originalVideo ??= ConfigManager.Config.Video.Clone();

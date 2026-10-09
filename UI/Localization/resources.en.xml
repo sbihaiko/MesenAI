@@ -1021,6 +1021,7 @@
 			<Control ID="lblDisplayFullscreen">Full screen</Control>
 			<Control ID="lblDisplayAspectRatio">Aspect ratio</Control>
 			<Control ID="lblDisplayScale">Scale</Control>
+			<Control ID="lblDisplayInterfaceSize">Interface size</Control>
 		</Form>
 		<Form ID="PlayerAudioSettingsView">
 			<Control ID="lblAudioSound">Sound</Control>
@@ -3897,6 +3898,11 @@ E
 		<Enum ID="WsAudioMode">
 			<Value ID="Headphones">Headphones (recommended)</Value>
 			<Value ID="Speaker">Speaker</Value>
+		</Enum>
+		<Enum ID="InterfaceSize">
+			<Value ID="Standard">Standard</Value>
+			<Value ID="Large">Large</Value>
+			<Value ID="ExtraLarge">Extra large</Value>
 		</Enum>
 		<Enum ID="HudDisplaySize">
 			<Value ID="Fixed">Fixed size</Value>

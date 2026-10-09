@@ -231,10 +231,12 @@ public class PlayerThemeSettingsRenderTests : IDisposable
 			//The group fills the sheet's width (the first capture used ~40 %).
 			Border group = sheet.FindNamed<Border>("DisplaySettingsGroup");
 			Assert.True(group.Bounds.Width >= sheet.Bounds.Width - 41, $"the group is {group.Bounds.Width} wide in a {sheet.Bounds.Width} sheet");
-			Assert.Equal(5, ControlsAtRest(sheet));
-			//W-P8's sheet is 340 high, and the hint sits right under the group,
+			//§13.3 rule 2 (W-P8d, #1111): strip, four rows, Done.
+			Assert.Equal(6, ControlsAtRest(sheet));
+			AssertPopup(sheet.FindNamed<ComboBox>("cboDisplayInterfaceSize"), 120);
+			//W-P8's sheet is 387 high (340 and the Interface size row), and the hint sits right under the group,
 			//on its own line above Done (not at the foot of Look's height).
-			Assert.Equal(340, sheet.Bounds.Height, 0.5);
+			Assert.Equal(387, sheet.Bounds.Height, 0.5);
 			double groupBottom = group.TranslatePoint(new Point(0, group.Bounds.Height), sheet)!.Value.Y;
 			double hintTop = hint.TranslatePoint(new Point(0, 0), sheet)!.Value.Y;
 			double doneTop = sheet.FindNamed<Button>("btnPlayerSettingsDone").TranslatePoint(new Point(0, 0), sheet)!.Value.Y;

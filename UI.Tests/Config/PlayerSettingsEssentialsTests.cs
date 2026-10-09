@@ -112,7 +112,7 @@ namespace Mesen.Tests.Config
 		//the same room - two storage choices with their folder lines, two
 		//keyboard choices, and the restart line a folder change puts there.
 		[Theory]
-		[InlineData(ConfigWindowTab.Display, 340)]
+		[InlineData(ConfigWindowTab.Display, 387)]
 		[InlineData(ConfigWindowTab.Look, 480)]
 		[InlineData(ConfigWindowTab.Audio, 340)]
 		[InlineData(ConfigWindowTab.Input, 340)]
@@ -125,16 +125,25 @@ namespace Mesen.Tests.Config
 		//The bug: Audio and Controls embedded the whole classic option pages
 		//(sub-tabs, per-console button row, scrollbars). Now each essentials tab
 		//is a short inset list in the Display pattern: at most 3 rows (PRD rule
-		//2 leaves room for the link), and no classic page.
+		//2 leaves room for the link; Display's 4th is #1111's Interface size,
+		//inside the 7-element budget), and no classic page.
 		[Theory]
-		[InlineData(ConfigWindowTab.Display, 3)]
+		[InlineData(ConfigWindowTab.Display, 4)]
 		[InlineData(ConfigWindowTab.Audio, 3)]
 		[InlineData(ConfigWindowTab.Input, 3)]
-		public void Each_list_tab_has_three_rows_and_no_classic_page(ConfigWindowTab tab, int rows)
+		public void Each_list_tab_has_its_rows_and_no_classic_page(ConfigWindowTab tab, int rows)
 		{
 			Assert.False(PlayerSettingsEssentials.EmbedsClassicPage(tab));
 			Assert.Equal(rows, PlayerSettingsEssentials.Rows(tab).Count);
-			Assert.True(PlayerSettingsEssentials.Rows(tab).Count <= PlayerSettingsEssentials.MaxRows);
+			Assert.True(PlayerSettingsEssentials.Rows(tab).Count <= PlayerSettingsEssentials.MaxRowsFor(tab));
+		}
+
+		[Fact]
+		public void Only_display_may_hold_a_fourth_row()
+		{
+			Assert.Equal(4, PlayerSettingsEssentials.MaxRowsFor(ConfigWindowTab.Display));
+			Assert.Equal(3, PlayerSettingsEssentials.MaxRowsFor(ConfigWindowTab.Audio));
+			Assert.Equal(3, PlayerSettingsEssentials.MaxRowsFor(ConfigWindowTab.Input));
 		}
 
 		[Fact]

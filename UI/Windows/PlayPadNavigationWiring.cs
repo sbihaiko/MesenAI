@@ -941,9 +941,29 @@ namespace Mesen.Windows
 				if(TopLevel.GetTopLevel(focused)?.FocusManager is IFocusManager manager) {
 					FindNextElementOptions options = new() { FocusedElement = focused, SearchRoot = PlayFocusOnOpen.Of(focused)?.SearchRoot() };
 					if(manager.FindNextElement(Direction(action), options) is Control next) {
+						//#1111: a tab strip's tabs sit side by side, and the engine can
+						//answer Down with the neighbouring tab (the page's rows are far
+						//to the right of the strip's left-most tab). Down from a tab goes
+						//into the page, never along the strip: Left / Right do that.
+						//Only the player settings strip is rewired; any other TabControl
+						//keeps the engine's answer.
+						if(action == PadNavAction.Down && focused is TabItem && next is TabItem && FirstInPage(focused) is Control inPage) {
+							next = inPage;
+						}
 						PlayFocusOnOpen.Enter(next);
 					}
 				}
+			}
+
+			//The first control of the page under the tab strip that holds this tab.
+			private static Control? FirstInPage(Control tab)
+			{
+				TabControl? tabs = tab.FindAncestorOfType<TabControl>();
+				if(tabs?.Name != "PlayerSettingsTabs") {
+					return null;
+				}
+				return tabs.GetVisualDescendants().OfType<Control>().FirstOrDefault(c =>
+					c is not TabItem && c.Focusable && c.IsEffectivelyVisible && c.IsEffectivelyEnabled && c.FindAncestorOfType<TabItem>() is null);
 			}
 
 			//#964: the focused control's own value semantics first (a slider's
@@ -969,6 +989,10 @@ namespace Mesen.Windows
 						return false;
 					case PadValueVerb.Step when target is Slider slider:
 						slider.Value = PlayPadValueRules.Step(slider.Value, slider.SmallChange, slider.Minimum, slider.Maximum, answer.Delta);
+						break;
+					case PadValueVerb.Step when target is ComboBox combo:
+						//A stepper row (#1111): the value changes in place, at once.
+						combo.SelectedIndex = PlayPadValueRules.Walk(combo.SelectedIndex, combo.ItemCount, answer.Delta);
 						break;
 					case PadValueVerb.Open when target is ComboBox combo:
 						_walk = combo.SelectedIndex;
@@ -1015,6 +1039,7 @@ namespace Mesen.Windows
 			{
 				return focused switch {
 					Slider => PadValueKind.Slider,
+					ComboBox { Name: "cboDisplayInterfaceSize" } => PadValueKind.Stepper,
 					ComboBox => PadValueKind.Popup,
 					Button { Name: "btnLookHoldToCompare", DataContext: LookConfigViewModel } => PadValueKind.Hold,
 					_ => PadValueKind.None
