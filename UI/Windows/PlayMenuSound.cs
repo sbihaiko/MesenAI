@@ -17,6 +17,10 @@ namespace Mesen.Windows
 	//that starts or resumes a game has already left the game running unpaused, and
 	//a blip must not mix into it (MenuSounds.ShouldPlay; the rule itself is pure
 	//and pinned in UI.Tests/Play/MenuSoundsTests).
+	//
+	//That makes WHEN a caller submits part of the rule, not a detail of it: the pad
+	//submits after Apply, and the window's key handler - which runs in the tunnel,
+	//before the focused control has activated - submits after the press has run.
 	public static class PlayMenuSound
 	{
 		//The action an input path resolved, by the rules of its own device

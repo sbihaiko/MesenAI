@@ -1206,7 +1206,27 @@ namespace Mesen.Windows
 			//that press (HandleEscInTheUi above) - the key is the overlay's, not the
 			//focused control's. Back is not one of the keys answered here.
 			if(InPlayDoor && !TheKeyboardIsSomewhereElse()) {
-				PlayMenuSound.For(PlayMenuSound.OfNavigateKey(e.Key));
+				PadNavAction action = PlayMenuSound.OfNavigateKey(e.Key);
+				//A held Confirm is one press, the rule this class already applies to
+				//Esc (#1080, HandleEscInTheUi): the OS repeats the key as more KeyDowns
+				//with no KeyUp in between, and the pad's own Confirm does not repeat
+				//either - PadNavRepeat.Held deliberately skips Confirm and Back, because
+				//a repeated Confirm activates whatever the repeat just scrolled onto.
+				//The arrows are left to repeat: a repeat there is Avalonia's own move of
+				//the ring, the keyboard's counterpart of the pad's held direction
+				//(PadNavRepeat: 400 ms, then one every 100 ms).
+				if(action != PadNavAction.None
+					&& (action != PadNavAction.Confirm || _keysAnsweredInTheUi.Add(e.GetKeyCode()))) {
+					//Submitted after the press, not here: this is the tunnel handler, so
+					//the focused control has not activated yet, and the gate reads the
+					//game's own state (MenuSounds.ShouldPlay). A Confirm that starts or
+					//resumes a game read here would find the game still paused, sound the
+					//blip, and let the resume happen under it - and the pad, which reads
+					//the same gate after Apply, is silent on that identical press (ADR-
+					//0270 D10 binds the two to the same answer, not merely the same call).
+					//Posted below Input, so the press has run by the time this does.
+					Dispatcher.UIThread.Post(() => PlayMenuSound.For(action), DispatcherPriority.Background);
+				}
 			}
 
 			if(OperatingSystem.IsMacOS()) {
