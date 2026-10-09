@@ -729,6 +729,75 @@ public class PlayerLibraryConsoleFilterTests : IDisposable
 			$"the restore did not land the ring on the remembered game (segment={FocusedSegmentLabel(window) ?? "none"}, {FocusedName(window)})");
 	}
 
+	//#1108 review finding 3 (ADR-0264 "What outranks the row"): the landing is
+	//SKIPPED while the sheet's own claim over the ring is standing, rather than
+	//landing and being taken back a turn later. The cycle still happens - the
+	//filter is not what the restore waits on - but the ring never touches the
+	//segment: the player who presses RB while the scan still owes them their last
+	//game would otherwise watch the ring flash on the row and jump off it.
+	//
+	//Read on the press's own synchronous half, with NO pump between: the arbiter
+	//re-decides on a POSTED turn (PlayFocusOnOpen.Refresh, DispatcherPriority
+	//Loaded), so a pump here would answer with the restore's own placement and
+	//hide the flash this case exists to catch.
+	[AvaloniaFact]
+	public void A_shoulder_press_while_a_restore_waits_never_lands_the_ring_on_the_row()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		LibraryRoot();
+
+		(MainWindow window, MainWindowViewModel model) = OpenLibrary();
+		WaitFor(() => !model.RomPicker.IsScanning, "the scan did not finish");
+
+		//The game the player leaves on, and the visit ends.
+		PlayerLibraryTile remembered = model.RomPicker.Tiles.First(tile => tile.Path.Contains(NesContra));
+		string contra = remembered.Path;
+		string nesMario = model.RomPicker.Tiles.First(tile => tile.Path.Contains(NesMario)).Path;
+		string gbMario = model.RomPicker.Tiles.First(tile => tile.Path.Contains(GameBoyMario)).Path;
+		model.RomPicker.RememberFocus(remembered);
+		model.RomPicker.Hide();
+		Pump();
+
+		//The next visit's scan answers the two games that are NOT the remembered
+		//one, then is held: the batch has landed and the restore is still pending,
+		//which is the state the press has to respect.
+		using ManualResetEventSlim release = new(false);
+		model.RomPicker.RunLibraryScanInline = false;
+		model.RomPicker.LibraryScanStreamSource = (folders, list, onBatch) => {
+			onBatch(new LibraryEntry[] {
+				new(nesMario, RomConsole.Nes, NesMario),
+				new(gbMario, RomConsole.GameBoy, GameBoyMario)
+			});
+			release.Wait();
+			onBatch(new LibraryEntry[] { new(contra, RomConsole.Nes, NesContra) });
+			return new LibraryScanResult(new LibraryEntry[] {
+				new(nesMario, RomConsole.Nes, NesMario),
+				new(gbMario, RomConsole.GameBoy, GameBoyMario),
+				new(contra, RomConsole.Nes, NesContra)
+			}, 1, false);
+		};
+		try {
+			model.RomPicker.Open();
+			WaitFor(() => model.RomPicker.Tiles.Count == 2 && model.RomPicker.IsScanning, "the batch did not land behind the held scan");
+			Assert.True(model.RomPicker.IsRestorePending, "the restore is not pending behind the held scan");
+			WaitFor(() => FocusedName(window) == "RomPickerBack", "the ring did not park on Back while the restore waits");
+
+			//The shoulder press itself, without the pump PressShoulder ends with.
+			ushort shoulder = BackendCode("Pad1 R1");
+			PlayPadNavigationWiring.TickForTest(window, new[] { shoulder }, TimeSpan.FromMilliseconds(50), BackendName, BackendCode);
+			PlayPadNavigationWiring.TickForTest(window, Array.Empty<ushort>(), TimeSpan.FromMilliseconds(50), BackendName, BackendCode);
+
+			//The cycle happened and the ring did not: the segment is nowhere near
+			//the focused element, and Back still holds it.
+			Assert.Equal(RomConsole.Nes, model.RomPicker.SelectedConsole);
+			Assert.Null(FocusedSegmentLabel(window));
+			Assert.Equal("RomPickerBack", FocusedName(window));
+		} finally {
+			release.Set();
+		}
+		WaitFor(() => !model.RomPicker.IsScanning, "the held scan did not finish");
+	}
+
 	//#1108 AC2 (review finding 4): the landing must not hang on something being
 	//focused. A rebuild can take the focused container out from under the ring
 	//before the claim runs, and a rule that only landed from a focused control

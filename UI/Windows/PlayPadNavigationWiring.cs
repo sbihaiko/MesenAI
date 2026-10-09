@@ -1037,8 +1037,20 @@ namespace Mesen.Windows
 		//would still happen and the ring would never be on what the press acted on.
 		//The search box is the one control that keeps the ring, and it is asked the
 		//way the sheet asks it.
+		//#1108 review finding 3 (ADR-0264 "What outranks the row"): the landing is
+		//SKIPPED while the sheet's own claim over the ring is standing - a restore
+		//pending, or the moment its remembered game lands - rather than landing and
+		//being taken back on the arbiter's next turn. The cycle above still happens
+		//(the filter is not what the restore waits on), but the ring never touches
+		//the row: without this a player who presses RB while the scan still owes
+		//them their last game watches the ring flash on the segment and jump off
+		//it. The arbiter already refuses to HAND the segment the ring mid-restore
+		//(RomPickerFocusTarget, above); this is the same rule, at the landing.
 		private void FocusLibraryConsoleSegment()
 		{
+			if(_model.RomPicker.IsRestorePending || _model.RomPicker.IsRestoreLanding) {
+				return;
+			}
 			if(SearchBoxHoldsRing()) {
 				return;
 			}
