@@ -61,16 +61,22 @@
 	</UserControl.Styles>
 
 	<DockPanel>
-		<DockPanel DockPanel.Dock="Bottom" Margin="0 4 110 0">
-			<Button DockPanel.Dock="Left" Name="btnLookHoldToCompare" Classes="secondary regular" Content="{l:Translate btnLookHoldToCompare}" IsEnabled="{Binding CanCompare}" VerticalAlignment="Center" />
-			<!--#1123 (ADR-0269 Decision 6): the footer shares Done's row, so at 1.5
-			in 512x505 the button leaves this note about 13 px of the 254 px page.
-			Wrapping there drew it as a 9-line column 126 px tall, taking two
-			thirds of the tab from the groups; it stays on one line and is
-			ellipsized instead. The note is the one place on this sheet where the
-			guarantee is "bounded, not whole" - reflowing this footer is #1149.-->
-			<TextBlock Name="txtLookCompareReason" Classes="lookNote footnote tertiary" Text="{Binding CompareReason}" VerticalAlignment="Center" Margin="10 0 0 0" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" />
-		</DockPanel>
+		<!--#1149 (ADR-0269 Decision 6): the footer shares Done's row, and at 1.5 in
+		512x505 the 137 px Hold to Compare button left the note 13 px of the
+		254 px page - the one spot on this sheet the guarantee missed. W-P10's
+		footer is reflowed: the note owns the line above the row, on the page's
+		own width, and wraps, so the reason is drawn whole there. Keeping it in
+		the row was the alternative and does not work at this size: the row has
+		the button, the window's Done (the 110 px of right margin below) and the
+		note to fit in 254 px. The row itself is unchanged - Hold to Compare
+		left, Done on its line to the right, as W-P10 draws it.-->
+		<StackPanel DockPanel.Dock="Bottom" Margin="0 4 0 0">
+			<TextBlock Name="txtLookCompareReason" Classes="lookNote footnote tertiary" Text="{Binding CompareReason}" IsVisible="{Binding CompareReason, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" Margin="0 0 0 8" />
+			<DockPanel Margin="0 0 110 0">
+				<Button DockPanel.Dock="Left" Name="btnLookHoldToCompare" Classes="secondary regular" Content="{l:Translate btnLookHoldToCompare}" IsEnabled="{Binding CanCompare}" VerticalAlignment="Center" />
+				<Panel />
+			</DockPanel>
+		</StackPanel>
 
 		<ScrollViewer AllowAutoHide="False" HorizontalScrollBarVisibility="Disabled" Padding="0 0 2 0">
 			<StackPanel>

@@ -27,12 +27,17 @@ public class InterfaceSizeLayoutTests : IDisposable
 	private readonly UiMode _uiMode = ConfigManager.Config.Preferences.UiMode;
 	private readonly Workspace _workspace = ConfigManager.Config.Preferences.Workspace;
 	private readonly InterfaceSize _size = ConfigManager.Config.Preferences.InterfaceSize;
+	private readonly VideoFilterType _filter = ConfigManager.Config.Video.VideoFilter;
+	private readonly string _shader = ConfigManager.Config.Video.ShaderFile;
 
 	public void Dispose()
 	{
 		ConfigManager.Config.Preferences.UiMode = _uiMode;
 		ConfigManager.Config.Preferences.Workspace = _workspace;
 		ConfigManager.Config.Preferences.InterfaceSize = _size;
+		//#1149: a case that needs the Look reason writes these two.
+		ConfigManager.Config.Video.VideoFilter = _filter;
+		ConfigManager.Config.Video.ShaderFile = _shader;
 	}
 
 	private static (MainWindow Window, MainWindowViewModel Model) Show(Workspace workspace, InterfaceSize size, double width = 1024, double height = 640)
@@ -197,6 +202,21 @@ public class InterfaceSizeLayoutTests : IDisposable
 		Typeface typeface = new(label.FontFamily, label.FontStyle, label.FontWeight, label.FontStretch);
 		FormattedText text = new(label.Text ?? "", CultureInfo.CurrentCulture, FlowDirection.LeftToRight, typeface, label.FontSize, null);
 		return text.Width;
+	}
+
+	//What the same text needs drawn when it wraps inside `width`: FormattedText
+	//trims nothing, so a drawn height short of this is the layout cutting the
+	//text off (#1149's one ellipsized line).
+	private static double WrappedHeight(TextBlock label, double width)
+	{
+		Typeface typeface = new(label.FontFamily, label.FontStyle, label.FontWeight, label.FontStretch);
+		FormattedText text = new(label.Text ?? "", CultureInfo.CurrentCulture, FlowDirection.LeftToRight, typeface, label.FontSize, null) {
+			//A bounded width is what makes it wrap: FormattedText has no wrapping
+			//switch of its own, only the width the lines are laid out in.
+			MaxTextWidth = width,
+			Trimming = TextTrimming.None
+		};
+		return text.Height;
 	}
 
 	//#1123 (ADR-0269 Decision 6, "nothing is clipped"): capping the sheet's width
@@ -465,6 +485,64 @@ public class InterfaceSizeLayoutTests : IDisposable
 		Rect holdBox = new(hold.TranslatePoint(new Point(0, 0), window)!.Value, hold.Bounds.Size);
 		Assert.False(doneBox.Intersects(holdBox), $"Hold to Compare {holdBox} overlaps Done {doneBox}");
 		Assert.True(holdBox.Bottom <= window.Bounds.Height && doneBox.Bottom <= window.Bounds.Height);
+		model.ClosePlayerSettings();
+	}
+
+	//#1149 (ADR-0269 Decision 6): the Look footer's reason note was the one spot
+	//the 512x505 guarantee missed. It shared Done's row inside a page about 254 px
+	//wide at 1.5 and the 137 px Hold to Compare button left it about 13 px, so it
+	//was drawn on one line and ellipsized - "bounded, not whole" (#1123). W-P10's
+	//footer is reflowed instead: the note owns the line above the row, on the
+	//page's own width, and wraps. This walks the worst case the ADR guarantees -
+	//the window's own starting size at the largest size, with a reason that needs
+	//more than one line ("Nothing to compare: Pixels and Screen are off") - and
+	//asserts the whole reason is drawn, and that it stays a line or two rather
+	//than the 9-line column that took two thirds of the tab before #1123.
+	[AvaloniaFact]
+	public void The_look_compare_reason_is_drawn_whole_in_the_small_window_at_the_largest_size()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		//Nothing to compare: Pixels and Screen are off, so the note carries the
+		//reason instead of the hint.
+		ConfigManager.Config.Video.VideoFilter = VideoFilterType.None;
+		ConfigManager.Config.Video.ShaderFile = "";
+		(MainWindow window, MainWindowViewModel model) = Show(Workspace.Play, InterfaceSize.ExtraLarge, 512, 505);
+		window.OpenPlayerSettingsSheet();
+		Settle(window);
+		window.FindNamed<TabControl>("PlayerSettingsTabs").SelectedIndex = PlayerSettingsEssentials.IndexOf(ConfigWindowTab.Look);
+		Settle(window);
+
+		Button hold = window.FindNamed<Button>("btnLookHoldToCompare");
+		Assert.False(hold.IsEnabled, "Hold to Compare is on with nothing that would change");
+		TextBlock note = window.FindNamed<TextBlock>("txtLookCompareReason");
+		Assert.True(note.IsOnScreen(), "The Look footer draws no reason");
+		string reason = note.Text ?? "";
+		Assert.False(string.IsNullOrEmpty(reason), "The Look footer's reason is empty");
+
+		//The whole reason is drawn: the room the note was given covers the lines
+		//its text needs there. Ellipsized to a single line this falls short.
+		double needed = WrappedHeight(note, note.Bounds.Width);
+		Assert.True(note.Bounds.Height + 1 >= needed, $"\"{reason}\" needs {needed:0.#} px in the {note.Bounds.Width:0.#} the note was given and is drawn in {note.Bounds.Height:0.#}");
+
+		//It is not the button's leftover, either: the note is laid out on the
+		//page's own width, which is what lets the reason be read at this size.
+		ScrollViewer page = window.FindNamed<TabControl>("PlayerSettingsTabs").FindAll<ScrollViewer>().First(s => s.Classes.Contains("pageScroll") && s.IsOnScreen());
+		Assert.True(note.Bounds.Width >= page.Bounds.Width - 2, $"The note is {note.Bounds.Width:0.#} px wide in a {page.Bounds.Width:0.#} px page");
+
+		//...and it does not cost the tab: a line or two, not two thirds of it.
+		Control look = window.FindAll<Mesen.Views.LookConfigView>().First();
+		Assert.True(note.Bounds.Height <= look.Bounds.Height / 3, $"The note takes {note.Bounds.Height:0.#} px of the tab's {look.Bounds.Height:0.#}");
+
+		//W-P10 is unchanged where it already fits: Hold to Compare keeps Done's
+		//row, left of it, and the note stays out of both.
+		Button done = window.FindNamed<Button>("btnPlayerSettingsDone");
+		Rect doneBox = BoxIn(done, window);
+		Rect holdBox = BoxIn(hold, window);
+		Rect noteBox = BoxIn(note, window);
+		Assert.Equal(doneBox.Top, holdBox.Top, 1);
+		Assert.False(noteBox.Intersects(doneBox), $"The reason {noteBox} covers Done {doneBox}");
+		Assert.False(noteBox.Intersects(holdBox), $"The reason {noteBox} covers Hold to Compare {holdBox}");
+		Assert.True(noteBox.Right <= window.Bounds.Width && noteBox.Bottom <= window.Bounds.Height, $"The reason {noteBox} is drawn outside the {window.Bounds.Size} window");
 		model.ClosePlayerSettings();
 	}
 
