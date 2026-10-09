@@ -145,20 +145,16 @@ public class PlayPadWalkTests : IDisposable
 	//items are set apart, so any other unreachable ListBoxItem still fails the walk.
 	public static readonly string[] KnownChipGaps = { "Library" };
 
-	//(surface, scale) pairs where a D-pad press moves focus to header controls
-	//outside the PlayHomeHost root. Product focus behavior is unchanged and the
-	//root is not widened; the real focus-scope fix is tracked in #1137. Which
-	//header buttons the pad lands on depends on the scale's layout, so the key
-	//carries the scale. Asserted both ways on the exact set: a listed leak that
-	//disappears and any unlisted leak both fail the walk.
-	public static readonly Dictionary<(string Surface, double Scale), string[]> KnownFocusLeaks = new() {
-		[("Home", 1.0)] = new[] { "ProfileButton", "ToolsMenuButton" },
-		//At ExtraLarge the header re-lays out and only ToolsMenuButton is reached
-		//by the pad, so the entry has to name exactly that or the set check fails.
-		[("Home", 1.5)] = new[] { "ToolsMenuButton" },
-		[("HomeFirstRun", 1.0)] = new[] { "ProfileButton", "ToolsMenuButton" },
-		[("HomeFirstRun", 1.5)] = new[] { "ProfileButton", "ToolsMenuButton" },
-	};
+	//(surface, scale) pairs where a D-pad press moves focus to controls outside
+	//the surface's own walk root. Which controls a press would land on depends on
+	//the scale's layout, so the key carries the scale.
+	//
+	//Empty, and it stays that way: #1137 contained the pad in the content area's
+	//own root (PlayHomeHost), so the home's presses no longer reach the header's
+	//ProfileButton / ToolsMenuButton. The mechanism is kept rather than deleted -
+	//the exact-set check below is what fails the walk on ANY leak, listed here or
+	//not, so a surface that starts leaking has to be named in the open.
+	public static readonly Dictionary<(string Surface, double Scale), string[]> KnownFocusLeaks = new() { };
 
 
 	private const int ClaimsInWiring = 18;

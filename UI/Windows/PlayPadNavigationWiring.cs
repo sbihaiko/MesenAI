@@ -322,7 +322,26 @@ namespace Mesen.Windows
 					? model.RecentGames.ShowFirstRunHome ? PlayBarDeclarations.HomeFirstRun
 					: model.RecentGames.ShowRecentsHome ? HomeDeclaration(window, model)
 					: PlayBarDeclarations.None
-					: PlayBarDeclarations.None);
+					: PlayBarDeclarations.None,
+				() => ContentRoot(window));
+		}
+
+		//#1137: what a D-pad press stays inside while the content area holds the
+		//focus - the home host, so a press from the home can never land on the
+		//header's Profile / Tools buttons, which are drawn over it and outside it.
+		//Containing the walk is ADR-0256 Decision 3 read for the content area: the
+		//surface holding the focus is the one the pad walks, and with no sheet up
+		//that surface is the home. The header keeps the door it always had - mouse
+		//and keyboard - so nothing becomes unreachable, only unpadded.
+		//
+		//The host is the whole content area (both home screens and the slot grid
+		//over a game), which is why the root is read here rather than derived from
+		//the focused control: one root answers for every screen the content area
+		//shows. Null when the host is not on screen - a game running with nothing
+		//up - and the arbiter's last resort then has the window, as before.
+		private static Control? ContentRoot(MainWindow window)
+		{
+			return Named(window, "PlayHomeHost") is Control host && host.IsEffectivelyVisible ? host : null;
 		}
 
 		//The library's A is the focused control's, as the home's is: a tile plays,
