@@ -99,7 +99,8 @@ public class PlayPadWalkTests : IDisposable
 	//is the harness's, not the sheet's: the preconditions are the detector's own
 	//timings over a device the core reports, and the follow-up that closes it is
 	//to drive Tick with a synthetic device once the detector's inputs are
-	//readable without a live pad. It stays named here rather than dropped.
+	//readable without a live pad. It stays named here rather than dropped, and the
+	//follow-up that owns it is #1147.
 	public static readonly string[] NotWalkedYet = { "ControllerSetup" };
 
 	//The one ToolSheet claim serves every PlayerToolSheet kind, so every kind is
