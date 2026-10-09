@@ -46,7 +46,12 @@ namespace Mesen.ViewModels
 		private void UpdatePausedFrame()
 		{
 			_pausedFramePending = false;
-			switch(PlayFrozenFrame.Next(PausedGameFrame != null, IsPlaySurfaceOverGame, IsGameLoaded, !LoadWait.PictureCutShort)) {
+			//The game has to be the picture on screen for the frozen frame to stand
+			//in for one: an open's load card covers the home (#734), so the card is
+			//a surface over a game that is not on screen, and the core's last frame
+			//- the previous game's - is not this game's picture. Read here and not
+			//off the pause, which arrives late (#1155).
+			switch(PlayFrozenFrame.Next(PausedGameFrame != null, IsPlaySurfaceOverGame, IsGameLoaded, IsGameViewVisible && !RecentGames.Visible, !LoadWait.PictureCutShort)) {
 				case FrozenFrameStep.Capture:
 					PausedGameFrame = FrameCaptureApi.CaptureFrame();
 					break;
