@@ -6,6 +6,7 @@ using System.Linq;
 using System.Threading;
 using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
+using Avalonia.Input;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using Mesen.Config;
@@ -665,6 +666,122 @@ public class PlayerLibraryConsoleFilterTests : IDisposable
 		Assert.Same(model.RomPicker.ConsoleOptions[0], model.RomPicker.SelectedConsoleOption);
 		Assert.Equal("All", (row.SelectedItem as PlayerConsoleFilterOption)?.Label);
 		Assert.Equal(new[] { NesContra, NesMario, GameBoyMario }, TileTitles(model));
+	}
+
+	//#1108 AC2 x #1037 (review finding 2): the row's landing does not outrank the
+	//sheet's own claim over the ring. A player presses RB while a scan's restore
+	//is still waiting on the game they left on - a batch has landed and the
+	//remembered game is not in it yet - so the cycle happens (the filter is not
+	//what the restore waits on), but the ring stays the restore's to place: when
+	//the remembered game lands, the ring is on IT and not on the segment the
+	//press selected.
+	[AvaloniaFact]
+	public void A_shoulder_press_while_a_restore_waits_leaves_the_landing_to_the_restore()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		LibraryRoot();
+
+		(MainWindow window, MainWindowViewModel model) = OpenLibrary();
+		WaitFor(() => !model.RomPicker.IsScanning, "the scan did not finish");
+
+		//The game the player leaves on, and the visit ends.
+		PlayerLibraryTile remembered = model.RomPicker.Tiles.First(tile => tile.Path.Contains(NesContra));
+		string contra = remembered.Path;
+		string nesMario = model.RomPicker.Tiles.First(tile => tile.Path.Contains(NesMario)).Path;
+		string gbMario = model.RomPicker.Tiles.First(tile => tile.Path.Contains(GameBoyMario)).Path;
+		model.RomPicker.RememberFocus(remembered);
+		model.RomPicker.Hide();
+		Pump();
+
+		//The next visit's scan answers the two games that are NOT the remembered
+		//one, then is held: the batch has landed and the restore is still pending,
+		//which is the state the press has to respect. The remembered game arrives
+		//only when the scan is released.
+		using ManualResetEventSlim release = new(false);
+		model.RomPicker.RunLibraryScanInline = false;
+		model.RomPicker.LibraryScanStreamSource = (folders, list, onBatch) => {
+			onBatch(new LibraryEntry[] {
+				new(nesMario, RomConsole.Nes, NesMario),
+				new(gbMario, RomConsole.GameBoy, GameBoyMario)
+			});
+			release.Wait();
+			onBatch(new LibraryEntry[] { new(contra, RomConsole.Nes, NesContra) });
+			return new LibraryScanResult(new LibraryEntry[] {
+				new(nesMario, RomConsole.Nes, NesMario),
+				new(gbMario, RomConsole.GameBoy, GameBoyMario),
+				new(contra, RomConsole.Nes, NesContra)
+			}, 1, false);
+		};
+		model.RomPicker.Open();
+		WaitFor(() => model.RomPicker.Tiles.Count == 2 && model.RomPicker.IsScanning, "the batch did not land behind the held scan");
+		Assert.True(model.RomPicker.IsRestorePending, "the restore is not pending behind the held scan");
+		WaitFor(() => (window.FocusManager?.GetFocusedElement() as Control)?.Name == "RomPickerBack", "the ring did not park on Back while the restore waits");
+
+		PressShoulder(window, "Pad1 R1");
+		Assert.Equal(RomConsole.Nes, model.RomPicker.SelectedConsole);
+
+		release.Set();
+		WaitFor(() => !model.RomPicker.IsScanning, "the held scan did not finish");
+
+		//The remembered game is the restore's: the ring lands on it, and it is not
+		//the segment the shoulder selected.
+		WaitFor(() => (window.FocusManager?.GetFocusedElement() as Control)?.DataContext is PlayerLibraryTile tile && tile.Path == contra,
+			$"the restore did not land the ring on the remembered game (segment={FocusedSegmentLabel(window) ?? "none"}, {FocusedName(window)})");
+	}
+
+	//#1108 AC2 (review finding 4): the landing must not hang on something being
+	//focused. A rebuild can take the focused container out from under the ring
+	//before the claim runs, and a rule that only landed from a focused control
+	//would leave the row unreachable exactly where the sheet is busiest - the
+	//cycle would still happen and the ring would never be on what the press acted
+	//on (ADR-0256 Decision 3).
+	[AvaloniaFact]
+	public void A_shoulder_press_with_no_control_focused_still_lands_on_the_row()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		LibraryRoot();
+
+		(MainWindow window, MainWindowViewModel model) = OpenLibrary();
+		window.FocusManager?.Focus(null, NavigationMethod.Unspecified, KeyModifiers.None);
+		Pump();
+		Assert.Null(window.FocusManager?.GetFocusedElement());
+
+		PressShoulder(window, "Pad1 R1");
+
+		Assert.Equal(RomConsole.Nes, model.RomPicker.SelectedConsole);
+		Assert.Equal("NES", FocusedSegmentLabel(window));
+	}
+
+	//#1108 AC2 (ADR-0256 Decision 6, PRD L.3's stop rule): with the ring on the
+	//filter row the footer names what the control in the player's hand does - the
+	//shoulders cycle the filter, B leaves the sheet - and promises no Play the row
+	//has not got. Read off the rendered bar, not off the declaration, because a
+	//rule the view never draws is not a footer.
+	[AvaloniaFact]
+	public void The_footer_names_the_shoulders_while_the_ring_is_on_the_filter_row()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		LibraryRoot();
+
+		(MainWindow window, MainWindowViewModel model) = OpenLibrary();
+		//A pad in hand is what makes the bar name the pad's controls at all
+		//(PlayMenuHint.ActiveDevice); with no pad the line is the keyboard's, and
+		//this case would prove nothing about the shoulders.
+		model.ConnectedGamepadCount = () => 1;
+		PressShoulder(window, "Pad1 R1");
+		Assert.Equal("NES", FocusedSegmentLabel(window));
+
+		Assert.Equal("Y Search     LB / RB Console     B Back", BarText(window));
+	}
+
+	//The line the player reads, after one idle tick - the production timer's job:
+	//the bar is recomputed on the tick, so reading it straight after a press would
+	//depend on the real timer having fired first.
+	private static string BarText(MainWindow window)
+	{
+		PlayPadNavigationWiring.TickForTest(window, Array.Empty<ushort>(), TimeSpan.FromMilliseconds(50), BackendName, BackendCode);
+		Pump();
+		return window.FindNamed<TextBlock>("PlayActionBarText").Text ?? "";
 	}
 
 	private static void PressCode(MainWindow window, ushort code)

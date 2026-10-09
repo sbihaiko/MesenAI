@@ -461,8 +461,16 @@ namespace Mesen.Windows
 				//end. A detached segment is NOT answered: a rescan that changes which
 				//consoles exist rebuilds the row, and the ring then belongs on the
 				//grid like any other ring a rebuild took the container out from under.
+				//#1108 review finding 2: a restore in flight outranks the row. While the
+				//scan is still bringing the game the player left on - pending, or the
+				//moment it lands - the ring is the restore's to place, so this branch is
+				//skipped and the park / land logic below answers instead: a player who
+				//presses RB while the restore waits gets the cycle, and the remembered
+				//game still lands on the ring rather than on the segment the press
+				//selected.
 				if(focused is Control { DataContext: PlayerConsoleFilterOption } segment
-					&& segment.IsAttachedToVisualTree() && segment.IsEffectivelyVisible) {
+					&& segment.IsAttachedToVisualTree() && segment.IsEffectivelyVisible
+					&& !model.RomPicker.IsRestorePending && !model.RomPicker.IsRestoreLanding) {
 					return segment;
 				}
 				//The header control the sheet itself parked THIS window's ring on while
@@ -1022,10 +1030,16 @@ namespace Mesen.Windows
 		//nothing for - parks the ring on *Library folders…* or Back, and a rule that
 		//only landed from the grid would leave the row unreachable exactly where a
 		//pad-only player first meets it.
+		//#1108 review finding 4: the landing does not hang on something being
+		//focused. A rebuild can take the focused container out from under the ring
+		//before this runs, and a rule that only landed from a focused control would
+		//leave the row unreachable exactly where the sheet is busiest - the cycle
+		//would still happen and the ring would never be on what the press acted on.
+		//The search box is the one control that keeps the ring, and it is asked the
+		//way the sheet asks it.
 		private void FocusLibraryConsoleSegment()
 		{
-			Control? focused = _window.FocusManager?.GetFocusedElement() as Control;
-			if(focused is null || SearchBoxHoldsRing()) {
+			if(SearchBoxHoldsRing()) {
 				return;
 			}
 			if(ConsoleSegment(_window) is Control segment) {
