@@ -84,11 +84,12 @@ EXPECTED_WIREFRAME_RENDERS = (
 # ADR-0264 Decision 12 drew W-P19 and W-P19b with
 # scripts/render_gui_wireframes.py *before* the sheet they picture existed; PRD
 # row L.1 (#1032) built it and moved W-P19 up into EXPECTED_WIREFRAME_RENDERS,
-# and L.2 (#1033) did the same for W-P19b. The list is empty now: every Player
-# wireframe drawn has a case that compares a render against it. Pinned like the
-# other set is — a wireframe drawn without an entry in one of the two still
-# fails, and the next W-P wireframe drawn before its surface exists goes here.
-WIREFRAMES_AWAITING_RENDER_CASE = ()
+# and L.2 (#1033) did the same for W-P19b. The list was empty after that. Pinned like the
+# other set is. #1103 drew W-P20, W-P4b, W-P8d and W-P8e (ADR-0268, ADR-0269,
+# the ADR-0254 amendment) before the tickets of spec #1102 build them; each moves
+# into EXPECTED_WIREFRAME_RENDERS with its ticket. A wireframe drawn without an
+# entry in one of the two still fails, and the next W-P wireframe drawn before its surface exists goes here.
+WIREFRAMES_AWAITING_RENDER_CASE = ("W-P20", "W-P4b", "W-P8d", "W-P8e")
 
 # A PNG may predate the TRX's start by this much (filesystem/clock rounding).
 FRESHNESS_SLACK_SECONDS = 2.0

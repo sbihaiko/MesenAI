@@ -7,7 +7,8 @@
   is what ADR-0137's same-turn rule requires alongside the unit tests below.
 - Date: 2026-10-04
 - Related: ADR-0241, ADR-0249, ADR-0251, `docs/roadmap/PRD-mesence-enhancement-ecosystem.md` Part B §8.
-- Supersedes / amends: none.
+- Supersedes / amends: none. Amended 2026-10-09 (#1103): the reason line has a
+  second wording, *Paused — controller disconnected* (see "Amendment").
 
 ## Context
 
@@ -44,3 +45,25 @@ Evidence: `UI.Tests/Play/FocusPauseTests` (8 cases over both rules — the door/
 - **Classic and Advanced now pause on focus loss by default with nothing to explain it.** `PauseWhenInBackground` is one global preference and the answer was "on by default", so those doors get the pause and no W-P4 — the accepted cost; a door-scoped default would need the preference split in two.
 - Auto-pause already suppresses the debugger's bring-to-front on break (`SuppressBringToFront()`); opening an overlay on top of that path must not re-enable it.
 - This ADR does not make the emulator run while its window is behind another window any safer on its own; it only makes the pause visible and the resume deliberate.
+
+## Amendment (2026-10-09, #1103): the reason line has a second wording
+
+Recorded by the agent under owner-away autonomy as the wording of spec #1102
+slice 3 (pause when a controller disappears); not an owner pick, and the owner
+may revert it. Nothing is implemented by this amendment.
+
+- The W-P4 reason line this ADR introduces for a lost focus gets a second
+  wording, **Paused — controller disconnected**, written when a game runs
+  unpaused and a connected pad vanishes. It is the same line on the same surface:
+  W-P4 keeps its seven controls and no overlay is added. The pause is an
+  auto-pause with the overlay, like the focus one.
+- **Reconnecting rewrites the line and never resumes.** When the pad returns the
+  line reads **Controller reconnected** and the game stays paused, exactly as
+  this ADR answers focus regain ("stay paused"): only the player's own Resume
+  (or Esc) leaves W-P4. The line is not cleared by the reconnect, and a second
+  disconnect rewrites it back.
+- The action bar on W-P4 names the control in words for the pad still connected
+  (PlayStation names such as Cross and Circle on that family); with none, the
+  keyboard (ADR-0256 Decision 6).
+- The picture is W-P4b, a variant of W-P4 (ADR-0264 Decision 12 applies: held as
+  awaiting until its ticket lands).
