@@ -25,6 +25,13 @@ namespace Mesen.ViewModels
 		[ObservableProperty] public partial string PackSummary { get; private set; } = "";
 		[ObservableProperty] public partial string EnhancementsSummary { get; private set; } = "";
 
+		//W-P4's second line: "Paused", or the reason the game paused by itself
+		//(#1109, PadLossPause). Reset once the game runs again.
+		[ObservableProperty] public partial string OverlayPausedLine { get; private set; } = ResourceHelper.GetMessage("OverlayPaused");
+
+		private PadPauseReason _padPauseReason;
+		private uint? _lastPadCount;
+
 		//ADR-0256 Decision 6 ("Segue o controle na mão"): W-P4's footer names the
 		//control in the player's hand, not the keyboard's Esc.
 		[ObservableProperty] public partial string OverlayResumeHint { get; private set; } = "";
@@ -226,6 +233,47 @@ namespace Mesen.ViewModels
 				return;
 			}
 			IsPlayerOverlayVisible = true;
+		}
+
+		//#1109: polled by PlayEdgeFlowsWiring every 50 ms. A pad count that falls
+		//under a running game in Play pauses into W-P4 with the reason; a pad that
+		//comes back rewrites the reason and leaves the game paused.
+		public void TickPadLoss()
+		{
+			uint count = ConnectedGamepadCount();
+			uint previous = _lastPadCount ?? count;
+			_lastPadCount = count;
+
+			bool paused = EmuApi.IsPaused();
+			if(!paused && _padPauseReason != PadPauseReason.None) {
+				SetPadPauseReason(PadPauseReason.None);
+			}
+			if(count == previous) {
+				return;
+			}
+
+			if(PadLossPause.ShouldPause(previous, count, IsPlayerMode, IsPlayWorkspace, IsGameLoaded, paused)) {
+				SetPadPauseReason(PadPauseReason.ControllerDisconnected);
+				EmuApi.Pause();
+				OpenPauseOverlay();
+			} else {
+				SetPadPauseReason(PadLossPause.AfterCountChange(_padPauseReason, previous, count));
+				//The footer names the control in hand, and the pad in hand may be
+				//the one that left.
+				if(IsPlayerOverlayVisible) {
+					RefreshPauseOverlay();
+				}
+			}
+		}
+
+		private void SetPadPauseReason(PadPauseReason reason)
+		{
+			_padPauseReason = reason;
+			OverlayPausedLine = ResourceHelper.GetMessage(reason switch {
+				PadPauseReason.ControllerDisconnected => "OverlayPausedControllerDisconnected",
+				PadPauseReason.ControllerReconnected => "OverlayPausedControllerReconnected",
+				_ => "OverlayPaused"
+			});
 		}
 
 		private void RefreshPauseOverlay()

@@ -91,6 +91,9 @@ namespace Mesen.Windows
 				model.ControllerReconnect.Check();
 			}
 
+			//#1109: a pad that disappears under a running game pauses into W-P4.
+			model.TickPadLoss();
+
 			bool listening = model.ControllerSetup.IsVisible
 				|| (model.IsPlayerMode && model.IsPlayWorkspace && EmuApi.IsRunning() && !EmuApi.IsPaused());
 			if(listening) {

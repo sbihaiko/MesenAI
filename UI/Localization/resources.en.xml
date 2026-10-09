@@ -2246,6 +2246,9 @@
 		<Message ID="OverlayRowNone">none</Message>
 		<Message ID="OverlayPackCommunityAvailable">Community pack available</Message>
 		<Message ID="OverlayRowCountOn">{0} on</Message>
+		<Message ID="OverlayPaused">Paused</Message>
+		<Message ID="OverlayPausedControllerDisconnected">Paused — controller disconnected</Message>
+		<Message ID="OverlayPausedControllerReconnected">Paused — controller reconnected</Message>
 		<Message ID="OverlayResumeHint">{0} to resume</Message>
 		<Message ID="OverlayResumeHintNeutral">Leave the menu to resume</Message>
 		<Message ID="SaveStatesRowEmpty">empty</Message>
