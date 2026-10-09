@@ -179,9 +179,9 @@ a human hand-wrote into Contra80s.
 
 - **That the conditions are artistically useful.** Everything above shows they
   are well-supported, correctly oriented and free. Whether an artist wants to
-  repaint a tile differently when its neighbour is present is a question for an
+  repaint a tile differently when its neighbor is present is a question for an
   artist, and no measurement here answers it.
-- **That the thresholds generalise past five NTSC NES games**, four of which ran
+- **That the thresholds generalize past five NTSC NES games**, four of which ran
   a Contra-tuned entry script. Re-run the dump before trusting them on a new
   console.
 - **Anything about GB/GBC/SMS.** The co-occurrence table is fed by the NES

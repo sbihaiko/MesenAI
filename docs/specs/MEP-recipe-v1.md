@@ -29,8 +29,8 @@ listed sources. MEP-v1 §6 forbids executing pack content as code; this
 spec is the vocabulary that section names.
 
 Non-goals: scraping Google Drive/MEGA confirm flows; fabricating missing
-assets; adjudicating patch licences (the recipe records the declared
-licence, nothing more).
+assets; adjudicating patch licenses (the recipe records the declared
+license, nothing more).
 
 ## 2. Document shape
 
@@ -117,7 +117,7 @@ in `copy`/`glob` `from` values.
 | `sha256` | MUST | SHA-256 of the artifact bytes, 64 hex |
 | `size` | SHOULD | size in bytes, as a JSON integer ≥ 0 |
 | `hints` | SHOULD | array of HTTPS (or other) URLs where a human can fetch the file; the host MUST NOT scrape confirm-interstitial hosts |
-| `license` | SHOULD | SPDX id or a short declared-licence string copied from the submission; the host MUST show it before using the file |
+| `license` | SHOULD | SPDX id or a short declared-license string copied from the submission; the host MUST show it before using the file |
 | `user_supplied` | MAY | JSON boolean, default `true`. `true`: the host MUST NOT download the artifact itself; the user provides a file whose bytes hash to `sha256` |
 
 ### 3.4 `pack`

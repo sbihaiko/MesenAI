@@ -116,7 +116,7 @@ two-bank model of the MMC2 left latch:
 
 **Red against the #450 branch.** This run used `OamFetchLatch.h` exactly as
 on `origin/fix/450-oam-fetch-latch`, plus API-only shims that keep #450's
-behaviour:
+behavior:
 
 - `OnRowFetch` does nothing;
 - the three-callback `ForEachLatched` forwards to the one-callback form;

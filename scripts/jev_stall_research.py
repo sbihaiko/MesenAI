@@ -69,7 +69,7 @@ CLAUDE = "claude"
 MODEL = "sonnet"
 #The two tools the worker may reach, and every built-in it may not. The deny
 #list is belt to `--tools`' braces: `--tools` narrows the set the CLI offers,
-#`--disallowedTools` refuses the names even if a future CLI stops honouring it.
+#`--disallowedTools` refuses the names even if a future CLI stops honoring it.
 WEB_TOOLS = ("WebSearch", "WebFetch")
 DENIED_TOOLS = (
     "Bash", "Edit", "Write", "NotebookEdit", "Read", "Glob", "Grep", "Task",

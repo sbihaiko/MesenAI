@@ -6,7 +6,7 @@
 //What this proves, and what it does not:
 //  - PRD stop condition (1): with a shader set the presented frame differs from
 //    the unfiltered one (and by the shader's documented amount); with none set
-//    it equals a CPU nearest-neighbour scale of the input, which is what the
+//    it equals a CPU nearest-neighbor scale of the input, which is what the
 //    software path shows at that size.
 //  - The "first risk": an NSView (what Avalonia's NativeControlHost hands out
 //    on macOS) can back a CAMetalLayer, and a handle that is not an NSView is
@@ -143,7 +143,7 @@ static void TestUnfilteredMatchesSoftwareScale(MetalPresenter& p, const std::vec
 	std::vector<uint32_t> out;
 	CHECK(Present(p, frame, out), "Present() succeeds and the drawable reads back");
 	CHECK(!p.ShaderActive(), "no shader is active");
-	CHECK(out.size() == ref.size() && memcmp(out.data(), ref.data(), ref.size() * 4) == 0, "drawable is byte-identical to a nearest-neighbour scale of the input");
+	CHECK(out.size() == ref.size() && memcmp(out.data(), ref.data(), ref.size() * 4) == 0, "drawable is byte-identical to a nearest-neighbor scale of the input");
 }
 
 static void TestShader(MetalPresenter& p, const std::vector<uint32_t>& frame, const std::vector<uint32_t>& ref)

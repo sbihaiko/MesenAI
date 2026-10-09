@@ -10,7 +10,7 @@ namespace FrameCaptureMath
 		}
 
 		//64-bit product first: width * height in 32-bit arithmetic wraps, and
-		//a wrapped value that happens to match bufferPixels would authorise a
+		//a wrapped value that happens to match bufferPixels would authorize a
 		//copy of the wrong length.
 		uint64_t pixelCount = (uint64_t)width * (uint64_t)height;
 		if(pixelCount > MaxCapturePixels || pixelCount != (uint64_t)bufferPixels) {
@@ -56,7 +56,7 @@ namespace FrameCaptureMath
 		}
 
 		if(top == height) {
-			//Every row matched, so the capture holds a single colour: there is
+			//Every row matched, so the capture holds a single color: there is
 			//no picture for a band to frame.
 			borders.IsBlank = true;
 			return borders;

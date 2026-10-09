@@ -179,15 +179,15 @@ struct HdPpuPixelInfo
 //ADR-0253 (slice W.4): one extra tile (8 px) of one row of the widescreen
 //Reveal's side columns, captured by HdNesPpu from the row's own scroll state.
 //`Tile` is what the pack lookup reads (the key) and what DrawTile needs (the
-//offsets); the two per-pixel arrays are the ROM's own colour for the eight
+//offsets); the two per-pixel arrays are the ROM's own color for the eight
 //pixels of the tile, so a tile the pack has no `<tile>` rule for still shows
-//the NES colour, exactly as a centred tile does.
+//the NES color, exactly as a centered tile does.
 struct HdSideTile
 {
 	HdPpuTileInfo Tile = {};
-	//The row's loopy x, as HdPpuPixelInfo::XScroll carries it for a centred
+	//The row's loopy x, as HdPpuPixelInfo::XScroll carries it for a centered
 	//pixel. The line's scroll the renderer derives the sides from is the
-	//centre's own (ScreenTiles[row << 8]'s), so no loopy v is kept here.
+	//center's own (ScreenTiles[row << 8]'s), so no loopy v is kept here.
 	uint8_t XScroll = 0;
 	uint8_t BgColorIndex[8] = {};
 	uint8_t BgColor[8] = {};
@@ -787,7 +787,7 @@ public:
 	uint32_t OptionFlags = 0;
 
 	//ADR-0224: the pack carried <bgPreservesBehindBgSprites>, so a layer-2
-	//<background> must not hide a behind-background sprite over a colour-0
+	//<background> must not hide a behind-background sprite over a color-0
 	//background pixel. Deliberately not an HdPackOptions bit: the <options>
 	//line is a contract other emulators enforce (see HdBehindBgSpriteRule.h).
 	bool PreservesBehindBgSprites = false;
@@ -850,7 +850,7 @@ public:
 	{
 		double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
 		MessageManager::Log("[MEP] LoadAsync (bitmap decode): " + std::to_string((int)(ms + 0.5)) + " ms, " +
-			std::to_string(BackgroundFileData.size() + ImageFileData.size()) + " image(s)" + (cancelled ? " (cancelled)" : ""));
+			std::to_string(BackgroundFileData.size() + ImageFileData.size()) + " image(s)" + (cancelled ? " (canceled)" : ""));
 	}
 
 	void CancelLoad()

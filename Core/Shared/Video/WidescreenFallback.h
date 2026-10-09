@@ -139,7 +139,7 @@ namespace WidescreenFallback
 	//the sides to the border on a pack that conforms everywhere else.
 	//
 	//This is where that is reconciled, and only here: the art is scaled up to the
-	//frame's own side run, nearest-neighbour by the integer factor the two have in
+	//frame's own side run, nearest-neighbor by the integer factor the two have in
 	//common (the pack's scale). The copy that follows is still 1:1 against the
 	//scaled art - no stretching, no cropping, no interpolation - and a frame that
 	//is not a whole-number multiple of the art on *both* axes is not this art's

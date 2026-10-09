@@ -282,7 +282,7 @@ public:
 	static MepLocalIdentityCache::RefreshResult RefreshLocalIdentityCache();
 
 	//Applies the winning pack's patches[] entry for this ROM (ADR-0044),
-	//in place, before the console reads the ROM. Honours the
+	//in place, before the console reads the ROM. Honors the
 	//ApplyPatchOnHashMismatch override. Returns true when a patch was applied.
 	bool ApplyPatches(VirtualFile& romFile);
 
@@ -294,7 +294,7 @@ public:
 	//F5.2, amended by ADR-0243 Q3: on ROM load, only when
 	//BootstrapEnhancementFolder is on (off for new installs; headless_record's
 	//"bootstrap" flag), starts a recording exactly as StartRecording does.
-	//Call once the console is initialised.
+	//Call once the console is initialized.
 	void StartBootstrapIfNeeded();
 	//ADR-0243 (F12.20): Remaster's Record. Exports the ROM tiles and records
 	//played tiles (xBRZ 4x) plus, on NES, music fingerprints into the next

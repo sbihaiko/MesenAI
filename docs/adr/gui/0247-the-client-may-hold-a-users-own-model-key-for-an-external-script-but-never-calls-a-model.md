@@ -2,7 +2,7 @@
 
 - Status: accepted (2026-10-02) and reflected in the docs. The user chose option A of three, verbatim: *"concordo com a opcao A que vc sugeriu"*, then accepted the wording (*"Aceitar"*, same day). Go-ahead for the text edit, verbatim: *"Sim, edite agora (Recomendado)"*, then *"sim, pode seguir"*. PRD Part A §1 principle 5 now carries Decision 1's wording, and the Phase 10 constraint that quoted it was updated with it. ADR-0242's implementation (F14.20) is no longer blocked by this ADR.
 - Date: 2026-10-02
-- Related: PRD Part A §1 (principle 5), PRD Part A §4 Phase 10 ("Constraints that hold regardless of outcome"), ADR-0154 (what an external tool may send off the machine; §4), ADR-0192, ADR-0242 (AI recorder, Q1: OS credential store), ADR-0245 (cheats; Decision 4's LLM phases), ADR-0238 (Jev harness), ADR-0188 (an AI's judgement is a proposal, never evidence), ADR-0199 (tool-free Gemini call in CI)
+- Related: PRD Part A §1 (principle 5), PRD Part A §4 Phase 10 ("Constraints that hold regardless of outcome"), ADR-0154 (what an external tool may send off the machine; §4), ADR-0192, ADR-0242 (AI recorder, Q1: OS credential store), ADR-0245 (cheats; Decision 4's LLM phases), ADR-0238 (Jev harness), ADR-0188 (an AI's judgment is a proposal, never evidence), ADR-0199 (tool-free Gemini call in CI)
 - Supersedes / amends: amends PRD Part A §1 principle 5. It makes ADR-0242's Q1 and Decision 4 consistent with that principle, and constrains ADR-0245 Decision 4 (below). ADR-0154 is unchanged.
 
 ## Context

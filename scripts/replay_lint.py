@@ -4,7 +4,7 @@
 The clean artifact is produced by construction (section 2): the share action
 power-cycles with RamPowerOnState = AllZeros and ignores battery data, so the
 `.mmo` it writes has neither `SaveState.mss` nor any `Battery*` member. This
-lint is defence in depth over that, and it exists because a submission's bytes
+lint is defense in depth over that, and it exists because a submission's bytes
 are not the action's output -- anyone can attach anything.
 
 What it checks -- section 3's lint, then section 8's structural gate (R.2):

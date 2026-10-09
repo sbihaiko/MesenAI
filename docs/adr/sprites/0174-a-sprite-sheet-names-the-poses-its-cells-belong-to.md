@@ -67,7 +67,7 @@ sheet joins to 23 poses, and the cap exists for a 223-pose run like Mega Man 3.
 ### 3. The poses are segmented once
 
 `HdPackBuilder::WriteSpriteSheets` runs `BuildPoses` over the sprite vocabulary before it
-names the first `sprNNN`, and `WritePoseFile` serialises that same table. The per-frame
+names the first `sprNNN`, and `WritePoseFile` serializes that same table. The per-frame
 clustering is O(n²) over up to `kMaxSheetFrames` frames and must not run twice.
 
 ## Consequences

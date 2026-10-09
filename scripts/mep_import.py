@@ -165,7 +165,7 @@ class Image:
             self.px[dst:dst + size * 4] = block[row * size * 4:(row + 1) * size * 4]
 
     def downscale(self, n: int) -> "Image":
-        """Nearest neighbour, dropping every Nth pixel — how the recorder
+        """Nearest neighbor, dropping every Nth pixel — how the recorder
         writes a sheet's `*.orig.png` twin at 1x (F5.4d)."""
         if n == 1:
             return Image(self.width, self.height, bytearray(self.px))
@@ -1414,7 +1414,7 @@ def _token_as_built(rule: Rule, ver: int) -> str:
 #      art this dump does not have. Read the loader's own way, `<ver>` decides
 #      whether that field is decimal (<= 102) or hex (103+); reading a
 #      `<ver>100` pack as hex is how a legitimate pack gets misread as aimed at
-#      another ROM (`int(field, 16)` is not a normalisation, it is a reading).
+#      another ROM (`int(field, 16)` is not a normalization, it is a reading).
 #   2. **`<patch>`** — amended 2026-09-24. An index-keyed `<patch>` pack is
 #      still refused by name, naming ADR-0198 §2/§3: its keys are bank indices
 #      of the patched ROM, a namespace the stock-ROM tools never meet, and no
@@ -1440,7 +1440,7 @@ def _open_manifest(path: Path) -> Pack:
 
 def _nes_palette() -> list:
     """2C02 RGB, from `artist_map` — the copy the artist tools read, taken on
-    import so this tool carries no second colour table."""
+    import so this tool carries no second color table."""
     import artist_map
     return artist_map.NES_PALETTE
 
@@ -1482,13 +1482,13 @@ def render_pattern(data_hex: str, pal_hex: str, scale: int) -> bytes:
     bytes, two bits per pixel, looked up in the key's own four palette indices
     (2C02 RGB, read from `artist_map` so this tool carries no second table).
 
-    The upscale is nearest neighbour — `ScaleFilterType::Prescale`, which is
+    The upscale is nearest neighbor — `ScaleFilterType::Prescale`, which is
     the recorder's own path (`HdPackBuilder` falls back to it whenever the
     pack's `<scale>` is forced) and which every sampled cell of the bounded
     input's recording is pixel-exact against (448 of 448, measured 2026-09-20).
     Which *smoothing* filter a run used is a recording-time choice the manifest
     does not carry, so a tool that renders a key from bytes cannot always know
-    it — and nearest neighbour invents no edge the ROM does not have, which is
+    it — and nearest neighbor invents no edge the ROM does not have, which is
     the same reason ADR-0183 §3 gives a ROM-derived kit cell its crisp fill."""
     data = bytes.fromhex(data_hex)
     table = _nes_palette()

@@ -295,7 +295,7 @@ def slot_of(sd, index: int):
 
 def prevailing_context(sd) -> str:
     """`context` routes nothing (ADR-0216), but a new cell that does not look
-    like its neighbours is a diff nobody can read. Copied off the sheet."""
+    like its neighbors is a diff nobody can read. Copied off the sheet."""
     seen = {}
     for c in sd.cells:
         if isinstance(c, dict) and isinstance(c.get("context"), str):

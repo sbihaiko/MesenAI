@@ -6,7 +6,7 @@
 //state to one NoteFrame per video frame; from that stream we
 //  - segment the recording into tracks and write one MIDI + one fingerprint
 //    per track (authoring, during the bootstrap - TrackSegmenter), and
-//  - recognise a known track from its first note onsets at run time and
+//  - recognize a known track from its first note onsets at run time and
 //    tell the host to start the replacement OGG (FingerprintMatcher).
 //Nothing here touches files but FingerprintStore / SimpleMidi.
 
@@ -46,7 +46,7 @@ struct AudioFingerprint
 	string MidiFile; //relative to the audio folder, may be empty
 	//F5.4g Block C item 8 (ADR-0134 Option A): optional loop point of the
 	//replacement OGG, in PCM samples at the OGG's own rate. 0 = loop the whole
-	//file (the pre-Block-C behaviour, and the default when the field is absent).
+	//file (the pre-Block-C behavior, and the default when the field is absent).
 	uint32_t Loop = 0;
 	//F6.10 (ADR-0240 A4 follow-up, 2026-10-05): the sound id the host had asked
 	//the game's driver for (the "trigger id" of enumeration.log) when this track
@@ -123,7 +123,7 @@ public:
 	uint32_t Save(const string& audioFolder);
 };
 
-//Run time: recognises the start of a known track
+//Run time: recognizes the start of a known track
 class FingerprintMatcher
 {
 private:

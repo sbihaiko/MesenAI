@@ -27,7 +27,7 @@ python3 scripts/spike_anchor_stability.py "<rom-library>" --recolour
 **Decision (amends §1 and §3, and ADR-0050's anchor clause with them).**
 
 1. `GridFrame` gains a `PaletteId Palettes[30][32]` plane beside `Cells`: one byte per cell, interned in first-sight order (`HdPackBuilder::PaletteIdFor`). A candidate is stable only when every variant agrees on the shape **and** the palette id, and a rival is ruled out only when it disagrees on one of the two — the rival count now models what `tileAtPosition` compares.
-2. `kUnknownPalette` (0xFF) means *no palette evidence* (no cell drawn there, a caller carrying none, or a recording past the 255-palette id space). It reads as "the colours may well be the same" on **both** sides, so a stream without palettes degrades to the pre-amendment pick — like an out-of-range `capturedIndex` degrading to ADR-0050's rarity greedy.
+2. `kUnknownPalette` (0xFF) means *no palette evidence* (no cell drawn there, a caller carrying none, or a recording past the 255-palette id space). It reads as "the colors may well be the same" on **both** sides, so a stream without palettes degrades to the pre-amendment pick — like an out-of-range `capturedIndex` degrading to ADR-0050's rarity greedy.
 3. The recorder de-duplicates consecutive frames on `SamePalettedCells`, not `SameCells`. A frame that only recolours the screen is the evidence this amendment reads, and collapsing it into `RepeatCount` would throw it away. `MetatileVocabulary` keeps `SameCells`: a recoloured tile is still one subject (ADR-0153 §5, ADR-0132).
 4. `SelectScreenAnchors` stays host-free and unit-testable; the cases are `BlocoP2` in `scripts/core_unit_tests.cpp`.
 
@@ -35,7 +35,7 @@ python3 scripts/spike_anchor_stability.py "<rom-library>" --recolour
 
 **Alternatives rejected.**
 
-- *Drop the palette from the condition* (`IgnorePalette`, supported by `HdPackBaseTileCondition`). Free, but aligns the condition at the loose end: **22 pairs of captured screens are shape-identical and differ only in colour**, so palette-agnostic conditions make each match the other's `<background>` — the "wrong screen drawn whole" §1 calls worse than a miss. (`HdPackBaseTileCondition::ToString` does not serialize `IgnorePalette`, so such a pack would reload without it.)
+- *Drop the palette from the condition* (`IgnorePalette`, supported by `HdPackBaseTileCondition`). Free, but aligns the condition at the loose end: **22 pairs of captured screens are shape-identical and differ only in color**, so palette-agnostic conditions make each match the other's `<background>` — the "wrong screen drawn whole" §1 calls worse than a miss. (`HdPackBaseTileCondition::ToString` does not serialize `IgnorePalette`, so such a pack would reload without it.)
 - *A palette witness map instead of a plane* — `(fineX, row, col, shape) -> palette`, with a "seen with two palettes" flag. Unbounded on a long recording and only answers globally; strictly less predictable than 960 bytes a frame.
 - *Re-checking each candidate's palette at capture time.* Per frame against every pending screen (up to 300), each a 960-cell classification, on the recorder's hot path.
 - *Packing the plane to 4 bits per cell* (~544 B/frame instead of 960 B). Saves 1.7 MB at the cap for nibble packing in the one structure every module reads; not worth it.

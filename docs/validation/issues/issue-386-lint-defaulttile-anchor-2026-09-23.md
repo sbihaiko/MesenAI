@@ -1,4 +1,4 @@
-# Issue #386 — `mep_lint` honours the `defaultTile=Y` palette wildcard (2026-09-23)
+# Issue #386 — `mep_lint` honors the `defaultTile=Y` palette wildcard (2026-09-23)
 
 Validation record for the fix to
 [#386](https://github.com/sbihaiko/MesenAI/issues/386): after the #382 fix

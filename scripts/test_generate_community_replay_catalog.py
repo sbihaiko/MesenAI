@@ -16,7 +16,7 @@ Checks:
       cheats[] (type and code verbatim) and 👍.
   C-2 a closed issue is not a row, whatever its votes; nor is an issue without
       `replay:valid`; `replay:removed` keeps a row out even while open
-      (honoured before the state).
+      (honored before the state).
   C-3 rows are most-👍-first; a tie keeps the earlier issue first; ROMs are in
       SHA-1 order.
   C-4 the gate runs before listing: an attachment the lint/gate refuses today,

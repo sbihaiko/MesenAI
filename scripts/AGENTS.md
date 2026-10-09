@@ -434,7 +434,7 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   so a pack can be recorded off a real playthrough. It **excludes**
   `input=` (both drive the same pad) and `state=` (a movie carries its own
   start state and power cycles the console itself) — either combination ends
-  the run naming both flags rather than warning. The Core recognises exactly
+  the run naming both flags rather than warning. The Core recognizes exactly
   two containers, by content and not by extension: a zip holding
   `Input Log.txt` (BizHawk `.bk2`) or one holding `GameSettings.txt` (Mesen
   `.mmo`). **There is no `.fm2` reader** — convert first. Anything else is
@@ -495,7 +495,7 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   one whose sha1 is not `SUITE_FILE_SHA1` — the checkpoints are frame numbers
   read off that exact build, so another build puts them on other screens and
   the arms are still "compared", at the wrong ones. Without the flag both keep
-  the lenient behaviour (the `SKIP` line, the warning note). It does not gate
+  the lenient behavior (the `SKIP` line, the warning note). It does not gate
   anything by itself: no workflow calls this, and the pinned ROM is still
   absent from the repo (ADR-0157 §5). `--perturb-flag` / `--perturb-texture`
   exist so the comparison can be shown to go red. The pure `rom_verdict` and
@@ -511,9 +511,9 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   versioned `SHA1 -> console + No-Intro name` table the flat game library
   looks a ROM up in (#1038, spec #1030), from the No-Intro DATs the
   libretro-database repository mirrors (CC BY-SA 4.0; names and hashes
-  only, no artwork). That licence and its attribution are a recorded
+  only, no artwork). That license and its attribution are a recorded
   decision, not a comment: **ADR-0266** (`docs/adr/gui/`) states the
-  source URL, the licence as verified from the repository's own `LICENSE`,
+  source URL, the license as verified from the repository's own `LICENSE`,
   what share-alike asks of the derived table, and where the attribution
   appears — the table's own `#source`/`#licence` header lines (so it
   travels inside the embedded resource), the notice committed beside it,
@@ -769,25 +769,25 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   the key is the index, but the run time still mirrors the art (#457). Each
   physical crop is un-baked once, however many entries (an alias, a fold)
   share it - twice would re-bake it while the sidecar lost the mirror.
-  **Colour 0 on background crops (#456, `sheet_pixel_fixes.py`).** Input:
+  **Color 0 on background crops (#456, `sheet_pixel_fixes.py`).** Input:
   the key source (`textures/hires.txt`) and the crops its `<img>`/`<tile>`
   lines point at, at its `<scale>`. A background key is see-through when
-  one of those crops has an alpha-0 pixel at a colour-0 position of the
+  one of those crops has an alpha-0 pixel at a color-0 position of the
   key's tile - the recorder's `TransparencyRequired` signature. On a CHR
   ROM game the tile comes from the sheet crop, since an index key has no
   pixels. A translucent brush pixel (alpha 1..254), or alpha 0 over ink,
   is paint and never marks a key. Side effect: in every background crop of
   a see-through key, and of any key sharing one of those crops (closed to
-  a fixed point), `build` sets each colour-0 pixel that still equals the
+  a fixed point), `build` sets each color-0 pixel that still equals the
   twin's backdrop (no twin: palette entry 0 of the default NES
   palette) to alpha 0. It rewrites both the authored sheet PNG and
   its `*.orig.png` twin in lockstep (#329). An RGB sheet and twin are
   written back as RGBA. Exclusions: sprite sheets (`sprite`, `sprites`),
-  `FF`-prefixed palettes, and a colour-0 pixel the artist repainted (it no
+  `FF`-prefixed palettes, and a color-0 pixel the artist repainted (it no
   longer equals the twin). A twin pixel already at alpha 0 is skipped, so
   a second build over its own output is byte-identical. Verification:
   `test_mep_build.py` (`backdrop_*`, `index_keyed_*` tests). Every `[condition]` rule from the key source keeps its
-  unconditional fallback twin in the rebuilt `hires.txt` (synthesised when
+  unconditional fallback twin in the rebuilt `hires.txt` (synthesized when
   the source omitted it) so a condition miss still shows the painted art
   (#256 / ADR-0189 §3). A painted sprite sheet whose cells lose to another
   sheet fails the build with an ownership error instead of a silent
@@ -802,13 +802,13 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   untouched rule, and among its untouched crops one whose cell nobody
   painted wins before the kind rank; it is never counted as muted paint
   (#464, ADR-0153 §4 amendment 2026-09-25). A background tile with the same
-  data is not blank (its colour 0 is the drawn backdrop) and keeps the
+  data is not blank (its color 0 is the drawn backdrop) and keeps the
   ordinary rule. Covered by `scripts/test_mep_build_blank_key.py`, also
   wired into `make doc-checks`.
   **An untouched
   cell keeps the recorded rule** (ADR-0231, #447, `mep_recorded.py`). A
   cell equal to its `*.orig.png` twin whose key the recording has does not
-  point at its crop. Its crop is nearest-neighbour, while the recorded
+  point at its crop. Its crop is nearest-neighbor, while the recorded
   `chr/` page went through the scale filter. Instead the build re-emits the
   recording's line byte for byte, with only the `<img>` index remapped.
   Those lines go under the `# mep_build: rules kept as recorded for
@@ -1133,14 +1133,14 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   repaint marker, not exclusivity). Prints totals, a per-image table and a
   per-state table with the tiles only that state exhibited. Stdlib only,
   no ROM. First run 2026-09-13 (Contra80s 1.1 vs fifteen Contra packs) is
-  summarised in ADR-0182. Refuses (exit 1, #225) when the reference's
+  summarized in ADR-0182. Refuses (exit 1, #225) when the reference's
   `tileData` keys and the recording's cannot intersect by shape — the
   emulator splits CHR RAM patterns (32+ hex chars) from CHR ROM bank
   indices by width alone (`HdPackLoader::ReadTileData`), so a reference
   built for a `<patch>`ed ROM that changed the board would otherwise print
   a confident 0%. The refusal quotes the iNES header bytes the pack's own
   IPS writes; the key shape is the trigger, the patch only the
-  explanation. A recorded state is labelled by the folder two levels above
+  explanation. A recorded state is labeled by the folder two levels above
   `auto/`, extended leftwards on a collision — two runs of the same state
   used to overwrite each other's row and under-report the pack count.
   Tests: `test_artist_cover.py`.
@@ -1166,11 +1166,11 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   relation, so neither says a column is another one flipped. A sheet
   is captioned by the run's own `--names` entry, failing that by the
   **subjects** its poses are filed under in that file (most cells first, the
-  key humanised - the `subjects` prose goes to `notes[]` once), and failing
+  key humanized - the `subjects` prose goes to `notes[]` once), and failing
   that by the run/pose id plus the measured counts; a subject is never read
   off a palette, a size or a thumbnail. Cells
   are padded to **their own row's** figure box (the rest grid bins figures by
-  box, so a boss never sets the cell size for a pickup), centred and
+  box, so a boss never sets the cell size for a pickup), centered and
   bottom-aligned on the **tile** box (a pose's fully transparent OAM tiles
   count, so ink can sit above the line). A pose whose every member is a
   screen-pinned node (ADR-0173) is HUD, not a figure, and is dropped; a pack
@@ -1190,7 +1190,7 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   `test_compose_engine.make_pack`.
 - `artist_bg_kit.py <pack-dir> [--out DIR] [--names F] [--verify]` (F9.24,
   ADR-0183 §2.2) - the kit's **scenery** half, the background counterpart of
-  `artist_kit.py`. Drops the cells that are one flat colour (no art to
+  `artist_kit.py`. Drops the cells that are one flat color (no art to
   repaint) and, when that empties an `objNNN`, the whole group, each with its
   count in the fragment's `dropped[]`; keeps the rest at the offsets
   ADR-0168's `evidence[]` walk recovers; recovers elements no `objNNN` groups
@@ -1206,7 +1206,7 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   behind them are in `runs/golden-20260913-f922/background-objects.md` (14
   golden packs). Stdlib only, no ROM; `test_artist_bg_kit.py` covers it on a
   synthetic pack of its own - `test_compose_engine.make_pack` paints every
-  cell one flat colour, which is precisely the input this tool rejects.
+  cell one flat color, which is precisely the input this tool rejects.
 - **`artist_map.py` needs `--scale` set to the pack's own scale.** It
   defaults to 1 and the mismatch is not caught until the acceptance test,
   where `mep_build` hard-errors `painted at 1x while metatiles.png is at 4x -
@@ -1263,7 +1263,7 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   order wins** and every disagreeing position is printed, split into "both
   painted differently" and "only one instance painted". Two limits, both
   reported and never hidden: a dump written before F9.24 carries no palette
-  plane, so its cells fall back to the shape's first-seen colours and each
+  plane, so its cells fall back to the shape's first-seen colors and each
   fall-back whose tile data has rival palettes carries `paletteAttributed` and
   makes its file `seen: false` (F9.24 added the plane to `WriteGridDump`, so a
   fresh dump resolves this and the count drops to zero); and a CHR ROM game -
@@ -1288,7 +1288,7 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   recorded tiles pin down a contiguous PRG block (`offset = base + 16*index`,
   >= 3 agreeing non-degenerate tiles, hole within 16 indices of one of them);
   where the game unpacks its graphics nothing pins down and the hole stays.
-  The recorder's own synthetic pages are recognised and copied through
+  The recorder's own synthetic pages are recognized and copied through
   untouched: the PRG scan it already writes (`AddPrgScanTiles`, bank ids
   `0x504247xx`) and the blank-tile bucket (`Chr_FFFFFFFF_*`). Packs recorded
   before ADR-0232 (the recorder's bank hash never followed the CHR state)
@@ -1299,7 +1299,7 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   with a non-blank tile (`recorded_before_bank_fix`) are regrouped, and a
   bank-0 page of blank tiles is the real power-on bank. Palette RGBA is read off the pack's own reference pages rather
   than assumed, so a custom palette completes correctly; a fill is rendered
-  nearest-neighbour (the recorder smooths its own cells) under the bank's
+  nearest-neighbor (the recorder smooths its own cells) under the bank's
   most-recorded palette, which is a guess and says so. Writes
   `<out>/chr/Chr_<n>.png` + `.orig.png` + `.legend.png` (green recorded, olive
   moved up, amber ROM fill, red hole) + `.json` (every cell's state, `seen`,
@@ -1358,7 +1358,7 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   opacity 0.5, ADR-0220 §3 as amended), `paint` (fully transparent, visible -
   the topmost visible layer), `guides` (cell outlines, captions, a hatch over
   every `seen: false` cell; hidden, `edit-locked`) and `palettes` (hidden,
-  `edit-locked`). Everything the module draws is one sentinel colour,
+  `edit-locked`). Everything the module draws is one sentinel color,
   `#FF00FD` (`mep_sentinel.SENTINEL_RGBA`, no NES palette reaches it), and
   `write_surface` refuses a canvas or twin that already carries it, so a
   cell exported with `guides`/`palettes` still visible is caught by
@@ -1381,7 +1381,7 @@ these tools call into, or the goldens under `docs/specs/golden/` (owned by
   the rule **select `paint` before the first stroke**, and the reason is
   measured, not stylistic: GIMP 2.10 and Krita 5.3.4 both open an OpenRaster
   file with the bottom layer, `orig`, active whatever the stack order; Krita
-  honours `edit-locked` and refuses the stroke, GIMP does not, and a stroke
+  honors `edit-locked` and refuses the stroke, GIMP does not, and a stroke
   on `orig` is lost on the next kit run (ADR-0220 §3). Verified by
   `test_ora_writer.py` (layer order, flags, sentinel guard, `fit_text`,
   first-use band and its labels), `test_compose_engine.py`,

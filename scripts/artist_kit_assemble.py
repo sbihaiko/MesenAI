@@ -23,7 +23,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import asset_names as N  # noqa: E402 — the F12.4 painting-surface name contract
 
-# The order an artist should open the kit in, most recognisable first. A part
+# The order an artist should open the kit in, most recognizable first. A part
 # missing from the kit is simply skipped - the four generators run separately
 # and a kit assembled from one of them is still a kit.
 PART_ORDER = ("sprites", "background", "map", "chr")
@@ -55,7 +55,7 @@ PART_BLURB = {
     "chr": (
         "The ROM's own pattern pages, 16x16 tiles each, in the layout the game "
         "stores them in. Cells marked as fill were never seen in play and were "
-        "recovered from the ROM - treat their colours as a guess, not evidence."
+        "recovered from the ROM - treat their colors as a guess, not evidence."
     ),
 }
 
@@ -295,7 +295,7 @@ def render_markdown(kit: dict) -> str:
         out.append(
             f"**Nothing here was seen in play.** Every page was read straight out of "
             f"{rom}'s own pattern tables, with no recording at all: the shapes are "
-            "exact, the colours are a placeholder, and each cell says `seen: false` "
+            "exact, the colors are a placeholder, and each cell says `seen: false` "
             "in its sidecar. There is no figure sheet, no scenery sheet and no stage "
             "map in this kit - those come from what a run observed, and nothing was "
             "observed. Record the game and generate the kit again to get them; a "
@@ -336,7 +336,7 @@ def render_markdown(kit: dict) -> str:
         "shows exactly what was recorded (ADR-0231). The first stroke on a cell, or "
         "painting it back to the original, moves that tile onto your sheet: the whole "
         "8x8 tile switches from the recorded art to your sheet's "
-        "nearest-neighbour pixels, so the pixels of that cell you did not touch "
+        "nearest-neighbor pixels, so the pixels of that cell you did not touch "
         "change with it. Repaint a whole cell, not just the part you are changing. "
         "Rebuild "
         "and reopen the ROM once, and after that the reload is enough. Painting a "
@@ -365,9 +365,9 @@ def render_markdown(kit: dict) -> str:
         "layers, for a program that opens OpenRaster: `orig` (the untouched reference, "
         "locked), `paint` (empty - the one you paint on; it is the topmost visible "
         "layer when the file opens), `guides` (the cell grid, the captions and a hatch "
-        "over every cell nothing was seen in play, hidden) and `palettes` (the colours "
+        "over every cell nothing was seen in play, hidden) and `palettes` (the colors "
         "the recording saw on this sheet, in the order they first appear reading down "
-        "the sheet, each group labelled with the first cell that wears it, hidden). "
+        "the sheet, each group labeled with the first cell that wears it, hidden). "
         "**Select `paint` in the Layers panel before your first stroke**: GIMP 2.10 and "
         "Krita 5 both open an OpenRaster file with the bottom layer, `orig`, active, "
         "whatever the stack order; Krita refuses a stroke there because `orig` is "
@@ -382,7 +382,7 @@ def render_markdown(kit: dict) -> str:
         "exactly as you would without it. Nothing reads the `.ora` back: not the "
         "rebuild, not the reload, not the lint. Keep `guides` and `palettes` hidden "
         "when you export; both are drawn in one magenta (`#FF00FD`) no NES palette "
-        "reaches, and a cell that carries that colour is refused by "
+        "reaches, and a cell that carries that color is refused by "
         "`python3 scripts/mep_lint.py`, which names the cell. Photoshop and Aseprite "
         "do not open `.ora`; they stay on the per-surface names above, and there is no "
         "`.psd`, `.aseprite` or `.kra` in the kit.",
@@ -418,7 +418,7 @@ def render_markdown(kit: dict) -> str:
         "",
         "If the manifest carries a bare `<bgPreservesBehindBgSprites>` line, leave it: "
         "the recorder writes it so a recorded screen does not hide a behind-background "
-        "sprite over empty (colour-0) canvas (ADR-0224). It is opt-in per pack - a pack "
+        "sprite over empty (color-0) canvas (ADR-0224). It is opt-in per pack - a pack "
         "without the line renders as it always did - it is not noise, and other "
         "emulators simply ignore it. It undoes the recorded screen only: a foreground "
         "background you add at priority 30-39 still covers the sprite where it is opaque.",

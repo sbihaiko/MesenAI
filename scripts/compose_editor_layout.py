@@ -19,7 +19,7 @@ pair of inverse functions here (`cell_origin`/`index_at`), and
 **Variable cell geometry (ADR-0171).** The sprite layer's unit is no longer a
 single 8x8 node but a *pose* — a silhouette of roughly 2x2 to 6x9 cells, i.e.
 16x16 to 48x72 px — so one hard-coded cell box can no longer serve every row.
-The grid is therefore parameterised by a `metrics` dict, computed once per row
+The grid is therefore parameterized by a `metrics` dict, computed once per row
 by `row_metrics` from the art the row is about to draw, and threaded through
 every geometry function. Two rules keep that affordable:
 
@@ -80,7 +80,7 @@ def fit_scale_box(avail_w, avail_h, w, h, cap=None):
     """Largest integer magnification of a `w` x `h` art that still fits in an
     `avail_w` x `avail_h` box — both axes, so a tall pose is not scaled off the
     bottom by a width that happens to allow more. Integer so the
-    nearest-neighbour zoom keeps pixels square, and never below 1: a box too
+    nearest-neighbor zoom keeps pixels square, and never below 1: a box too
     small for one native pixel clips rather than resampling (the same rule
     `record_viewer_layout.fit_zoom` applies to a captured frame)."""
     if w <= 0 or h <= 0 or avail_w <= 0 or avail_h <= 0:
@@ -191,7 +191,7 @@ def art_box(index, metrics=None):
 
 
 def caption_point(index, metrics=None):
-    """Where cell `index`'s "#node" caption is centred — in the caption strip
+    """Where cell `index`'s "#node" caption is centered — in the caption strip
     under the art box, not over it."""
     cell_w, cell_h, _per_line = _grid(metrics)
     x0, y0 = cell_origin(index, metrics)
@@ -244,24 +244,24 @@ def export_caption(name, cells, columns, unit, width, height, scale, pack_scale=
             f"{width}×{height} px (shown at {scale}×)")
 
 
-# Secondary text ("muted") colours. The editor hard-coded #555/#444 for its
+# Secondary text ("muted") colors. The editor hard-coded #555/#444 for its
 # status line, the selection caption and the export caption: readable on the
 # light aqua theme it was checked against, near-invisible on the dark theme Tk
 # hands it when the system is in dark mode - which is where the F9.18 panel
-# rehearsal read them. The colour is therefore derived from the background the
+# rehearsal read them. The color is therefore derived from the background the
 # widget really sits on instead of being fixed.
 MUTED_ON_LIGHT = "#555555"
 MUTED_ON_DARK = "#b9b9c6"
 
 # Relative luminance below this counts as a dark surface (WCAG, 0..1). 0.18 is
-# mid grey: everything below it needs light ink, everything above it dark ink.
+# mid gray: everything below it needs light ink, everything above it dark ink.
 DARK_SURFACE = 0.18
 
 
 def relative_luminance(r, g, b, depth=65535):
     """WCAG relative luminance of an (r, g, b) triple, 0..1. `depth` is the
-    maximum channel value - 65535 for `winfo_rgb`, 255 for an 8-bit colour.
-    The channels are linearised first, so the contrast ratios computed from
+    maximum channel value - 65535 for `winfo_rgb`, 255 for an 8-bit color.
+    The channels are linearized first, so the contrast ratios computed from
     this are the ones a reader actually perceives."""
     depth = float(depth or 1)
 
@@ -273,5 +273,5 @@ def relative_luminance(r, g, b, depth=65535):
 
 
 def muted_foreground(r, g, b, depth=65535):
-    """A secondary text colour that stays readable on the given background."""
+    """A secondary text color that stays readable on the given background."""
     return MUTED_ON_DARK if relative_luminance(r, g, b, depth) < DARK_SURFACE else MUTED_ON_LIGHT

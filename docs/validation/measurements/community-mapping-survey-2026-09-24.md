@@ -2,7 +2,7 @@
 
 The question: *can we read the community's mappings and expand the automatic
 mapping?* This is a **measurement only**. No product code changed, no ADR was
-written, and no community condition, PNG or colour choice was imported
+written, and no community condition, PNG or color choice was imported
 anywhere. Every pack was read as data, never as instruction.
 
 The binding frame is ADR-0210 §3: a third-party `hires.txt` is an index of
@@ -164,7 +164,7 @@ With ADR-0210 unchanged and today's library and recordings:
   gain.
 - **0 change on screen for every CHR ROM game**, because of the wildcard, and
   **0 change on any sheet**, because nothing is written. The per-index reading
-  above would give the 7 651 fill cells real preview colours.
+  above would give the 7 651 fill cells real preview colors.
 - **0 for Castlevania, Metroid, Zelda, Mega Man and Zelda II**, because filter
   2 refuses them.
 
@@ -242,7 +242,7 @@ and are marked n/c. Nearby facts are compared at shape level (palette
 ignored). "Reachable" restricts the reference to facts whose shapes both occur
 in our recording, so a short recording is not scored for what it never saw.
 
-| # | game | namespace | their conditioned keys | we hold the key | **we condition it too** | our conditioned keys | nearby-conditioned subjects: theirs reachable / also ours | tileNearby ±8 px facts, direction-normalised: theirs reachable / agree / ours | exact nearby facts (type, offset, target): theirs reachable / agree / ours |
+| # | game | namespace | their conditioned keys | we hold the key | **we condition it too** | our conditioned keys | nearby-conditioned subjects: theirs reachable / also ours | tileNearby ±8 px facts, direction-normalized: theirs reachable / agree / ours | exact nearby facts (type, offset, target): theirs reachable / agree / ours |
 |---|---|---|---|---|---|---|---|---|---|
 | 137 | Contra | same dump | 613 | 192 | **139** (72% of held) | 384 | 87 / 66 | 10 / 0 / 235 | 174 / 5 / 522 |
 | 144 | Donkey Kong | same dump | 108 | 57 | **33** (58%) | 245 | 53 / 29 | 64 / **44** / 313 | 543 / 24 / 406 |
@@ -260,12 +260,12 @@ in our recording, so a short recording is not scored for what it never saw.
   *facts* barely overlap. Scored against theirs, our exact nearby facts have
   a recall of 5/174 (Contra), 24/543 (Donkey Kong) and 0/688 (Castlevania),
   and a precision of 5/522, 24/406 and 0/368.
-- **Only Donkey Kong agrees on adjacency.** Normalised for direction (a fact
+- **Only Donkey Kong agrees on adjacency.** Normalized for direction (a fact
   seen from either side counts once), our `tileNearby` recovers **44 of the 64**
   reachable ±8 px adjacencies the author wrote (69% recall, 14% precision). No
   other pack agrees on a single one.
 - **The two sides use nearby for different jobs.** Authors mostly place the
-  neighbour far away. The share of their nearby facts that are *not* a ±8 px
+  neighbor far away. The share of their nearby facts that are *not* a ±8 px
   adjacency is Contra 255/298, Donkey Kong 588/671, Castlevania 766/992 and
   SMB 529/647. Those are disambiguators ("this shared tile belongs to *that*
   object"). Ours are co-occurrence adjacencies by construction (ADR-0190:
@@ -277,7 +277,7 @@ in our recording, so a short recording is not scored for what it never saw.
   multi-condition `<tile>` rules are absent from all 30 sweep `auto/` packs. So
   is memoryCheck, which the recorder cannot observe and ADR-0183 §3 forbids.
 
-## 3. Structure — how authors organise, and what we never emit
+## 3. Structure — how authors organize, and what we never emit
 
 | # | game | `<img>` sheets (recorder-named) | example names | `<background>` (parallax / behind-BG) | `<addition>` | `<fallback>` | brightness ≠ 1 | multi-condition rules | bgm / sfx | options |
 |---|---|---|---|---|---|---|---|---|---|---|
@@ -303,8 +303,8 @@ names are Mesen's other recorder layout and are also untouched recorder pages.
 Parallax counts backgrounds whose horizontal or vertical scroll ratio is
 neither 0 nor 1.
 
-- **Two organisations, about half each.** 7 of 15 packs repaint onto sheets
-  organised by **subject**: Donkey Kong, SMB, Contra, Metroid, Zelda, Mega Man
+- **Two organizations, about half each.** 7 of 15 packs repaint onto sheets
+  organized by **subject**: Donkey Kong, SMB, Contra, Metroid, Zelda, Mega Man
   and Zelda II, the last with `Characters/` and `Font/` sub-folders and
   `hero_`/`enemy_`/`boss_` prefixes. The other 8 repaint the recorder's own
   pages in place and never reorganise them. The subject naming is ADR-0209's
@@ -381,7 +381,7 @@ Nothing else in the 15 packs is reachable without an amendment.
    (amend ADR-0210 §3, which today says conditions are "never imported" and
    is silent on reading them for measurement). This survey did exactly that
    and found: subject selection agrees 58–72% where we hold the key; exact
-   nearby facts agree at 0–4.4% recall; direction-normalised adjacency agrees
+   nearby facts agree at 0–4.4% recall; direction-normalized adjacency agrees
    69% on Donkey Kong and 0% elsewhere; and 90% of their references are types
    we never emit. A standing yardstick would score ADR-0189/0190 changes
    against 197 810 human-conditioned rules instead of the five-game

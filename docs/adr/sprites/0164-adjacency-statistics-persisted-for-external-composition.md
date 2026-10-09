@@ -38,7 +38,7 @@ test, and the denominators the test divided by, is discarded at save time.
 
 That is enough to emit a fixed set of sheets. It is not enough for the tool
 the artist actually wants: start from one cell, see what statistically
-touches it and where, lock a neighbour, have the remaining suggestions
+touches it and where, lock a neighbor, have the remaining suggestions
 re-ranked *conditional on the locked set*, and end up with a composed image
 to paint (by hand or through `scripts/sheet_repaint.py`) that
 `scripts/mep_build.py` slices back into `hires.txt` exactly like an object
@@ -208,7 +208,7 @@ with `"kind": "object"` or `"sprite"`, `cells[]` at the composed positions
 **Pixels for the twin.** The 1x pixels of a node come from whichever sheet
 shows it: the cell whose `metatile` or `aliases[].metatile` equals the node
 id, in `metatiles`/`hud`/`font`/`misc` for background or `sprites` for OAM,
-copied nearest-neighbour from that sheet's `*.orig.png`. A background node
+copied nearest-neighbor from that sheet's `*.orig.png`. A background node
 no sheet shows is one a captured screen owns (ADR-0156): the tool takes it
 from the `backgrounds/screenNNN.orig.png` the routing named, or, failing
 that, renders it from `textures/chr/` by its `tiles[]` keys. It must never
@@ -240,7 +240,7 @@ allowed to wipe `auto/textures`. The moment it is painted it is the
 artist's work and belongs in `mep/textures/sheets/` (ADR-0147), which the
 bootstrap never touches; `mep_build.py` already reads sheets from
 whichever pack folder it is pointed at. An AI repaint of a composed sheet
-follows ADR-0154 unchanged: `auto/repaint/`, labelled `generated`.
+follows ADR-0154 unchanged: `auto/repaint/`, labeled `generated`.
 
 ### 5. The composition editor is a layered canvas, one layer per sheet kind
 
@@ -294,7 +294,7 @@ band the artist keeps is exported as a `usrNNN` sidecar (§3) with
 Not a runtime concept: the emulator draws no layers from this. If HUD,
 background and sprites ever become separate *rendered* planes of a pack,
 that is a `hires.txt` format change (ADR-0004 is at v1-draft) with its own
-`HdNesPack` rendering work, in the mould of ADR-0149's border layer — a
+`HdNesPack` rendering work, in the mold of ADR-0149's border layer — a
 different ADR.
 
 ## Consequences
@@ -322,10 +322,10 @@ different ADR.
 - `HdPackBuilder` grows one write call; ADR-0155's header tracking makes the
   rebuild ordinary. The serializer lands in the existing `SheetRender.cpp`,
   so no `Core.vcxproj` entry (ADR-0007) is needed.
-- The composition editor (§5: layered canvas, seed → ranked neighbours →
+- The composition editor (§5: layered canvas, seed → ranked neighbors →
   lock → recompute → export `usrNNN`) is a separate slice with two
   acceptance tests: seed on a Ninja Gaiden metatile that `obj000.json`
-  groups, lock its strongest neighbour, and the recomputed ranking must
+  groups, lock its strongest neighbor, and the recomputed ranking must
   place the rest of `obj000`'s cells first; and the sprite band containing
   Ryu's bottom edge must rank the ground enemies of the recording above any
   projectile. This ADR guarantees the data the editor needs is on disk, the

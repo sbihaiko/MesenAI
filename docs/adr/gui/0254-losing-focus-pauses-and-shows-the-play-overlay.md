@@ -11,7 +11,7 @@
 
 ## Context
 
-`Preferences.PauseWhenInBackground` pauses emulation when the app is not the active window. `MainWindow.UpdateAutoPause()` (polled, `UI/Windows/MainWindow.axaml.cs`) resolves the same flags for two neighbours: `PauseWhenInMenusAndConfig` (a menu/config window is up) and `PauseWhenInBackground` (while `ApplicationHelper.GetActiveWindow()` returns null). Both write `MainMenu.AutoPaused` and both resume themselves: `UpdateAutoPause()` calls `EmuApi.Resume()` on the first poll where the condition clears and the load/save state grid is closed.
+`Preferences.PauseWhenInBackground` pauses emulation when the app is not the active window. `MainWindow.UpdateAutoPause()` (polled, `UI/Windows/MainWindow.axaml.cs`) resolves the same flags for two neighbors: `PauseWhenInMenusAndConfig` (a menu/config window is up) and `PauseWhenInBackground` (while `ApplicationHelper.GetActiveWindow()` returns null). Both write `MainMenu.AutoPaused` and both resume themselves: `UpdateAutoPause()` calls `EmuApi.Resume()` on the first poll where the condition clears and the load/save state grid is closed.
 
 Three things are wrong for a player, all hit on 2026-10-04: (1) **the preference is off by default** (`UI/Config/PreferencesConfig.cs`), so the game runs with no window in front — on a fullscreen emulator a lost life, race or save; (2) **the pause is silent** — the game freezes with nothing saying why; (3) **the resume is automatic** — coming back drops the player into a running game, mid-frame, no countdown, the same loss the pause was meant to prevent.
 

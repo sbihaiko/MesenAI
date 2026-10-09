@@ -3,7 +3,7 @@
 Form, the `replay-submitted.yml` workflow and the labels they use.
 
   * .github/ISSUE_TEMPLATE/replay.yml is an Issue Form titled "[Replay] ",
-    labelled `replay`, with a required `attachment` textarea (the author drags
+    labeled `replay`, with a required `attachment` textarea (the author drags
     the file in, section 6) and an optional `notes` textarea -- and no
     `pack_link`-style field: "paste a link" is the model section 6 rejects here.
   * .github/workflows/replay-submitted.yml triggers on issues opened/edited and

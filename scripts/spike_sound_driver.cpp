@@ -16,7 +16,7 @@
 //  c++ -std=c++17 -O2 -I . -I Core -Wl,-headerpad_max_install_names scripts/spike_sound_driver.cpp InteropDLL/obj.osx-arm64/MesenCore.dylib -o scripts/spike_sound_driver
 //  install_name_tool -change MesenCore.dylib $PWD/InteropDLL/obj.osx-arm64/MesenCore.dylib scripts/spike_sound_driver
 //Usage: scripts/spike_sound_driver <rom.nes> <workdir> <output-folder> [maxIds=40] [secondsPerId=4] [startAt=3.0] [wallClockBudget=300]
-//  Productised tool (ADR-0135): runs on a private copy of the ROM with the MEP bootstrap on; the
+//  Productized tool (ADR-0135): runs on a private copy of the ROM with the MEP bootstrap on; the
 //  F5.3 recorder writes <workdir>/rom/<Game>/auto/audio/ for every enumerated track, then the run
 //  relocates fingerprints.json + midi/ into <output-folder>/auto/audio/ and writes enumeration.log
 //  beside it. SIGINT aborts at a frame boundary (partial result kept); when no trigger validates,
@@ -147,7 +147,7 @@ namespace
 	BreakEvent g_lastBreak = {};
 
 	//ADR-0135 runtime contract: the whole-run wall-clock budget and the SIGINT
-	//abort flag are honoured at frame boundaries; per-id sampling is bounded by
+	//abort flag are honored at frame boundaries; per-id sampling is bounded by
 	//emulated frames (Ppu.FrameCount), not wall-clock.
 	std::atomic<bool> g_abort { false };
 	Clock::time_point g_wallStart = Clock::now();

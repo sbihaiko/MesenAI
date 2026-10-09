@@ -7,7 +7,7 @@ the "did this recording reach gameplay?" criterion fires where it should and
 abstains where it cannot know:
 
   * `_screen_tiles` recovers the native 256x240 frame from a pack written at
-    scale 4 (nearest-neighbour replication), byte-identical to the same frame
+    scale 4 (nearest-neighbor replication), byte-identical to the same frame
     written at scale 1, and rejects a screen whose size is not a whole
     multiple of 256x240;
   * each of the four clauses (A tile structure, B misc share, C screen-area
@@ -89,13 +89,13 @@ def frame(colour_of, scale=1):
 
 
 def _drawn(x, y, colour):
-    """`colour` on a checkerboard, so the 8x8 tile is not one flat colour —
-    the probe only counts a tile as drawn when it has more than one colour."""
+    """`colour` on a checkerboard, so the 8x8 tile is not one flat color —
+    the probe only counts a tile as drawn when it has more than one color."""
     return colour if (x + y) % 2 else (0, 0, 0)
 
 
 def unique_tiles(seed=0):
-    """Every 8x8 tile a different colour: a one-off bitmap, reuse == 1.0."""
+    """Every 8x8 tile a different color: a one-off bitmap, reuse == 1.0."""
     return lambda x, y: _drawn(x, y, (((y // 8) * 32 + x // 8) % 256, (y // 8) // 8, seed + 90))
 
 
@@ -105,7 +105,7 @@ def tiled(seed=0, palette=6):
 
 
 def blank_but(count):
-    """A flat screen with only `count` drawn tiles (the rest one flat colour)."""
+    """A flat screen with only `count` drawn tiles (the rest one flat color)."""
     return lambda x, y: ((7, 7, 7) if (y // 8) * 32 + x // 8 >= count
                          else _drawn(x, y, (200, x // 8, y // 8)))
 

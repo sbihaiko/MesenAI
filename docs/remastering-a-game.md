@@ -162,7 +162,7 @@ scripts/headless_record roms/Castlevania.nes 400 out/tas bootstrap hdpack-off \
 repeatable and checked only while the movie drives the pad. Add
 `sync-movie-frames=<n>` when you know how many frames the movie's input covers.
 Both are RAM **reads** — see the cheat rules below. The design and its measured
-false-positive behaviour are in [ADR-0185](adr/recorder/0185-a-published-tas-movie-is-an-admissible-recording-driver-when-it-matches-our-rom.md).
+false-positive behavior are in [ADR-0185](adr/recorder/0185-a-published-tas-movie-is-an-admissible-recording-driver-when-it-matches-our-rom.md).
 
 ### Driver C — a RAM cheat (`cheat=`)
 
@@ -447,7 +447,7 @@ can load it in the emulator as-is and see what you have.
 The generated `textures/hires.txt` carries, in its header block right after
 the `<options>` line, a bare `<bgPreservesBehindBgSprites>` line. It asks
 MesenAI to keep a behind-background sprite visible where the ROM's background
-is colour 0, even under a recorded `<background>` screen — without it, the
+is color 0, even under a recorded `<background>` screen — without it, the
 screen paints over the sprite (ADR-0224). It is opt-in per pack: the recorder
 writes it on every pack it produces; a hand-written pack opts in by adding
 the same line; a pack without the line — every community pack in the
@@ -495,7 +495,7 @@ Or record through `scripts/record_stages.sh`, which gives every run its own
 directory with a hard link to the ROM and clears any pack left there.
 
 The decline itself is deliberate — it is what keeps a short session from
-erasing a long recording — so the message is the fix, not the behaviour.
+erasing a long recording — so the message is the fix, not the behavior.
 
 ---
 
@@ -604,7 +604,7 @@ The last line writes **`<kit>/ARTIST.md` — the page you open first** — plus
 |---|---|---|
 | `artist_kit.py` | `<kit>/sheets/` | sprite figures on grids, animation cycles in phase order, variants beside their base |
 | `artist_bg_kit.py` | `<kit>/` object sheets | background elements recovered across their animation phases |
-| `artist_map.py` | `<kit>/map/` | the stage stitched into one long panorama, addressable per 8x8 cell — the shape of Contra80s `Stage1a.png` (6696x480 at scale 2, i.e. 3348x240 logical). A panorama is only as long as the camera actually travelled, so a short recording gives a short strip. **CHR RAM games only** — see below |
+| `artist_map.py` | `<kit>/map/` | the stage stitched into one long panorama, addressable per 8x8 cell — the shape of Contra80s `Stage1a.png` (6696x480 at scale 2, i.e. 3348x240 logical). A panorama is only as long as the camera actually traveled, so a short recording gives a short strip. **CHR RAM games only** — see below |
 | `artist_chr_kit.py` | `<kit>/chr/Chr_*.png` | complete pattern pages — every tile of a CHR bank, in ROM order |
 
 `artist_chr_kit.py` also runs with **no recording at all**: `--static` takes a
@@ -619,7 +619,7 @@ read one from.
 A 60-second stage-1 recording yields up to one part per generator —
 `kit-part-sprites.json`, `kit-part-background.json`, `kit-part-chr.json`,
 `kit-part-map.json` — a `chr/` page per 4 KB bank of the ROM, and a panorama
-whose length is exactly how far the camera travelled and nothing more. Painting
+whose length is exactly how far the camera traveled and nothing more. Painting
 a *whole* stage means recording the whole stage. The counts for a particular
 kit are in its own `kit.json` and the parts beside it, and they move whenever a
 kit feature changes what a cell is — the variant and fold cells of F14.9 are
@@ -632,7 +632,7 @@ run it every time, and treat a failure as "the kit is wrong", never as "the
 verify is wrong".
 
 **What the sheets reach, and what only the pattern pages reach.** The
-organised sheets and `unsorted` give a cell to every shape the recording
+organized sheets and `unsorted` give a cell to every shape the recording
 drew. Most of a recorded pack's `<tile>` keys are something else: tiles the
 game never drew during the recording, which the bootstrap exports from the
 ROM with `defaultTile=Y` (on a 60 s Castlevania run, 2 141 of 2 673 shapes).
@@ -640,7 +640,7 @@ Those are on the `chr/` pattern pages only. Every palette the game drew a
 shape in reaches the sheets too (ADR-0230, F14.9). The shape's cell carries
 the first palette it was seen in. Another palette that is the same picture at
 one Brightness (the cell's pixels times one multiplier give exactly what the
-recording drew, e.g. a palette that differs only in a colour the tile never
+recording drew, e.g. a palette that differs only in a color the tile never
 paints, or a fade to black) is listed on the cell's sidecar entry as a
 `folds` item and rides on the cell's paint. Any other palette, whether a
 colourway (a red and a blue enemy) or a fade step no single Brightness
@@ -695,7 +695,7 @@ Two more things the CHR kit does that matter for how much work you have:
   `(pattern, palette)`, so a screen fade turns every on-screen tile into one key
   per brightness step. Folding maps those onto a single cell; the renderer
   rebuilds the rest from the `tile` row's Brightness column. On the flagship kit
-  this took 4712 cells to 3439. Folding is **colour-only**: a palette that
+  this took 4712 cells to 3439. Folding is **color-only**: a palette that
   changes the hue of anything you painted is never folded, and no pixel is ever
   altered by it.
 - `--fill-rules none|observed|all` decides which **filled** cells also get a
@@ -830,13 +830,13 @@ three programs above open natively — the same picture as layers, bottom to top
 | `context` | the stage around the surface at 1x, at 50 % — only on a surface whose every cell has a stage position: today the stage panoramas (five layers); figure, scenery and CHR sheets have four until a recording writes where a sprite was seen on the stage (ADR-0220 §3, amended 2026-09-22) | visible, movable |
 | `paint` | empty — **the one layer you paint on**; it opens as the topmost visible layer | visible |
 | `guides` | cell grid, captions from the recording's ids or your `names.json` (wrapped to the canvas, at most two lines, cut with `...` when they still do not fit), a hatch over every cell nothing saw in play | **hidden**, locked |
-| `palettes` | a swatch strip of the palettes recorded for the sheet, in the order they first appear reading down the sheet, each group labelled with the first cell that wears it (a static page states `defaultTile = Y` instead) | **hidden**, locked |
+| `palettes` | a swatch strip of the palettes recorded for the sheet, in the order they first appear reading down the sheet, each group labeled with the first cell that wears it (a static page states `defaultTile = Y` instead) | **hidden**, locked |
 
 **Select `paint` in the Layers panel before your first stroke.** Measured on
 2026-09-23: GIMP 2.10 and Krita 5.3 both open an OpenRaster file with the
 *bottom* layer active — `orig`, the locked reference — whatever the stack
 order, and no order fixes it: putting `paint` at the bottom would make it the
-active layer but would hide every stroke under `orig`. Krita honours the lock
+active layer but would hide every stroke under `orig`. Krita honors the lock
 and refuses the stroke; GIMP ignores `edit-locked` and lets you paint on
 `orig`, where the work is discarded on the next kit run (ADR-0220 §3, amended
 2026-09-23). One click on `paint` before painting is the whole fix.
@@ -884,7 +884,7 @@ runs had to reverse-engineer it from the cells already there:
 | `x`, `y` | the cell's top-left in the **1× pixel space** of the `.orig.png`, *not* the PNG you paint on. A pack at `scale` 4 puts the same cell at `4x,4y` there. |
 | `count` | how many tiles the cell holds. Free — it is not checked against `tiles[]`. |
 | `tiles[]` | one entry per tile the cell carries, in the cell's own order. |
-| `context`, `label`, `metatile` | free text and an optional back-reference the tools write and carry. Copy them off a neighbouring cell; nothing requires them. Since ADR-0209 Q1 the recorder fills `label` with a default it infers from the grouping (`scene #142 x1004`, and on a `sprNNN`/`objNNN` sheet, a pose or a cycle in `poses.json` a one-line statement of its size and counts) beside `"labelSource": "inferred"`; to rename, edit the `label` and set `labelSource` to anything else, or put the name in a `names.json` handed to `artist_kit.py --names` / `mep_figure.py export --names`, which always wins over the inferred one. |
+| `context`, `label`, `metatile` | free text and an optional back-reference the tools write and carry. Copy them off a neighboring cell; nothing requires them. Since ADR-0209 Q1 the recorder fills `label` with a default it infers from the grouping (`scene #142 x1004`, and on a `sprNNN`/`objNNN` sheet, a pose or a cycle in `poses.json` a one-line statement of its size and counts) beside `"labelSource": "inferred"`; to rename, edit the `label` and set `labelSource` to anything else, or put the name in a `names.json` handed to `artist_kit.py --names` / `mep_figure.py export --names`, which always wins over the inferred one. |
 | `columns`, `cell`, `gutter` | the grid: how many cells fit across, each cell's size, and the transparent margin between them. Written above `cells[]`, not inside it. |
 | `kind` | what the surface holds: `unsorted`, `misc`, `metatiles`, `object`, `sprite`, `sprites`, `font`, `hud`, `map`. With `cell` it decides which sheet a new cell belongs on — see *Which sheet a copied key goes on*. |
 | `addedBy` | `"mep_add_cell"` on a cell `mep_add_cell.py` placed. Nothing requires it, and nothing but `build` reads it: it is how the build knows to report that cell's rule by name even before you paint it (#511). A cell you wrote into the sidecar by hand does not carry it. |
@@ -944,7 +944,7 @@ every cell you painted produced (see *The report*). Only *editing*
 
 *Copy as MEP sheet cell* lives in the Tilemap Viewer's right-click menu, and the
 picture you right-click is **one nametable** — the whole 32×30 map in map order,
-labelled `($2000)` in the same menu. The screen is a **scrolled window** into it,
+labeled `($2000)` in the same menu. The screen is a **scrolled window** into it,
 and nothing in the viewer marks where that window is. Three consequences, all
 measured on 2026-09-19:
 
@@ -959,10 +959,10 @@ measured on 2026-09-19:
   col + 22 and only map cols 0–9 were on screen at all.
 - **A nametable can hold art the frame never displays.** Bubble Bobble's attract
   frame keeps the whole "Bubble Bobble" logo in VRAM while the background layer
-  draws the backdrop: 59 917 of the frame's 61 440 pixels are one colour and the
+  draws the backdrop: 59 917 of the frame's 61 440 pixels are one color and the
   logo is not fetched. A key copied there is well-formed and unreachable.
 - **The viewer's own picture is not the frame's picture.** It draws patterns in a
-  flat palette, so the shapes read differently from the game's colours, and on a
+  flat palette, so the shapes read differently from the game's colors, and on a
   CHR-banked game it can draw the tile from a different bank than the PPU used
   for that scanline — Ninja Gaiden's viewer shows glyphs where the frame shows a
   boulder. The copy itself names the bank the frame drew with (ADR-0215, #341),
@@ -1467,7 +1467,7 @@ scripts/artist_ai_review.py promote out/kit --proposals kit-proposals.json \
 
 `--crops` takes a **folder**: it writes each figure enlarged. Show the model the
 enlarged crops, not the 16x32 thumbnail — the same figure judged at 16x32 and at
-128x256 is not the same judgement, and the measured comparison is in the
+128x256 is not the same judgment, and the measured comparison is in the
 protocol: [`ai-kit-review.md`](ai-kit-review.md). Run against the Contra flagship
 kit, the reviewer was never *confidently* wrong: 0 of 34 scorable asks, with the
 errors concentrated on ambiguous `mixed` boxes and the abstention rate rising

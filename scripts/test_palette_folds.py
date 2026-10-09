@@ -1,4 +1,4 @@
-"""Headless suite for `palette_folds.py` — the fold/colourway predicate the
+"""Headless suite for `palette_folds.py` — the fold/colorway predicate the
 pattern pages and the recorder's sheets share (ADR-0230, F14.9).
 
 Two things are pinned here:
@@ -23,7 +23,7 @@ import palette_folds as P  # noqa: E402
 
 _FAILURES = []
 VECTORS = Path(__file__).resolve().parent.parent / "docs/specs/golden/sheets/palette-relation-cases.txt"
-# The shape Zelda's fade rides on: it paints colours 2 and 3 only.
+# The shape Zelda's fade rides on: it paints colors 2 and 3 only.
 RAMP_TILE = "7F80808080808080" + "FFFFFFFFFFFFFFFF"
 
 
@@ -60,7 +60,7 @@ def test_the_shared_vectors_hold_for_the_python_predicate():
 
 
 def test_the_relation_is_the_kits_own_fold_test():
-    # A colourway is exactly what compute_folds refuses to fold: a hue change,
+    # A colorway is exactly what compute_folds refuses to fold: a hue change,
     # or a residual over the gate. The vectors are real Zelda and Castlevania
     # pairs, so this ties the sheets' split to the pages' one.
     for tile, cell, other, rel, _b, _d, _n in _vectors():
@@ -70,9 +70,9 @@ def test_the_relation_is_the_kits_own_fold_test():
         fold = (all(P._nes_rgb(a[k]) == P._nes_rgb(o[k]) for k in used) or
                 ((P.fade_related(a, o, used) or P.fade_related(o, a, used)) and drift <= P.HUE_DRIFT_GATE_DEG))
         if fold == (rel == "colourway"):
-            check(False, "a colourway is precisely a pair the kit would not fold", f"{cell}->{other}")
+            check(False, "a colorway is precisely a pair the kit would not fold", f"{cell}->{other}")
             return
-    check(True, "a colourway is precisely a pair the kit would not fold")
+    check(True, "a colorway is precisely a pair the kit would not fold")
 
 
 class _Row:
@@ -96,7 +96,7 @@ def _zelda_fade_pages():
 
 
 def test_without_a_sheet_cell_the_brightest_step_is_the_base():
-    # The F14.4 behaviour: the brightest step is the base, the third step
+    # The F14.4 behavior: the brightest step is the base, the third step
     # drifts over the gate against it and becomes a second base, and the
     # darkest folds onto that one - two cells to paint for one fade.
     pages, steps = _zelda_fade_pages()

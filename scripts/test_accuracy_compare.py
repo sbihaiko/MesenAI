@@ -24,7 +24,7 @@ SCRIPT = Path(__file__).resolve().parent / "accuracy_compare.py"
 
 # The line the ROM gate printed before --require-rom existed, quoted from the
 # script as it shipped (not rebuilt from the code under test): "today's
-# behaviour" is only unchanged if the *text* is unchanged too.
+# behavior" is only unchanged if the *text* is unchanged too.
 TODAYS_SKIP = ("SKIP: no AccuracyCoin ROM. Pass --rom, set MESENCE_ACCURACY_ROM, "
                "or put it in tests/accuracy/AccuracyCoin.nes "
                "(MIT, https://github.com/100thCoin/AccuracyCoin).")
@@ -72,7 +72,7 @@ def test_parse_capture():
                   "pixels": 61440, "checksum": "E5C1E0D8"},
           "reads a real recorder run")
     check(ac.parse_capture("capture: 1x1 frame=1 pixels=1 checksum=0xdeadbeef")["checksum"] == "DEADBEEF",
-          "checksum case is normalised, so 0xdeadbeef and 0xDEADBEEF are one value")
+          "checksum case is normalized, so 0xdeadbeef and 0xDEADBEEF are one value")
     # The load-bearing case: a run that produced no frame must not read as a
     # match. `capture failed:` goes to stderr, so stdout simply has no line.
     raises(lambda: ac.parse_capture("capture finished: 0 frames (target 4808)"),
@@ -210,7 +210,7 @@ def test_arm_table():
     check({spec.get("compare") for spec in ac.ARMS.values()} <= {None, "centre"},
           "compare modes are the ones compared_capture knows")
     check(ac.ARMS["widescreen"]["flags"] == ("widescreen",) and ac.ARMS["widescreen"]["compare"] == "centre",
-          "ADR-0253: the widescreen arm turns WideScrn on and is compared on its standard centre")
+          "ADR-0253: the widescreen arm turns WideScrn on and is compared on its standard center")
     check(ac.ARMS[ac.BASELINE]["install"] is None and ac.ARMS[ac.BASELINE]["flags"] == (),
           "the baseline turns no layer on - otherwise there is nothing to compare against")
     check({spec["install"] for spec in ac.ARMS.values()} <= {None, "hdpack", "mep"},
@@ -226,17 +226,17 @@ capture finished: 4809 frames (target 4808), 7.1s of wall clock
 
 
 def test_widescreen_centre():
-    print("widescreen centre (ADR-0253)")
+    print("widescreen center (ADR-0253)")
     got = ac.parse_capture(WIDESCREEN_OUTPUT)
     check(got["width"] == 384 and got["centre"] == {"width": 256, "height": 240, "checksum": "E5C1E0D8"},
-          "reads the extended frame and its centre line")
+          "reads the extended frame and its center line")
     compared = ac.compared_capture(got, "centre")
     check(compared["checksum"] == "E5C1E0D8" and compared["width"] == 256 and compared["extended_width"] == 384,
-          "the widescreen arm is compared on the centre checksum")
+          "the widescreen arm is compared on the center checksum")
     check(ac.compared_capture(got, None) is got, "other arms are compared on the whole frame")
     vanilla = ac.parse_capture(REAL_OUTPUT)
     check(ac.compare({("vanilla", "results-table"): vanilla, ("widescreen", "results-table"): compared}) == [],
-          "a centre equal to the vanilla frame is no divergence")
+          "a center equal to the vanilla frame is no divergence")
     raises(lambda: ac.compared_capture(vanilla, "centre"), ValueError,
            "a widescreen run whose frame was never extended is an error, not a pass")
 

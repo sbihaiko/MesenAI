@@ -121,7 +121,7 @@ allow-listed raw host, and lives only in the player's own cache.**
    something about the network and nothing about the game, and one offline
    session must not blank every visible cover for thirty days — such a call
    returns `null` and leaves the cache untouched, at the cost of asking again
-   once the network is back. A call the caller itself cancelled records nothing
+   once the network is back. A call the caller itself canceled records nothing
    either: the sheet closing is not evidence about the game.
 
 8. **One master switch, default on, and off means no request at all.** The

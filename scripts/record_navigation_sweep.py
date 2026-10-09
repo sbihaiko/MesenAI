@@ -486,7 +486,7 @@ def missing_scripts(sessions: list) -> list:
     """The declared scripts a plan needs and does not have (ADR-0184 s1).
 
     `headless_record` writes a pack from a script it can read; one it cannot is
-    a session that dies after its neighbours have run. The cheat rule is
+    a session that dies after its neighbors have run. The cheat rule is
     refused at plan time for exactly that reason, so a script path is too - and
     the path is named, because "no such file" without the file is the message
     that costs an hour.
@@ -819,7 +819,7 @@ def main() -> int:
     seconds = args.seconds if args.seconds is not None else \
         profile.get("defaults", {}).get("seconds", 300)
     only = set(x.strip() for x in args.only.split(",")) if args.only else set()
-    # A dry run launches nothing, so there is nothing to parallelise: it goes
+    # A dry run launches nothing, so there is nothing to parallelize: it goes
     # through the sequential branch, which is the one that prints each session's
     # full command. Left parallel, --dry-run printed "dry-run in None s" (there
     # is no wall clock to report) and printed no command at all - the one thing

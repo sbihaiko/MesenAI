@@ -11,7 +11,7 @@
 	<!--G.5 (PRD Part B §13.5.2 W-P13): a game needs a BIOS file. Rule 2: drop
 	zone, Cancel, Choose File… = 3. The whole dimmed area takes a drop, so a
 	file dropped anywhere while the sheet is up lands here, never as a ROM.-->
-	<!--ADR-0249 (W-P13): the light sheet on the dimmed home - grey lock badge,
+	<!--ADR-0249 (W-P13): the light sheet on the dimmed home - gray lock badge,
 	title, body, the drop zone, the orange wrong-file line, Cancel and Choose
 	File….-->
 	<Panel Name="BiosSheetBackdrop" Classes="scrim" DragDrop.AllowDrop="True">

@@ -3,7 +3,7 @@
 
 A recorded pack's `textures/hires.txt` points every key at the recorder's
 pattern pages (`chr/Chr_*.png`), which went through the pack's scale filter
-(xBRZ by default). A sheet crop is the raw tile upscaled nearest-neighbour. So
+(xBRZ by default). A sheet crop is the raw tile upscaled nearest-neighbor. So
 a rebuild that points an *untouched* cell's key at its sheet crop renders
 different pixels from the recording, even though nothing was painted (#447).
 
@@ -82,7 +82,7 @@ def run(*argv, expect=0):
 
 
 def page_color(shape: int) -> int:
-    """The recorded page's pixel for `shape`: a solid colour no sheet crop has,
+    """The recorded page's pixel for `shape`: a solid color no sheet crop has,
     standing in for the xBRZ-filtered art the recorder writes."""
     return 0xFF000000 | ((shape * 0x2A1B0C + 0x113355) & 0xFFFFFF)
 

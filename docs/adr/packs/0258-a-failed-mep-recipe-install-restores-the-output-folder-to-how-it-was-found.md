@@ -88,7 +88,7 @@ the method's contract, not to a crash anyone reproduced.
 Two consequences recorded so they are not mistaken for oversights.
 `ClearFolderForReinstall` removes the folder rather than emptying it, so the
 legacy path hands back no entry where the recipe path hands back the caller's
-own — pre-existing behaviour of the sibling branches, unchanged here and not
+own — pre-existing behavior of the sibling branches, unchanged here and not
 covered by this decision. And the stamp is written *after* `pack.json`,
 deliberately: a stamp beside a `pack.json` that never landed would claim a
 folder the install did not finish, which is worse than no stamp at all.
@@ -113,7 +113,7 @@ folder the install did not finish, which is worse than no stamp at all.
 - Not covered, and unchanged from before: when the folder is absent and
   `create_directories` fails partway, the leaf is absent — as it was — but any
   ancestor directories it already created are left behind. That is
-  `create_directories`' own behaviour and this decision does not address it.
+  `create_directories`' own behavior and this decision does not address it.
 - Both residues this ADR left open on the legacy HD path are decided in the
   Decision above (#886): the unguarded post-extraction writes, and the fixed
   exception list on the extract. The asymmetry that survives — a cleared folder

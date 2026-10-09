@@ -38,7 +38,7 @@
 				</StackPanel>
 			</DockPanel>
 			<!--W-P6: the pack's three layers, one switch each, for this game only
-			(PackLayerSwitches): a layer the pack lacks is a grey switch that says
+			(PackLayerSwitches): a layer the pack lacks is a gray switch that says
 			so, and one its global switch has off says that instead. A flip applies
 			at once (in place where ADR-0244 allows) under a moving bar.-->
 			<StackPanel Name="PackDetailLayers" IsVisible="{Binding PackDetailHasPack}" Margin="0 0 0 16">

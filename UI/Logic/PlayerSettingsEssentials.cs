@@ -53,7 +53,7 @@ public static class PlayerSettingsEssentials
 	//#852: the strip's segment width. ADR-0249's sheet is 480 px wide behind
 	//19 px of padding a side, and the reference mockups (docs/media/
 	//gui-redesign/W-P8..W-P11.png) draw the strip at four tabs, where 96 px
-	//segments leave the track centred and narrower than the sheet. ADR-0256
+	//segments leave the track centered and narrower than the sheet. ADR-0256
 	//Decision 8 added the fifth (System) and the fixed 96 px ran 42 px past the
 	//sheet's right edge, so the last label rendered as "Syst": the mockups were
 	//drawn before the tab existed (since #1006 they draw all five, 84 px each). A segment is 96 px while 96 px still fits the

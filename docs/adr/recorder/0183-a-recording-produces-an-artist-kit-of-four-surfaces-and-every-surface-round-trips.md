@@ -69,7 +69,7 @@ The Phase 9 cold read failed on exactly that omission.
 
 Anything a generator infers — a tile filled from the ROM, a guessed palette, a
 stretch of panorama not walked — is marked `seen: false` in the kit manifest
-and labelled in `ARTIST.md`. A rule that would change what a rebuilt pack
+and labeled in `ARTIST.md`. A rule that would change what a rebuilt pack
 renders is emitted only when its key was actually observed; the safe form is
 preferred over the complete one.
 

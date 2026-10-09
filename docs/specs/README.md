@@ -21,7 +21,7 @@ Golden fixtures under [`golden/`](golden/) (one folder per spec — `esp/`,
 | Golden | Path | Checked by | What it pins |
 |---|---|---|---|
 | MEP `content_id` | [`golden/mep-content-id.json`](golden/mep-content-id.json) | `scripts/test_mep_content_id_golden.py` (Python) and `scripts/core_unit_tests.cpp` (C++, `Core/Shared/EnhancementPacks/MepContentId`) | canonical hash of a resolved pack (ADR-0139) — fixtures as inline file entries with expected ids, run by both implementations |
-| MEP border section | [`golden/mep/border/`](golden/mep/border/) | `validate-specs.py` (`validate_mep_border`), `mep_lint.py` via `validate-specs.py` | 32×18 RGBA `border.png` with a transparent 4:3 centre + `border.json` viewport `4,0 24×18` inside the `golden/mep/` pack, declared as `sections.border` (MEP v1.5 §5.4, ADR-0149) |
+| MEP border section | [`golden/mep/border/`](golden/mep/border/) | `validate-specs.py` (`validate_mep_border`), `mep_lint.py` via `validate-specs.py` | 32×18 RGBA `border.png` with a transparent 4:3 center + `border.json` viewport `4,0 24×18` inside the `golden/mep/` pack, declared as `sections.border` (MEP v1.5 §5.4, ADR-0149) |
 | MEP NES pack | [`golden/mep-nes/`](golden/mep-nes/) | `scripts/test_mep_compare_auto_palettes.py`, `mep_lint.py` via `validate-specs.py` | NES-shaped `pack.json` + `textures/hires.txt` fixture with several palettes per tile shape (ADR-0136) |
 
 **Reference implementation limitations (MesenCE, MEP v1 host — F3):** the

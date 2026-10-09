@@ -7,7 +7,7 @@ What is covered, and how the loopback constraint is handled:
 
 * `validate_url_shape` / `match_host` -- pure helpers: https only, hostname
   (not netloc) matching, userinfo and non-443 ports refused, case-insensitive
-  host, `path_contains_any` honoured, suffix (`host_ends_with`) entries.
+  host, `path_contains_any` honored, suffix (`host_ends_with`) entries.
 * `extract_drive_id` -- the `?id=` value is held to the same charset as the
   `/d/<id>` form.
 * Dropbox and MEGA (ADR-0187) -- `force_dropbox_download`'s dl=1 rewrite,

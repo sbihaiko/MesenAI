@@ -12,7 +12,7 @@ namespace Mesen.ViewModels
 {
 	//One row of the sheet's PLAYERS list: a player port, the device whose keys
 	//live under it (read off the port's own slots, never a second table of "who
-	//is P1"), and the player's colour.
+	//is P1"), and the player's color.
 	public partial class ControllerSheetPlayerRow : ObservableObject
 	{
 		public int PortIndex { get; }

@@ -254,6 +254,6 @@ def canonical(decoded):
 
 
 def normalise(decoded_parts):
-    """The normalised code of one effect: its distinct parts, sorted, joined
+    """The normalized code of one effect: its distinct parts, sorted, joined
     with '+'. Order and repetition of the parts do not matter."""
     return "+".join(sorted({canonical(d) for d in decoded_parts}))

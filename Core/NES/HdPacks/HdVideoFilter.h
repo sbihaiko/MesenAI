@@ -29,7 +29,7 @@ public:
 
 	//ADR-0253 W.4: this filter draws the Reveal's extra columns itself, at the
 	//pack's scale, from the side tiles HdNesPpu captured - so it takes the whole
-	//widened frame. VideoDecoder crops the standard centre for a filter that
+	//widened frame. VideoDecoder crops the standard center for a filter that
 	//refuses one (and for the border layer, which is composited on top of it).
 	bool AcceptsExtendedFrame() override { return true; }
 };

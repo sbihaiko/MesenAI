@@ -22,10 +22,10 @@ The F5 closeout spec (run `d662e62e2648`, item 8) planned an optional `loop` fie
 
 Option B — loop point in the OGG's own metadata:
 - Vorbis comment tags `LOOPSTART`/`LOOPLENGTH` (the RPG Maker / game-audio convention) or an equivalent tag, read by `OggReader` when the file is opened and applied as `loopPosition`.
-- No schema or spec change; the asset carries its own loop and loops identically in any player that honours the tag.
+- No schema or spec change; the asset carries its own loop and loops identically in any player that honors the tag.
 - Requires reading Vorbis comments in `OggReader` (not done today).
 
-Rule regardless of option — **backward compatibility for packs that omit it**: a track without a loop point keeps today's behaviour, `LoopPosition = 0` (loop the whole file). Hosts MUST ignore an unknown field/tag rather than reject the pack; `scripts/mep_lint.py` MUST accept both the presence and the absence of the field/tag under MEP-v1.
+Rule regardless of option — **backward compatibility for packs that omit it**: a track without a loop point keeps today's behavior, `LoopPosition = 0` (loop the whole file). Hosts MUST ignore an unknown field/tag rather than reject the pack; `scripts/mep_lint.py` MUST accept both the presence and the absence of the field/tag under MEP-v1.
 
 ## Consequences
 

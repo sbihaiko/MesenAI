@@ -5,7 +5,7 @@ Due to Gamescope (SteamOS' compositor) not handling Avalonia UI's popups very we
  * Download the **[Linux - AppImage](https://github.com/sbihaiko/MesenAI/releases/download/ci-latest/MesenAI-ci-linux-x64.AppImage)** CI build.
  * **Mark the AppImage as executable.** (right click > Properties > Permissions > Is executable)
  * Add the application as a non-Steam shortcut to be able to run it through Steam on both _Desktop Mode_ and _Game Mode_. (right click > Add to Steam)
- * Customise the non-Steam shortcut through Steam to your desire. (in Steam: search the AppImage's filename, right click > Properties; from there you can change the icon, shortcut name and launch options)
+ * Customize the non-Steam shortcut through Steam to your desire. (in Steam: search the AppImage's filename, right click > Properties; from there you can change the icon, shortcut name and launch options)
  * Create a folder called `Mesen.AppImage.Config` in the same directory where the AppImage is stored.
  * Run it the first time. When asking where to store the settings, choose the `Store the data in my user profile` option. ![254295455-88c1942d-b81f-48ee-a3a3-74b9f3ecd9b7-1](https://github.com/kevin-wijnen/Mesen2/assets/58944808/9f4ff1e3-4df6-4441-958b-ce96599ef69d)
  * Set up the controls as asked by Mesen.
@@ -18,4 +18,4 @@ It is recommended to:
 
 **If sound does not work**, check if an audio device is chosen by Mesen. (in Mesen: Settings > Audio > General (Device))
 
-**To make game-specific shortcuts**: Repeat the non-Steam shortcut step on the Mesen AppImage. Customise the new shortcut with a Launch Option (in Steam: right click > Properties; Launch Options). To find possible Launch Options, check the Command-line options menu (in Mesen: Help > Command-line options). When you want to supply a game with the shortcut, put the entire file location of the game in double quotes ("game-filepath") as the first part of the launch options. Add additional options (`--fullscreen` for example) _after_ the file location.
+**To make game-specific shortcuts**: Repeat the non-Steam shortcut step on the Mesen AppImage. Customize the new shortcut with a Launch Option (in Steam: right click > Properties; Launch Options). To find possible Launch Options, check the Command-line options menu (in Mesen: Help > Command-line options). When you want to supply a game with the shortcut, put the entire file location of the game in double quotes ("game-filepath") as the first part of the launch options. Add additional options (`--fullscreen` for example) _after_ the file location.

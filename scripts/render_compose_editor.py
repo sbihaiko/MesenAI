@@ -6,7 +6,7 @@ has, so instead of grabbing pixels off the display this tool runs the real
 `compose_editor.EditorApp` against a real pack, lets Tk lay it out, then walks
 the widget tree and draws every mapped widget from its actual on-screen
 rectangle, text and state - canvases from the PhotoImages Tk itself holds.
-Every colour is resolved through `winfo_rgb`, so an aqua system colour name
+Every color is resolved through `winfo_rgb`, so an aqua system color name
 (`systemWindowBackgroundColor` and friends of the theme the editor really
 runs under) is drawn as the pixels the artist sees, and every string is
 clipped to its widget the way Tk clips it. The result is the window's true
@@ -21,7 +21,7 @@ the ViewModel, so the wiring itself is exercised:
     tab-bg | tab-sprites      switch notebook tabs
     pick-bg:<i>               select row <i> of the background cell list
     seed-bg                   press "Seed selected" on the background tab
-    pick-bg-sugg:<i>          select row <i> of the ranked neighbour list
+    pick-bg-sugg:<i>          select row <i> of the ranked neighbor list
     lock-bg                   press "Lock suggestion"
     band:<i>                  choose floor band <i> in the combobox
     pick-sprite:<i>           select row <i> of the band member list
@@ -92,10 +92,10 @@ class Renderer:
         self.d = ImageDraw.Draw(self.img)
         self.ox, self.oy = root.winfo_rootx(), root.winfo_rooty()
 
-    # ---- colour / text helpers ---------------------------------------------
+    # ---- color / text helpers ---------------------------------------------
 
     def rgb(self, spec, default=(0, 0, 0)):
-        """Any Tk colour (hex, name, or an aqua `system*` colour) as RGB."""
+        """Any Tk color (hex, name, or an aqua `system*` color) as RGB."""
         try:
             r, g, b = self.root.winfo_rgb(str(spec))
         except tk.TclError:
@@ -103,7 +103,7 @@ class Renderer:
         return (r >> 8, g >> 8, b >> 8)
 
     def themed(self, widget, option, fallback):
-        """A ttk widget's colour: its own option when the editor set one,
+        """A ttk widget's color: its own option when the editor set one,
         else what the live theme resolves for its style."""
         own = opt(widget, option)
         if own:
@@ -134,7 +134,7 @@ class Renderer:
         """A canvas is drawn into its own image and pasted, so an item placed
         outside the widget is clipped away exactly as Tk clips it - the
         difference between "off-canvas, invisible to the artist" and "drawn on
-        top of the neighbouring frame"."""
+        top of the neighboring frame"."""
         sub = Image.new("RGB", (max(1, r[2] - r[0]), max(1, r[3] - r[1])),
                         self.rgb(opt(widget, "background", "white")))
         page, canvas_d, origin = self.img, self.d, (r[0], r[1])

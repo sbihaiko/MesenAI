@@ -214,7 +214,7 @@ namespace MepZipExtract
 			return false;
 		}
 
-		vector<std::pair<string, string>> plan; //entry name -> normalised relative path
+		vector<std::pair<string, string>> plan; //entry name -> normalized relative path
 		bool hasPackJson = false;
 		if(!BuildExtractionPlan(entries, plan, hasPackJson, error)) {
 			return false;

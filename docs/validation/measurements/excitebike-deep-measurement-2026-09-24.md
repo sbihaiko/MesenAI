@@ -173,7 +173,7 @@ Reading it:
   steps (`29220F20` → `29272230`), plus 1 over the gate, and 8 colourways
   (mostly `29272230` ↔ `29220F16`).
 - **On a CHR ROM pack, the kit criterion folds nothing.** Assuming all four
-  entries means palette entry 0 (the universal background colour) and every
+  entries means palette entry 0 (the universal background color) and every
   unpainted entry must also agree. So all 19 misses, and every other
   multi-palette index on the pattern pages, stay separate cells. The CHR kit's
   own `fold` block confirms this: 608 cells on CHR pages, 0 folded. Its
@@ -217,7 +217,7 @@ also has 16 sequences. The kit lays out 53 figures on 10 sheets:
 
 | Sheet | Run | Period / repeats / holds | Figures | Reads as (by eye) |
 |---|---|---|---|---|
-| `usr000` | `cycle000` | 2 / **772** / 2,2 | 14 (12 variants), plays columns 1 8 | the rider cruising, wheels alternating; variants carry a small marker sprite or a neighbour |
+| `usr000` | `cycle000` | 2 / **772** / 2,2 | 14 (12 variants), plays columns 1 8 | the rider cruising, wheels alternating; variants carry a small marker sprite or a neighbor |
 | `usr001` | `cycle001` | 2 / 23 / 10,2 | 4 (3 variants) | wheelie |
 | `usr002` | `cycle005` | 2 / 4 / 26,3 | 4 (3 variants) | airborne / leaning |
 | `usr003` | `cycle007` | 2 / 2 / 14,8 | 2 | crash (rider down) |
@@ -338,7 +338,7 @@ python3 scripts/mep_build.py build <p>/painted   # and once more, to check idemp
     the time, and a different pose hides it altogether. The OAM stream
     confirms nodes 2–8 in one phase and 82–88 in the other.
 - **#447 (nearest vs xBRZ), noted and not fixed.** All 569 rules of a
-  rebuilt pack draw the nearest-neighbour sheet crops, where the auto layer
+  rebuilt pack draw the nearest-neighbor sheet crops, where the auto layer
   draws xBRZ-smoothed pages. So the unpainted control renders crisper than
   the recording, as the F14.4 log found on Castlevania and Zelda.
 - **The kit's per-sheet note** (the `artist_kit.py` bullet "Rebuild after
@@ -384,7 +384,7 @@ another palette, and 175 `Y` only for an index never drawn.
   tiles are only the ROM export.
 - The fold criteria are the kit's predicates applied in scratch code. The
   resolved criterion is what the kit *would* do with the ROM bytes. It is
-  not current behaviour.
+  not current behavior.
 - The in-game proof is a single-frame screenshot. The frame was picked by
   scanning 10–14 s for the pose that draws the painted tile. That is not
   chance: the cell is visible in about half the frames of that pose's cycle.

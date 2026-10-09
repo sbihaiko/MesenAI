@@ -1039,9 +1039,9 @@ def test_cheat_validation(tmp):
     check(True, "the AAAA:VV[:CC] form under $0800 is accepted")
     try:
         check(jev_harness.parse_cheat("0a2:ff") == "00A2:FF",
-              "a short address is normalised, not refused")
+              "a short address is normalized, not refused")
     except jev_harness.CheatError as error:
-        check(False, "a short address is normalised", str(error))
+        check(False, "a short address is normalized", str(error))
 
     #`1000` and `2000` are the NES's mirrors of internal RAM and are still
     #refused: ADR-0184 section 1 draws the line at $07FF, not at what mirrors.

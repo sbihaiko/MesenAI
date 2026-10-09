@@ -87,7 +87,7 @@ namespace Mesen.Logic
 		//names fires at the player's own threshold; every other direction keeps
 		//the host's own ratio, untouched.
 		//
-		//This is what makes "zero behaviour change for anyone who has not bound an
+		//This is what makes "zero behavior change for anyone who has not bound an
 		//axis" a rule and not a promise: `thresholdUnits` is the value the core
 		//holds for that direction, and it is absent (null) for every direction no
 		//binding names - including every direction on a config that never used

@@ -553,7 +553,7 @@ OverscanDimensions EmuSettings::GetOverscan()
 				//same rule, from the same inputs, that makes SmsVdp report those
 				//columns as the frame's extended ones, so the crop can never
 				//come back over a picture it was already dropped from. That
-				//includes the centre the decoder keeps for a filter or the
+				//includes the center the decoder keeps for a filter or the
 				//border layer that cannot take the wide frame: it IS this crop's
 				//output, and cropping it again would read past the end of the row.
 				return SmsWidescreenReveal::GameGearOverscan(_sms.GameGearOverscan, _video.AspectRatio);

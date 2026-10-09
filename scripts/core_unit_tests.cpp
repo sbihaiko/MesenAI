@@ -1689,11 +1689,11 @@ namespace
 
 	void TestBorderDefaultHeuristic()
 	{
-		//No border.json: 16:9 canvas gets a 4:3, full-height, centred viewport
+		//No border.json: 16:9 canvas gets a 4:3, full-height, centered viewport
 		BorderLayout l = BorderLayout::ForCanvas(1920, 1080);
 		Check(l.ViewportWidth == 1440 && l.ViewportHeight == 1080, "BlocoH: default viewport is 4:3 at full canvas height",
 			std::to_string(l.ViewportWidth) + "x" + std::to_string(l.ViewportHeight));
-		Check(l.ViewportX == 240 && l.ViewportY == 0, "BlocoH: default viewport is horizontally centred",
+		Check(l.ViewportX == 240 && l.ViewportY == 0, "BlocoH: default viewport is horizontally centered",
 			std::to_string(l.ViewportX) + "," + std::to_string(l.ViewportY));
 		Check(l.ScaleMode == BorderScaleMode::Fit && !l.Underlay, "BlocoH: defaults are scale_mode=fit, underlay=false");
 		Check(l.IsViewportInsideCanvas(), "BlocoH: default viewport lies inside the canvas");
@@ -1744,9 +1744,9 @@ namespace
 		CheckRect(l.CanvasRectOnOutput(1920, 1080), 0, 0, 1920, 1080, "BlocoH: fit on a same-aspect output fills it");
 		CheckRect(l.CanvasRectOnOutput(960, 540), 0, 0, 960, 540, "BlocoH: fit on a half-size output scales down");
 
-		//Wider output (21:9): full height, pillarboxed and centred
+		//Wider output (21:9): full height, pillarboxed and centered
 		CheckRect(l.CanvasRectOnOutput(2560, 1080), 320, 0, 1920, 1080, "BlocoH: fit on a wider output pillarboxes");
-		//Taller output (4:3): full width, letterboxed and centred
+		//Taller output (4:3): full width, letterboxed and centered
 		CheckRect(l.CanvasRectOnOutput(1920, 1440), 0, 180, 1920, 1080, "BlocoH: fit on a taller output letterboxes");
 
 		//Game viewport follows the canvas rect
@@ -1833,7 +1833,7 @@ namespace
 		}
 		Check(allPainted, "BlocoH: overhanging viewport still paints every canvas cell it covers");
 		//Viewport cell (2,2) (canvas 0,0) samples game pixel (2*2/8, 2*2/8) = (0,0)
-		Check(buf[0] == 0xFF000001 && buf[15] == 0xFF000004, "BlocoH: overhanging viewport samples the game with nearest-neighbour",
+		Check(buf[0] == 0xFF000001 && buf[15] == 0xFF000004, "BlocoH: overhanging viewport samples the game with nearest-neighbor",
 			std::to_string(buf[0]) + "/" + std::to_string(buf[15]));
 	}
 
@@ -1844,7 +1844,7 @@ namespace
 		//50% white over opaque black: (255*128 + 0*127)/255 = 128 per channel, alpha stays 255
 		uint32_t mid = BorderBlendOver(0xFF000000, 0x80FFFFFF);
 		Check(mid == 0xFF808080, "BlocoH: mid alpha blends channels with integer source-over", std::to_string(mid));
-		//50% over a transparent destination: alpha accumulates, colour is scaled
+		//50% over a transparent destination: alpha accumulates, color is scaled
 		uint32_t onClear = BorderBlendOver(0x00000000, 0x80FFFFFF);
 		Check(onClear == 0x80808080, "BlocoH: mid alpha over transparent keeps the border's alpha", std::to_string(onClear));
 		//Alpha 1 barely changes the destination but never overflows a channel
@@ -2026,7 +2026,7 @@ namespace
 			"worst " + std::to_string(worstJump) + " at " + std::to_string(worstAt) + ", allowed " + std::to_string(maxJump));
 
 		//(b) The envelope tracks the expected linear curves. Tolerance covers
-		//the 8-bit quantisation of the per-block endpoint volumes: one LSB of
+		//the 8-bit quantization of the per-block endpoint volumes: one LSB of
 		//volume is amplitude/255 of level (~0.8% of the loudest source here,
 		//against the ~1250 step the block-stepped fade produced).
 		double tolerance = kAmpB / 255.0 + 2.0;
@@ -2156,7 +2156,7 @@ namespace
 	void TestNoLoopPointBehavesAsBefore()
 	{
 		//Backward compatibility (ADR-0134): a pack that omits `loop` keeps the
-		//pre-item-8 behaviour and loops the whole file from 0.
+		//pre-item-8 behavior and loops the whole file from 0.
 		StubOggDecoder decoder(1000);
 		OggLoopStream stream;
 		stream.Init(&decoder, true, 0);
@@ -2168,7 +2168,7 @@ namespace
 			std::to_string(decoder.LastSeekTarget));
 		Check(buffer[1000 * 2] == 0 && buffer[1001 * 2] == 1, "BlocoJ: without a loop point the intro is replayed");
 
-		//An out-of-range loop point degrades to the same behaviour instead of
+		//An out-of-range loop point degrades to the same behavior instead of
 		//seeking past the end of the stream.
 		StubOggDecoder farLoop(1000);
 		OggLoopStream clamped;
@@ -3072,7 +3072,7 @@ namespace
 		uint8_t MapperReadVram(uint16_t addr, MemoryOperationType) { SideEffectReads++; return Internal(addr); }
 		void NotifyVramAddressChange(uint16_t) { VramHookCalls++; }
 
-		//BaseMapper::DebugReadVram, same default and same hook behaviour
+		//BaseMapper::DebugReadVram, same default and same hook behavior
 		uint8_t DebugReadVram(uint16_t addr, bool disableSideEffects = true)
 		{
 			if(!disableSideEffects) {
@@ -3097,8 +3097,8 @@ namespace
 		}
 	};
 
-	//Tile 1: solid colour 1. Tile 2: solid colour 2. Tile 4: colour 1 on the
-	//tile's first pixel column only. Tile 5: colour 1 on fine row 2 only.
+	//Tile 1: solid color 1. Tile 2: solid color 2. Tile 4: color 1 on the
+	//tile's first pixel column only. Tile 5: color 1 on fine row 2 only.
 	void SetUpRevealTiles(RevealFakeMapper& m)
 	{
 		uint8_t ff[8] = { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF };
@@ -3188,7 +3188,7 @@ namespace
 	void TestRevealContentRulePerMirroring()
 	{
 		using namespace NesWidescreenReveal;
-		Check(SideColumnsHaveContent(MirroringType::Vertical, 0), "W253: vertical mirroring has a neighbouring screen beside the picture");
+		Check(SideColumnsHaveContent(MirroringType::Vertical, 0), "W253: vertical mirroring has a neighboring screen beside the picture");
 		Check(SideColumnsHaveContent(MirroringType::Vertical, 300), "W253: vertical mirroring has content at any scroll");
 		Check(SideColumnsHaveContent(MirroringType::FourScreens, 37), "W253: four-screen has content beside the picture");
 		Check(!SideColumnsHaveContent(MirroringType::ScreenAOnly, 0), "W253: single-screen (A) never has content beside the picture");
@@ -3213,16 +3213,16 @@ namespace
 		using namespace NesWidescreenReveal;
 		RevealFakeMapper m;
 		SetUpRevealTiles(m);
-		m.FillNametable(0, 1, 0x00); //colour 1, palette 0 -> 0x11
-		m.FillNametable(1, 2, 0x55); //colour 2, palette 1 -> 0x22
+		m.FillNametable(0, 1, 0x00); //color 1, palette 0 -> 0x11
+		m.FillNametable(1, 2, 0x55); //color 2, palette 1 -> 0x22
 		uint8_t pal[0x20];
 		SetUpRevealPalette(pal);
 		uint16_t left[ExtraColumns] = {}, right[ExtraColumns] = {};
 
 		//Unscrolled: both sides are the other nametable (wrapping on the left)
 		RenderRowSides(RevealBasis(0, 0), MirroringType::Vertical, m, pal, left, right);
-		Check(AllEqual(left, ExtraColumns, 0x22), "W253: unscrolled, the left columns come from the neighbouring nametable", Hex16(left[0]));
-		Check(AllEqual(right, ExtraColumns, 0x22), "W253: unscrolled, the right columns come from the neighbouring nametable", Hex16(right[0]));
+		Check(AllEqual(left, ExtraColumns, 0x22), "W253: unscrolled, the left columns come from the neighboring nametable", Hex16(left[0]));
+		Check(AllEqual(right, ExtraColumns, 0x22), "W253: unscrolled, the right columns come from the neighboring nametable", Hex16(right[0]));
 
 		//Scrolled by 128: the left side is still NT0, the right side is NT1
 		RenderRowSides(RevealBasis(16, 0), MirroringType::Vertical, m, pal, left, right);
@@ -3282,7 +3282,7 @@ namespace
 		RenderRowSides(RevealBasis(0, 0), MirroringType::Horizontal, m, pal, left, right);
 		Check(AllEqual(left, ExtraColumns, BlackColor) && AllEqual(right, ExtraColumns, BlackColor), "W253: horizontal mirroring unscrolled draws black (SMB3 title)", Hex16(left[0]));
 
-		//Black stays black under grayscale/emphasis: it is not a game colour
+		//Black stays black under grayscale/emphasis: it is not a game color
 		RowBasis gray = RevealBasis(4, 0);
 		gray.PaletteMask = 0x30;
 		gray.EmphasisBits = 0x40;
@@ -3373,7 +3373,7 @@ namespace
 		for(uint32_t y = 0; y < Height && centreSame; y++) {
 			centreSame = memcmp(wide + y * ExtendedWidth + ExtraColumns, standard.data() + y * StandardWidth, StandardWidth * sizeof(uint16_t)) == 0;
 		}
-		Check(centreSame, "W253: the centre 256 columns of every row are the standard frame, bit for bit");
+		Check(centreSame, "W253: the center 256 columns of every row are the standard frame, bit for bit");
 		Check(AllEqual(wide, ExtraColumns, 0x21) && AllEqual(wide + ExtraColumns + StandardWidth, ExtraColumns, 0x22), "W253: a drawn row keeps its side columns");
 		Check(AllEqual(wide + ExtendedWidth, ExtraColumns, BlackColor) && AllEqual(wide + ExtendedWidth + ExtraColumns + StandardWidth, ExtraColumns, BlackColor),
 			"W253: a row the frame never drew falls back to black");
@@ -3443,7 +3443,7 @@ namespace
 		}
 	}
 
-	//CGB palette index i reads 0x100 + i, so every colour under test is a
+	//CGB palette index i reads 0x100 + i, so every color under test is a
 	//distinct value (the PPU masks the palette entry with 0x7FFF)
 	void GbSetUpRevealPalette(uint16_t pal[32])
 	{
@@ -3461,7 +3461,7 @@ namespace
 		basis.CgbEnabled = true;
 		basis.BgEnabled = true;
 		basis.BgTileSelect = true; //tile data at 0x0000
-		basis.BgPalette = 0xE4; //colour c -> shade c
+		basis.BgPalette = 0xE4; //color c -> shade c
 		return basis;
 	}
 
@@ -3471,14 +3471,14 @@ namespace
 		uint8_t ff[8] = { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF };
 		uint8_t col0[8] = { 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80 };
 		uint8_t row0[8] = { 0xFF, 0, 0, 0, 0, 0, 0, 0 };
-		GbSetTileAt(vram, 1 * 16, ff, zero); //tile 1: colour 1
-		GbSetTileAt(vram, 2 * 16, zero, ff); //tile 2: colour 2
-		GbSetTileAt(vram, 3 * 16, ff, ff); //tile 3: colour 3
-		GbSetTileAt(vram, 4 * 16, col0, zero); //tile 4: colour 1 on fine X 0 only
-		GbSetTileAt(vram, 5 * 16, zero, ff); //tile 5: colour 2
-		GbSetTileAt(vram, 6 * 16, col0, zero); //tile 6: colour 1 on fine X 0 only
-		GbSetTileAt(vram, 7 * 16, row0, zero); //tile 7: colour 1 on fine Y 0 only
-		GbSetTileAt(vram, (1 * 16) | 0x2000, zero, ff); //bank 1's tile 1: colour 2
+		GbSetTileAt(vram, 1 * 16, ff, zero); //tile 1: color 1
+		GbSetTileAt(vram, 2 * 16, zero, ff); //tile 2: color 2
+		GbSetTileAt(vram, 3 * 16, ff, ff); //tile 3: color 3
+		GbSetTileAt(vram, 4 * 16, col0, zero); //tile 4: color 1 on fine X 0 only
+		GbSetTileAt(vram, 5 * 16, zero, ff); //tile 5: color 2
+		GbSetTileAt(vram, 6 * 16, col0, zero); //tile 6: color 1 on fine X 0 only
+		GbSetTileAt(vram, 7 * 16, row0, zero); //tile 7: color 1 on fine Y 0 only
+		GbSetTileAt(vram, (1 * 16) | 0x2000, zero, ff); //bank 1's tile 1: color 2
 	}
 
 	void TestGbRevealWidthContractIsFortyEightColumnsPerSide()
@@ -3592,7 +3592,7 @@ namespace
 		RenderRowSides(GbRevealBasis(0, 0, 7), vram, pal, left, right);
 		Check(left[0] == 0x100, "W253b: the same tile without the Y flip is transparent at fine Y 7", Hex16(left[0]));
 
-		//Palette bits 0-2: colour 1 in palette 3 is CGB palette entry 13
+		//Palette bits 0-2: color 1 in palette 3 is CGB palette entry 13
 		GbSetMapEntry(vram, 0x1800, 26, 0, 1, 0x03);
 		RenderRowSides(GbRevealBasis(), vram, pal, left, right);
 		Check(left[0] == 0x10D, "W253b: the CGB palette attribute picks the revealed tile's palette", Hex16(left[0]));
@@ -3618,21 +3618,21 @@ namespace
 		GbSetUpRevealPalette(pal);
 		GbSetUpTiles(vram);
 		uint8_t ff[8] = { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF };
-		GbSetTileAt(vram, 0x0800, ff, ff); //tile 0x80 in the 0x1000 + signed area: colour 3
+		GbSetTileAt(vram, 0x0800, ff, ff); //tile 0x80 in the 0x1000 + signed area: color 3
 		GbFillMap(vram, 0x1800, 2);
 		uint16_t left[ExtraColumns] = {}, right[ExtraColumns] = {};
 
-		//BGP 0x1B maps colour c to shade 3 - c, so colour 2 reads pal[1]
+		//BGP 0x1B maps color c to shade 3 - c, so color 2 reads pal[1]
 		RowBasis basis = GbRevealBasis();
 		basis.CgbEnabled = false;
 		basis.BgPalette = 0x1B;
 		RenderRowSides(basis, vram, pal, left, right);
-		Check(AllEqual(left, ExtraColumns, 0x101) && AllEqual(right, ExtraColumns, 0x101), "W253b: the DMG BGP maps the revealed tile's colour to a shade", Hex16(left[0]));
+		Check(AllEqual(left, ExtraColumns, 0x101) && AllEqual(right, ExtraColumns, 0x101), "W253b: the DMG BGP maps the revealed tile's color to a shade", Hex16(left[0]));
 
-		//A frozen palette reads colour 0, like the PPU's own reads
+		//A frozen palette reads color 0, like the PPU's own reads
 		basis.PaletteBlocked = true;
 		RenderRowSides(basis, vram, pal, left, right);
-		Check(AllEqual(left, ExtraColumns, 0) && AllEqual(right, ExtraColumns, 0), "W253b: a blocked palette reads colour 0, like the PPU", Hex16(left[0]));
+		Check(AllEqual(left, ExtraColumns, 0) && AllEqual(right, ExtraColumns, 0), "W253b: a blocked palette reads color 0, like the PPU", Hex16(left[0]));
 
 		//LCDC.4 clear: tile data at 0x1000 + a signed tile index
 		basis = GbRevealBasis();
@@ -3738,15 +3738,15 @@ namespace
 		GbFillMap(vram, 0x1800, 1);
 		uint16_t left[ExtraColumns] = {}, right[ExtraColumns] = {};
 
-		//DMG with LCDC.0 cleared: the hardware outputs colour 0 through BGP for
-		//the whole line, so the revealed columns show the same blank colour
+		//DMG with LCDC.0 cleared: the hardware outputs color 0 through BGP for
+		//the whole line, so the revealed columns show the same blank color
 		RowBasis basis = GbRevealBasis();
 		basis.CgbEnabled = false;
 		basis.BgEnabled = false;
-		basis.BgPalette = 0x1B; //colour 0 -> shade 3
+		basis.BgPalette = 0x1B; //color 0 -> shade 3
 		RenderRowSides(basis, vram, pal, left, right);
 		Check(AllEqual(left, ExtraColumns, 0x103) && AllEqual(right, ExtraColumns, 0x103),
-			"W253b: with the DMG background off the revealed columns show the picture's blank colour", Hex16(left[0]));
+			"W253b: with the DMG background off the revealed columns show the picture's blank color", Hex16(left[0]));
 
 		//On CGB, LCDC.0 is the BG priority bit - the map is still drawn
 		basis.CgbEnabled = true;
@@ -3826,7 +3826,7 @@ namespace
 		for(uint32_t y = 0; y < Height && centreSame; y++) {
 			centreSame = memcmp(wide + y * ExtendedWidth + ExtraColumns, standard.data() + y * StandardWidth, StandardWidth * sizeof(uint16_t)) == 0;
 		}
-		Check(centreSame, "W253b: the centre 160 columns of every GB row are the standard frame, bit for bit");
+		Check(centreSame, "W253b: the center 160 columns of every GB row are the standard frame, bit for bit");
 		Check(AllEqual(wide, ExtraColumns, 0x101) && AllEqual(wide + ExtraColumns + StandardWidth, ExtraColumns, 0x102), "W253b: a drawn GB row keeps its side columns");
 		Check(AllEqual(wide + ExtendedWidth, ExtraColumns, BlackColor) && AllEqual(wide + ExtendedWidth + ExtraColumns + StandardWidth, ExtraColumns, BlackColor),
 			"W253b: a GB row the frame never drew falls back to black");
@@ -3841,7 +3841,7 @@ namespace
 	{
 		using namespace SmsWidescreenReveal;
 		Check(ExtraColumns == 48, "W253b: the Game Gear Reveal is the 48 px the viewport crops on each side", std::to_string(ExtraColumns));
-		Check(LineWidth == 256, "W253b: the VDP's line is 256 px and the Game Gear's picture is its centre 160", std::to_string(LineWidth));
+		Check(LineWidth == 256, "W253b: the VDP's line is 256 px and the Game Gear's picture is its center 160", std::to_string(LineWidth));
 		Check(StandardPictureWidth + 2 * ExtraColumns == LineWidth, "W253b: the frame-width contract holds - Width - 2N is the standard picture");
 		Check(Height == 144, "W253b: the Game Gear's picture is 144 lines tall", std::to_string(Height));
 
@@ -3870,15 +3870,15 @@ namespace
 		//What the frame is shown with, from the crop and the switch alone. The
 		//rule never asks the VideoDecoder which frame it is holding: a filter or
 		//the border layer that cannot take the wide frame makes the decoder keep
-		//the standard 160-px centre, which is what the crop itself produces, and
-		//a crop applied on top of that centre would cut into the picture and
+		//the standard 160-px center, which is what the crop itself produces, and
+		//a crop applied on top of that center would cut into the picture and
 		//read past the end of the row. Dropping the crop and reporting the
 		//extended columns are the same decision, so a filter that takes the wide
-		//frame and one that takes the centre both end up with no crop.
+		//frame and one that takes the center both end up with no crop.
 		OverscanDimensions ggCrop = { 48, 48, 24, 24 };
 		OverscanDimensions revealed = GameGearOverscan(ggCrop, VideoAspectRatio::Widescreen);
 		Check(revealed.Left == 0 && revealed.Right == 0,
-			"W253b: a Game Gear frame with the Reveal on has no horizontal crop, whether the wide frame or the standard centre is the one shown");
+			"W253b: a Game Gear frame with the Reveal on has no horizontal crop, whether the wide frame or the standard center is the one shown");
 		Check(revealed.Top == 24 && revealed.Bottom == 24, "W253b: the Reveal is horizontal - the vertical overscan is left alone");
 		OverscanDimensions plain = GameGearOverscan(ggCrop, VideoAspectRatio::Auto);
 		Check(plain.Left == 48 && plain.Right == 48, "W253b: with WideScrn off the configured crop is applied untouched");
@@ -4358,7 +4358,7 @@ namespace
 		for(uint32_t y = 0; y < Height && centreSame; y++) {
 			centreSame = memcmp(wide + y * ExtendedWidth + ExtraColumns, standard.data() + y * StandardWidth, StandardWidth * sizeof(uint16_t)) == 0;
 		}
-		Check(centreSame, "W253: the centre 240 columns of every row are the standard frame, bit for bit");
+		Check(centreSame, "W253: the center 240 columns of every row are the standard frame, bit for bit");
 		Check(AllEqual(wide, ExtraColumns, GbaColor(31, 0, 0)) && AllEqual(wide + ExtraColumns + StandardWidth, ExtraColumns, GbaColor(0, 31, 0)),
 			"W253: a drawn row keeps its side columns");
 		Check(AllEqual(wide + ExtendedWidth, ExtraColumns, BlackColor) && AllEqual(wide + ExtendedWidth + ExtraColumns + StandardWidth, ExtraColumns, BlackColor),
@@ -4532,14 +4532,14 @@ namespace
 }
 
 //--- Bloco W253-W4: the Reveal's extra columns through the HD pack path -----
-//ADR-0253 slice W.4. The extra columns are the picture's own neighbours, so the
-//pack has to be asked about them the way it is asked about a centred pixel: the
-//same tile key (index + palette, plus CHR RAM's own bytes), the same ROM colour
+//ADR-0253 slice W.4. The extra columns are the picture's own neighbors, so the
+//pack has to be asked about them the way it is asked about a centered pixel: the
+//same tile key (index + palette, plus CHR RAM's own bytes), the same ROM color
 //behind a tile the pack has no rule for, and the whole thing at the pack's own
 //scale - never a raw low-res tile stretched to fit.
 //
 //The picture keeps its own coordinates while the sides sit outside them
-//(-64..-1 and 256..319). That is what keeps the centre bit-identical and every
+//(-64..-1 and 256..319). That is what keeps the center bit-identical and every
 //rule a pack already ships meaning what it meant; the price is that a rule
 //which reads a position has to be told "this pixel is not in the picture"
 //instead of wrapping onto an unrelated one - the guard the last cases pin, and
@@ -4677,8 +4677,8 @@ void TestW4SideTilesComeFromTheNeighbouringNametable()
 	using namespace HdWidescreenColumns;
 	HdSideFakeMapper m;
 	SetUpRevealTiles(m);
-	m.FillNametable(0, 1, 0x00); //tile 1 = colour 1, palette 0 -> 0x11
-	m.FillNametable(1, 2, 0x55); //tile 2 = colour 2, palette 1 -> 0x22
+	m.FillNametable(0, 1, 0x00); //tile 1 = color 1, palette 0 -> 0x11
+	m.FillNametable(1, 2, 0x55); //tile 2 = color 2, palette 1 -> 0x22
 	uint8_t pal[0x20];
 	SetUpRevealPalette(pal);
 	HdSideTile tiles[TilesPerRow];
@@ -4687,13 +4687,13 @@ void TestW4SideTilesComeFromTheNeighbouringNametable()
 	BuildHdSideTiles(m, HdSideBasis(0, 0), MirroringType::Vertical, pal, false, 109, tiles);
 	Check(tiles[0].HasContent && tiles[TilesPerSide].HasContent, "W4: vertical mirroring gives the sides content");
 	Check(tiles[0].Tile.TileIndex == 2 && tiles[TilesPerSide].Tile.TileIndex == 2,
-		"W4: both sides are drawn from the neighbouring nametable's tile",
+		"W4: both sides are drawn from the neighboring nametable's tile",
 		std::to_string(tiles[0].Tile.TileIndex) + " " + std::to_string(tiles[TilesPerSide].Tile.TileIndex));
 	Check(tiles[0].BgColorIndex[0] == 2 && tiles[0].BgColor[0] == 0x22,
-		"W4: and carry the ROM's own colour for the pixel", Hex16(tiles[0].BgColor[0]) + " idx=" + std::to_string(tiles[0].BgColorIndex[0]));
+		"W4: and carry the ROM's own color for the pixel", Hex16(tiles[0].BgColor[0]) + " idx=" + std::to_string(tiles[0].BgColorIndex[0]));
 	Check(tiles[0].Tile.PpuBackgroundColor == 0x0D, "W4: the backdrop travels with the tile", Hex16(tiles[0].Tile.PpuBackgroundColor));
 	Check(tiles[0].Tile.OffsetY == 0 && tiles[0].Tile.PaletteOffset == 0,
-		"W4: a side tile is handed to the pack with the offsets a centred one has");
+		"W4: a side tile is handed to the pack with the offsets a centered one has");
 
 	//Scrolled by 128 px: the left side is the current nametable, the right one
 	//the next - exactly W.1's RenderRowSides split
@@ -4705,7 +4705,7 @@ void TestW4SideTilesComeFromTheNeighbouringNametable()
 }
 
 //Fine X, fine Y and the nametable row: the three bits that decide *which*
-//neighbour pixel a side column shows.
+//neighbor pixel a side column shows.
 void TestW4SideTilesFollowTheRowsScrollState()
 {
 	using namespace HdWidescreenColumns;
@@ -4718,7 +4718,7 @@ void TestW4SideTilesFollowTheRowsScrollState()
 	HdSideTile tiles[TilesPerRow];
 
 	//Scrolled by 16 tiles with vertical mirroring, the left side is the current
-	//nametable and the right one the neighbour. Tile 4 lights only its own first
+	//nametable and the right one the neighbor. Tile 4 lights only its own first
 	//pixel column, so it says both things at once: the tile is handed over
 	//whole - its eight pixels are the ROM's, unshifted - and fine X only moves
 	//which of them the side's output columns start on.
@@ -4744,7 +4744,7 @@ void TestW4SideTilesFollowTheRowsScrollState()
 	Check(tiles[TilesPerSide].BgColorIndex[7] == 0 && tiles[TilesPerSide].BgColor[7] == 0x0D,
 		"W4: a transparent tile row shows the backdrop", Hex16(tiles[TilesPerSide].BgColor[7]));
 
-	//The attribute quadrant picks the palette, as it does for a centred pixel.
+	//The attribute quadrant picks the palette, as it does for a centered pixel.
 	//NT1's attribute 0xE4 gives its tiles at coarse X 48-49 palette 0 and those
 	//at 50-51 palette 1, so two adjacent right-side tiles holding the *same* ROM
 	//tile come out in different palettes.
@@ -4803,7 +4803,7 @@ void TestW4SideTilesGoEmptyWhereTheRevealDrawsBlack()
 		"W4: with the background off the pack is handed a pixel with no tile",
 		std::to_string(tiles[0].Tile.TileIndex));
 	Check(tiles[0].BgColorIndex[0] == 0 && tiles[0].BgColor[0] == 0x0D && tiles[0].Tile.PpuBackgroundColor == 0x0D,
-		"W4: and that pixel's colour is the backdrop, as W.1 draws it", Hex16(tiles[0].BgColor[0]));
+		"W4: and that pixel's color is the backdrop, as W.1 draws it", Hex16(tiles[0].BgColor[0]));
 	Check(m.SideEffectReads == 0, "W4: even the background-off row uses no rendering read");
 }
 
@@ -4837,7 +4837,7 @@ void TestW4SideTilePixelsAreTheLowResRevealPixels()
 
 			//The frame HdNesPpu emits is built from these same tiles. If it ever
 			//stopped matching W.1's own renderer, the widened RenderedFrame a
-			//non-HD consumer sees (the border layer's centre) would be the only
+			//non-HD consumer sees (the border layer's center) would be the only
 			//place the two could disagree.
 			uint16_t lowLeft[ExtraColumns] = {}, lowRight[ExtraColumns] = {};
 			HdWidescreenColumns::SideTilesToLowResRow(tiles, fineX, basis.PaletteMask, basis.EmphasisBits, lowLeft);
@@ -4869,12 +4869,12 @@ void TestW4SideTilePixelsAreTheLowResRevealPixels()
 			}
 		}
 	}
-	Check(same, "W4: every side tile pixel is the colour W.1's low-res Reveal draws there", firstBad);
+	Check(same, "W4: every side tile pixel is the color W.1's low-res Reveal draws there", firstBad);
 	Check(sameLowRes, "W4: the widened frame's own side pixels are W.1's, built from those same tiles", firstBadLowRes);
 }
 
 //What the HD renderer is handed for a side pixel. The low-res frame above is
-//built from the tile's own colours, so it cannot see this: `OffsetX` is which
+//built from the tile's own colors, so it cannot see this: `OffsetX` is which
 //column of the pack's *art* the pixel samples, and `DrawTile` indexes the bitmap
 //with it. Left at the struct's default of 0, every column of a side row draws
 //column 0 of the tile - a smear the low-res comparison above is blind to.
@@ -4927,7 +4927,7 @@ void TestW4SidePixelInfoSamplesEachColumnsOwnPixel()
 				}
 
 				//Everything else is exactly the side tile's, so the pack's lookup
-				//key and the ROM colour behind a tile it has no rule for are the
+				//key and the ROM color behind a tile it has no rule for are the
 				//ones HdNesPpu captured - not a re-derivation.
 				bool ok = info.Tile.TileIndex == sideTile.Tile.TileIndex &&
 					info.Tile.PaletteColors == sideTile.Tile.PaletteColors &&
@@ -4938,7 +4938,7 @@ void TestW4SidePixelInfoSamplesEachColumnsOwnPixel()
 					info.Tile.BgColor == sideTile.BgColor[pixel] &&
 					info.SpriteCount == 0 && !info.Tile.HorizontalMirroring;
 				//A side pixel has no sprite of its own: sprites do not exist past
-				//the picture's edge, and a stale SpriteCount would draw the centre's.
+				//the picture's edge, and a stale SpriteCount would draw the center's.
 				if(!ok && recordMatchesTile) {
 					firstBadRecord = "side=" + std::to_string(side) + " fineX=" + std::to_string(fineX) +
 						" col=" + std::to_string(column) + " tile=" + std::to_string(tile) + " px=" + std::to_string(pixel);
@@ -4953,7 +4953,7 @@ void TestW4SidePixelInfoSamplesEachColumnsOwnPixel()
 	Check(recordMatchesTile, "W4: the rest of the record is the side tile's own", firstBadRecord);
 }
 
-//The pack's key: a side tile is looked up by the same fields a centred one is,
+//The pack's key: a side tile is looked up by the same fields a centered one is,
 //and the pack version still decides whether the palette carries its alpha byte.
 void TestW4SideTileKeyMatchesTheKeyOfACentredTile()
 {
@@ -4980,7 +4980,7 @@ void TestW4SideTileKeyMatchesTheKeyOfACentredTile()
 		"0x" + std::to_string(tiles[0].Tile.PaletteColors) + " vs 0x" + std::to_string(expected99));
 
 	//CHR RAM: the tile carries its own bytes, hashed by them, exactly as a
-	//centred tile does (HdTileKey's own rule).
+	//centered tile does (HdTileKey's own rule).
 	uint8_t chrLo[8] = { 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA };
 	uint8_t chrHi[8] = {};
 	m.SetTile(2, chrLo, chrHi);
@@ -4995,8 +4995,8 @@ void TestW4SideTileKeyMatchesTheKeyOfACentredTile()
 		std::to_string(m.SideEffectReads) + " " + std::to_string(m.VramHookCalls));
 }
 
-//The HD frame the pack has to fill, and the invariant that makes the centre
-//trustworthy: widening the row never moves a centre pixel.
+//The HD frame the pack has to fill, and the invariant that makes the center
+//trustworthy: widening the row never moves a center pixel.
 void TestW4HdFrameAddsTheSidesAroundTheCentre()
 {
 	using namespace HdWidescreenColumns;
@@ -5011,14 +5011,14 @@ void TestW4HdFrameAddsTheSidesAroundTheCentre()
 	Check(wide.ExtraColumns == 64, "W4: an extended frame carries the Reveal's 64 columns a side", std::to_string(wide.ExtraColumns));
 	Check(wide.ScreenWidth == (384 - 16) * 3, "W4: the HD row is the extended picture minus the overscan", std::to_string(wide.ScreenWidth));
 	Check(wide.RowStride == wide.ScreenWidth * 3, "W4: the HD row stride follows the wider row", std::to_string(wide.RowStride));
-	Check(wide.CentreOffset == 64 * 3, "W4: the centre starts after the left side", std::to_string(wide.CentreOffset));
+	Check(wide.CentreOffset == 64 * 3, "W4: the center starts after the left side", std::to_string(wide.CentreOffset));
 	Check(wide.ScreenWidth - 2 * 64 * 3 == standard.ScreenWidth,
-		"W4: the sides widen the row by exactly 2 x 64 x scale, so the centre keeps its width");
+		"W4: the sides widen the row by exactly 2 x 64 x scale, so the center keeps its width");
 
 	//The common case: scale 1, no overscan
 	HdFrameGeometry plain = ComputeHdFrameGeometry(true, 1, 0, 0);
 	Check(plain.ScreenWidth == 384 && plain.RowStride == 384 && plain.CentreOffset == 64,
-		"W4: at scale 1 with no overscan the row is the 384-px picture, centre at 64",
+		"W4: at scale 1 with no overscan the row is the 384-px picture, center at 64",
 		std::to_string(plain.ScreenWidth) + " " + std::to_string(plain.CentreOffset));
 
 	//Where the sides land in that row
@@ -5126,7 +5126,7 @@ void TestW4NearbyRulesRefuseAPixelOutsideThePicture()
 	HdScreenInfo info(false);
 
 	//tileNearby: PixelOffset + y*256 + x - with the side coordinates this lands
-	//on a real but unrelated centre pixel unless the pixel is refused first.
+	//on a real but unrelated center pixel unless the pixel is refused first.
 	HdPackTileNearbyCondition nearby;
 	nearby.Name = "w4near";
 	nearby.Initialize(1, 0, 0, 0x42, "", false);
@@ -5135,7 +5135,7 @@ void TestW4NearbyRulesRefuseAPixelOutsideThePicture()
 	info.ScreenTiles[256].Tile.TileIndex = 0x42;
 	Check(nearby.CheckCondition(0, 0, nullptr), "W4: tileNearby still reads the pixel it names inside the picture");
 	Check(!nearby.CheckCondition(-1, 1, nullptr),
-		"W4: tileNearby refuses a left side pixel whose wrapped index would land on a real centre pixel");
+		"W4: tileNearby refuses a left side pixel whose wrapped index would land on a real center pixel");
 
 	HdPackSpriteNearbyCondition sprite;
 	sprite.Name = "w4snear";
@@ -5147,7 +5147,7 @@ void TestW4NearbyRulesRefuseAPixelOutsideThePicture()
 	info.ScreenTiles[255].Sprite[0].TileIndex = 0x42;
 	Check(sprite.CheckCondition(0, 0, nullptr), "W4: spriteNearby still reads the pixel it names inside the picture");
 	Check(!sprite.CheckCondition(-1, 1, nullptr),
-		"W4: spriteNearby refuses a left side pixel whose wrapped index would land on a real centre pixel");
+		"W4: spriteNearby refuses a left side pixel whose wrapped index would land on a real center pixel");
 }
 
 void TestW4CellGuardRefusesAPixelOutsideThePicture()
@@ -5456,7 +5456,7 @@ namespace
 	void TestW253BorderCompositeFillsOnlyTheUnfilledSideRows()
 	{
 		//Canvas 16x8, a 4:3-style viewport at x=4 w=8 h=8; source 12x8 with
-		//ExtendedColumns = 2, so the centre 8 px map 1:1 into the viewport and
+		//ExtendedColumns = 2, so the center 8 px map 1:1 into the viewport and
 		//each side run is 2 canvas px wide, right beside it.
 		const uint32_t canvasW = 16, canvasH = 8, standardWidth = 8, extra = 2;
 		BorderLayout layout;
@@ -5486,13 +5486,13 @@ namespace
 		auto at = [&](uint32_t x, uint32_t y) { return dst[(size_t)y * canvasW + x]; };
 		auto srcAt = [&](uint32_t x, uint32_t y) { return src[(size_t)y * (standardWidth + 2 * extra) + x]; };
 
-		Check(at(4, 0) == srcAt(extra, 0) && at(11, 0) == srcAt(extra + standardWidth - 1, 0), "W253C: the centre picture lands in the viewport");
+		Check(at(4, 0) == srcAt(extra, 0) && at(11, 0) == srcAt(extra + standardWidth - 1, 0), "W253C: the center picture lands in the viewport");
 		Check(at(2, 0) == 0 && at(3, 0) == 0 && at(12, 0) == 0 && at(13, 0) == 0, "W253C: an unfilled side row keeps the border backdrop", Hex32(at(2, 0)));
 		Check(at(2, 1) == srcAt(0, 1) && at(3, 1) == srcAt(1, 1), "W253C: a left-filled row draws the left run beside the viewport", Hex32(at(2, 1)));
 		Check(at(12, 2) == srcAt(extra + standardWidth, 2) && at(13, 2) == srcAt(extra + standardWidth + 1, 2), "W253C: a right-filled row draws the right run", Hex32(at(12, 2)));
 		Check(at(2, 3) == srcAt(0, 3) && at(13, 3) == srcAt(extra + standardWidth + 1, 3), "W253C: a row filled on both sides draws both runs");
 		Check(at(0, 1) == 0 && at(15, 3) == 0, "W253C: outside the viewport and the side runs the backdrop is untouched");
-		Check(at(4, 4) == srcAt(extra, 4), "W253C: the centre is drawn on every row, filled or not");
+		Check(at(4, 4) == srcAt(extra, 4), "W253C: the center is drawn on every row, filled or not");
 
 		//Overlay mode blends the border over the side runs it just drew, so an
 		//opaque bezel still covers the game there; underlay leaves the game on top.
@@ -5554,7 +5554,7 @@ namespace
 	{
 		//ADR-0253 §2/§3: the two extended fields describe each other - a side-fill
 		//map with no extra columns is a map of columns the standard picture does
-		//not have, and VideoDecoder's drop-back-to-the-centre path (the filter
+		//not have, and VideoDecoder's drop-back-to-the-center path (the filter
 		//that cannot take an extended frame) is one of the places that has to
 		//clear both, not just the width.
 		uint8_t fill[240] = {};
@@ -5901,12 +5901,12 @@ namespace
 //--- Bloco W6: widescreen through the NTSC filters, the recorder and the
 //capture tools (ADR-0253, slice W.6) ----------------------------------------
 //W.1 put the extra columns into the frame behind a contract and left every
-//filter that assumes 256 px on the decoder's standard-centre crop
+//filter that assumes 256 px on the decoder's standard-center crop
 //(BaseVideoFilter::AcceptsExtendedFrame). W.6 widens the two NES NTSC filters,
 //which are the display tools that were still hardcoded: the blargg filter
 //sized its blit plane for 256 px and reported its HUD scale from 256, and the
 //Bisqwit filter walked its input with a 256-px row stride and advanced the
-//colour phase by the 256 px it assumed it had drawn.
+//color phase by the 256 px it assumed it had drawn.
 //
 //The recorder and the capture tools are asserted here too - the width the
 //recorder is opened at (the filter's own visible width) and the canvas it lays
@@ -5971,10 +5971,10 @@ namespace
 	{
 		using namespace WidescreenFrameFlow::Ntsc;
 		//The PPU's scanline is 341 cycles whatever part of it the picture
-		//shows, so a row must advance the colour phase by the whole scanline
+		//shows, so a row must advance the color phase by the whole scanline
 		//no matter how many pixels the frame carries. Advancing by the drawn
 		//pixels instead - the constant the 256-px path used - drifts 128
-		//subcarrier samples per row on a Reveal frame: a colour crawl.
+		//subcarrier samples per row on a Reveal frame: a color crawl.
 		const int32_t scanline = ScanlineCycles * SignalsPerPixel;
 		Check(scanline == 2728, "W6: a scanline is 341 * 8 subcarrier samples", std::to_string(scanline));
 		for(uint32_t width : { 256u, 384u }) {
@@ -5984,22 +5984,22 @@ namespace
 		Check(PhaseAdvanceAfterRow(256) == 85 * 8, "W6: the standard frame's correction is the 85 cycles it does not draw", std::to_string(PhaseAdvanceAfterRow(256)));
 		Check(PhaseAdvanceAfterRow(384) == -43 * 8, "W6: a Reveal frame draws past the scanline, so the correction is negative", std::to_string(PhaseAdvanceAfterRow(384)));
 		Check(PhaseAdvanceAfterRow(384) != (ScanlineCycles - 256) * SignalsPerPixel,
-			"W6: the correction is not the 256-px constant, which would desync a Reveal frame's colour");
+			"W6: the correction is not the 256-px constant, which would desync a Reveal frame's color");
 	}
 
 	void TestW6CaptureMeasuresAnExtendedFrameOnItsCentre()
 	{
 		using namespace WidescreenFrameFlow;
 		Centre centre = StandardCentre(384, 256);
-		Check(centre.Offset == 64 && centre.Width == 256, "W6: the standard picture of a Reveal frame is its centre 256 columns", std::to_string(centre.Offset) + " " + std::to_string(centre.Width));
-		Check(StandardCentre(768, 512).Offset == 128 && StandardCentre(768, 512).Width == 512, "W6: a scaled Reveal frame's centre scales with it");
-		//The refusals: a standard frame has no centre *in itself* to measure
+		Check(centre.Offset == 64 && centre.Width == 256, "W6: the standard picture of a Reveal frame is its center 256 columns", std::to_string(centre.Offset) + " " + std::to_string(centre.Width));
+		Check(StandardCentre(768, 512).Offset == 128 && StandardCentre(768, 512).Width == 512, "W6: a scaled Reveal frame's center scales with it");
+		//The refusals: a standard frame has no center *in itself* to measure
 		//against, and neither does a frame narrower than the standard picture
 		//nor one whose extra columns would split a pixel in half.
-		Check(!StandardCentre(256, 256).IsValid(), "W6: a standard frame has no centre to measure - the whole frame is the picture");
-		Check(!StandardCentre(128, 256).IsValid(), "W6: a frame narrower than the standard picture has no centre");
-		Check(!StandardCentre(385, 256).IsValid(), "W6: extra columns that do not split evenly leave no centre");
-		Check(!StandardCentre(384, 0).IsValid(), "W6: with no standard picture there is no centre");
+		Check(!StandardCentre(256, 256).IsValid(), "W6: a standard frame has no center to measure - the whole frame is the picture");
+		Check(!StandardCentre(128, 256).IsValid(), "W6: a frame narrower than the standard picture has no center");
+		Check(!StandardCentre(385, 256).IsValid(), "W6: extra columns that do not split evenly leave no center");
+		Check(!StandardCentre(384, 0).IsValid(), "W6: with no standard picture there is no center");
 
 		//Two rows, each pixel carrying its own column number so a wrong row
 		//stride or a wrong offset is visible rather than plausible.
@@ -6010,10 +6010,10 @@ namespace
 			}
 		}
 		std::vector<uint32_t> out;
-		Check(ExtractCentre(frame.data(), 384, 2, 256, out), "W6: a Reveal capture yields its centre");
-		Check(out.size() == 512, "W6: the extracted centre is 256x2 pixels", std::to_string(out.size()));
-		Check(out.size() == 512 && out[0] == 64 && out[255] == 319, "W6: the first row's centre is columns 64-319", out.size() == 512 ? std::to_string(out[0]) + " " + std::to_string(out[255]) : "");
-		Check(out.size() == 512 && out[256] == 1064 && out[511] == 1319, "W6: the second row's centre is read from the second row", out.size() == 512 ? std::to_string(out[256]) + " " + std::to_string(out[511]) : "");
+		Check(ExtractCentre(frame.data(), 384, 2, 256, out), "W6: a Reveal capture yields its center");
+		Check(out.size() == 512, "W6: the extracted center is 256x2 pixels", std::to_string(out.size()));
+		Check(out.size() == 512 && out[0] == 64 && out[255] == 319, "W6: the first row's center is columns 64-319", out.size() == 512 ? std::to_string(out[0]) + " " + std::to_string(out[255]) : "");
+		Check(out.size() == 512 && out[256] == 1064 && out[511] == 1319, "W6: the second row's center is read from the second row", out.size() == 512 ? std::to_string(out[256]) + " " + std::to_string(out[511]) : "");
 
 		//A standard capture: 256 wide, i.e. the whole frame is the picture and
 		//there is nothing in it to measure a Reveal frame against.
@@ -6021,7 +6021,7 @@ namespace
 		out.assign(4, 0xDEADBEEF);
 		Check(!ExtractCentre(standardFrame.data(), 256, 2, 256, out) && out.empty(), "W6: a standard capture is refused rather than read as an extended one");
 		Check(!ExtractCentre(frame.data(), 384, 2, 255, out) && out.empty(), "W6: a standard picture that does not split the frame evenly is refused");
-		Check(!ExtractCentre(nullptr, 384, 2, 256, out) && out.empty(), "W6: with no pixels there is no centre to extract");
+		Check(!ExtractCentre(nullptr, 384, 2, 256, out) && out.empty(), "W6: with no pixels there is no center to extract");
 	}
 
 	void TestW6TheRecordedFrameFollowsTheFilteredFramesWidth()
@@ -6064,7 +6064,7 @@ namespace
 	void TestW6TheFiltersAcceptTheExtendedFrame()
 	{
 		//The override is the whole wiring. VideoDecoder::KeepStandardCentre
-		//crops an extended frame back to its standard centre unless the filter
+		//crops an extended frame back to its standard center unless the filter
 		//answers yes, so a filter that only *uses* whatever width it is handed
 		//still never sees a Reveal column: the header could be perfect and the
 		//picture would still arrive as 256 px. The CUTOBJ set does not link the
@@ -7069,7 +7069,7 @@ namespace
 	void TestSheetVocabularyCountsAndIsolationRule()
 	{
 		//One block shape repeated all over the screen, plus a single stray
-		//metatile that neighbours nothing recurring: the stray is the noise.
+		//metatile that neighbors nothing recurring: the stray is the noise.
 		std::vector<GridFrame> frames;
 		for(uint32_t i = 0; i < 2; i++) {
 			GridFrame frame;
@@ -7199,7 +7199,7 @@ namespace
 	//---- F9.8: adjacency evidence before two screens share a map -----------
 
 	//A pseudo-random world, addressed in cells; a screen is a 32-column window
-	//onto it, so two windows 32 columns apart are genuine neighbours and any
+	//onto it, so two windows 32 columns apart are genuine neighbors and any
 	//other pair is not.
 	ShapeId SheetWorldCell(int32_t col, int32_t row)
 	{
@@ -7531,7 +7531,7 @@ namespace
 			}
 			SheetTileKey tile;
 			if(shape >= 300) {
-				//A blank cell, and its sparse neighbour drawing one tile row.
+				//A blank cell, and its sparse neighbor drawing one tile row.
 				tile.PaletteColors = 0x0F162A30;
 				tile.TileData[0] = shape == 301 ? 0xFF : 0x00;
 			} else {
@@ -7611,7 +7611,7 @@ namespace
 	//fine scroll.
 
 	//Shapes 900+ are the fixture's "figure": a 2x2 block an artist would
-	//recognise as a subject, distinct from the backdrop vocabulary.
+	//recognize as a subject, distinct from the backdrop vocabulary.
 	const ShapeId kSheetFigureShape = 900;
 
 	void SheetPlaceFigure(GridFrame& frame, uint32_t row, uint32_t col)
@@ -7646,7 +7646,7 @@ namespace
 		//Somewhere the recording went that no screen was written for. Without
 		//it every scene cell would be routed and the sampling floor
 		//(kMaxRoutedSceneShare) would withhold the lot - which is the right
-		//behaviour for a real pack and a useless fixture for testing what the
+		//behavior for a real pack and a useless fixture for testing what the
 		//residency rule itself decides.
 		GridFrame elsewhere;
 		for(uint32_t r = 0; r < kGridRows; r++) {
@@ -8048,7 +8048,7 @@ namespace
 			"picked=" + std::to_string(choice.Picked.size()));
 	}
 
-	//--- issue #164, third mode: a variant that only *recolours* the anchor ---
+	//--- issue #164, third mode: a variant that only *recolors* the anchor ---
 	//
 	//ADR-0159 shipped with this one open: the retained grid stream carried
 	//palette-agnostic shape ids (HdTileKey::GetKey(true)), while the
@@ -8057,7 +8057,7 @@ namespace
 	//therefore stable in the evidence, chosen, and then did not match - and
 	//since ADR-0156 the cells routed onto that screen render vanilla. Measured
 	//on the 30-pack library re-recorded 2026-09-05 (scripts/spike_anchor_stability.py
-	//--recolour): 190 of 4333 shipped anchors (4.4 %) on 124 of 1450 screens.
+	//--recolor): 190 of 4333 shipped anchors (4.4 %) on 124 of 1450 screens.
 	//The amendment adds a palette plane to GridFrame; these cases are its
 	//contract.
 
@@ -8077,7 +8077,7 @@ namespace
 	{
 		//The gap, in the smallest form that reproduces it: the rarest tile on
 		//the frame keeps its 16 CHR bytes on every variant of the screen and
-		//changes colour - a flashing prompt, a power-up palette cycle. Nothing
+		//changes color - a flashing prompt, a power-up palette cycle. Nothing
 		//in Cells moves, so the old rule anchored on it and the <background>
 		//stopped drawing anyway.
 		GridFrame screen = SheetBlockScreen(0, 3);
@@ -8085,24 +8085,24 @@ namespace
 		screen.Cells[2][4] = 900;  //ranked first: the rarest candidate
 		screen.Cells[20][4] = 901; //a rare badge that neither moves nor blinks
 		GridFrame variant = screen;
-		variant.Palettes[2][4] = 2; //same drawing, other colours
+		variant.Palettes[2][4] = 2; //same drawing, other colors
 		variant.FrameNumber = 1;
 		std::vector<GridFrame> frames = { screen, variant };
 
 		AnchorChoice choice = SelectScreenAnchors(frames, 0, AnchorCandidates());
 		Check(choice.Picked.size() == kAnchorCount,
-			"BlocoP2: a recoloured candidate still leaves three anchors",
+			"BlocoP2: a recolored candidate still leaves three anchors",
 			"picked=" + std::to_string(choice.Picked.size()));
 		Check(!AnchorPicked(choice, 0),
-			"BlocoP2: the cell a variant only recolours is not made an anchor");
+			"BlocoP2: the cell a variant only recolors is not made an anchor");
 		Check(AnchorPicked(choice, 1),
-			"BlocoP2: the rarest cell no variant recolours is preferred");
+			"BlocoP2: the rarest cell no variant recolors is preferred");
 	}
 
 	void TestAnchorSeparatesAScreenByPaletteAlone()
 	{
 		//The other half of the same fact: tileAtPosition compares the palette,
-		//so a frame that draws the same tile in other colours does *not*
+		//so a frame that draws the same tile in other colors does *not*
 		//satisfy the condition and is not a rival. Reading rivals off shapes
 		//alone made the pick believe it was ambiguous and widen the pool for
 		//nothing.
@@ -8114,14 +8114,14 @@ namespace
 				rival.Cells[r][c] = (ShapeId)(700 + r * 32 + c); //a fifth of the frame: not a variant
 			}
 		}
-		rival.Palettes[15][20] = 2; //...and one candidate it draws in other colours
+		rival.Palettes[15][20] = 2; //...and one candidate it draws in other colors
 		rival.FrameNumber = 1;
 		std::vector<GridFrame> frames = { screen, rival };
 
 		std::vector<AnchorCandidate> candidates = { { 2, 5, 1 }, { 14, 5, 2 }, { 26, 5, 3 }, { 15, 20, 4 } };
 		AnchorChoice choice = SelectScreenAnchors(frames, 0, candidates);
 		Check(choice.Rivals == 0,
-			"BlocoP2: a frame that redraws the anchor tile in other colours is not a rival",
+			"BlocoP2: a frame that redraws the anchor tile in other colors is not a rival",
 			"rivals=" + std::to_string(choice.Rivals));
 		Check(AnchorPicked(choice, 3),
 			"BlocoP2: the cell that separates the screen by palette alone is picked");
@@ -8133,7 +8133,7 @@ namespace
 	{
 		//A cell whose palette id is unknown - past the 255-palette id space, or
 		//a stream recorded before the plane existed - is evidence of nothing,
-		//not evidence of a recolour. It degrades to the pre-amendment pick,
+		//not evidence of a recolor. It degrades to the pre-amendment pick,
 		//the same way an out-of-range capturedIndex degrades to ADR-0050's
 		//plain rarity greedy.
 		GridFrame screen = SheetBlockScreen(0, 3);
@@ -8155,7 +8155,7 @@ namespace
 	void TestGridFrameRecolourIsItsOwnFrame()
 	{
 		//The recorder de-duplicates consecutive frames. If it kept doing that on
-		//the drawing alone, the recoloured frame - the only evidence the rule
+		//the drawing alone, the recolored frame - the only evidence the rule
 		//above can read - would vanish into RepeatCount. The vocabulary keeps
 		//the palette-agnostic comparison: for it the two frames are one subject.
 		GridFrame frame = SheetBlockScreen(0, 3);
@@ -8164,9 +8164,9 @@ namespace
 		recoloured.Palettes[9][9] = 2;
 
 		Check(frame.SameCells(recoloured),
-			"BlocoP2: a recolour draws the same shapes");
+			"BlocoP2: a recolor draws the same shapes");
 		Check(!frame.SamePalettedCells(recoloured),
-			"BlocoP2: a recolour is not the same frame for the recorder's de-duplication");
+			"BlocoP2: a recolor is not the same frame for the recorder's de-duplication");
 		GridFrame moved = frame;
 		moved.Cells[9][9] = 950;
 		Check(!frame.SamePalettedCells(moved) && !frame.SameCells(moved),
@@ -8349,7 +8349,7 @@ namespace
 		for(uint32_t r = 10; r < 13; r++) {
 			for(uint32_t c = 8; c < 21; c++) {
 				screen.Cells[r][c] = (ShapeId)(600 + r * 32 + c); //text drawn in both
-				blink.Cells[r][c] = (ShapeId)(700 + r * 32 + c);  //...in another colour phase
+				blink.Cells[r][c] = (ShapeId)(700 + r * 32 + c);  //...in another color phase
 			}
 		}
 		blink.FrameNumber = 1;
@@ -8433,13 +8433,13 @@ namespace
 		uint8_t colour1[16] = {};
 		memset(colour1, 0xFF, 8); //plane 0 set, plane 1 clear
 		uint8_t stripe[16] = {};
-		stripe[3] = 0xFF; //one row differs: two colours in the cell
+		stripe[3] = 0xFF; //one row differs: two colors in the cell
 		uint8_t glyph[16] = {};
 		glyph[0] = 0x3C; //a byte that is neither 0x00 nor 0xFF: pixels differ within the row
 		Check(IsFlatTileData(colour0) && IsFlatTileData(colour3) && IsFlatTileData(colour1),
-			"BlocoP3: a tile whose every pixel is one colour index is flat, whatever the index");
+			"BlocoP3: a tile whose every pixel is one color index is flat, whatever the index");
 		Check(!IsFlatTileData(stripe) && !IsFlatTileData(glyph),
-			"BlocoP3: a tile with two colour indexes anywhere is content");
+			"BlocoP3: a tile with two color indexes anywhere is content");
 
 		std::vector<SheetTileKey> shapes(3);
 		memcpy(shapes[1].TileData, colour3, 16);
@@ -8562,7 +8562,7 @@ namespace
 		//is not in the unit-test link set (HdPackBuilder.cpp), so the two halves
 		//of "a solid colour-1 tile lands in the probe pool with Usage =
 		//UINT32_MAX" are checked at the boundary each side owns. First, the
-		//shared predicate itself: a solid colour-1 tile (plane0 = 0xFF x8, plane1
+		//shared predicate itself: a solid color-1 tile (plane0 = 0xFF x8, plane1
 		//= 0x00 x8) is flat, exactly what AppendFlatAnchorCells (HdPackBuilder.h)
 		//now gates on via MesenSheets::IsFlatTileData instead of the old
 		//"all 16 bytes identical" lambda. This is one of the two margin cases
@@ -8575,7 +8575,7 @@ namespace
 		uint8_t colour1[16] = {};
 		memset(colour1, 0xFF, 8);
 		Check(IsFlatTileData(colour1),
-			"BlocoP5: a solid colour-1 tile (plane0=FFx8, plane1=00x8) is flat");
+			"BlocoP5: a solid color-1 tile (plane0=FFx8, plane1=00x8) is flat");
 
 		//Second, the stitcher side: once such a tile is handed over with
 		//Usage == UINT32_MAX (what AppendFlatAnchorCells always sets), it lands
@@ -8588,7 +8588,7 @@ namespace
 		};
 		AnchorChoice choice = SelectScreenAnchors(frames, 0, candidates, {}, AnchorFlatPlane());
 		Check(choice.Rivals == 0 && choice.UsedEmptinessProbe,
-			"BlocoP5: a Usage=UINT32_MAX candidate (as AppendFlatAnchorCells would hand a solid colour-1 tile) resolves only via the probe pass");
+			"BlocoP5: a Usage=UINT32_MAX candidate (as AppendFlatAnchorCells would hand a solid color-1 tile) resolves only via the probe pass");
 	}
 
 	void TestSheetContactSheetGeometry()
@@ -9194,7 +9194,7 @@ namespace
 			"BlocoP: the first sprite cell starts after the gutter");
 		Check(image.Pixels[0] == 0, "BlocoP: the gutter of a sprite sheet stays transparent");
 
-		//Colour index 0 is the OAM backdrop: it must not ship as a box around
+		//Color index 0 is the OAM backdrop: it must not ship as a box around
 		//the figure. SheetTileFor's byte 0 is the shape id, byte 8 the shape id
 		//plus 8, so the top-left pixel of shape 1 is index 0 either way.
 		bool anyTransparentInsideACell = false;
@@ -9203,7 +9203,7 @@ namespace
 				anyTransparentInsideACell |= image.Row(y)[x] == 0;
 			}
 		}
-		Check(anyTransparentInsideACell, "BlocoP: OAM colour 0 is punched out of a sprite cell");
+		Check(anyTransparentInsideACell, "BlocoP: OAM color 0 is punched out of a sprite cell");
 	}
 
 	//F9.16: the sprites.png vocabulary sheet lists every OAM shape, grouped or
@@ -9233,7 +9233,7 @@ namespace
 		}
 		Check(drifter >= 0 && drifterHasACell, "BlocoP: a sprite that joined no group still reaches sprites.png");
 
-		//Colour index 0 is punched out here too, or a lone sprite would ship
+		//Color index 0 is punched out here too, or a lone sprite would ship
 		//with a backdrop box a grouped one does not have.
 		bool anyTransparentInsideACell = false;
 		for(uint32_t y = 1; y < 9; y++) {
@@ -9241,7 +9241,7 @@ namespace
 				anyTransparentInsideACell |= image.Row(y)[x] == 0;
 			}
 		}
-		Check(anyTransparentInsideACell, "BlocoP: OAM colour 0 is punched out of a vocabulary sprite cell");
+		Check(anyTransparentInsideACell, "BlocoP: OAM color 0 is punched out of a vocabulary sprite cell");
 
 		SheetJsonDoc doc;
 		doc.Kind = "sprites";
@@ -9263,7 +9263,7 @@ namespace
 		std::vector<OamFrame> frames = SpriteFigureFrames(12);
 		Vocabulary vocab = BuildSpriteVocabulary(frames);
 		std::vector<SheetGroup> groups = BuildSprites(frames, vocab);
-		Check(!groups.empty(), "BlocoP: the sprite JSON fixture has a group to serialise");
+		Check(!groups.empty(), "BlocoP: the sprite JSON fixture has a group to serialize");
 		if(groups.empty()) {
 			return;
 		}
@@ -9291,7 +9291,7 @@ namespace
 			"BlocoP: a figure that never comes apart predicts itself perfectly");
 		Check(json.find("\"metatile\": ") != std::string::npos,
 			"BlocoP: a sprite cell carries its vocabulary index for the round-trip");
-		Check(SerializeSheet(doc, SheetLookup()) == json, "BlocoP: sprite serialisation is deterministic");
+		Check(SerializeSheet(doc, SheetLookup()) == json, "BlocoP: sprite serialization is deterministic");
 	}
 
 	//ADR-0172 (issue #170): hires.txt keys a CHR ROM game's tiles by their CHR
@@ -9486,7 +9486,7 @@ namespace
 	}
 
 	//ADR-0173 (issue #167): a HUD bar is drawn at a handful of fixed pixels for
-	//the whole capture, so its bottom edge lands in several quantised bands at
+	//the whole capture, so its bottom edge lands in several quantized bands at
 	//once and joins every one of them. This fixture is that shape against a
 	//walking actor, long enough to clear kScreenFixedMinFrames.
 	std::vector<OamFrame> HudAndActorFrames(uint32_t frames)
@@ -9580,7 +9580,7 @@ namespace
 		//bottom, not the top, so a tall figure and a short one on one floor agree.
 		Check(stats.Floors[(size_t)topLeft].size() == 1 && stats.Floors[(size_t)topLeft][0].Bottom == 96
 			&& stats.Floors[(size_t)topLeft][0].Count == 12,
-			"BlocoP: a top-row tile's floor band is its quantised bottom edge");
+			"BlocoP: a top-row tile's floor band is its quantized bottom edge");
 		Check(stats.Floors[(size_t)bottomLeft].size() == 1 && stats.Floors[(size_t)bottomLeft][0].Bottom == 104
 			&& stats.Floors[(size_t)bottomLeft][0].Count == 12,
 			"BlocoP: the lower half of an 8x16 figure lands in the ground band");
@@ -9672,7 +9672,7 @@ namespace
 		}
 		//And the floor bands still say both stand somewhere, whatever the offsets say.
 		Check(stats.Floors.size() == 2 && stats.Floors[0][0].Bottom == 24 && stats.Floors[1][0].Bottom == 208,
-			"BlocoP: floor bands are quantised bottom edges (Y + 8, no distance cap)");
+			"BlocoP: floor bands are quantized bottom edges (Y + 8, no distance cap)");
 	}
 
 	//A hand-built background vocabulary, so the degree totals and the complete
@@ -9755,7 +9755,7 @@ namespace
 			Check(outE0 == 7, "BlocoP: a reader can recompute outE(X) by summing the complete edge list");
 		}
 		Check(SerializeAdjacency(bg, noSprites, noStats, SheetLookup()) == json,
-			"BlocoP: adjacency serialisation is deterministic");
+			"BlocoP: adjacency serialization is deterministic");
 	}
 
 	//ADR-0166 (F9.18): a screen-resident background node (one no sheet shows,
@@ -9821,7 +9821,7 @@ namespace
 			Check(false, "BlocoP: the background nodes array round-trips", "");
 		}
 		Check(SerializeAdjacency(bg, noSprites, noStats, SheetLookup(), sites) == json,
-			"BlocoP: screens[] serialisation is deterministic");
+			"BlocoP: screens[] serialization is deterministic");
 		//The default (no sites) emits no screens[] anywhere - old callers and
 		//packs that predate the field stay byte-identical to before this ADR.
 		Check(SerializeAdjacency(bg, noSprites, noStats, SheetLookup()).find("\"screens\"") == std::string::npos,
@@ -9903,7 +9903,7 @@ namespace
 		std::vector<OamFrame> frames;
 		for(uint32_t f = 0; f < 6; f++) {
 			//Sub-cell steps: the figure walks, but every offset inside the pose
-			//is a whole cell, so the normalised set does not wobble.
+			//is a whole cell, so the normalized set does not wobble.
 			uint32_t x0 = 100 + f;
 			OamFrame frame;
 			frame.FrameNumber = f;
@@ -10026,10 +10026,10 @@ namespace
 			"BlocoP: the fused entry holds both figures' tiles",
 			"tiles=" + std::to_string(fused.Tiles.size()) + " frames=" + std::to_string(fused.Frames));
 		Check(fused.FusionOf.size() == 2,
-			"BlocoP: a pose that splits into two poses is labelled a fusion of them",
+			"BlocoP: a pose that splits into two poses is labeled a fusion of them",
 			"fusionOf=" + std::to_string(fused.FusionOf.size()));
 		Check(stats.Poses[0].FusionOf.empty() && stats.Poses[1].FusionOf.empty(),
-			"BlocoP: neither lone figure is labelled a fusion",
+			"BlocoP: neither lone figure is labeled a fusion",
 			"pose0=" + std::to_string(stats.Poses[0].FusionOf.size())
 				+ " pose1=" + std::to_string(stats.Poses[1].FusionOf.size()));
 		if(fused.FusionOf.size() != 2) {
@@ -10068,7 +10068,7 @@ namespace
 	{
 		//The same first figure, but what joins it is three tiles that are never
 		//a cluster of their own - a muzzle flash, a projectile. Three is below
-		//kPoseMinTiles, so the remainder is not a pose and nothing is labelled.
+		//kPoseMinTiles, so the remainder is not a pose and nothing is labeled.
 		std::vector<OamFrame> frames;
 		uint32_t frameNumber = 0;
 		for(uint32_t f = 0; f < 5; f++) {
@@ -10160,7 +10160,7 @@ namespace
 				"variantOf=" + std::to_string(whole.VariantOf));
 			std::string json = SerializePoses(vocab, stats);
 			Check(json.find("\"fusionOf\": [\"pose000\"]") != std::string::npos,
-				"BlocoP: ADR-0228 - a one-part fusion serialises as a one-id fusionOf", "");
+				"BlocoP: ADR-0228 - a one-part fusion serializes as a one-id fusionOf", "");
 		}
 	}
 
@@ -10736,7 +10736,7 @@ namespace
 			const JsonValue& c = cycles->GetArray()[0];
 			Check(c.Get("id") && c.Get("id")->GetString() == "cycle000" && c.Get("period") && c.Get("period")->GetNumber() == 6
 				&& c.Get("poses") && c.Get("poses")->GetArray().size() == 6 && c.Get("poses")->GetArray()[0].GetString() == "pose000",
-				"BlocoP: a cycle serialises id, period and pose ids", json.substr(json.find("\"cycles\""), 120));
+				"BlocoP: a cycle serializes id, period and pose ids", json.substr(json.find("\"cycles\""), 120));
 		}
 		Check(root.Get("sequences") == nullptr, "BlocoP: an empty sequences[] is absent, not []", "");
 		const JsonValue* poses = root.Get("poses");
@@ -10744,7 +10744,7 @@ namespace
 			const JsonValue& first = poses->GetArray()[0];
 			const JsonValue* next = first.Get("next");
 			Check(first.Get("hold") && next && next->GetArray().size() == 2 && next->GetArray()[0].Get("count"),
-				"BlocoP: a pose serialises hold and next[] with counts", first.Get("hold") ? "hold present" : "hold missing");
+				"BlocoP: a pose serializes hold and next[] with counts", first.Get("hold") ? "hold present" : "hold missing");
 		}
 	}
 
@@ -10962,7 +10962,7 @@ namespace
 		char expected[48];
 		snprintf(expected, sizeof(expected), "\"variantOf\": \"pose%03d\"", p);
 		Check(p >= 0 && json.find(expected) != std::string::npos,
-			"BlocoP: variantOf serialises as the base pose id", expected);
+			"BlocoP: variantOf serializes as the base pose id", expected);
 	}
 
 	void TestPoseSidecarRoundTrips()
@@ -11007,7 +11007,7 @@ namespace
 			"size entries=" + std::to_string(size ? size->GetArray().size() : 0));
 		if(size && size->GetArray().size() == 2) {
 			Check(size->GetArray()[0].GetNumber() == expected.Width && size->GetArray()[1].GetNumber() == expected.Height,
-				"BlocoP: the serialised extent is the one BuildPoses measured",
+				"BlocoP: the serialized extent is the one BuildPoses measured",
 				std::to_string(size->GetArray()[0].GetNumber()) + "x" + std::to_string(size->GetArray()[1].GetNumber()));
 		}
 
@@ -11033,7 +11033,7 @@ namespace
 			"first node=" + std::to_string(expected.Tiles[0].Node)
 				+ " dx=" + std::to_string(expected.Tiles[0].Dx)
 				+ " dy=" + std::to_string(expected.Tiles[0].Dy));
-		Check(SerializePoses(vocab, stats) == json, "BlocoP: pose serialisation is deterministic",
+		Check(SerializePoses(vocab, stats) == json, "BlocoP: pose serialization is deterministic",
 			"bytes=" + std::to_string(json.size()));
 	}
 
@@ -11151,8 +11151,8 @@ namespace
 				allZ = allZ && tile.Get("z") != nullptr;
 			}
 		}
-		Check(allPixels, "BlocoP: every serialised tile carries px/py consistent with dx/dy", "");
-		Check(allZ, "BlocoP: an overlapping pose serialises z on every tile", "");
+		Check(allPixels, "BlocoP: every serialized tile carries px/py consistent with dx/dy", "");
+		Check(allZ, "BlocoP: an overlapping pose serializes z on every tile", "");
 	}
 
 	//+5 and +6 round to the same cells, so they are one pose; the layout
@@ -11242,7 +11242,7 @@ namespace
 	{
 		std::vector<OamFrame> out;
 		//Sub-cell drift: the figure walks, but every offset inside it stays a
-		//whole cell, so the normalised pose set does not wobble.
+		//whole cell, so the normalized pose set does not wobble.
 		for(uint32_t f = 0; f < 10; f++) {
 			OamFrame frame;
 			frame.FrameNumber = f;
@@ -11450,7 +11450,7 @@ namespace
 			"BlocoP: a metatile cell's default label is inferred from its context and index, and says so");
 		Check(json.find("\"tiles\": [{ \"tile\": \"") != std::string::npos,
 			"BlocoP: a cell carries the exact hires.txt keys of its tiles");
-		Check(SerializeSheet(doc, SheetLookup()) == json, "BlocoP: serialisation is deterministic");
+		Check(SerializeSheet(doc, SheetLookup()) == json, "BlocoP: serialization is deterministic");
 	}
 
 	//--- Bloco Q: headless input script (ADR-0157, F9.14) --------------------
@@ -11614,7 +11614,7 @@ namespace
 	//to cost whole recordings before anyone noticed.
 	//
 	//Test model borrowed from lusid/MesenCE's UI.Tests/Mcp/ (GPLv3, same
-	//licence): fake the core at a seam narrow enough to be honest, then drive
+	//license): fake the core at a seam narrow enough to be honest, then drive
 	//the surface through realistic frame sequences rather than single calls.
 
 	class FakeHeadlessHost : public IHeadlessInputHost
@@ -12208,7 +12208,7 @@ void TestCaptureSizeRejectsABufferThatDoesNotMatch()
 void TestCaptureSizeRejectsAnOverflowingProduct()
 {
 	//65536 * 65536 is 2^32: in 32-bit arithmetic it wraps to 0, which would
-	//match a zero-length buffer and authorise a copy of the wrong length.
+	//match a zero-length buffer and authorize a copy of the wrong length.
 	uint32_t pixelCount = 7;
 	Check(!FrameCaptureMath::IsCaptureSizeValid(65536, 65536, 0, pixelCount),
 		"BlocoS: a width * height that overflows 32 bits is refused, not wrapped");
@@ -12268,9 +12268,9 @@ void TestHdPackOptionsLineOrderAndEmptiness()
 //and the two format ends of the tag: the predicate that decides the re-apply,
 //the loader-side line match, and the header tail the recorder writes. The
 //pixel cases below run the pass sequence of GetPixels as a model - backdrop,
-//behind-background sprite, ROM tile where its colour index is not 0, layer-2
+//behind-background sprite, ROM tile where its color index is not 0, layer-2
 //<background>, the ADR-0224 re-apply, front sprite, layer-3 <background> -
-//over flat colours, with the real predicate deciding the re-apply. The
+//over flat colors, with the real predicate deciding the re-apply. The
 //renderer itself is proven on the headless render: a pack without the tag
 //must come back byte-identical
 //(docs/validation/slices/f12.15-behind-bg-sprites-2026-09-22.md).
@@ -12280,7 +12280,7 @@ namespace
 	{
 		bool BgSprite = false;      //an opaque behind-background sprite covers the pixel
 		bool FrontSprite = false;   //an opaque front sprite covers the pixel
-		uint8_t BgColorIndex = 0;   //the ROM's background colour index
+		uint8_t BgColorIndex = 0;   //the ROM's background color index
 		bool Layer2Covers = true;   //a priority-20 <background> paints the pixel
 		bool Layer3Covers = false;  //a priority-30 <background> paints the pixel (opaque there)
 	};
@@ -12329,7 +12329,7 @@ void TestBehindBgSpriteRuleIsOffWithoutTheTag()
 	ModelPixel spriteOverCanvas;
 	spriteOverCanvas.BgSprite = true;
 	Check(ModelGetPixels(spriteOverCanvas, false) == kScreenColor,
-		"BlocoP4: without the tag a recorded screen paints over a behind-background sprite on colour-0 canvas, as today");
+		"BlocoP4: without the tag a recorded screen paints over a behind-background sprite on color-0 canvas, as today");
 
 	bool anyKept = false;
 	for(int lowest : {999, 0, 3}) {
@@ -12347,9 +12347,9 @@ void TestBehindBgSpriteRuleKeepsTheSpriteOverColourZero()
 	ModelPixel spriteOverCanvas;
 	spriteOverCanvas.BgSprite = true;
 	Check(ModelGetPixels(spriteOverCanvas, true) == kBgSpriteColor,
-		"BlocoP4: with the tag the behind-background sprite stays visible where the ROM background is colour 0");
+		"BlocoP4: with the tag the behind-background sprite stays visible where the ROM background is color 0");
 	Check(HdBehindBgSpriteRule::KeepsBehindBgSprite(true, 0, 0, true),
-		"BlocoP4: predicate: opted in, opaque bg sprite, colour 0, layer 2 painted -> re-apply");
+		"BlocoP4: predicate: opted in, opaque bg sprite, color 0, layer 2 painted -> re-apply");
 }
 
 void TestBehindBgSpriteRuleHidesTheSpriteUnderAnOpaqueBackground()
@@ -12358,9 +12358,9 @@ void TestBehindBgSpriteRuleHidesTheSpriteUnderAnOpaqueBackground()
 	spriteUnderWall.BgSprite = true;
 	spriteUnderWall.BgColorIndex = 2;
 	Check(ModelGetPixels(spriteUnderWall, true) == kScreenColor,
-		"BlocoP4: an opaque ROM background pixel (colour index != 0) still hides the sprite - the screen paints as today");
+		"BlocoP4: an opaque ROM background pixel (color index != 0) still hides the sprite - the screen paints as today");
 	Check(!HdBehindBgSpriteRule::KeepsBehindBgSprite(true, 0, 2, true),
-		"BlocoP4: predicate: colour index != 0 -> no re-apply");
+		"BlocoP4: predicate: color index != 0 -> no re-apply");
 	Check(!HdBehindBgSpriteRule::KeepsBehindBgSprite(true, 999, 0, true),
 		"BlocoP4: predicate: no opaque behind-background sprite drew here (999) -> no re-apply, a transparent sprite pixel never blocks the screen");
 	Check(!HdBehindBgSpriteRule::KeepsBehindBgSprite(true, 0, 0, false),
@@ -12416,7 +12416,7 @@ void TestBehindBgSpriteRuleYieldsToALayer3Background()
 void TestBehindBgSpriteTagLineParsesAndWrites()
 {
 	Check(HdBehindBgSpriteRule::IsTagLine("<bgPreservesBehindBgSprites>"),
-		"BlocoP4: the loader recognises the bare tag line");
+		"BlocoP4: the loader recognizes the bare tag line");
 	Check(!HdBehindBgSpriteRule::IsTagLine("<bgPreservesBehindBgSprites>1") && !HdBehindBgSpriteRule::IsTagLine("<options>bgPreservesBehindBgSprites"),
 		"BlocoP4: the tag takes no arguments and is not an <options> token");
 
@@ -12450,7 +12450,7 @@ void TestHdPackErrorDedupeLogsEachDistinctMessageOnce()
 
 	std::vector<std::pair<std::string, uint32_t>> repeated = log.GetRepeated();
 	Check(repeated.size() == 1 && repeated[0].first == "Condition not found: !SamusInTheAir" && repeated[0].second == 2400,
-		"BlocoP: the repeated message is summarised once with its true occurrence count");
+		"BlocoP: the repeated message is summarized once with its true occurrence count");
 	Check(log.GetDistinctCount() == 2 && log.GetUnretainedCount() == 0,
 		"BlocoP: nothing is lost while the distinct-message budget lasts");
 }
@@ -12623,15 +12623,15 @@ void TestBordersOnAUniformFrame()
 {
 	std::vector<uint32_t> pixels((size_t)64 * 32, 0xFF000000);
 	FrameBorders borders = FrameCaptureMath::MeasureBorders(pixels.data(), 64, 32);
-	Check(borders.IsBlank, "BlocoS: a frame of a single colour reports itself blank");
+	Check(borders.IsBlank, "BlocoS: a frame of a single color reports itself blank");
 	Check(borders.Left == 0 && borders.Right == 0 && borders.Top == 0 && borders.Bottom == 0,
 		"BlocoS: a blank frame reports no bands - there is no picture for one to frame");
-	Check(borders.Colour == 0xFF000000, "BlocoS: the band colour is the frame's own top-left pixel");
+	Check(borders.Colour == 0xFF000000, "BlocoS: the band color is the frame's own top-left pixel");
 }
 
 void TestBordersMeasureLetterboxing()
 {
-	//The 16:9 case the harness exists to assert on: a 4:3 picture centred on
+	//The 16:9 case the harness exists to assert on: a 4:3 picture centered on
 	//a 320x180 surface leaves 30 rows of black above and below it.
 	std::vector<uint32_t> pixels = MakeCaptureFrame(320, 180, 0xFF000000, 0, 30, 320, 120, 0xFF3050C0);
 	FrameBorders borders = FrameCaptureMath::MeasureBorders(pixels.data(), 320, 180);
@@ -12656,7 +12656,7 @@ void TestBordersMeasurePillarboxing()
 
 void TestBordersMeasureAnOffCentrePicture()
 {
-	//Nothing here assumes the picture is centred: the bands are whatever the
+	//Nothing here assumes the picture is centered: the bands are whatever the
 	//pixels say they are, which is how an off-by-one viewport gets caught.
 	std::vector<uint32_t> pixels = MakeCaptureFrame(100, 50, 0xFFFFFFFF, 10, 5, 80, 40, 0xFF102030);
 	FrameBorders borders = FrameCaptureMath::MeasureBorders(pixels.data(), 100, 50);
@@ -12667,18 +12667,18 @@ void TestBordersMeasureAnOffCentrePicture()
 	std::vector<uint32_t> shifted = MakeCaptureFrame(100, 50, 0xFFFFFFFF, 3, 5, 80, 40, 0xFF102030);
 	FrameBorders shiftedBorders = FrameCaptureMath::MeasureBorders(shifted.data(), 100, 50);
 	Check(shiftedBorders.Left == 3 && shiftedBorders.Right == 17,
-		"BlocoS: an off-centre picture reports unequal side bands",
+		"BlocoS: an off-center picture reports unequal side bands",
 		std::to_string(shiftedBorders.Left) + "/" + std::to_string(shiftedBorders.Right));
 }
 
 void TestBordersOnAFrameThatFillsTheSurface()
 {
 	std::vector<uint32_t> pixels = MakeCaptureFrame(16, 16, 0xFF000000, 0, 0, 16, 16, 0xFF00FF00);
-	pixels[0] = 0xFF000000; //one stray pixel: the top-left is the band colour by definition
+	pixels[0] = 0xFF000000; //one stray pixel: the top-left is the band color by definition
 	FrameBorders borders = FrameCaptureMath::MeasureBorders(pixels.data(), 16, 16);
 	Check(!borders.IsBlank, "BlocoS: a picture reaching every edge is not blank");
 	Check(borders.Left == 0 && borders.Right == 0 && borders.Top == 0 && borders.Bottom == 0,
-		"BlocoS: a single stray pixel of the band colour is not a band");
+		"BlocoS: a single stray pixel of the band color is not a band");
 }
 
 void TestBordersHandleAnEmptyFrame()
@@ -12878,7 +12878,7 @@ void TestSyncGateTotalComparisonMissesThePartialDesync()
 		std::to_string(run.back().TilesSeen) + " > " + std::to_string(baseline.back().TilesSeen));
 	Check(!HasFinding(findings, "no-gain-over-baseline", true),
 		"BlocoT: the original total rule passes the diverged run, which is the defect in issue #201");
-	//...and the prefix form of the same comparison localises it instead.
+	//...and the prefix form of the same comparison localizes it instead.
 	Check(HasFinding(findings, "prefix-stall", false),
 		"BlocoT: the prefix comparison reports the stall the total cannot see");
 	Check(FindingFrame(findings, "prefix-stall") >= 3600 && FindingFrame(findings, "prefix-stall") <= 7260,
@@ -13066,7 +13066,7 @@ void TestUnsortedSheetCellsResolveBackToTileKeys()
 {
 	//The round-trip contract: mep_build.py reads cells[].tiles[] out of the
 	//sidecar and writes those keys into hires.txt. A cell whose shape does not
-	//serialise is a cell the artist can paint and never see in the game.
+	//serialize is a cell the artist can paint and never see in the game.
 	std::set<ShapeId> claimed;
 	claimed.insert(0);
 	SheetImage image;
@@ -13077,9 +13077,9 @@ void TestUnsortedSheetCellsResolveBackToTileKeys()
 	doc.ReferenceFile = "unsorted.orig.png";
 	std::string json = SerializeSheet(doc, SheetLookup());
 	Check(json.find("\"kind\": \"unsorted\"") != std::string::npos,
-		"BlocoV: the serialised sidecar carries the kind mep_build.py ranks on");
+		"BlocoV: the serialized sidecar carries the kind mep_build.py ranks on");
 	Check(json.find("\"tiles\": ") != std::string::npos,
-		"BlocoV: every cell serialises the tile keys the round-trip needs");
+		"BlocoV: every cell serializes the tile keys the round-trip needs");
 	Check(json.find("\"reference\": \"unsorted.orig.png\"") != std::string::npos,
 		"BlocoV: the .orig.png twin is declared, so _EditedProbe can tell paint from pixels");
 }
@@ -13238,7 +13238,7 @@ void TestRamDumpLineIsFixedWidthUpperCaseHex()
 //and is written self-describing, like the grid stream, so `mep_conditions.py`
 //can resolve a sprite to (tileData, palette) from the OAM file alone. Two
 //guarantees are pinned here: entry identity includes the palette (a frame that
-//only recolours a sprite is not collapsed into RepeatCount), and the dump line
+//only recolors a sprite is not collapsed into RepeatCount), and the dump line
 //format the Python parser reads.
 
 void TestOamFramesDifferingOnlyInPaletteDoNotCollapse()
@@ -13253,7 +13253,7 @@ void TestOamFramesDifferingOnlyInPaletteDoNotCollapse()
 	b.Entries.push_back(e);
 	Check(a.SameEntries(b), "ADR-0222: two frames with identical entries (palette included) collapse");
 	b.Entries[0].Palette = 2;
-	Check(!a.SameEntries(b), "ADR-0222: a frame that only recolours a sprite is its own frame");
+	Check(!a.SameEntries(b), "ADR-0222: a frame that only recolors a sprite is its own frame");
 	b.Entries[0].Palette = kUnknownPalette;
 	Check(!a.SameEntries(b), "ADR-0222: no palette evidence is not the same as palette 1");
 }
@@ -13530,7 +13530,7 @@ void TestSheetSidecarCarriesTheInferredLabelWithItsProvenance()
 	std::vector<OamFrame> frames = SpriteFigureFrames(12);
 	Vocabulary vocab = BuildSpriteVocabulary(frames);
 	std::vector<SheetGroup> groups = BuildSprites(frames, vocab);
-	Check(!groups.empty(), "ADR-0209 Q1: the sprite fixture has a group to serialise");
+	Check(!groups.empty(), "ADR-0209 Q1: the sprite fixture has a group to serialize");
 	if(groups.empty()) {
 		return;
 	}
@@ -13719,7 +13719,7 @@ MesenSheets::SheetTileKey ColourwayTile(const std::string& hex, uint32_t palette
 	return tile;
 }
 
-//Zelda's fade shape (paints colours 2 and 3) and a shape painting all four.
+//Zelda's fade shape (paints colors 2 and 3) and a shape painting all four.
 const char* kRampTile = "7F80808080808080FFFFFFFFFFFFFFFF";
 const char* kFourColourTile = "CCCCCCCCCCCCCCCCF0F0F0F0F0F0F0F0";
 
@@ -13766,7 +13766,7 @@ void TestAFoldIsExactOnlyWhenOneBrightnessRebuildsTheRecordedPixels()
 	ColourwayTileBytes(kRampTile, ramp);
 	NesPalette pal = ColourwayPalette();
 
-	//Colour 0 differs, but the ramp never paints it: inert, Brightness 1.
+	//Color 0 differs, but the ramp never paints it: inert, Brightness 1.
 	PaletteRelationResult inert = ClassifyPaletteRelation(ramp, 0x3617270F, 0x0F17270F);
 	Check(inert.Relation == PaletteRelation::Inert && FoldBrightnessText(inert.Brightness) == "1",
 		"ADR-0230: a palette differing only where the pattern is unpainted is inert");
@@ -13856,10 +13856,10 @@ void TestAnExactFoldGoesToFoldsAndAResidualFoldToAVariantCell()
 		"ADR-0230 (#448 refinement): the two Zelda fade steps with a residual are not folds",
 		std::to_string(plan.ResidualFoldKeys));
 	Check(plan.ColourwayKeys == 1 && plan.UnplacedKeys == 0,
-		"ADR-0230: the red of a green shape is a colourway key",
+		"ADR-0230: the red of a green shape is a colorway key",
 		std::to_string(plan.ColourwayKeys));
 	Check(plan.Cells.size() == 3 && plan.VariantTiles.size() == 3,
-		"ADR-0230: every residual fold and colourway key becomes its own variant cell (a repeat is decided once)",
+		"ADR-0230: every residual fold and colorway key becomes its own variant cell (a repeat is decided once)",
 		std::to_string(plan.Cells.size()));
 
 	size_t residualCells = 0;
@@ -13869,7 +13869,7 @@ void TestAnExactFoldGoesToFoldsAndAResidualFoldToAVariantCell()
 		const SheetTileKey* v = plan.Variant(cell.Key.Tiles[0]);
 		Check(v && v->PaletteColors == cell.Palette, "ADR-0230: a variant cell's tile is its shape in the key's palette");
 	}
-	Check(residualCells == 2, "ADR-0230: residual-fold cells are told apart from colourway cells", std::to_string(residualCells));
+	Check(residualCells == 2, "ADR-0230: residual-fold cells are told apart from colorway cells", std::to_string(residualCells));
 	Check(plan.Cells[0].BaseCell == 0 && plan.Cells[0].Colourway && plan.Cells[1].BaseCell == 1,
 		"ADR-0230: cells are laid out in sheet, base cell, palette order");
 	Check(plan.Variant((ShapeId)shapes.size() + 3) == nullptr && plan.Variant(0) == nullptr,
@@ -14909,7 +14909,7 @@ void TestShapeKeyGivesOffOriginBackgroundRunsTheOriginsShape()
 	Check(intern(flipped) == 2, "#474/#471: the same index drawn as a mirrored sprite is still its own shape");
 }
 
-//Issue #470: a fully transparent sprite half (all 16 bytes zero, colour 0 on
+//Issue #470: a fully transparent sprite half (all 16 bytes zero, color 0 on
 //every pixel) was a sheet key every time the latch recorded it, but a <tile>
 //rule only when it happened to be the highest-priority active shifter at its
 //first dot (NesPpu::GetPixelColor). Punch-Out!!'s blank latch tiles 1CFD,
@@ -14931,7 +14931,7 @@ namespace BlankHalfFrame
 
 	//One 8x8 sprite `tile` at x, rows 100-107, decoded at cycle 257 from bank
 	//`decodeBank`, whose row 0 is read from `topBank` and rows 1-7 from
-	//`restBank`; beside it a drawn neighbour, $80 from bank $05.
+	//`restBank`; beside it a drawn neighbor, $80 from bank $05.
 	MmcLatchFrame::Result Run(uint8_t tile, uint8_t x, int32_t decodeBank, int32_t topBank, int32_t restBank)
 	{
 		uint8_t oam[256];
@@ -14996,7 +14996,7 @@ void TestAFullyTransparentSpriteHalfNeverReachesTheRegistry()
 	using namespace BlankHalfFrame;
 	MmcLatchFrame::Result plain = Run(0xFD, 40, 0x1C, 0x1C, 0x1C);
 	Check(plain.Sprites.size() == 1 && plain.Sprites[0].Index == 0x0580 && plain.ExtraIndexes.empty(),
-		"#470: a blank sprite half (1CFD) is never recorded; its drawn neighbour (0580) is", Describe(plain));
+		"#470: a blank sprite half (1CFD) is never recorded; its drawn neighbor (0580) is", Describe(plain));
 	MmcLatchFrame::Result rebanked = Run(0xFD, 40, 0x05, 0x1C, 0x1C);
 	Check(rebanked.Sprites.size() == 1 && rebanked.Sprites[0].Index == 0x0580 && rebanked.ExtraIndexes.empty(),
 		"#470: a half decoded from a drawn bank but read from a blank one is not recorded", Describe(rebanked));
@@ -15022,7 +15022,7 @@ void TestTheLatchHandsABlankHalfToThePlacementCallbackAlone()
 {
 	using namespace BlankHalfFrame;
 	//Sprite 0 is $FD, read from bank $1C, which this model fills with zeroes;
-	//sprite 1 is the drawn neighbour $80 beside it.
+	//sprite 1 is the drawn neighbor $80 beside it.
 	MmcLatchFrame::Result r = Run(0xFD, 40, 0x1C, 0x1C, 0x1C);
 	Check(r.Placements.size() == 1 && r.Placements[0].first == 40 && r.Placements[0].second == 100,
 		"#520: the blank half reaches emitPlaced, at its own position and once", Describe(r));
@@ -15088,7 +15088,7 @@ void TestAPoseKeepsAFigureWhoseHalfIsArtless()
 		"#520: the pose holds what the game draws - two tiles, never the transparent ones",
 		stats.Poses.empty() ? "no pose" : "tiles=" + std::to_string(stats.Poses[0].Tiles.size()));
 	if(stats.Poses.size() == 1 && stats.Poses[0].Tiles.size() == 2) {
-		//ADR-0170 §1: normalised to the drawn figure's own top-left, so a
+		//ADR-0170 §1: normalized to the drawn figure's own top-left, so a
 		//transparent cell above it cannot move the origin.
 		Check(stats.Poses[0].Tiles[0].Dx == 0 && stats.Poses[0].Tiles[0].Dy == 0 &&
 			stats.Poses[0].Tiles[1].Dx == 1 && stats.Poses[0].Tiles[1].Dy == 0,
@@ -15452,7 +15452,7 @@ namespace SpritePixelVerdictFixture
 void TestASpritePixelOnlyCountsWhenThePpuPutsItOnScreen()
 {
 	using SpritePixelVerdictFixture::CheckVerdict;
-	CheckVerdict("ADR-0234: a transparent sprite pixel (colour 0) contends for nothing",
+	CheckVerdict("ADR-0234: a transparent sprite pixel (color 0) contends for nothing",
 		MesenSheets::SpritePixelVerdictOf(0, true, 3, true), false, false);
 	CheckVerdict("ADR-0234: a transparent sprite pixel over the backdrop contends for nothing either",
 		MesenSheets::SpritePixelVerdictOf(0, true, 0, false), false, false);
@@ -15593,10 +15593,10 @@ void TestAMaskNodeIsLabelledAndKeptOutOfThePoseClusters()
 	int32_t maskNode = SpriteNodeOf(vocab, 9);
 	int32_t figureNode = SpriteNodeOf(vocab, 2);
 	Check(maskNode >= 0 && (size_t)maskNode < mask.size() && mask[maskNode] == 1,
-		"ADR-0234: a behind-background node that never drew a pixel is labelled a mask",
+		"ADR-0234: a behind-background node that never drew a pixel is labeled a mask",
 		"node=" + std::to_string(maskNode));
 	Check(figureNode >= 0 && (size_t)figureNode < mask.size() && mask[figureNode] == 0,
-		"ADR-0234: a figure that drew pixels is not labelled",
+		"ADR-0234: a figure that drew pixels is not labeled",
 		"node=" + std::to_string(figureNode));
 
 	PoseStats stats = BuildPoses(frames, vocab);
@@ -15687,7 +15687,7 @@ void TestATileThatShowsInOneFrameOfAPoseStays()
 	//a reader can see that this pose's fifth tile is mostly hidden.
 	SpriteAdjacencyStats adj = AccumulateSpriteAdjacency(frames, vocab);
 	Check(maskNode >= 0 && (size_t)maskNode < adj.Mask.size() && adj.Mask[maskNode] == 1,
-		"ADR-0234: the shape is still labelled as one drawn as a mask",
+		"ADR-0234: the shape is still labeled as one drawn as a mask",
 		"node=" + std::to_string(maskNode));
 	Check((size_t)maskNode < adj.MaskAppearances.size() && adj.MaskAppearances[maskNode] == 6
 		&& adj.BehindBgAppearances[maskNode] == 8 && adj.VisiblePixels[maskNode] == 128
@@ -15745,7 +15745,7 @@ void TestABehindBackgroundSpriteThePpuNeverDrewIsNotAMask()
 void TestABehindBackgroundSpriteThatDrewIsStillPartOfAFigure()
 {
 	//ADR-0224's measured case: Punch-Out!!'s behind-background sprites are
-	//real figure halves that show over colour-0 canvas. The priority bit alone
+	//real figure halves that show over color-0 canvas. The priority bit alone
 	//must never cost a figure its tiles.
 	std::vector<OamFrame> frames;
 	for(uint32_t f = 0; f < 6; f++) {
@@ -15968,8 +15968,8 @@ void TestACaptureRecordTreatsARecolouredCellAsMovedOn()
 	guard.Record = &record;
 	Build(guard, live);
 
-	Check(!LayerDraws(guard, 3 * 8, 12 * 8), "F14.11: a recoloured cell is a cell the capture does not hold");
-	Check(LayerDraws(guard, 4 * 8, 12 * 8), "F14.11: its neighbour with the captured palette still draws");
+	Check(!LayerDraws(guard, 3 * 8, 12 * 8), "F14.11: a recolored cell is a cell the capture does not hold");
+	Check(LayerDraws(guard, 4 * 8, 12 * 8), "F14.11: its neighbor with the captured palette still draws");
 }
 
 //A cell the run time names no tile at - the leftmost 8 pixels of a line the ROM
@@ -16157,7 +16157,7 @@ void TestTheGateKeepsComparingStaleBytesWhereTheGuardReadsNone()
 	}
 	cond.HdPackCondition::Initialize(&screen, &pack);
 	Check(cond.CheckCondition(0, 0, nullptr),
-		"F14.11: the gate's data form still compares the target's fields at a NoTile pixel - its pre-0236 behaviour, unchanged");
+		"F14.11: the gate's data form still compares the target's fields at a NoTile pixel - its pre-0236 behavior, unchanged");
 
 	HdCellKey live = HdCellKeyOf(target);
 	HdCellKey recorded;
@@ -16225,7 +16225,7 @@ void TestACaptureRecordTagRoundTripsThroughItsGrammar()
 	using namespace CaptureCellGuardModel;
 	Check(HdCellKeyRecord::IsTagLine("<bgCellRecord>N;00") && !HdCellKeyRecord::IsTagLine("<bgPreservesBehindBgSprites>") &&
 		!HdCellKeyRecord::IsTagLine("[cond]<bgCellRecord>N;00"),
-		"F14.11: the tag is recognised on its own line and only there");
+		"F14.11: the tag is recognized on its own line and only there");
 
 	LiveScreen captured(Live(0x42, 0x1B1A1918));
 	captured.Keys[3][4] = Live(HdPpuTileInfo::NoTile, 0);
@@ -16363,7 +16363,7 @@ void TestTheLoaderBindsARecordToTheLineDirectlyAbove()
 //disagree with them in *both* directions, which is why this is a test and not
 //a comment: it tested `lineContent.empty()` before rolling the binding, so an
 //LF blank line kept the binding (the Core accepted what the tools reject) while
-//a CRLF blank line cancelled it (a lone `\r` is not empty, so that spelling
+//a CRLF blank line canceled it (a lone `\r` is not empty, so that spelling
 //rolled). The rule now lives in `Step`, which is both the roll and the
 //blank test, so the two spellings cannot diverge again and there is no call
 //site left where the order can be written wrong.
@@ -17078,7 +17078,7 @@ void TestAPendingAudioDeviceOpenIsWaitedForBeforeTheOwnerGoesAway()
 
 //--- Player-style system toast (user's decision 2026-10-03, "Estilizar o HUD
 //do Core"): HudToastLayout is the pure half of SystemHud's Player card - the
-//W-P3/W-P9 geometry, glyph choice, colours, text mapping and word wrap. The
+//W-P3/W-P9 geometry, glyph choice, colors, text mapping and word wrap. The
 //pixels themselves are checked by scripts/test_headless_record_player_toast.py.
 namespace
 {
@@ -17149,7 +17149,7 @@ static void TestEachToastGetsTheRendersGlyph()
 		"toast: a failure sentence gets the warning whatever its title");
 	Check(Classify("Save States", "State #1 saved.") == Icon::Dot, "toast: any other toast gets the Player-accent dot");
 	Check(HudToastLayout::IconRgb(Icon::Check) == 0x34C759 && HudToastLayout::IconRgb(Icon::Warning) == 0xFF9F0A &&
-		HudToastLayout::IconRgb(Icon::Dot) == 0x007AFF, "toast: glyph colours are the Player palette's green, orange and Play blue");
+		HudToastLayout::IconRgb(Icon::Dot) == 0x007AFF, "toast: glyph colors are the Player palette's green, orange and Play blue");
 	int lit = 0;
 	for(int i = 0; i < HudToastLayout::IconSize; i++) {
 		lit += HudToastLayout::IconRows(Icon::Check)[i] != 0 ? 1 : 0;
@@ -17163,7 +17163,7 @@ static void TestToastColoursFadeThroughTheHudsInvertedAlpha()
 	Check(HudColor(0x1E1E20, 225, 255) == 0x1E1E1E20u, "toast: the card is PlayerHudColor at alpha 225 (transparency 30)");
 	Check(HudColor(0xFFFFFF, 255, 255) == 0x00FFFFFFu, "toast: opaque text has a zero transparency byte");
 	Check((HudColor(0xFFFFFF, 255, 0) >> 24) == 255, "toast: a fully faded toast is fully transparent");
-	Check((HudColor(0x1E1E20, 225, 128) >> 24) == 255 - 225 * 128 / 255, "toast: the fade scales the colour's own alpha");
+	Check((HudColor(0x1E1E20, 225, 128) >> 24) == 255 - 225 * 128 / 255, "toast: the fade scales the color's own alpha");
 }
 
 static void TestToastTextIsMappedOntoTheBitmapFont()

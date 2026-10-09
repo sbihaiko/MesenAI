@@ -278,7 +278,7 @@ slice changes the output of a pack it promised not to touch. That pair is also
 the only thing that covers the shared predicate's refactor on a CHR RAM game
 (Contra, `1942`, and the other CHR RAM titles in the set): the guard may not fire
 there, but `HdPackTileAtPositionCondition` was rewritten to call
-`HdCellKeyMatches`, so the gate's behaviour has to be shown unchanged, not
+`HdCellKeyMatches`, so the gate's behavior has to be shown unchanged, not
 argued to be.
 
 `runs/f1411/sweep.py identical 4` → `runs/f1411/identical/*/done.json`, rendered
@@ -327,7 +327,7 @@ split by iNES header (`CHR banks = 0`: Castlevania, Contra, Double Dragon,
 Lemmings, Lifeforce, Mega Man, Mega Man 2, Metroid, Punch-Out, Ninja Gaiden,
 SMB3, Tetris 2, Flintstones, Zelda, Zelda II) — where the refactored
 `HdPackTileAtPositionCondition` compares 16-byte patterns instead of indices, so
-its behaviour there is shown unchanged rather than argued to be.
+its behavior there is shown unchanged rather than argued to be.
 
 ## 5. Tooling: the tag travels
 
@@ -379,7 +379,7 @@ The spec (§8, **Form**) says nothing may separate a `<background>` from its
 `mep_lint` errors and `mep_carry` drops on all three. The Core did not agree, in
 *both* directions: the loader tested `lineContent.empty()` **before** it rolled
 the binding, so an `LF` blank line kept the binding (the Core bound a record the
-tools refuse) while a `CRLF` blank line cancelled it (a lone `\r` is not empty,
+tools refuse) while a `CRLF` blank line canceled it (a lone `\r` is not empty,
 so that spelling reached the roll). Divergence in one direction is a pack that
 lints clean and then loses its guard; in the other it is a guard the tools say
 cannot exist.

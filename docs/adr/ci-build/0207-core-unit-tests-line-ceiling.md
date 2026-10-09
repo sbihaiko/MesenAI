@@ -32,7 +32,7 @@ Cost: no gate at all against a genuinely bloated or duplicated test file. The mi
 
 ### Option B — split the harness into per-block translation units (not chosen)
 
-The file is already organised in named blocks (`BlocoP`, `BlocoT`, …). Split it into `scripts/core_unit_tests/<block>.cpp` with a thin runner, add each to `CUTSRC` in the makefile, and give each part its own ratchet at a size where the ceiling means something again.
+The file is already organized in named blocks (`BlocoP`, `BlocoT`, …). Split it into `scripts/core_unit_tests/<block>.cpp` with a thin runner, add each to `CUTSRC` in the makefile, and give each part its own ratchet at a size where the ceiling means something again.
 
 Cost: a real refactor — makefile `CUTSRC`/`CUTOBJ` wiring, the shared helpers must move to a header, and every future block is a new file plus a new makefile line plus a new ceiling. It also multiplies the amendment problem by the number of parts rather than removing it, unless the per-part ceilings are set with deliberate headroom.
 

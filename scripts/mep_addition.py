@@ -49,7 +49,7 @@ RESERVED_PALETTE = "0D0D0D0D"
 # The marker row of the reserved pattern: row 7 of the tile, i.e. byte 7 of
 # bit-plane 0 and byte 15 of bit-plane 1. Two bytes, so 65 535 synthetic cells
 # fit in one pack — far past any plausible overflow layer, and a fixed row
-# keeps the pattern recognisable by inspection.
+# keeps the pattern recognizable by inspection.
 MARKER_LOW = 7
 MARKER_HIGH = 15
 MAX_ORDINAL = 0xFFFF
@@ -86,9 +86,9 @@ def is_index_key(token: str) -> bool:
 
 def is_blank_sprite(tile_data: str, palette: str) -> bool:
     """True for a sprite tile the NES draws as fully transparent: all 16 bytes
-    of pattern data zero (colour 0 everywhere) under a sprite palette key,
+    of pattern data zero (color 0 everywhere) under a sprite palette key,
     whose first byte `HdBuilderPpu` sets to FF. A background tile with the same
-    data is not blank - its colour 0 is the backdrop, which the NES draws.
+    data is not blank - its color 0 is the backdrop, which the NES draws.
     `mep_build` never lets such a key claim paint (#464, ADR-0153 §4)."""
     data = str(tile_data).strip()
     return len(data) == 32 and data.strip("0") == "" and str(palette).strip().upper().startswith("FF")
@@ -122,7 +122,7 @@ def canonical_key(key, version: int):
     maps to, so two tokens compare equal exactly when `HdPackLoader::
     ReadTileData` builds the same `HdTileKey` from them (#382).
 
-    A CHR ROM index is re-spelt through `parse_index` (decimal below
+    A CHR ROM index is re-spelled through `parse_index` (decimal below
     `<ver>103`, hex at 103+) and `index_token`, so `000`, `00` and `0` are one
     key at 103+. Pattern data (32+ hex digits) is kept as its first 32 digits,
     uppercased — the loader reads exactly 16 byte pairs and ignores the rest.

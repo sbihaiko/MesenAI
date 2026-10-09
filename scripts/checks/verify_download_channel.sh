@@ -23,7 +23,7 @@
 # release call moved out of build.yml into two scripts both publishers run, so
 # the six names and the pre-release flag are asserted once, in the scripts, and
 # both workflows are asserted to call them. Sections 6-8 below hold that half;
-# the behaviour of the three scripts is unit-tested by
+# the behavior of the three scripts is unit-tested by
 # scripts/test_ci_channel_scripts.py.
 #
 # What this file deliberately does NOT assert: that the links currently resolve.
@@ -234,7 +234,7 @@ if [ -n "$FIND_BUILD_CODE" ]; then
   fi
   for q in "event=pull_request" "head_sha=" "status=success"; do
     if ! printf '%s\n' "$FIND_BUILD_CODE" | grep -- "$q" >/dev/null; then
-      fail "$FIND_BUILD's run query lost '$q'; it could pick a failed, cancelled or unrelated run (ADR-0204 §6)"
+      fail "$FIND_BUILD's run query lost '$q'; it could pick a failed, canceled or unrelated run (ADR-0204 §6)"
     fi
   done
   if ! printf '%s\n' "$FIND_BUILD_CODE" | grep -- "-n ci-channel-provenance" >/dev/null; then

@@ -46,12 +46,12 @@ Non-goals:
 - No shader authoring or per-game policy; the user points at an existing RetroArch
   `.slangp`, as upstream does.
   - **Amended 2026-10-02 (user's decision, *"Sim, 2–3 estilos"*):** the "no
-    bundled preset catalogue" clause is lifted for a **short named list** of two
+    bundled preset catalog" clause is lifted for a **short named list** of two
     or three looks (for example *CRT TV* and *Handheld LCD*), offered by Settings
     › Look › Screen (PRD Part B §13, W-P10). Each is a `.slangp` plus its passes,
     with a GPL-3.0-compatible license; the slice records each preset's source,
     license and sha256. The display-only rule stands, and adding a look is a code
-    change, not a catalogue browser or download path.
+    change, not a catalog browser or download path.
 - No Intel macOS leg (ADR-0203 narrowed the release to Apple Silicon).
 
 ## Decision

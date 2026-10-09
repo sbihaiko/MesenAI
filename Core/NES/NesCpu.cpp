@@ -351,7 +351,7 @@ void NesCpu::ProcessPendingDma(uint16_t readAddress, MemoryOperationType opType)
 		_abortDmcDma = false;
 
 		if(!_spriteDmaTransfer) {
-			//If DMC DMA was cancelled and OAM DMA isn't about to start,
+			//If DMC DMA was canceled and OAM DMA isn't about to start,
 			//stop processing DMA entirely. Otherwise, OAM DMA needs to run,
 			//so the DMA process has to continue.
 			_needDummyRead = false;

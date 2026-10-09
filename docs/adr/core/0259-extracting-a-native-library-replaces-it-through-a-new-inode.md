@@ -42,7 +42,7 @@ Two consequences, both measured rather than reasoned about:
 The trade-off is not free: a replacement through a new file costs a temp file
 beside the target and a rename, and on Windows `MoveFileEx` with
 `REPLACE_EXISTING` fails where the destination is mapped. That failure is loud
-rather than fatal, which is the right side to be on — the Windows behaviour is
+rather than fatal, which is the right side to be on — the Windows behavior is
 unchanged from an in-place write to a mapped image, which also fails.
 
 ## Decision
@@ -63,7 +63,7 @@ a different door.
   is found by scanning beside the executable. A failed write leaves the old
   library in place and removes its own temp file.
 - The destination's timestamp is set from the archive entry before the move, so
-  the guard above still recognises an unchanged member and does not unpack the
+  the guard above still recognizes an unchanged member and does not unpack the
   whole archive on every launch.
 - The per-member `catch` stays: the archive carries members for several
   platforms plus Satellaview data, and one unreadable member must not stop the

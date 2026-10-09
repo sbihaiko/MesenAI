@@ -51,7 +51,7 @@ def _node_color(node, band=0):
 def _write_sheet(dirpath, stem, kind, cells, unit, columns, extra=None, scale=1):
     """Sidecar + PNG + orig twin for one ADR-0153 sheet. `cells` is a list of
     dicts already carrying x/y/metatile; each cell's region in the image is a
-    solid colour keyed off its metatile, so art is resolvable and comparable."""
+    solid color keyed off its metatile, so art is resolvable and comparable."""
     dirpath = Path(dirpath)
     stride = unit + E.GUTTER
     rows = max(1, -(-len(cells) // columns))
@@ -466,7 +466,7 @@ def test_band_membership_uses_bottom_edge():
     with tempfile.TemporaryDirectory() as td:
         pack = E.Pack(make_pack(Path(td)))
         adj = pack.adjacency
-        check(176 in adj.floors() and 128 in adj.floors(), "floors() lists quantised bottom bands",
+        check(176 in adj.floors() and 128 in adj.floors(), "floors() lists quantized bottom bands",
               str(adj.floors()))
         members = adj.band_members(176)
         check(0 in members and 1 in members and 2 in members, "ground members on the 176 band", str(members))
@@ -512,10 +512,10 @@ def test_acceptance_sprite_band_ranks_ground_enemies_above_projectile():
 def test_acceptance_background_recompute_places_obj_group_first():
     with tempfile.TemporaryDirectory() as td:
         pack = E.Pack(make_pack(Path(td)))
-        # The seed is a metatile that obj000 groups; lock its strongest neighbour.
+        # The seed is a metatile that obj000 groups; lock its strongest neighbor.
         seed = _OBJ000[0]
         first = pack.background_rank([seed], budget=1)[0][0]
-        check(first in _OBJ000[1:], "strongest neighbour is inside the group", f"got {first}")
+        check(first in _OBJ000[1:], "strongest neighbor is inside the group", f"got {first}")
         locked = [seed, first]
         ranked = [c for c, _ in pack.background_rank(locked)]
         rest = [m for m in _OBJ000 if m not in locked]
@@ -835,7 +835,7 @@ def test_a_variant_ranks_below_its_base_and_runs_are_read():
 
 
 def test_a_fused_pose_is_never_offered_as_a_figure():
-    """ADR-0177 §5: an entry the recorder labelled a fusion is two figures that
+    """ADR-0177 §5: an entry the recorder labeled a fusion is two figures that
     touched, so the suggestion list must not offer it. It stays reachable by
     id — the label is a filter for the ranked list, not a deletion."""
     with tempfile.TemporaryDirectory() as tmp:
@@ -855,7 +855,7 @@ def test_a_fused_pose_is_never_offered_as_a_figure():
               "fusionOf is read as the pose ids the entry splits into",
               str(by_id["pose001"].fusion_of))
         check(by_id["pose001"].fused and not by_id["pose000"].fused,
-              "only the labelled entry reads as fused",
+              "only the labeled entry reads as fused",
               f'{by_id["pose001"].fused}/{by_id["pose000"].fused}')
 
         offered = [e.id for e in pack.pose_band_members(176)]
@@ -1010,7 +1010,7 @@ def _first_metatile_xy(doc, sheets):
 
 
 def test_a_1x_pack_still_exports_a_1x_pair():
-    """The old behaviour is the special case, not a second code path."""
+    """The old behavior is the special case, not a second code path."""
     with tempfile.TemporaryDirectory() as td:
         root = make_pack(Path(td))
         pack = E.Pack(root)

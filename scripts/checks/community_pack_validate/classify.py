@@ -211,7 +211,7 @@ def check_prompt_file_markers(text):
 # built by the renderer, which is the only place submitter bytes reached
 # instruction-shaped context. The rule now lives in the .md as trusted prompt
 # text and the renderers emit nothing but the verbatim field, fenced between
-# EXTERNAL-ASSETS-DATA-BEGIN/-END with any forged sentinel neutralised.
+# EXTERNAL-ASSETS-DATA-BEGIN/-END with any forged sentinel neutralized.
 EXT_BEGIN_SENTINEL = "EXTERNAL-ASSETS-DATA-BEGIN"
 EXT_END_SENTINEL = "EXTERNAL-ASSETS-DATA-END"
 EXT_NEUTRALISE_SED = "s/EXTERNAL-ASSETS-DATA-/EXTERNAL-ASSETS-DATA_/g"

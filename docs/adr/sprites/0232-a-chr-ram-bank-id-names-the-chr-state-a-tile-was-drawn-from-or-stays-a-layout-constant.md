@@ -29,7 +29,7 @@ Non-goals: the loader, the `<tile>` format, and CHR ROM games. #460's guard stay
 ## Options considered
 
 - **(a)** Rename to `WriteRam … override`, so a CHR RAM write marks the banks for rehash. One real CHR state per bank; the kit reads the pack as designed; #460's guard becomes a backstop rather than a path taken on every power-on recording. Cost: +7–8 PNG pages and +0.9–1.8 % bytes, one re-layout of every CHR RAM recording, Zelda's headline down (75 % → 53 %, about 66 % without the empty power-on bank), about 4 % slower recording on an upload-heavy game.
-- **(b)** Keep today's behaviour plus #460's guard. No pack or layout change, in-game identical to (a) — but `ChrBankId` stays a constant that means nothing, the kit stays on its fallback (mixed-state pages, no `--also` donation), and the guard keeps moving tiles off their CHR index (2 and 1 keys here).
+- **(b)** Keep today's behavior plus #460's guard. No pack or layout change, in-game identical to (a) — but `ChrBankId` stays a constant that means nothing, the kit stays on its fallback (mixed-state pages, no `--also` donation), and the guard keeps moving tiles off their CHR index (2 and 1 keys here).
 - **(c)** The suggested middle ("fix it but merge identical duplicates") has nothing to act on — the rename creates no duplicates — so it is the same as (a). Supported middles: **(c1)** (a) with the rehash on the draw path, same output without the forced-blank cost (picked); **(c2)** fix only the kit side, which makes the fallback honest. It does not make it right: without a state id the kit cannot recover which tiles shared a pattern table.
 
 The author recommended **(a) as (c1)** at proposal time.

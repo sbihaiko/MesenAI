@@ -135,7 +135,7 @@ namespace MesenSheets
 		//§4's variant: a kept pose plus a remainder of kPoseMinTiles or more
 		//tiles is a fusion even when the remainder never stood alone (Bill's
 		//death tumble, only ever drawn over the soldier that killed him). It
-		//is labelled with the one kept part; a two-part split still wins.
+		//is labeled with the one kept part; a two-part split still wins.
 		//
 		//ADR-0228 (issue #504) adds the one way "never stood alone" can be the
 		//screen's doing rather than the game's: a part drawn only while its own
@@ -174,7 +174,7 @@ namespace MesenSheets
 			if(seen == origins.end() || seen->second.empty()) {
 				return false;
 			}
-			//A pose's tiles are normalised to its own top-left, so the part's
+			//A pose's tiles are normalized to its own top-left, so the part's
 			//extent is its largest tile offset plus one tile.
 			int32_t partWidth = 0;
 			int32_t partHeight = 0;
@@ -212,7 +212,7 @@ namespace MesenSheets
 
 		void LabelPoseFusions(std::vector<PoseEntry>& entries, const PoseOrigins& origins)
 		{
-			//Tile set -> rank. A kept pose's Tiles are normalised (the smallest
+			//Tile set -> rank. A kept pose's Tiles are normalized (the smallest
 			//Dx and the smallest Dy are both 0) and sorted, so the vector is
 			//already a usable key. emplace keeps the first, i.e. the best rank,
 			//should two entries ever share a set.
@@ -284,7 +284,7 @@ namespace MesenSheets
 							continue;
 						}
 
-						//The remainder, re-normalised to its own top-left -
+						//The remainder, re-normalized to its own top-left -
 						//the space every kept pose's Tiles already live in.
 						std::vector<PoseTile> rest;
 						for(const PoseTile& member : whole) {
@@ -366,7 +366,7 @@ namespace MesenSheets
 
 		//---- ADR-0179 (F9.20) ---------------------------------------------
 
-		//One spatially connected cluster of a frame: its normalised tile set
+		//One spatially connected cluster of a frame: its normalized tile set
 		//(the pose identity) and where its top-left sat on screen, in pixels.
 		struct PoseCluster
 		{
@@ -432,7 +432,7 @@ namespace MesenSheets
 
 		//The ADR-0170 §1 segmentation of one retained frame: entries the
 		//vocabulary knows, DSU-joined within kPoseMaxGap on both axes, each
-		//cluster normalised to its own top-left at round-to-nearest cell and
+		//cluster normalized to its own top-left at round-to-nearest cell and
 		//reduced to a set. Clusters under kPoseMinTiles are not returned.
 		//
 		//#520: an artless placement (Shape == kEmptyCell) takes part in both -
@@ -1202,7 +1202,7 @@ namespace MesenSheets
 				continue;
 			}
 			//The metatile criterion's denominator is "every placement of A in
-			//that direction"; the OAM analogue is "every frame A is on screen",
+			//that direction"; the OAM analog is "every frame A is on screen",
 			//so a sprite that is only sometimes at this offset - or that turns
 			//up without its partner - fails exactly like sand next to
 			//everything.
@@ -1272,7 +1272,7 @@ namespace MesenSheets
 					continue;
 				}
 				present.insert((uint32_t)cell);
-				//Bottom edge (Y + 8) quantised to 8 px. Accumulated per instance
+				//Bottom edge (Y + 8) quantized to 8 px. Accumulated per instance
 				//over the de-duplicated frames, like Appearances: an 8x16 figure's
 				//lower half lands on the true bottom, and two identical actors on
 				//one ground both reach the same band.
@@ -1348,7 +1348,7 @@ namespace MesenSheets
 		}
 		//ADR-0173: screen furniture - a HUD bar, a menu icon - is drawn at a
 		//handful of fixed pixels for the whole capture, so its bottom edge lands
-		//in several quantised bands at once and joins every one of them as a
+		//in several quantized bands at once and joins every one of them as a
 		//member. An actor visits a new position nearly every frame it is on
 		//screen; furniture returns to the same one over and over. That ratio is
 		//the test, and it needs enough frames to mean anything.
@@ -1463,7 +1463,7 @@ namespace MesenSheets
 		//so that LabelPoseFusions can tell a figure standing alone from one the
 		//screen edge cut in half. Keyed by the pose's own tiles, i.e. the reduced
 		//set below - the same key `seen` and the entries carry, so a fusion label
-		//finds the origins of the pose it is labelling.
+		//finds the origins of the pose it is labeling.
 		PoseOrigins origins;
 		//ADR-0234: one pass to learn which tiles each cluster ever drew
 		//visibly, then the usual accumulation over the clusters reduced to

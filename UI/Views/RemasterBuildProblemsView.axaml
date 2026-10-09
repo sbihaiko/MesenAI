@@ -19,7 +19,7 @@
 	the small primary Try Again.-->
 	<!--The render's hierarchy (Player only): a drawn orange warning before the
 	title; each problem's name in bold, then its sentence in the secondary
-	colour. Advanced keeps the "⚠ …" title and the caption-led "· …" rows.-->
+	color. Advanced keeps the "⚠ …" title and the caption-led "· …" rows.-->
 	<UserControl.Styles>
 		<Style Selector="DockPanel#RemasterBuildProblemsTitleRow, DockPanel.problem-split">
 			<Setter Property="IsVisible" Value="False" />

@@ -17,7 +17,7 @@
 //- sprites, sprite-0 hit, the left-8-px mask and every CPU-visible register
 //  stay on the original 256 px - this file never touches them;
 //- the standard 256x240 frame the PPU keeps (GetScreenBuffer, the HD builder,
-//  thumbnails, the debugger) is never written to: the centre of the extended
+//  thumbnails, the debugger) is never written to: the center of the extended
 //  frame is a copy of it.
 //
 //The row state each row is drawn from (loopy v, fine X, the BG pattern table,
@@ -46,7 +46,7 @@ namespace NesWidescreenReveal
 
 	//W.1's fallback for a column with no real content (ADR-0253 §3): NES
 	//palette entry $0F, black on every PPU palette. Not run through grayscale
-	//or emphasis, because it is not a colour the game chose.
+	//or emphasis, because it is not a color the game chose.
 	constexpr uint16_t BlackColor = 0x0F;
 
 	//One row's rendering state, as it stands when the row's first tiles are
@@ -185,7 +185,7 @@ namespace NesWidescreenReveal
 		}
 	}
 
-	//Copies the standard frame into the centre of an extended one, row by
+	//Copies the standard frame into the center of an extended one, row by
 	//row: the 256 middle columns of every row are the standard picture, bit
 	//for bit.
 	inline void ComposeCenter(const uint16_t* standardFrame, uint16_t* extendedFrame)
@@ -242,7 +242,7 @@ namespace NesWidescreenReveal
 			return true;
 		}
 
-		//The extended frame (standard picture in the centre), or nullptr when
+		//The extended frame (standard picture in the center), or nullptr when
 		//this frame is standard. A row the frame never drew (a save state
 		//loaded mid-frame) gets the black fallback rather than last frame's.
 		const uint16_t* Finish(const uint16_t* standardFrame)

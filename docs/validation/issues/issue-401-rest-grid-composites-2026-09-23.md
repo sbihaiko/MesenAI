@@ -1,6 +1,6 @@
-# Issue #401 — Contra rest-grid composites measured and labelled as fusions (2026-09-23)
+# Issue #401 — Contra rest-grid composites measured and labeled as fusions (2026-09-23)
 
-Issue #401 reported a cold reader's visual judgement: in the Contra stage-1
+Issue #401 reported a cold reader's visual judgment: in the Contra stage-1
 kit, `sheets/usr003.png` / `figures/usr003-figure.png` (10 loose poses) show
 Bill fused with an enemy soldier, although `ARTIST.md` said only 2 fused poses
 were left out. This log measures the claim, records the root cause, and
@@ -80,7 +80,7 @@ The user picked "treat as fused", which became ADR-0228.
   `84cba9d2ad3eecc7f9200903aa980bc019dc0290037efb23b89f7603ed202351`
   (the before binary's was `6f210da4…`). `otool -L scripts/headless_record`
   resolves the dylib to this worktree.
-- Behavioural proof: the new recording writes one-id `fusionOf` lists, which
+- Behavioral proof: the new recording writes one-id `fusionOf` lists, which
   only the ADR-0228 branch produces (below).
 
 ## Before / after
@@ -112,13 +112,13 @@ files. Poses, tracks (9) and cycles reproduce exactly.
 
 - `make core-unit-tests`: 1037/1037. New cases (Bloco P): a kept pose plus
   an 8-tile remainder that never stands alone is a one-part fusion
-  (`FusionOf == {0}`), not a variant, and serialises as
+  (`FusionOf == {0}`), not a variant, and serializes as
   `"fusionOf": ["pose000"]`. The same holds at a remainder of exactly
   `kPoseMinTiles`. A kept pose plus a 3-tile remainder is still a variant.
   The ADR-0177 two-part cases are unchanged.
 - Mutation: disabling the ADR-0228 fallback in `LabelPoseFusions` fails 4
   cases (1033/1037): both one-part fusion checks and both one-id `fusionOf`
-  serialisation checks.
+  serialization checks.
 - `python3 scripts/test_artist_kit.py`: 14/14, including the new
   one-part-fusion case. Mutation: disabling the one-part branch in
   `_dropped` fails it (13/14), because the message then claims "both halves

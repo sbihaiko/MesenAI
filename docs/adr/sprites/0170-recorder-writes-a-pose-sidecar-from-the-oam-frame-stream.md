@@ -31,7 +31,7 @@ Non-goals: no change to capture (no PPU hook, no new pass, no change to `_oamFra
 
 ### 1. `sheets/poses.json` — one entry per distinct silhouette
 
-At save time, alongside `adjacency.json`, the recorder writes `textures/sheets/poses.json`. For every retained OAM frame it segments the frame's entries into **spatially connected clusters** (two entries are connected when their 8x8 boxes are within 8 px on both axes), normalises each cluster to its own top-left, and expresses it as a set of `(node, dx, dy)` in 8 px tile units, using the existing `SpriteGrouping::ToCells` round-to-nearest-cell rule. `node` is an index into the sprite vocabulary — the same index space as `adjacency.json` `sprites.nodes[]`.
+At save time, alongside `adjacency.json`, the recorder writes `textures/sheets/poses.json`. For every retained OAM frame it segments the frame's entries into **spatially connected clusters** (two entries are connected when their 8x8 boxes are within 8 px on both axes), normalizes each cluster to its own top-left, and expresses it as a set of `(node, dx, dy)` in 8 px tile units, using the existing `SpriteGrouping::ToCells` round-to-nearest-cell rule. `node` is an index into the sprite vocabulary — the same index space as `adjacency.json` `sprites.nodes[]`.
 
 Two clusters are the **same pose** when that set is equal. Identical sets merge, summing the frames they were seen in (a frame counts `RepeatCount` times, as elsewhere in the stream).
 
@@ -67,7 +67,7 @@ A pose is kept when it was seen in at least 3 retained frames and holds at least
 
 ### 3. The segmentation lives in `SpriteGrouping`, host-free and unit-tested
 
-The clustering, normalisation, dedup and thresholds are a free function in `Core/NES/HdPacks/SpriteGrouping.{h,cpp}` (`BuildPoses`), taking the OAM frame stream and the sprite vocabulary and returning the entries — no `HdPackBuilder` state, no I/O, per ADR-0127. `HdPackBuilder` only serialises what it returns. It is covered by `core_unit_tests` (ADR-0126) with hand-built frame streams: two poses of one character that share a torso tile stay two poses; an 8 px diagonal gap connects and a 9 px gap does not; a `RepeatCount` frame counts its repeats; the thresholds and the cap drop what they claim to drop.
+The clustering, normalization, dedup and thresholds are a free function in `Core/NES/HdPacks/SpriteGrouping.{h,cpp}` (`BuildPoses`), taking the OAM frame stream and the sprite vocabulary and returning the entries — no `HdPackBuilder` state, no I/O, per ADR-0127. `HdPackBuilder` only serializes what it returns. It is covered by `core_unit_tests` (ADR-0126) with hand-built frame streams: two poses of one character that share a torso tile stay two poses; an 8 px diagonal gap connects and a 9 px gap does not; a `RepeatCount` frame counts its repeats; the thresholds and the cap drop what they claim to drop.
 
 ### 4. Pose layout supersedes the walk where both apply
 
@@ -77,7 +77,7 @@ A consumer that has `poses.json` takes a figure's layout from it and does **not*
 
 - Only newly recorded packs get poses, so the composition editor carries two layout paths (sidecar, walk) until old packs are re-recorded — not dead code to delete later, since a pack recorded today is a legitimate input forever.
 - `poses.json` is a second file that can disagree with `adjacency.json` (same stream, different projection); they are written in one pass from the same `_oamFrames`, the only guarantee offered, and a consumer that mixes a pose's `tiles[]` with a pair's `offsets[]` is on its own.
-- Sets-equal identity is strict: the same body pose with the projectile one cell further away is a different pose (S10.a counted 15 Mega Man poses where a human would say 10-12). Loosening it can merge two real poses and that failure is invisible in the file. **Closed 2026-09-15 (Phase 11 C.8 / ADR-0171 Consequences):** do **not** loosen — the 2026-09-11 Mega Man 3 pack carried 223 poses with fusion labelling (`fusionOf`), and ADR-0171 already treats over-large units as labelled fusions. Revisit only with a measurement that names a false-merge rate on a labelled set, not as an open debt.
+- Sets-equal identity is strict: the same body pose with the projectile one cell further away is a different pose (S10.a counted 15 Mega Man poses where a human would say 10-12). Loosening it can merge two real poses and that failure is invisible in the file. **Closed 2026-09-15 (Phase 11 C.8 / ADR-0171 Consequences):** do **not** loosen — the 2026-09-11 Mega Man 3 pack carried 223 poses with fusion labeling (`fusionOf`), and ADR-0171 already treats over-large units as labeled fusions. Revisit only with a measurement that names a false-merge rate on a labeled set, not as an open debt.
 - Contact between actors merges them: in Contra an enemy touching Bill is one cluster, so a "pose" can be two characters — connectivity is the only signal the OAM stream carries, and separating actors needs identity the pack does not have.
 - A Phase 10 subject sheet becomes buildable from a pack, but this ADR does not build one: grouping poses *of the same subject* is still open, and S10.b's layout-fidelity question is untouched.
 - The sidecar exposes screen positions only as relative offsets, so it adds no new ROM-derived information beyond what `sprites.png` already shows.

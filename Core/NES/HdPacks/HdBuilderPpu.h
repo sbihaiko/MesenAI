@@ -182,7 +182,7 @@ public:
 				}
 
 				//ADR-0234: one dot of the tally, from the verdict the PPU just
-				//reported (NoteSpritePixel) - the sprite's colour either reached
+				//reported (NoteSpritePixel) - the sprite's color either reached
 				//the output buffer, or an opaque background pixel in front of a
 				//behind-the-background sprite took it. SMB3's pipe mask is the
 				//case this measures: drawn in front of the piranha plant, behind

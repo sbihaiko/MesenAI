@@ -127,7 +127,7 @@ Gaiden (`CA513F84…` whole-file SHA1) and the state is the one
 exit 0. Whole suite, `bash scripts/checks/run_python_tests.sh`: 72 passed,
 1 failed in 83 s.
 
-**Mutation check** — twelve single-behaviour mutations of `jev_harness.py`
+**Mutation check** — twelve single-behavior mutations of `jev_harness.py`
 (loop fingerprint 3→4, cycle period 2 dropped, watermark 60→59 s, decision cap
 off by one, a failed macro not withdrawn, the floor no longer clamping, a tip's
 trigger ignored, the settle window dropped, cheat address 0x800→0x8000, the

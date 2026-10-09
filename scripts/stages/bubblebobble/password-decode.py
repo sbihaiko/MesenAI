@@ -36,7 +36,7 @@ accepts exactly one - AAAAB, which arms round 16 - while AAAAA computes the same
 16 and is refused. So the last two letters carry a constraint this arithmetic
 does not describe, and it is not "one string per round": round 1 accepts both
 BBAAB and the Super BBAJI, and round 112 both EECJJ and EECFG. That is why the
-set types published passwords and never a synthesised one.
+set types published passwords and never a synthesized one.
 
 Past the NES version's last round the round-to-level lookup then lands somewhere
 else entirely, which is a property of the level table and not of this arithmetic

@@ -431,7 +431,7 @@ namespace Mesen.Services
 		}
 
 		//MEI-v1.md §2.3 user_supplied deps: tell the user what to drop where, with the
-		//declared licence (or "not declared") so they can judge the source themselves.
+		//declared license (or "not declared") so they can judge the source themselves.
 		private static void NotifyPendingDeps(string packName, IReadOnlyList<CommunityPackDepPrompt> pending, string installedRomSha1, int openGeneration)
 		{
 			//G.5 W-P16: Player mode gets the sheet (with the pause overlay) and a

@@ -35,7 +35,7 @@ by relative name. Nothing from that directory is committed.
 | Step | Result |
 |---|---|
 | 1. Route | `scripts/stages/punchout/{mint-fight1,fight1}.txt` plus `stage-set.json`. From the minted state, the recording runs 70 s (4208 frames). Two passes produced a byte-identical `hires.txt` (sha256 `215a3351…7830e6`) and an identical `auto/` tree. |
-| 2. Palette gap | 1655 drawn keys (516 sprite, 1139 BG) over 1009 drawn shapes. 60.6 % of drawn keys are on a sheet and 30.3 % are on an organised sheet. The 652 missing keys fold 315 and stay their own colourway 337. |
+| 2. Palette gap | 1655 drawn keys (516 sprite, 1139 BG) over 1009 drawn shapes. 60.6 % of drawn keys are on a sheet and 30.3 % are on an organized sheet. The 652 missing keys fold 315 and stay their own colourway 337. |
 | 3. Kit | Every `--verify` passes, with 0 keys lost and 0 invented. There are 13 figure sheets holding all 34 poses and 6 cycles, 66 pattern pages covering 100 % of the CHR, and 3 scene screens. **Glass Joe comes out whole. Little Mac does not become a figure, because he is drawn as BG.** Two poses are torn (bug B). |
 | 4. Round trip | Magenta reaches the game at the painted spot: 1024 px, the full 32x32 cell. That only happens with the backdrop spike for bug A applied. Without it, the rebuilt layer hides Glass Joe, and only a 32x4 px sliver (128 px) of the paint shows. An unpainted rebuild keeps the key set: 1010 = 1010 = 1010. |
 | Bugs | A (P1): BG crops bake the backdrop opaque, so a rebuilt layer hides behind-BG sprites. B (P1): the flip is not un-baked on index-keyed packs. C (P2): the registry names a different MMC2 bank than the one the PPU drew. #447 is noted only. |
@@ -107,7 +107,7 @@ all of them the knockdown count with the referee.
 measuring:
 
 - **Glass Joe** and his gloves are sprites, drawn *behind* the background.
-- **Little Mac and the referee** are BG tiles. Little Mac changes colour when he
+- **Little Mac and the referee** are BG tiles. Little Mac changes color when he
   is tired, using three BG palettes: `112A0F36`, `112A1436` and `112A2536`.
 
 ## 2. Palette gap
@@ -123,7 +123,7 @@ it credits a key by `_index_token(index)` and reads each bitmap from the ROM at
 | Shapes (all / drawn) | 8192 / 1009 |
 | Sheet entries / distinct sheet keys | 1448 / 1010. 7 of the sheet keys are not in the recording (bug C). |
 | Drawn keys on any sheet | 1003 = **60.6 %** (sprite 411/516, BG 592/1139) |
-| Drawn keys on an organised sheet | 501 = **30.3 %** |
+| Drawn keys on an organized sheet | 501 = **30.3 %** |
 | Drawn keys missing from the sheets | 652, on 402 shapes. The count of missing keys per shape is 1:179, 2:205, 3:13, 4:3, 5:1, 7:1. |
 | Missing keys with no cell for their shape | 9 keys, on 6 shapes |
 | Maximum palettes per shape | drawn 8, on sheet 1 |
@@ -301,10 +301,10 @@ bug A is fixed.
 
 ## Bugs found (drafts, not filed)
 
-**A. A rebuilt BG layer bakes the backdrop colour opaque and hides behind-BG
+**A. A rebuilt BG layer bakes the backdrop color opaque and hides behind-BG
 sprites (Punch-Out!!: Glass Joe disappears)**
 
-The sheet BG crops store colour 0 (the backdrop, RGB 21,95,217) as opaque.
+The sheet BG crops store color 0 (the backdrop, RGB 21,95,217) as opaque.
 `mep_build` then emits rules for blank floor tiles with fully opaque blue crops,
 from `metatiles`, `obj000` and `unsorted.png`:
 
@@ -363,7 +363,7 @@ is probably the MMC2 latch switching banks mid-frame, between the moment the
 recorder resolves the index and the fetch. Suggested priority: P2.
 
 **#447** (nearest vs xBRZ scaling) is known and was only noted here. It does
-not affect the magenta pixel count, because the paint is a flat colour.
+not affect the magenta pixel count, because the paint is a flat color.
 
 No duplicates of A, B or C were found among the open issues.
 

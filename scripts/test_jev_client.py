@@ -346,7 +346,7 @@ def test_bad_answers(tmp):
         ("a non-choice type", with_answer(type="text")),
         ("no probabilities", with_answer(probabilities=None)),
         # Offered in `criteria`, absent from the distribution: the by-name
-        # lookup must fail loudly rather than read a neighbour's number.
+        # lookup must fail loudly rather than read a neighbor's number.
         ("the choice missing from its own probabilities", without_probability("JUMP_RIGHT")),
         ("a non-numeric probability", with_answer(probabilities={"JUMP_RIGHT": "0.35"})),
         ("no confidence", with_answer(confidence=None)),

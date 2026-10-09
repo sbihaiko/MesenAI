@@ -58,7 +58,7 @@ def palette_hex(n: int) -> str:
 
 def palette_id(n: int) -> int:
     """The palette plane's id for a shape. The fixture gives each shape its own
-    palette word, which is the identity case; the recolour case builds its own
+    palette word, which is the identity case; the recolor case builds its own
     ids by hand."""
     return n % M.UNKNOWN_PALETTE
 
@@ -383,7 +383,7 @@ def test_a_blank_row_abstains_and_a_hud_below_it_is_still_found():
     scrolled - it matches itself under every shift - so the only thing left to
     separate the unshifted from the shifted comparison is a one-cell edge
     artifact. That artifact voted "moving", and since only a band contiguous
-    from row 0 is honoured, the real HUD underneath was never reached and got
+    from row 0 is honored, the real HUD underneath was never reached and got
     smeared across the panorama."""
     # The root cause, in the two calls hud_bands makes: `a` has all 32 columns
     # of a blank row, `b` is missing the rightmost one.
@@ -444,7 +444,7 @@ def test_a_blank_margin_with_nothing_fixed_under_it_stays_in_the_panorama():
 def test_one_shape_under_two_palettes_keeps_both_colours():
     """The reason the palette plane exists (F9.24). The grid stream interns a
     shape palette-agnostically, so without the plane a tile a bank switch
-    recoloured lands on the panorama under whichever colours it happened to be
+    recolored lands on the panorama under whichever colors it happened to be
     seen with first - and an artist repaints a stretch of stage in a palette
     the game never used there."""
     with tempfile.TemporaryDirectory() as td:
@@ -453,7 +453,7 @@ def test_one_shape_under_two_palettes_keeps_both_colours():
         lines = [f"P 0 {left}", f"P 1 {right}"]
         emitted = set()
         # The world's drawing repeats every 23 columns, so the same shape is on
-        # both sides of the recolour boundary at world column 40.
+        # both sides of the recolor boundary at world column 40.
         for frame, ox in enumerate(range(0, 50)):
             lines.append(f"F {frame}")
             for row in range(M.ROWS):
@@ -467,7 +467,7 @@ def test_one_shape_under_two_palettes_keeps_both_colours():
         frames, shapes, palettes = M.parse_grid_dump(p)
         check(palettes == {0: left, 1: right}, "both palette words are interned", str(palettes))
         regions = M.stitch(frames, 0, 0)
-        check(len(regions) == 1, "the recolour does not cut the region", str(len(regions)))
+        check(len(regions) == 1, "the recolor does not cut the region", str(len(regions)))
         keys = set()
         for sid in shapes:
             keys.add((tile_hex(sid), left))
@@ -478,7 +478,7 @@ def test_one_shape_under_two_palettes_keeps_both_colours():
         for c in cells:
             by_col.setdefault(c["x"] // 8, set()).add(c["tiles"][0]["palette"])
         check(by_col[0] == {left}, "a cell keeps the palette it was recorded with", str(by_col[0]))
-        check(by_col[max(by_col)] == {right}, "and a recoloured stretch keeps its own",
+        check(by_col[max(by_col)] == {right}, "and a recolored stretch keeps its own",
               str(by_col[max(by_col)]))
         repeated = {t for t in by_col.values() if len(t) > 1}
         check(not repeated, "no cell carries two palettes at one position", str(repeated))
@@ -487,7 +487,7 @@ def test_one_shape_under_two_palettes_keeps_both_colours():
         pal_of_shape = {c["tiles"][0]["palette"] for c in cells
                         if c["tiles"][0]["tile"] == tile_hex(shape)}
         check(pal_of_shape == {left, right},
-              "one shape recoloured mid-stage appears under both its palettes", str(pal_of_shape))
+              "one shape recolored mid-stage appears under both its palettes", str(pal_of_shape))
         check(stats["ambiguous"] == 0, "nothing is attributed when the plane answered",
               str(stats["ambiguous"]))
 
@@ -500,7 +500,7 @@ def test_a_dump_without_the_palette_plane_still_parses_and_says_so():
         p = Path(td) / "grid.txt"
         lines = []
         emitted = set()
-        # Two neighbouring shape ids share one tile data under two palettes -
+        # Two neighboring shape ids share one tile data under two palettes -
         # exactly the case the plane exists to resolve - and the dump has no
         # plane to resolve it with.
         def data_of(sid):
@@ -649,7 +649,7 @@ def test_a_sliced_sheet_comes_out_at_the_pack_scale_not_the_painted_one():
     # an artist wants it at its own size - but every sheet of a pack shares one
     # <scale> (MEP-v1 2.1). Slicing a 1x painting into a 4x pack used to emit a
     # 1x sheet and fail the build with "painted at 1x while metatiles.png is at
-    # 4x". The sidecar carries the pack's scale and the slicer honours it.
+    # 4x". The sidecar carries the pack's scale and the slicer honors it.
     with tempfile.TemporaryDirectory() as td:
         out = Path(td) / "kit"
         map_dir = out / "map"
@@ -681,7 +681,7 @@ def test_a_sliced_sheet_comes_out_at_the_pack_scale_not_the_painted_one():
             check("does not divide" in str(e),
                   "a painted scale that does not divide the pack's is refused", str(e))
 
-        # No packScale (a sidecar written before this) keeps the old behaviour.
+        # No packScale (a sidecar written before this) keeps the old behavior.
         del doc["panorama"]["packScale"]
         (map_dir / "s-000.json").write_text(json.dumps(doc, indent=1) + "\n", encoding="utf-8")
         M.cut_painted(map_dir / "s-000.json", map_dir / "s-000.png", out, quiet=True)
@@ -693,7 +693,7 @@ def test_a_sliced_sheet_comes_out_at_the_pack_scale_not_the_painted_one():
 
 def test_the_panorama_palette_band_follows_first_use_in_reading_order_and_is_labelled():
     """What `artist_kit_assemble.py` tells the artist about the `palettes`
-    band - first-use order, every group labelled - has to hold for the
+    band - first-use order, every group labeled - has to hold for the
     panorama too, not only for the sheets `compose_engine` exports."""
     with tempfile.TemporaryDirectory() as td:
         camera = walk(1, 0, 25)
@@ -710,7 +710,7 @@ def test_the_panorama_palette_band_follows_first_use_in_reading_order_and_is_lab
                 if t["palette"] not in expected_hex:
                     expected_hex.append(t["palette"])
                     expected_labels.append(str(c["index"]))
-        check(labels == expected_labels, "each group is labelled with the first cell (reading order) that wears it",
+        check(labels == expected_labels, "each group is labeled with the first cell (reading order) that wears it",
               f"{labels[:6]} vs {expected_labels[:6]}")
         check(swatches == M.ora_writer.nes_swatches(expected_hex),
               "the swatches follow first use in reading order, not hex order")
@@ -730,7 +730,7 @@ def test_the_panorama_palette_band_follows_first_use_in_reading_order_and_is_lab
         finally:
             M.ora_writer.write_surface, M.Pack = real_write, real_pack
         check(seen.get("swatch_labels") == labels and seen.get("swatches") == swatches,
-              "generate passes the labelled first-use band to write_surface",
+              "generate passes the labeled first-use band to write_surface",
               str(seen.get("swatch_labels", "missing"))[:60])
 
 

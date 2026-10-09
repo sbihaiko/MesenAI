@@ -1,4 +1,4 @@
-# ADR-0173: A sprite that never moved is labelled screen-fixed, and the composition editor stops treating it as standing on a floor
+# ADR-0173: A sprite that never moved is labeled screen-fixed, and the composition editor stops treating it as standing on a floor
 
 - Status: superseded
 - Superseded by: ADR-0171

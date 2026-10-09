@@ -65,7 +65,7 @@ def cell_center(index):
 
 def test_drawing_and_hit_testing_are_inverse():
     misses = [i for i in range(3 * L.ROW_N) if L.index_at(*cell_center(i)) != i]
-    check(not misses, "a click in a cell's centre resolves to that cell",
+    check(not misses, "a click in a cell's center resolves to that cell",
           f"cells that resolved elsewhere: {misses}")
     corners = [i for i in range(2 * L.ROW_N)
                if L.index_at(*L.cell_origin(i)) != i]
@@ -81,7 +81,7 @@ def test_a_pose_sized_grid_is_still_a_pair_of_inverses():
     m = L.row_metrics(POSE_SIZES)
     n = 3 * m["per_line"]
     misses = [i for i in range(n) if L.index_at(*L.cell_center(i, m), m) != i]
-    check(not misses, "a click in a pose cell's centre resolves to that cell",
+    check(not misses, "a click in a pose cell's center resolves to that cell",
           f"metrics={m} cells that resolved elsewhere: {misses}")
     corners = [i for i in range(n) if L.index_at(*L.cell_origin(i, m), m) != i]
     check(not corners,
@@ -224,7 +224,7 @@ def test_scales_are_integers_that_fit_and_never_vanish():
     check(L.fit_scale_box(100, 100, 8, 8, 3) == 3
           and L.fit_scale_box(2, 100, 8, 8) == 1
           and L.fit_scale_box(100, 0, 8, 8) == 1,
-          "fit_scale_box honours the cap and never returns 0",
+          "fit_scale_box honors the cap and never returns 0",
           str([L.fit_scale_box(100, 100, 8, 8, 3), L.fit_scale_box(2, 100, 8, 8),
                L.fit_scale_box(100, 0, 8, 8)]))
     check(L.row_cell_scale(8) == L.row_cell_scale(8, 8)
@@ -256,8 +256,8 @@ def test_secondary_text_is_readable_on_either_theme():
     invisible on a dark one. Issue #171."""
     light = L.muted_foreground(0xEE, 0xEE, 0xEE, 255)
     dark = L.muted_foreground(0x2B, 0x2B, 0x33, 255)
-    check(light == L.MUTED_ON_LIGHT, "a light surface keeps the dark grey", light)
-    check(dark == L.MUTED_ON_DARK, "a dark surface gets a light grey", dark)
+    check(light == L.MUTED_ON_LIGHT, "a light surface keeps the dark gray", light)
+    check(dark == L.MUTED_ON_DARK, "a dark surface gets a light gray", dark)
     check(L.muted_foreground(0xEE * 257, 0xEE * 257, 0xEE * 257) == light,
           "16-bit channels (winfo_rgb) read the same as 8-bit")
     # Contrast against the surface it sits on, both ways round.

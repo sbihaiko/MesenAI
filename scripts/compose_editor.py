@@ -164,20 +164,20 @@ class EditorApp:
             self.load_pack(folder)
 
     def _labelframe(self, parent, text: str, **kw):
-        """A `ttk.LabelFrame` whose title is a label this file colours itself.
+        """A `ttk.LabelFrame` whose title is a label this file colors itself.
         The aqua theme ignores `TLabelframe.Label`'s `foreground`, so styling
-        alone left every frame title in the theme's own grey — unreadable on a
+        alone left every frame title in the theme's own gray — unreadable on a
         dark background, which is how the F9.18 panel rehearsal found them. A
-        `labelwidget` is honoured by every theme."""
+        `labelwidget` is honored by every theme."""
         frame = ttk.LabelFrame(parent, **kw)
         frame.configure(labelwidget=ttk.Label(frame, text=text, foreground=self.muted))
         return frame
 
     def _muted_foreground(self) -> str:
-        """Secondary text colour for this window, measured off the theme's own
+        """Secondary text color for this window, measured off the theme's own
         frame background through `winfo_rgb` — the same call
-        `render_compose_editor.py` resolves colours with, so what the render
-        shows is what the artist reads. Falls back to the light-theme grey when
+        `render_compose_editor.py` resolves colors with, so what the render
+        shows is what the artist reads. Falls back to the light-theme gray when
         Tk cannot answer."""
         try:
             bg = ttk.Style(self.root).lookup("TFrame", "background") or self.root.cget("background")
@@ -227,7 +227,7 @@ class EditorApp:
         self.bg_seed = tk.Listbox(left, width=46, height=12, exportselection=False)
         self.bg_seed.pack(fill="both", expand=True)
         ttk.Button(left, text="Seed selected", command=self._seed_bg).pack(pady=2)
-        mid = self._labelframe(f, "Ranked neighbours — lock to compose", padding=4)
+        mid = self._labelframe(f, "Ranked neighbors — lock to compose", padding=4)
         mid.pack(side="left", fill="both", expand=True, padx=4, pady=4)
         self.bg_sugg = tk.Listbox(mid, width=46, height=12, exportselection=False)
         self.bg_sugg.pack(fill="both", expand=True)
@@ -400,7 +400,7 @@ class EditorApp:
 
     def _refresh_sp_sugg(self):
         """The ranked candidates. On a pose pack the score is ADR-0171 §4's
-        damped sum (a float, not a raw coFrames count), so it is labelled as a
+        damped sum (a float, not a raw coFrames count), so it is labeled as a
         score and the line carries the silhouette's shape instead of the
         anchor tile's name — the artist is choosing a figure, not a fragment."""
         self.sp_sugg.delete(0, "end")

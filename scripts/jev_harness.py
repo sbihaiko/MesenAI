@@ -1988,7 +1988,7 @@ def write_cheat_sidecar(out, cheats) -> Path:
     ADR-0184 section 1: a RAM cheat is legitimate for reaching a spot, and the
     artifact it produces is not the same claim as an uncheated one - it replays
     only with the same cheat list. So the script ships with a sidecar naming the
-    codes, and the pass is labelled `coverage`, never `route`.
+    codes, and the pass is labeled `coverage`, never `route`.
     """
     sidecar = Path(f"{out}.cheats.json")
     sidecar.write_text(json.dumps(

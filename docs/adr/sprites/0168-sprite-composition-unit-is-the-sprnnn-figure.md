@@ -69,7 +69,7 @@ The spike above was a demonstration on six hand-picked groups. S10.a counted
 the same walk against a denominator, on two fresh 300 s recordings (Mega Man
 3, MMC3/CHR-ROM; Contra, CHR-RAM), with the poses actually drawn read off
 ADR-0169's live OAM channel — a pose being one spatially connected OAM
-cluster normalised to its own top-left, using `SpriteGrouping::ToCells`'
+cluster normalized to its own top-left, using `SpriteGrouping::ToCells`'
 round-to-nearest-cell rule, kept when seen in >= 3 captures with >= 4 tiles.
 Decode validity: 98.7 % (MM3) / 94.4 % (Contra) of the decoded OAM tiles are
 present in the pack's own `sprites.json` vocabulary.
@@ -97,7 +97,7 @@ another, so a character's tiles fall into several disjoint always-together
 fragments. The partition the walk walks was never pose-shaped, so no
 refinement of the walk reaches a pose. §1 (the figure, not the node, is the
 unit) is unaffected and still holds: a node row is unreadable, and the
-fragments are at least recognisable art.
+fragments are at least recognizable art.
 
 Evidence: `runs/s10a-shared/S10a-summary.json` and
 `runs/s10a-{mm3,contra}/analysis/` (gitignored, not versioned).
@@ -153,9 +153,9 @@ The reference implementation is `shape_layout` / `shape_image` in
 existing headless suite pattern (`scripts/test_compose_engine.py`) covering
 it against a synthetic pack.
 
-### 3. Step 3 is a heuristic and is labelled as one
+### 3. Step 3 is a heuristic and is labeled as one
 
-The occupied-slot refusal is the only defence against a group's poses
+The occupied-slot refusal is the only defense against a group's poses
 overlapping, and it is not derivable from recorded data. It must carry that
 caveat in the code that implements it, and a figure whose walk left members
 unplaced must surface the count to the artist rather than look complete.
@@ -163,7 +163,7 @@ unplaced must surface the count to the artist rather than look complete.
 Making this exact needs the recorder to record pose membership — which OAM
 entries appeared in the same frame — which is a bootstrap change and a
 different ADR (ADR-0170, `proposed`). This ADR shipped the heuristic instead,
-on the grounds that it "already turns striped noise into recognisable
+on the grounds that it "already turns striped noise into recognizable
 characters" and that the exact version "cannot be had without re-recording
 every pack". S10.a falsified the second half of that reasoning twice over:
 the walk recovers 6.7 % / 10.5 % of a character's poses, not one clean pose
@@ -196,8 +196,8 @@ through the same group sheet. No new field.
   the gesture state machine and its headless tests survive; the cell
   geometry is View code.
 - Ranking gets a denominator question this ADR does not settle: `sprite_rank`
-  scores nodes, and a figure has many. Summing member scores favours big
-  figures, averaging favours small ones. The implementing slice must pick
+  scores nodes, and a figure has many. Summing member scores favors big
+  figures, averaging favors small ones. The implementing slice must pick
   one and state it; the spike sidestepped it by not ranking at all.
 - Groups of one stay first-class, so nothing that composes today stops
   composing.

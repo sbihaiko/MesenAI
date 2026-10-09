@@ -536,7 +536,7 @@ HdPackTileInfo* HdNesPack<scale>::GetCachedMatchingTile(int32_t x, int32_t y, Hd
 	//are x = -64..-1, and the boundary this looks for is the picture's own eight-
 	//pixel grid. Arithmetic on a wrapped uint32_t would land on the same residue
 	//(2^32 is a multiple of 8) but says so by accident; here it says so by
-	//construction, for the centre (x = 0..255, unchanged either way) and the sides
+	//construction, for the center (x = 0..255, unchanged either way) and the sides
 	//alike.
 	if(((_scrollX + x) & 0x07) == 0) {
 		_useCachedTile = false;
@@ -726,7 +726,7 @@ void HdNesPack<scale>::GetPixels(int32_t x, int32_t y, HdPpuPixelInfo& pixelInfo
 	}
 
 	//ADR-0224: a pack that opted in keeps a behind-background sprite visible
-	//where the ROM's background pixel is colour 0 - on hardware the sprite
+	//where the ROM's background pixel is color 0 - on hardware the sprite
 	//shows there, and a recorded screen (ADR-0050) carries no sprite of either
 	//priority, so the layer-2 draw above just painted canvas over it. The pass
 	//is re-applied rather than the layer skipped, so layers 0/1 and the tile
@@ -760,7 +760,7 @@ void HdNesPack<scale>::GetPixels(int32_t x, int32_t y, HdPpuPixelInfo& pixelInfo
 	if(trackTileSuppression && coveringBackground != nullptr && pixelAfterTile != pixelBeforeTile) {
 		_frameSuppressedPixels++;
 		//Last one wins: the topmost layer is the pixels that reach the display,
-		//and that is the one an artist has to edit or re-prioritise.
+		//and that is the one an artist has to edit or re-prioritize.
 		_frameSuppressingBg = coveringBackground;
 		_frameSuppressedTile = hdPackTileInfo;
 	}
@@ -769,7 +769,7 @@ void HdNesPack<scale>::GetPixels(int32_t x, int32_t y, HdPpuPixelInfo& pixelInfo
 //ADR-0253 W.4: one row's extra columns. Every pixel here goes through GetPixels
 //with the HdSideTile HdNesPpu captured for it, so the pack's `<tile>` rules,
 //fallback tiles, brightness and CHR-RAM keys all apply exactly as they do in the
-//centre, and at the pack's own scale rather than as a stretched low-res tile. A
+//center, and at the pack's own scale rather than as a stretched low-res tile. A
 //column the console has no content for is drawn black and never looked up
 //(ADR-0253 §3) - the pack is not asked a question with no answer.
 //
@@ -788,7 +788,7 @@ void HdNesPack<scale>::DrawWidescreenColumns(int32_t y, HdSideTile* sideTiles, u
 		uint8_t xScroll = sideRow[0].XScroll;
 
 		uint32_t* dest = rowStart + (right ? screenWidth - HdWidescreenColumns::ExtraColumns * scale : 0);
-		_useCachedTile = false; //the cache holds a centre tile, or nothing at all
+		_useCachedTile = false; //the cache holds a center tile, or nothing at all
 		for(uint32_t m = 0; m < HdWidescreenColumns::ExtraColumns; m++) {
 			uint32_t tile = 0;
 			uint32_t pixel = 0;
@@ -798,8 +798,8 @@ void HdNesPack<scale>::DrawWidescreenColumns(int32_t y, HdSideTile* sideTiles, u
 			if(!sideTile.HasContent) {
 				DrawColor(_palette[NesWidescreenReveal::BlackColor], dest, screenWidth);
 			} else {
-				//One pixel's worth of what HdNesPpu::DrawPixel fills for a centred
-				//pixel: the tile key, the ROM colour behind a tile the pack has no
+				//One pixel's worth of what HdNesPpu::DrawPixel fills for a centered
+				//pixel: the tile key, the ROM color behind a tile the pack has no
 				//rule for, and which column of the art this output column samples
 				//(HdWidescreenColumns::BuildSidePixelInfo).
 				HdPpuPixelInfo pixelInfo;
@@ -825,8 +825,8 @@ void HdNesPack<scale>::Process(HdScreenInfo* hdScreenInfo, uint32_t* outputBuffe
 	OnBeforeApplyFilter();
 	//`i` and `j` are signed (ADR-0253 W.4): they are the pixel coordinate the pack
 	//is asked about, and a side column's is negative - x = -64 is the picture's
-	//first left neighbour, not a wrapped 0xFFFFFFC0 that only *happens* to land on
-	//the right eight-pixel tile boundary in `(_scrollX + x) & 0x07`. In the centre
+	//first left neighbor, not a wrapped 0xFFFFFFC0 that only *happens* to land on
+	//the right eight-pixel tile boundary in `(_scrollX + x) & 0x07`. In the center
 	//they are 0..255 either way, so the standard frame is unchanged (ADR-0162).
 	for(int32_t i = (int32_t)overscan.Top, iMax = 240 - (int32_t)overscan.Bottom; i < iMax; i++) {
 		OnLineStart(hdScreenInfo->ScreenTiles[i << 8], (uint8_t)i);
@@ -844,7 +844,7 @@ void HdNesPack<scale>::Process(HdScreenInfo* hdScreenInfo, uint32_t* outputBuffe
 			DrawWidescreenColumns(i, hdScreenInfo->SideTiles + (size_t)i * HdSideTilesPerRow, outputBuffer + lineStartIndex, screenWidth);
 		}
 
-		_useCachedTile = false; //the centre's first drawn pixel is mid-tile when overscan.Left is not a multiple of 8
+		_useCachedTile = false; //the center's first drawn pixel is mid-tile when overscan.Left is not a multiple of 8
 		for(int32_t j = (int32_t)overscan.Left, jMax = 256 - (int32_t)overscan.Right; j < jMax; j++) {
 			GetPixels(j, i, hdScreenInfo->ScreenTiles[i * 256 + j], outputBuffer + bufferIndex, screenWidth);
 			bufferIndex += hdScale;

@@ -32,7 +32,7 @@ build  reads `textures/sheets/*.png` (16-column grids of `8*scale`-px
        <bgm>/<sfx> never live in the textures manifest — they belong to the
        audio section (MEP-v1 §2.1 rule 6), so build moves them there.
 
-       ADR-0153 sheets (F9.4) live in the same folder and are recognised by
+       ADR-0153 sheets (F9.4) live in the same folder and are recognized by
        their sidecar: `textures/sheets/<name>.json` with `"version": 1`. They
        are NOT 16-column grids — each cell carries the exact hires.txt key of
        every 8x8 tile inside it, so the build slices them back through
@@ -51,7 +51,7 @@ build  reads `textures/sheets/*.png` (16-column grids of `8*scale`-px
        static kind rank decides.
 
        ADR-0231 (#447): the key an *untouched* cell wins does not point at
-       its crop. A sheet crop is the raw tile upscaled nearest-neighbour,
+       its crop. A sheet crop is the raw tile upscaled nearest-neighbor,
        while the recording's own rule points at a pattern page that went
        through the pack's scale filter (xBRZ by default), so pointing it at
        the crop changed what an unpainted rebuild rendered. The build re-emits
@@ -120,7 +120,7 @@ import mep_lint
 import mep_project  # ADR-0243: auto/rec-NNN/ recordings; a bare auto/textures is rec-001
 import mep_recorded  # ADR-0231 (#447): an untouched cell keeps the recorded rule
 import palette_folds  # ADR-0230 item 2: a sidecar entry's exact `folds`
-import sheet_pixel_fixes as F  # ADR-0178 un-bake and #456 colour 0, sheet + twin in lockstep
+import sheet_pixel_fixes as F  # ADR-0178 un-bake and #456 color 0, sheet + twin in lockstep
 from mep_recipe_common import sha256_file
 
 # NES hires.txt version emitted for the texture and audio manifests (ver >=
@@ -251,7 +251,7 @@ _index_token = mep_addition.index_token
 
 def _unflips(data: str) -> set:
     """The three flipped readings of a 32-hex tile key (H, V, H+V). ADR-0178
-    uses them only to *recognise* a sidecar recorded before the ADR — a key
+    uses them only to *recognize* a sidecar recorded before the ADR — a key
     emitted from one of these would be a second source of truth for the same
     tile, which ADR-0172 already refused."""
     try:
@@ -296,7 +296,7 @@ def _rewrite_sheet(png_path: Path, ref_path: "Path | None", scale: int, fix, alp
     land on it too: un-baking only the sheet left each corrected cell differing
     from a still-baked twin, so the next `build` read those cells as painted and
     tripped #253 wherever one lost its key to a higher-ranked sheet. Both fixes
-    (sheet_pixel_fixes) commute with nearest-neighbour upscaling. `alpha`
+    (sheet_pixel_fixes) commute with nearest-neighbor upscaling. `alpha`
     gives an RGB sheet and twin the alpha channel a transparency fix needs."""
     bmp = _png_pixels(png_path)
     if bmp is None:
@@ -536,7 +536,7 @@ class _Bitmap:
 
     def band_upscaled(self, y: int, x0: int, x1: int, n: int) -> bytes:
         """`band` with every pixel repeated n times — the reference twin as it
-        would look painted at n x, without materialising the whole image."""
+        would look painted at n x, without materializing the whole image."""
         if n == 1:
             return self.band(y, x0, x1)
         key = (y, x0, x1, n)
@@ -1094,7 +1094,7 @@ def cmd_build(args) -> int:
         print(f"error: no textures/sheets/ folder with the author sheets: {sheets_dir}", file=sys.stderr)
         return 2
 
-    # ADR-0153 sheets are recognised by their sidecar; everything else that is
+    # ADR-0153 sheets are recognized by their sidecar; everything else that is
     # a PNG and not an `*.orig.png` reference twin stays on the ADR-0049
     # 16-column path.
     sheet_docs, owned = _load_sheet_docs(sheets_dir)
@@ -1217,7 +1217,7 @@ def cmd_build(args) -> int:
     index_keyed = any(_is_index_key(raw.split(",")[1]) for _cond, raw in tiles
                       if len(raw.split(",")) >= 2)
     missing_index = {}
-    # ADR-0178: crops of a pack recorded before the ADR, recognised - never
+    # ADR-0178: crops of a pack recorded before the ADR, recognized - never
     # repaired - by the un-flip test below.
     baked_flip = {}
     # #343: every painted crop that emits no <tile> because another crop
@@ -1232,9 +1232,9 @@ def cmd_build(args) -> int:
         except BuildError as e:
             print(f"error: {e}", file=sys.stderr)
             return 2
-    # #456: the background crops that keep colour 0 transparent - every crop of
+    # #456: the background crops that keep color 0 transparent - every crop of
     # a key the key source draws see-through, closed over shared crops. The
-    # crop's (unflipped) bitmap says where colour 0 is, an index key cannot.
+    # crop's (unflipped) bitmap says where color 0 is, an index key cannot.
     bg = [((sd.name, c[0], c[1]), (_index_token(c[5]) if index_keyed and c[5] is not None else c[6] or c[2], c[3]),
            c[6] or c[2]) for sd, crops, _touched in sliced if sd.kind not in _FLIPPABLE_SHEET_KINDS
           for c in crops if c[3][:2] != "FF"]
@@ -1457,7 +1457,7 @@ def cmd_build(args) -> int:
     # Named after the captures are copied up, so the path printed is the one
     # the artist will actually open. #339: the gate is a few tileAtPosition
     # probes, not the whole frame, so "the frames it was frozen for" is the
-    # recorder's claim and a neighbour can satisfy the same probes.
+    # recorder's claim and a neighbor can satisfy the same probes.
     captures = captured_screen_note(textures_dir)
     if captures:
         count, first = captures

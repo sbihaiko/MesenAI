@@ -6,7 +6,7 @@
 - Related: ADR-0153 §2 (the criterion this corrects on the sprite side), ADR-0164 §1,
   ADR-0173 (the same biased denominator, fixed for `floors[]`), ADR-0174 (the pose join),
   issue #176
-- Supersedes / amends: ADR-0153 §2, OAM analogue only — the background criterion is
+- Supersedes / amends: ADR-0153 §2, OAM analog only — the background criterion is
   unchanged.
 
 ## Context

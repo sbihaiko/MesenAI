@@ -43,7 +43,7 @@ ceiling of 2070**; the ceiling was not raised and no module was added.
 
 `scripts/test_mep_build_recorded.py` gains `cell_rule_report_test`, which
 builds a synthetic recorded pack (`test_mep_build.py`'s fixtures) and pins the
-four behaviours: an unpainted build prints no rows; painting one four-tile cell
+four behaviors: an unpainted build prints no rows; painting one four-tile cell
 prints one row per key with the sheet, the cell ordinal, the crop and the
 `<tile>` text the manifest itself carries; a cell `mep_add_cell.py` placed is
 reported before any paint, carrying the recorded rule ADR-0231 emits for it;

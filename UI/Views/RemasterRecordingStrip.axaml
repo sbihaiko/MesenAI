@@ -15,7 +15,7 @@
 	not over it, because the native renderer draws above Avalonia content.-->
 	<!--ADR-0249 (W-R2): in Player mode the strip is the game's black and its
 	content the render's HUD pill (radius 12, 48 high): the red dot, the time,
-	the Remaster badge, the hint and the grey Stop. Advanced keeps the classic
+	the Remaster badge, the hint and the gray Stop. Advanced keeps the classic
 	dark strip.-->
 	<UserControl.Styles>
 		<Style Selector="Border#RemasterRecordingStripBorder">
@@ -56,7 +56,7 @@
 		<Style Selector=".player TextBlock#RemasterRecordingPill">
 			<Setter Property="FontWeight" Value="SemiBold" />
 		</Style>
-		<!--The view's own classic colours beat the theme's, so the HUD's are restated.-->
+		<!--The view's own classic colors beat the theme's, so the HUD's are restated.-->
 		<Style Selector=".player TextBlock.tag">
 			<Setter Property="Foreground" Value="{StaticResource PlayerHudTintTextBrush}" />
 			<Setter Property="FontWeight" Value="SemiBold" />

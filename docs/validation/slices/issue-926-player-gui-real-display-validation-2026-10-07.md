@@ -82,7 +82,7 @@ These apply to every render and are not counted as divergences:
   "· Contra 80s 1.2" suffix.
 - **W-P4:** all 7 controls match: the Save States, Pack, Enhancements, Cheats
   and Settings rows, Resume, Quit Game, plus "Esc to resume". The scrim is
-  flat grey instead of a blurred game, because the fixture has no game frame,
+  flat gray instead of a blurred game, because the fixture has no game frame,
   and the home's text bleeds through on the left.
 - **W-P5:** the same 5 controls. It lacks the 👍 counts and the known-missing
   warning, and shows "1.0" instead of "validated Aug 30" (seeded).
@@ -109,7 +109,7 @@ These apply to every render and are not counted as divergences:
   Press Start on it to set it up.").
 - **W-P16:** matches.
 - **W-S2 (FAIL, #1007):** with no game loaded, Reset, Power Cycle and
-  Screenshot render in enabled ink, but the wireframe greys them out. The
+  Screenshot render in enabled ink, but the wireframe grays them out. The
   ⌃⌘F shortcut on Fullscreen and the hint "Disk, coin and tape items appear
   when the game uses them." are missing.
 - **W-S3:** matches: 4 doors with ⌘1–⌘4 and the footer.

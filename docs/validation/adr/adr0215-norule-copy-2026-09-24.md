@@ -58,7 +58,7 @@ not fire on this run.
 
 | Mutant | Result |
 |---|---|
-| `IsRefusal` includes `NoRule` again (the old behaviour) | killed, 2 FAIL |
+| `IsRefusal` includes `NoRule` again (the old behavior) | killed, 2 FAIL |
 | `NoRule` carries palette `0` | killed, 2 FAIL |
 | `NoRule` receipt back to the old text | killed, 2 FAIL |
 | `NoRule` branch never taken (`Count < 0`), so the empty list falls through to `RecordedNotDrawn` | killed, 2 FAIL |
@@ -125,7 +125,7 @@ key the copy handed out. Rendered with
 | + the pasted cell | `<tile>23,1170,0F281807,508,652,1,N` | **274 432** |
 
 274 432 = 268 cells × 32×32, the same 268 cells the "after" scan added. The
-old behaviour refused every one of them.
+old behavior refused every one of them.
 
 ## Not measured
 

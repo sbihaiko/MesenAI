@@ -158,7 +158,7 @@ namespace Mesen.ViewModels
 				case PlayEscAction.CancelCapture:
 					//ADR-0255 slice 3: Esc releases the capture and the sheet stays
 					//up, ready for another row. The sheet's own tail decides what
-					//"cancelled" means on screen.
+					//"canceled" means on screen.
 					ControllerSheet.CancelCapture();
 					break;
 

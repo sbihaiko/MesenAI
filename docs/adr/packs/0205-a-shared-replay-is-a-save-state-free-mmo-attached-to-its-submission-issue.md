@@ -155,7 +155,7 @@ follow-up, not this decision.
 ### 3. Verification: the lint re-checks what the action guarantees
 
 The validate pipeline rejects an archive containing `SaveState.mss` or any `Battery*` member —
-defence in depth over §2, not the primary gate, because a submission's bytes are not the
+defense in depth over §2, not the primary gate, because a submission's bytes are not the
 action's output. The archive is capped — **8 MB** compressed — because `MesenMovie` inflates
 every member in memory and a deflate bomb is the one attack a 50 KB artifact class invites;
 both CI and client enforce the cap before inflating. The ROM SHA-1 and the ROM *file name*
@@ -228,7 +228,7 @@ attachment is served from `github.com/user-attachments/assets/<id>` and redirect
 with the redirect hop handled — and per ADR-0187 a host change must be mirrored in
 `scripts/fetch_pack.py` (CI) and `UI/Logic/CommunityPackHostAllowlist` (client). That is a
 trust-boundary decision reviewed like the workflow YAML, not a mechanical edit. The wider
-allow-list is not the exposure it looks like: it is defence in depth, not the trust boundary
+allow-list is not the exposure it looks like: it is defense in depth, not the trust boundary
 (the client only fetches URLs the validate workflow wrote into the pinned catalog, so an
 attacker needs a catalog row, not a file on the host; `raw.githubusercontent.com` and
 `gist.githubusercontent.com` already let anyone host anything). And **the catalog stores the
@@ -336,9 +336,9 @@ evidence that the archive is bad.
 
 **A maintainer override exists, and it outranks the issue state.** The label `replay:removed`,
 settable only by collaborators, keeps the row de-listed whatever the issue state, and the
-catalog generator honours it before it looks at `state`. It is the counterpart of
+catalog generator honors it before it looks at `state`. It is the counterpart of
 `pack:known-missing` (ADR-0152): applied by the pipeline's owners from a decision, never from
-submitter-controlled input. It is not a quality judgement — §8's posture stands — but a lever
+submitter-controlled input. It is not a quality judgment — §8's posture stands — but a lever
 for abuse, a broken artifact the author will not fix, or a takedown.
 
 ### 10. The project's git tree carries no replay bytes — and the attachment is not "someone else's host"
