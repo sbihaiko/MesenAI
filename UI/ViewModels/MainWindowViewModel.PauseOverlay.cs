@@ -233,6 +233,14 @@ namespace Mesen.ViewModels
 				return;
 			}
 			IsPlayerOverlayVisible = true;
+			//After the flag: the bar names the surface holding the focus, and that
+			//is the overlay only once it is visible.
+			RefreshPlayActionBarFromBridge();
+		}
+
+		private void RefreshPlayActionBarFromBridge()
+		{
+			RefreshPlayActionBar(PlayActionBarDeclaration is null ? PlayActionBarDeclared : PlayActionBarDeclaration(), PlayActionBarKeyboardOpen);
 		}
 
 		//#1109: polled by PlayEdgeFlowsWiring every 50 ms. A pad count that falls
@@ -262,6 +270,7 @@ namespace Mesen.ViewModels
 				//the one that left.
 				if(IsPlayerOverlayVisible) {
 					RefreshPauseOverlay();
+					RefreshPlayActionBarFromBridge();
 				}
 			}
 		}
@@ -288,8 +297,6 @@ namespace Mesen.ViewModels
 			EnhancementsSummary = on == 0 ? ResourceHelper.GetMessage("OverlayRowNone") : ResourceHelper.GetMessage("OverlayRowCountOn", on);
 
 			SaveStatesRowValue = BuildSaveStatesSummary();
-
-			RefreshPlayActionBar(PlayActionBarDeclaration is null ? PlayActionBarDeclared : PlayActionBarDeclaration(), PlayActionBarKeyboardOpen);
 		}
 
 		//The bridge's live read of the focus owner's declaration, so the overlay
