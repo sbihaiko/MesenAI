@@ -406,6 +406,11 @@ void MacOSKeyManager::TestForceFeedback(uint32_t index, uint16_t magnitudeRight,
 	}
 }
 
+bool MacOSKeyManager::PlayGamepadTick(uint32_t index)
+{
+	return index < _controllers.size() && _controllers[index]->PlayTick();
+}
+
 bool MacOSKeyManager::SetGamepadLight(uint32_t index, uint8_t r, uint8_t g, uint8_t b)
 {
 	return index < _controllers.size() && _controllers[index]->SetLight(r, g, b);

@@ -13,6 +13,14 @@ XInputManager::XInputManager(Emulator* emu)
 
 void XInputManager::RefreshState()
 {
+	ULONGLONG now = GetTickCount64();
+	for(int i = 0; i < XUSER_MAX_COUNT; i++) {
+		if(_tickStopAt[i] != 0 && now >= _tickStopAt[i]) {
+			_tickStopAt[i] = 0;
+			SetForceFeedback((uint8_t)i, 0, 0);
+		}
+	}
+
 	XINPUT_STATE state;
 	for(DWORD i = 0; i < XUSER_MAX_COUNT; i++) {
 		if(_gamePadConnected[i]) {
@@ -131,4 +139,14 @@ void XInputManager::SetForceFeedback(uint8_t gamepadPort, uint16_t magnitudeRigh
 	settings.wRightMotorSpeed = magnitudeRight;
 	settings.wLeftMotorSpeed = magnitudeLeft;
 	XInputSetState(gamepadPort, &settings);
+}
+
+bool XInputManager::PlayTick(uint8_t gamepadPort)
+{
+	if(!IsConnected(gamepadPort)) {
+		return false;
+	}
+	SetForceFeedback(gamepadPort, 0x6000, 0x6000);
+	_tickStopAt[gamepadPort] = GetTickCount64() + 40;
+	return true;
 }

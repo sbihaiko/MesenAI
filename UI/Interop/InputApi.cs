@@ -65,6 +65,10 @@ namespace Mesen.Interop
 		//#925: the pad's light in its player colour. False where the pad has no
 		//light (an Xbox pad on macOS) and always on Windows and Linux (a no-op).
 		[DllImport(DllPath)][return: MarshalAs(UnmanagedType.I1)] public static extern bool SetGamepadLight(UInt32 index, byte r, byte g, byte b);
+		//#1106: whether pad `index` can take a haptic tick on its own (never a
+		//DirectInput pad), and the tick; false when the pad is not aimable.
+		[DllImport(DllPath)][return: MarshalAs(UnmanagedType.I1)] public static extern bool IsGamepadAimable(UInt32 index);
+		[DllImport(DllPath)][return: MarshalAs(UnmanagedType.I1)] public static extern bool TickGamepad(UInt32 index);
 	}
 
 	//GamepadBackend lives in InteropEnums.cs (host-free, dual-compiled into

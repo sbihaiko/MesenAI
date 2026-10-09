@@ -13,6 +13,9 @@ private:
 	XINPUT_STATE _gamePadStates[XUSER_MAX_COUNT] = {};
 	uint8_t _gamePadConnected[XUSER_MAX_COUNT] = {};
 	bool _enableForceFeedback[XUSER_MAX_COUNT] = {};
+	//#1106: when a menu tick's motors must be switched off again, 0 = no tick
+	//running. XInput has no timed effect, so RefreshState ends the pulse.
+	ULONGLONG _tickStopAt[XUSER_MAX_COUNT] = {};
 
 public:
 	XInputManager(Emulator* emu);
@@ -29,4 +32,7 @@ public:
 	//and force feedback applied to a single pad instead of all of them.
 	bool IsConnected(uint8_t gamepadPort);
 	void SetForceFeedback(uint8_t gamepadPort, uint16_t magnitudeRight, uint16_t magnitudeLeft);
+
+	//#1106: a short pulse on one slot; false when the slot has no pad.
+	bool PlayTick(uint8_t gamepadPort);
 };

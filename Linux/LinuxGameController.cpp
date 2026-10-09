@@ -308,6 +308,31 @@ void LinuxGameController::SetForceFeedback(uint16_t magnitudeRight, uint16_t mag
 	}
 }
 
+bool LinuxGameController::PlayTick()
+{
+	if(!_rumbleEffect || !_enableForceFeedback) {
+		return false;
+	}
+
+	//The effect is a 2 s rumble; a tick plays the same effect for 40 ms, then the
+	//length goes back so SetForceFeedback keeps its own duration.
+	uint16_t previousLength = _rumbleEffect->replay.length;
+	_rumbleEffect->replay.length = 40;
+	_rumbleEffect->u.rumble.strong_magnitude = 0x6000;
+	_rumbleEffect->u.rumble.weak_magnitude = 0x6000;
+	int rc = ioctl(_fd, EVIOCSFF, _rumbleEffect.get());
+	_rumbleEffect->replay.length = previousLength;
+	if(rc < 0) {
+		return false;
+	}
+
+	struct input_event play = {};
+	play.type = EV_FF;
+	play.code = _rumbleEffect->id;
+	play.value = 1;
+	return write(_fd, (const void*)&play, sizeof(play)) >= 0;
+}
+
 bool LinuxGameController::IsDisconnected()
 {
 	return _disconnected;
