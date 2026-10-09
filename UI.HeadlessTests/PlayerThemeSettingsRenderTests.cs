@@ -249,6 +249,58 @@ public class PlayerThemeSettingsRenderTests : IDisposable
 		}
 	}
 
+	//W-P8d (ADR-0269 Decision 4, #1111): the wireframe is drawn at Standard (1.0), so the gated frame is too.
+	//The sheet is 387 high with six controls at rest.
+	[AvaloniaFact]
+	public void Settings_display_with_interface_size_renders_as_the_W_P8d_sheet()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		InterfaceSize before = ConfigManager.Config.Preferences.InterfaceSize;
+		MainWindowViewModel? model = null;
+		//The setup sits inside the try: a ShowSettings that throws must still restore the global preference.
+		try {
+			ConfigManager.Config.Preferences.InterfaceSize = InterfaceSize.Standard;
+			(MainWindow window, MainWindowViewModel shown, Border sheet) = ShowSettings(ConfigWindowTab.Display);
+			model = shown;
+			AssertSettingsChrome(sheet);
+			AssertInsetGroup(sheet.FindNamed<Border>("DisplaySettingsGroup"));
+			ComboBox size = sheet.FindNamed<ComboBox>("cboDisplayInterfaceSize");
+			AssertPopup(size, 120);
+			Assert.Equal(InterfaceSize.Standard, Assert.IsType<PlayerInterfaceSizeChoice>(size.SelectedItem).Value);
+			Assert.Equal(6, ControlsAtRest(sheet));
+			Assert.Equal(387, sheet.Bounds.Height, 0.5);
+
+			Render(window, sheet, "W-P8d");
+		} finally {
+			model?.ClosePlayerSettings();
+			ConfigManager.Config.Preferences.InterfaceSize = before;
+		}
+	}
+
+	//Large scales the chrome from the root (ADR-0269): the same sheet shows ~600 wide on screen. Not the W-P8d
+	//frame, which stays at Standard, so nothing is saved under that name.
+	[AvaloniaFact]
+	public void Settings_display_at_large_interface_size_scales_the_sheet_from_the_root()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		InterfaceSize before = ConfigManager.Config.Preferences.InterfaceSize;
+		MainWindowViewModel? model = null;
+		try {
+			ConfigManager.Config.Preferences.InterfaceSize = InterfaceSize.Large;
+			(MainWindow window, MainWindowViewModel shown, Border sheet) = ShowSettings(ConfigWindowTab.Display);
+			model = shown;
+			ComboBox size = sheet.FindNamed<ComboBox>("cboDisplayInterfaceSize");
+			Assert.Equal(InterfaceSize.Large, Assert.IsType<PlayerInterfaceSizeChoice>(size.SelectedItem).Value);
+			Assert.Equal(6, ControlsAtRest(sheet));
+			double rightEdge = sheet.TranslatePoint(new Point(sheet.Bounds.Width, 0), window)!.Value.X;
+			double leftEdge = sheet.TranslatePoint(new Point(0, 0), window)!.Value.X;
+			Assert.InRange(rightEdge - leftEdge, 570, 630);
+		} finally {
+			model?.ClosePlayerSettings();
+			ConfigManager.Config.Preferences.InterfaceSize = before;
+		}
+	}
+
 	[AvaloniaFact]
 	public void Settings_look_renders_as_the_W_P10_sheet()
 	{
