@@ -8,9 +8,10 @@ namespace Mesen.Logic;
 //whole", #1123). The note therefore keeps the row wherever the row has room for
 //it - unchanged at the ~1024x640 the wireframe is drawn at, where the row
 //leaves it about 184 px - and takes the line above the row only where it does
-//not. This is the rule; Controls/LookFooterPanel arranges by it. Pure, so it is
-//pinned host-free in UI.Tests/Play/LookFooterTests and rendered in
-//UI.HeadlessTests (InterfaceSizeLayoutTests).
+//not. This is the rule; Controls/LookFooterPanel arranges by it, and the note is
+//drawn whole in either branch: it wraps, in the row's room or in the page's.
+//Pure, so it is pinned host-free in UI.Tests/Play/LookFooterTests and rendered
+//in UI.HeadlessTests (InterfaceSizeLayoutTests).
 public static class LookFooter
 {
 	//Done is the sheet's own, drawn at the row's right (W-P10), so the row keeps
@@ -22,10 +23,14 @@ public static class LookFooter
 	//Between the note's own line and the row below it.
 	public const double StackGap = 8;
 	//The least the row can leave the note and still be said to have room for it:
-	//about sixteen characters at the footnote size, which draws the start of the
-	//longest reason the Look tab has ("Nothing to compare: Pixels and Screen are
-	//off"). The row leaves the note about 184 px at the drawn size and about 14
-	//at the guaranteed one, so the threshold sits well inside both.
+	//about sixteen characters at the footnote size. The note is wrapped, so this
+	//is not where the text starts being cut - nothing is, in either branch - but
+	//where the row's room stops being worth wrapping in: under it the note would
+	//be a tall column in a sliver beside the button, and the page's own width,
+	//one line above, reads better. (The 60-character longest line the Look tab
+	//has, the hold-to-compare hint, takes four or five lines in 96 px.) The row
+	//leaves the note about 184 px at the drawn size and about 14 at the
+	//guaranteed one, so the floor sits well inside both.
 	public const double MinNoteWidth = 96;
 
 	//What the row leaves the note beside the button, Done's own reserve taken out.

@@ -19,8 +19,9 @@
   tab's rows asserting that no child is drawn outside its row or over a sibling
   — the label-width theory that came with the rows cannot see it, because a
   label in an Auto column is always as wide as its own text; the one spot that
-  did not meet it was named in Decision 6, and #1149 has since closed it by
-  reflowing the Look footer rather than drawing its note in a sliver of the row.
+  did not meet it was named in Decision 6, and #1149 has since closed it: the
+  Look footer's note wraps where it is drawn, in the row and on its own line
+  alike, so it is no longer a sliver of the row and no longer drawn short.
   The same review found the cap answering "+Infinity" - no cap - on the first
   measure pass, when the host reports a room of 0: the fallback is now the room itself,
   so the sheet does not lay out at 480 and flash at 720 for a frame. A second
@@ -41,17 +42,35 @@
   Amended 2026-10-09 (Decision 6, the empty spot it named): the Look footer's
   Hold to Compare note was the one spot on the sheet the guarantee missed, and
   #1149 closed it - no spot on this sheet is outside the guarantee any more.
-  The decision is the issue's own, not a new panel pick: "Reflowing the footer -
-  the button on its own line, or the note above the row - is a W-P10 design
-  decision". W-P10 is what the note follows: it keeps the row it is drawn in
-  wherever the row has room for it, so nothing moves at the ~1024x640 the
-  wireframe is drawn at, and takes the line above the row - on the page's own
-  width, wrapped - only where the row has no room (about 14 px of the 271 px
-  page at 512x505 at 1.5). The reflow is a pure rule with a host-free test
-  (LookFooter, UI.Tests/Play/LookFooterTests, UI.HeadlessTests/
-  InterfaceSizeLayoutTests), and the note's line is kept at the taller of the
-  two lines the tab can carry, so toggling Pixels or Screen cannot move the
-  footer. PR #1163 implements it.
+  The note follows W-P10 as drawn: the wireframe draws it in the footer's row
+  beside Hold to Compare, wrapped over more than one line, and that is where it
+  stays wherever the row has room for it - the ~1024x640 the wireframe is drawn
+  at included, where nothing moves. Where the row has no room at all it takes
+  the line above, on the page's own width (its room in the row is about 14 px of
+  the 271 px page at 512x505 at 1.5, and the floor under which it leaves is
+  LookFooter.MinNoteWidth). Either way it wraps: the note is the tab's reason
+  for refusing a compare, so what the room decides is how many lines it takes,
+  never how much of it is drawn.
+  The issue left that choice open and this does not read it as settled. Its
+  Expected is "The note and the Hold to Compare button share Done's row (W-P10)
+  and both stay readable ... at the guaranteed 512x505", and at that size the
+  two halves cannot both hold - the row leaves the note 14 px - which the issue
+  says itself: "Reflowing the footer - the button on its own line, or the note
+  above the row - is a W-P10 design decision, which is why it is out of that
+  slice." Of those two, the footer takes the second, "the note above the row",
+  and only where the row has no room: the first, "the button on its own line",
+  would move the row the wireframe draws at every size, including the one it is
+  drawn at. So the Expected holds wherever the row can hold it, and the note is
+  readable at the size it cannot.
+  What the tests hold, exactly: the pure rule (LookFooter, host-free, in
+  UI.Tests/Play/LookFooterTests) reads the room the row leaves the note at the
+  drawn size and at the guaranteed one; UI.HeadlessTests/
+  InterfaceSizeLayoutTests walks the same note in both branches and asserts it
+  asks for no trimming and that the room it was given covers the lines its text
+  needs there, and that the reserve line the footer's height is kept at - the
+  taller of the two lines the tab can carry - is out of the automation tree and
+  takes no hit, so toggling Pixels or Screen neither moves the footer nor has a
+  screen reader read both lines at once. PR #1163 implements it.
 - Date: 2026-10-09
 - Related: ADR-0249 (tokens come from the renderer; the drift test), ADR-0241,
   ADR-0256, wireframe W-P8d, issues #1102 and #1103.
@@ -139,14 +158,14 @@ Nothing in Play is sized for a TV three meters away. Settings › Display has a
    **The Look footer's Hold to Compare note (W-P10) was the one spot on this
    sheet that did not meet it**, and #1149 closed it: the note shared Done's row
    and was left about 14 px of the 271 px page at 1.5 in 512x505, drawn on one
-   line and ellipsized — bounded, not whole. The note now keeps the row wherever
-   the row has room for it, still one line and ellipsized there, which is W-P10
-   as drawn and leaves the ~1024x640 page unchanged; where the row has no room
-   (less than LookFooter.MinNoteWidth, a short phrase's worth, which the
-   guaranteed size is far below and the drawn size far above) the note takes the
-   line above the row, on the page's own width, and wraps, so its reason is
-   drawn whole. The row keeps the button on the left, Done on its line to the
-   right of it, either way. The note's line is kept at the taller of the two
+   line and ellipsized — bounded, not whole. The note now wraps wherever it is
+   drawn, so its reason is whole: it keeps the row wherever the row has room for
+   it, as W-P10 draws it, taking as many lines as that room needs and leaving
+   the ~1024x640 page unchanged; where the row has no room (less than
+   LookFooter.MinNoteWidth, which the guaranteed size is far below and the drawn
+   size far above) it takes the line above the row, on the page's own width.
+   The row keeps the button on the left, Done on its line to the right of it,
+   either way. The note's line is kept at the taller of the two
    lines the tab can carry — the hold-to-compare hint while Pixels or Screen has
    something to compare, the reason while neither has — so toggling either does
    not move the footer or the rows in the page scroller above it, and nothing is

@@ -110,11 +110,14 @@ public partial class LookConfigViewModel : DisposableViewModel
 			CanCompare = view.CanCompare;
 			//The tab's two lines: the hint while Pixels or Screen has something to
 			//compare, and the reason it gives while neither has (LookLayers.Build's
-			//CompareReason). The footer keeps the note's line at the taller.
+			//CompareReason - read, never assumed). The footer keeps the note's line
+			//at the taller of the two, and while there is something to compare it
+			//has no reason of its own to measure, so the longest reason the tab can
+			//give stands in for the one the toggle will swap in.
 			string hint = ResourceHelper.GetMessage("LookCompareHint");
-			string nothing = ReasonText(LookReason.NothingToCompare);
-			CompareReason = view.CanCompare ? hint : nothing;
-			CompareNoteReserve = view.CanCompare ? nothing : hint;
+			string reserve = view.CanCompare ? ReasonText(LookReason.NothingToCompare) : hint;
+			CompareReason = view.CanCompare ? hint : ReasonText(view.CompareReason);
+			CompareNoteReserve = reserve;
 		} finally {
 			_refreshing = false;
 		}

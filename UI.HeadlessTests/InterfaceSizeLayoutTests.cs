@@ -529,9 +529,13 @@ public class InterfaceSizeLayoutTests : IDisposable
 			Assert.True(noteBox.Bottom <= holdBox.Top + 1, $"The note {noteBox} is not above Hold to Compare {holdBox}");
 			Assert.True(noteBox.Left <= holdBox.Left + 1, $"The note {noteBox} starts right of the button {holdBox}");
 		} else {
-			//Room: the note is the row's own, on the button's line and to its
-			//right, as W-P10 draws it.
-			Assert.True(Math.Abs(noteBox.Center.Y - holdBox.Center.Y) <= 2, $"The note {noteBox} is not on Hold to Compare's line {holdBox}");
+			//Room: the note is the row's own and to the button's right, as W-P10
+			//draws it. The row's shared line, not the button's centre to the
+			//pixel: the note is drawn at the height its own text needs in the row
+			//- two lines beside a one-line button - and centred in it, so its
+			//centre sits up to half a line below the button's. What W-P10 draws
+			//is the row the two share.
+			Assert.True(noteBox.Top < holdBox.Bottom && holdBox.Top < noteBox.Bottom, $"The note {noteBox} is not on Hold to Compare's row {holdBox}");
 			Assert.True(noteBox.Left >= holdBox.Right - 1, $"The note {noteBox} is not beside Hold to Compare {holdBox}");
 		}
 		Assert.False(noteBox.Intersects(BoxIn(done, window)), $"The note {noteBox} covers Done");
@@ -637,11 +641,14 @@ public class InterfaceSizeLayoutTests : IDisposable
 		Settle(window);
 
 		ScrollViewer page = window.FindNamed<TabControl>("PlayerSettingsTabs").FindAll<ScrollViewer>().First(s => s.Classes.Contains("pageScroll") && s.IsOnScreen());
+		Control footer = window.FindNamed<Control>("LookFooter");
 		TextBlock note = window.FindNamed<TextBlock>("txtLookCompareReason");
 		string off = note.Text ?? "";
-		Rect noteOff = BoxIn(note, window);
-		//The page is what the footer's height is taken from, so its own box is
-		//the rows above moving: a line more or less in the footer shows here.
+		//The footer's own box is the line it is kept at, and the page's is the
+		//rows above moving: a line more or less in the footer shows in both. The
+		//note's box is not a witness either way - it is its own text's, drawn
+		//whole, and the two strings are not the same height.
+		Rect footerOff = BoxIn(footer, window);
 		Rect pageOff = BoxIn(page, window);
 
 		//Smoothing on: Pixels has something to compare, so the note swaps to the
@@ -653,8 +660,9 @@ public class InterfaceSizeLayoutTests : IDisposable
 
 		//The footer is where it was, down to the pixel, and the page's rows have
 		//not moved with it.
-		Rect noteOn = BoxIn(note, window);
-		Assert.Equal(noteOff.Top, noteOn.Top, 0.5);
+		Rect footerOn = BoxIn(footer, window);
+		Assert.Equal(footerOff.Top, footerOn.Top, 0.5);
+		Assert.Equal(footerOff.Height, footerOn.Height, 0.5);
 		Assert.Equal(pageOff.Height, BoxIn(page, window).Height, 0.5);
 		model.ClosePlayerSettings();
 	}
