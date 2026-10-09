@@ -2,6 +2,8 @@
 #include "pch.h"
 #include "Sdl/include/Sdl2.h"
 #include "Core/Shared/Audio/AsyncAudioDeviceOpen.h"
+#include "Core/Shared/Audio/MenuSoundAudioSubsystem.h"
+#include "Core/Shared/Audio/MenuSoundSinkHealth.h"
 #include "Core/Shared/Audio/MenuSoundStream.h"
 #include "Core/Shared/Emulator.h"
 #include "Core/Shared/EmuSettings.h"
@@ -22,9 +24,32 @@ class Emulator;
 class SdlMenuSoundSink final : public IMenuSoundSink
 {
 public:
+	//The statuses the liveness latch reads are SDL's own, and the values are
+	//pinned against the loader's copy of SDL_AudioStatus (Sdl/include/Sdl2.h).
+	static_assert(MenuSoundSinkHealth::AudioStopped == SDL_AUDIO_STOPPED
+		&& MenuSoundSinkHealth::AudioPlaying == SDL_AUDIO_PLAYING
+		&& MenuSoundSinkHealth::AudioPaused == SDL_AUDIO_PAUSED,
+		"MenuSoundSinkHealth's audio statuses mirror SDL_AudioStatus");
+
 	explicit SdlMenuSoundSink(Emulator* emu)
 	{
 		_emu = emu;
+	}
+
+	//ADR-0270 D9: SDL's audio subsystem init, run once and on the caller that
+	//arms the stream - before the stream's own thread exists, and ahead of the
+	//emulator's audio-init path, which runs the same call from
+	//SdlSoundManager::InitializeAudio. SDL2's subsystem init is not thread-safe,
+	//so the two must never be in flight at once, which is exactly the window a
+	//first press after launch lands in. False when SDL is absent or the init came
+	//back nonzero: every sink then fails its open instead of opening against an
+	//uninitialized subsystem (the capability stays false and the row stays hidden).
+	static bool InitializeAudioSubsystem()
+	{
+		if(!LoadSdl()) {
+			return false;
+		}
+		return SharedSubsystem().Ensure(&SdlMenuSoundSink::InitAudioSubsystem);
 	}
 
 	~SdlMenuSoundSink() override
@@ -46,7 +71,13 @@ public:
 			return;
 		}
 
-		SDL_InitSubSystem(SDL_INIT_AUDIO);
+		//The init already ran on the caller that armed the stream; this ask finds
+		//that result instead of running it here, on the stream's own thread. A
+		//nonzero result fails the open (D9), and so does a latched earlier failure.
+		if(!SharedSubsystem().Ensure(&SdlMenuSoundSink::InitAudioSubsystem)) {
+			_openFailed = true;
+			return;
+		}
 
 		SDL_AudioSpec audioSpec;
 		memset(&audioSpec, 0, sizeof(audioSpec));
@@ -76,7 +107,10 @@ public:
 
 	bool TryTakeOpen(bool& opened) override
 	{
-		if(_noSdl) {
+		if(_noSdl || _openFailed) {
+			//No SDL at all, or a subsystem that never came up: there is no device
+			//to wait for, so the first call answers "failed" and the capability
+			//stays false (D9).
 			opened = false;
 			return true;
 		}
@@ -107,7 +141,19 @@ public:
 
 	bool IsAlive() const override
 	{
-		return _audioDeviceID != 0;
+		if(_audioDeviceID == 0) {
+			return false;
+		}
+
+		//D9: a device that is gone reports SDL_AUDIO_STOPPED - unplugged, or the
+		//subsystem taken down under it - and that flips the capability back. A
+		//paused device is alive, because this sink parks its device paused between
+		//blips (D8). A build without the probe keeps the open-device answer rather
+		//than losing the game device's audio over it (Sdl/include/Sdl2.h).
+		if(SDL_GetAudioDeviceStatus != nullptr) {
+			_health.ObservedAudioStatus((int)SDL_GetAudioDeviceStatus(_audioDeviceID));
+		}
+		return _health.IsAlive();
 	}
 
 	uint32_t BufferFrames() const override
@@ -150,6 +196,22 @@ private:
 		sink->_reader->ReadMenuSound((int16_t*)stream, (uint32_t)len / (2 * sizeof(int16_t)));
 	}
 
+	//SDL's own zero-on-success answer, so the init can be handed to the run-once
+	//unit as it is.
+	static int InitAudioSubsystem()
+	{
+		return (int)SDL_InitSubSystem(SDL_INIT_AUDIO);
+	}
+
+	//One per process: SDL refcounts the subsystem process-wide, and the result of
+	//its init belongs to the process rather than to one sink, so a re-arm finds the
+	//same answer instead of initializing the subsystem again.
+	static MenuSoundAudioSubsystem& SharedSubsystem()
+	{
+		static MenuSoundAudioSubsystem subsystem;
+		return subsystem;
+	}
+
 	static constexpr int CallbackFrames = 1024;
 
 	Emulator* _emu = nullptr;
@@ -157,5 +219,8 @@ private:
 	AsyncAudioDeviceOpen _deviceOpen;
 	string _deviceName;
 	SDL_AudioDeviceID _audioDeviceID = 0;
+	//D9: one-way, fed by the device's own status.
+	MenuSoundSinkHealth _health;
 	bool _noSdl = false;
+	bool _openFailed = false;
 };

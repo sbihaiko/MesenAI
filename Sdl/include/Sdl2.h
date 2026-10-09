@@ -9,6 +9,11 @@ typedef uint32_t SDL_AudioDeviceID;
 #define SDL_INIT_AUDIO 0x00000010u
 #define AUDIO_S16SYS   0x8010 //Assume little endian CPU
 
+//SDL2's SDL_AudioStatus values, which SDL_GetAudioDeviceStatus reports.
+#define SDL_AUDIO_STOPPED 0x1010
+#define SDL_AUDIO_PLAYING 0x1011
+#define SDL_AUDIO_PAUSED  0x1012
+
 typedef void (*SDL_AudioCallback)(void* userdata, uint8_t* stream, int len);
 
 typedef struct SDL_AudioSpec
@@ -30,6 +35,7 @@ typedef SDL_AudioDeviceID (*PFN_SDL_OpenAudioDevice)(const char* device, int isc
 typedef int (*PFN_SDL_GetNumAudioDevices)(int iscapture);
 typedef const char* (*PFN_SDL_GetAudioDeviceName)(int index, int iscapture);
 typedef void (*PFN_SDL_PauseAudioDevice)(SDL_AudioDeviceID dev, int pause_on);
+typedef int (*PFN_SDL_GetAudioDeviceStatus)(SDL_AudioDeviceID dev);
 
 inline PFN_SDL_InitSubSystem ptr_SDL_InitSubSystem = nullptr;
 inline PFN_SDL_CloseAudioDevice ptr_SDL_CloseAudioDevice = nullptr;
@@ -37,6 +43,7 @@ inline PFN_SDL_OpenAudioDevice ptr_SDL_OpenAudioDevice = nullptr;
 inline PFN_SDL_GetNumAudioDevices ptr_SDL_GetNumAudioDevices = nullptr;
 inline PFN_SDL_GetAudioDeviceName ptr_SDL_GetAudioDeviceName = nullptr;
 inline PFN_SDL_PauseAudioDevice ptr_SDL_PauseAudioDevice = nullptr;
+inline PFN_SDL_GetAudioDeviceStatus ptr_SDL_GetAudioDeviceStatus = nullptr;
 
 #define SDL_InitSubSystem ptr_SDL_InitSubSystem
 #define SDL_CloseAudioDevice ptr_SDL_CloseAudioDevice
@@ -44,6 +51,7 @@ inline PFN_SDL_PauseAudioDevice ptr_SDL_PauseAudioDevice = nullptr;
 #define SDL_GetNumAudioDevices ptr_SDL_GetNumAudioDevices
 #define SDL_GetAudioDeviceName ptr_SDL_GetAudioDeviceName
 #define SDL_PauseAudioDevice ptr_SDL_PauseAudioDevice
+#define SDL_GetAudioDeviceStatus ptr_SDL_GetAudioDeviceStatus
 
 inline bool LoadSdl(void)
 {
@@ -103,6 +111,12 @@ inline bool LoadSdl(void)
 	LOAD_SYMBOL(PFN_SDL_PauseAudioDevice, SDL_PauseAudioDevice);
 
 #undef LOAD_SYMBOL
+
+	//Optional: the menu sink reads it to tell a device that is gone from one that
+	//is merely paused, and a build that does not export it must not cost the game
+	//device its audio - which is what a mandatory LOAD_SYMBOL above would do,
+	//since every caller of LoadSdl shares this list.
+	ptr_SDL_GetAudioDeviceStatus = (PFN_SDL_GetAudioDeviceStatus)dlsym(handle, "SDL_GetAudioDeviceStatus");
 
 	loaded = true;
 	return true;

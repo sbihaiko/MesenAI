@@ -1,9 +1,12 @@
 #pragma once
 #include "pch.h"
+#include "Core/Shared/Audio/MenuSoundDeviceResolve.h"
+#include "Core/Shared/Audio/MenuSoundSinkHealth.h"
 #include "Core/Shared/Audio/MenuSoundStream.h"
 #include "Core/Shared/Emulator.h"
 #include "Core/Shared/EmuSettings.h"
 #include "Core/Shared/MessageManager.h"
+#include "Utilities/UTF8Util.h"
 #include <audioclient.h>
 #include <mmdeviceapi.h>
 #include <wrl/client.h>
@@ -26,6 +29,10 @@ class Emulator;
 class WasapiMenuSoundSink final : public IMenuSoundSink
 {
 public:
+	//The one code the liveness latch treats as fatal is WASAPI's own.
+	static_assert(MenuSoundSinkHealth::DeviceInvalidated == (int32_t)AUDCLNT_E_DEVICE_INVALIDATED,
+		"MenuSoundSinkHealth::DeviceInvalidated mirrors AUDCLNT_E_DEVICE_INVALIDATED");
+
 	explicit WasapiMenuSoundSink(Emulator* emu)
 	{
 		_emu = emu;
@@ -81,7 +88,11 @@ public:
 			return;
 		}
 
-		if(SUCCEEDED(_audioClient->Start())) {
+		//D9: a device that went away answers this call with
+		//AUDCLNT_E_DEVICE_INVALIDATED, which latches the device dead: the owner
+		//thread's next IsAlive() then flips the capability back to false.
+		_health.ObservedResult((int32_t)_audioClient->Start());
+		if(_health.IsAlive()) {
 			_playing = true;
 		}
 	}
@@ -99,7 +110,9 @@ public:
 
 	bool IsAlive() const override
 	{
-		return _audioClient.Get() != nullptr;
+		//The open device, until one of its calls answers with the invalidated code
+		//- which is the only way WASAPI reports that the endpoint left (D9).
+		return _audioClient.Get() != nullptr && _health.IsAlive();
 	}
 
 	uint32_t BufferFrames() const override
@@ -113,14 +126,21 @@ public:
 			return;
 		}
 
+		//D9: either of these calls answers with AUDCLNT_E_DEVICE_INVALIDATED once
+		//the endpoint is gone, and that is where a device that disappeared
+		//mid-session is noticed - nothing else reports it.
 		UINT32 padding = 0;
-		if(FAILED(_audioClient->GetCurrentPadding(&padding)) || padding >= _bufferFrameCount) {
+		HRESULT hr = _audioClient->GetCurrentPadding(&padding);
+		_health.ObservedResult((int32_t)hr);
+		if(FAILED(hr) || padding >= _bufferFrameCount) {
 			return;
 		}
 
 		UINT32 frames = _bufferFrameCount - padding;
 		uint8_t* data = nullptr;
-		if(FAILED(_renderClient->GetBuffer(frames, &data))) {
+		hr = _renderClient->GetBuffer(frames, &data);
+		_health.ObservedResult((int32_t)hr);
+		if(FAILED(hr)) {
 			return;
 		}
 
@@ -169,8 +189,25 @@ private:
 			return false;
 		}
 
+		//D2: the output device the player already picked, resolved exactly the way
+		//the game device resolves it (WasapiSoundManager::Initialize) - the
+		//configured endpoint by its id, and the default endpoint when they picked
+		//none, or when the one they picked is no longer there. Always taking the
+		//default endpoint would put the game on the player's device and the blips
+		//on another one.
 		ComPtr<IMMDevice> device;
-		if(FAILED(enumerator->GetDefaultAudioEndpoint(eRender, eConsole, &device))) {
+		const char* configuredDeviceId = _emu->GetSettings()->GetAudioConfig().AudioDevice;
+		bool resolved = MenuSoundDeviceResolve::Resolve(
+			configuredDeviceId != nullptr ? configuredDeviceId : "",
+			[&enumerator, &device](const std::string& deviceId) {
+				std::wstring wideDeviceId = utf8::utf8::decode(deviceId);
+				return SUCCEEDED(enumerator->GetDevice(wideDeviceId.c_str(), &device)) && device.Get() != nullptr;
+			},
+			[&enumerator, &device]() {
+				return SUCCEEDED(enumerator->GetDefaultAudioEndpoint(eRender, eConsole, &device)) && device.Get() != nullptr;
+			});
+
+		if(!resolved) {
 			return false;
 		}
 
@@ -232,4 +269,6 @@ private:
 	ComPtr<IAudioClient> _audioClient;
 	ComPtr<IAudioRenderClient> _renderClient;
 	UINT32 _bufferFrameCount = 0;
+	//D9: one-way, fed by the device's own call results.
+	MenuSoundSinkHealth _health;
 };
