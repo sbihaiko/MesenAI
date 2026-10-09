@@ -179,6 +179,7 @@ public class PlayPadWalkTests : IDisposable
 		Assert.True(chipGap == KnownChipGaps.Contains(surface),
 			chipGap ? $"{surface}: the console chips are not reachable and the surface is not listed in KnownChipGaps"
 				: $"{surface}: the pad reaches the console chips now: remove it from KnownChipGaps");
+		Assert.Empty(observation.FocusOutside ?? Array.Empty<string>());
 		List<string> problems = PadWalk.Judge(observation);
 		Assert.True(problems.Count == 0, string.Join(Environment.NewLine, problems));
 
@@ -276,9 +277,14 @@ public class PlayPadWalkTests : IDisposable
 					bar.Add((Label(node), focus.Declared(), Arbiter.CoverHasFocus(model, node)));
 				}
 				Press(window, direction);
-				if(window.FocusManager?.GetFocusedElement() is Control focusedNext && Canonical(focusedNext) is Control next && next != node && root.IsVisualAncestorOf(next) && reached.Add(next)) {
-					frontier.Enqueue(next);
-					names.TryAdd(next, Label(next));
+				if(window.FocusManager?.GetFocusedElement() is Control focusedNext && Canonical(focusedNext) is Control next && next != node) {
+					//A press that lands outside the surface is a leak to report, not an edge to follow.
+					if(!root.IsVisualAncestorOf(next)) {
+						outside.Add($"{Label(node)} -> {Label(next)}");
+					} else if(reached.Add(next)) {
+						frontier.Enqueue(next);
+						names.TryAdd(next, Label(next));
+					}
 				}
 			}
 		}
