@@ -53,10 +53,11 @@ namespace Mesen.HeadlessTests;
 //    the surface re-arbitrates away is still a landing (#1108).
 //  - Following each node as it lands is depth-first, which a swapping surface
 //    defeats on its own: a control can be listed while one page is up and only
-//    be reachable once another is. The walk therefore runs to a fixpoint - it
-//    re-presses from every control it reached, pass after pass, until a pass
-//    finds nothing new (Walk below) - so "listed but not reached" is a pad gap
-//    and not the walk's own coverage (#1146 review finding 1).
+//    be reachable once another is. The walk therefore runs on to the pad's
+//    reachability closure - all four directions from every control it reached,
+//    with the page each of them belongs to put back before every press, until a
+//    pass reaches nothing new (Walk below) - so "shown but not reached" is a pad
+//    gap and not the walk's own coverage (#1146 review finding 1).
 //
 //Scale: every live case is parameterized by the interface size (1.0 = Standard,
 //1.5 = Extra large, #1111), so a size can never strand the pad.
@@ -127,6 +128,26 @@ public class PlayPadWalkTests : IDisposable
 	//this list (the test fails on a stale entry as well as on a new one).
 	public static readonly string[] KnownBarGaps = { };
 
+	//Controls a surface shows that the pad cannot land on, by label, per surface.
+	//The walk runs to the pad's reachability closure before this is read (Walk), so
+	//what is left here is the pad's reach and not the walk's coverage: with the page
+	//each control belongs to put back before every press, all four directions from
+	//every control the pad reached land on everything else the sheet shows.
+	//
+	//chkAudioEnabled was here too, and the closure reaches it now - that one was the
+	//walk's coverage (#1146 review finding 1). What is left is the footer's "More in
+	//Options…", which the sheet shows only while Audio or Controls is the selected
+	//tab: it is left-aligned directly above a right-aligned Done with nothing
+	//focusable to its left, so no direction from any control the pad can reach lands
+	//on it. Moving or re-anchoring it is a Player-layout change, not a test change,
+	//so it is named here and tracked as #1148. Asserted both ways: a listed control
+	//the walk starts reaching has to leave this list, and a name here that the
+	//surface stops showing fails too.
+	public static readonly Dictionary<string, string[]> KnownUnreachable = new() {
+		["SettingsDisplay"] = new[] { "btnPlayerSettingsMoreInOptions" },
+		["SettingsSystemTab"] = new[] { "btnPlayerSettingsMoreInOptions" },
+	};
+
 	//Surfaces whose console chips (RomPickerConsoleFilter) the pad cannot land on:
 	//LB/RB cycle the selection but the focus never enters the chip ListBox (#1107
 	//review finding 2). Named so the gap shows, and asserted both ways: when the
@@ -154,11 +175,12 @@ public class PlayPadWalkTests : IDisposable
 	private const int ClaimsInWiring = 18;
 
 	//How many controls one surface may reach before the walk stops following new
-	//nodes, and how many times it may re-press what it reached before it must have
-	//settled. Both are ceilings on the walk itself, and both fail loudly rather
-	//than truncating a result silently (#1146 review finding 4).
-	private const int MaxReached = 200;
-	private const int PassCap = 8;
+	//nodes, and how many passes the closure may take before it must have settled.
+	//Both are ceilings on the walk itself: the strip rebuilds a page on every tab
+	//change, so the instance count runs far above the label count, and both fail
+	//loudly rather than truncating a result silently (#1146 review finding 4).
+	private const int MaxReached = 2000;
+	private const int PassCap = 12;
 
 	private readonly UiMode _uiMode = ConfigManager.Config.Preferences.UiMode;
 	private readonly Workspace _workspace = ConfigManager.Config.Preferences.Workspace;
@@ -248,9 +270,32 @@ public class PlayPadWalkTests : IDisposable
 		HashSet<string> known = KnownFocusLeaks.TryGetValue((surface, scale), out string[]? listed) ? listed.ToHashSet() : new HashSet<string>();
 		Assert.True(leaks.SetEquals(known),
 			$"{surface} at {scale}: focus left the surface onto [{string.Join(", ", leaks.OrderBy(l => l))}] but KnownFocusLeaks lists [{string.Join(", ", known.OrderBy(l => l))}] (#1137)");
-		//Every control the surface shows is judged: there is no judged-set
-		//carve-out left to hide an unreachable one behind (#1146 review finding 1).
-		List<string> problems = PadWalk.Judge(observation with { FocusOutside = null });
+		//Every control the surface shows is judged, and the only ones taken out are
+		//the named gaps above - asserted both ways here, so the list cannot outlive a
+		//gap that closes and cannot grow quietly (#1146 review finding 1).
+		//
+		//The unreachable rule is asked by LABEL rather than by instance, because the
+		//strip rebuilds its page on every tab change: most of the instances the walk
+		//listed without landing on are second copies of a control it did land on, and
+		//an identity judgement would report the rebuild as a pad gap. What a surface
+		//shows is a set of control kinds - the names a player would point at - and the
+		//closure in Walk proves exactly that set is the pad's reach, so a control the
+		//surface shows and the pad cannot land on is its own row here.
+		HashSet<string> gaps = KnownUnreachable.TryGetValue(surface, out string[]? named) ? named.ToHashSet() : new HashSet<string>();
+		HashSet<string> shownLabels = observation.Interactive.Select(c => c.Label).ToHashSet();
+		HashSet<string> landedLabels = observation.Reached.Select(c => c.Label).ToHashSet();
+		Assert.True(shownLabels.IsSupersetOf(gaps),
+			$"{surface}: KnownUnreachable names [{string.Join(", ", gaps.Except(shownLabels))}] but the surface does not show them");
+		Assert.Empty(gaps.Intersect(landedLabels));
+		List<string> unreached = shownLabels.Except(landedLabels).Except(gaps).OrderBy(l => l).ToList();
+		Assert.True(unreached.Count == 0,
+			$"{surface}: the pad reaches no control named [{string.Join(", ", unreached)}] (#1146 review finding 1)");
+		//The judge still answers the other three rules, over the live observation:
+		//Back, the shared action bar, and the focus leaks the caller strips by name.
+		List<string> problems = PadWalk.Judge(observation with {
+			Interactive = Array.Empty<PadWalkControl>(),
+			FocusOutside = null,
+		});
 		Assert.True(problems.Count == 0, string.Join(Environment.NewLine, problems));
 
 		//The known gaps are asserted both ways, so a surface that joins the
@@ -355,6 +400,9 @@ public class PlayPadWalkTests : IDisposable
 						},
 					},
 				});
+				//The rows are the reason this surface is walked: a sheet on an empty
+				//config would pass with nothing a player could adjust.
+				WaitFor(() => ShaderParamRows(window) > 0, () => "the shader sheet did not build the preset's parameter rows");
 				return (window, model, () => model.IsShaderSheetVisible, false);
 			//The core asked for a BIOS it cannot find (a failed load, ADR-0249).
 			case "BiosSheet":
@@ -423,6 +471,11 @@ public class PlayPadWalkTests : IDisposable
 		interactive.AddRange(chips);
 		Dictionary<Control, string> names = interactive.Concat(new[] { start }).Distinct().ToDictionary(c => c, Label);
 		HashSet<Control> reached = new() { start };
+		//The same reach, by label. A page-swapping surface rebuilds its page on
+		//every tab change, so an identity set says "an instance I have not seen"
+		//where the walk means "a control I have not landed on": the label is what
+		//survives the rebuild, and the closure below is measured in labels.
+		HashSet<string> reachedLabels = new() { Label(start) };
 		//The same set in the order the pad reached it, which is the order the closing
 		//presses look for a control the surface still shows (#1146 review finding 3).
 		List<Control> reachOrder = new() { start };
@@ -486,8 +539,9 @@ public class PlayPadWalkTests : IDisposable
 						//surface as "unreachable" controls and hide the real cause, so it
 						//fails as itself (#1146 review finding 4).
 						Assert.True(reached.Count < MaxReached,
-							$"{surface}: the walk stopped at its cap of {MaxReached} controls and did not follow {Label(next)}");
+							$"{surface}: the walk stopped at its cap of {MaxReached} controls (listed {interactive.Count}) and did not follow {Label(next)}");
 						reached.Add(next);
+						reachedLabels.Add(Label(next));
 						names.TryAdd(next, Label(next));
 						reachOrder.Add(next);
 						Explore(next);
@@ -496,28 +550,59 @@ public class PlayPadWalkTests : IDisposable
 			}
 		}
 		//A surface that SWAPS its page under the pad (the Settings strip replaces the
-		//page a press leaves) can list a control while one tab is up and only make it
-		//reachable once another is: the press that finds it has to be made again, from
-		//a control the pad had already passed, with that other page up. A single
-		//depth-first pass cannot - it presses from each control once, in the context it
-		//was reached in - and the controls it lists without reaching then read as pad
-		//gaps when they are the walk's own coverage (#1146 review finding 1). So the
-		//walk is run to a fixpoint: every control the pad reached and the surface still
-		//shows is pressed from again, pass after pass, until a pass finds nothing new.
+		//page a press leaves) defeats one depth-first pass on its own: the pass presses
+		//from a control once, in the page context it was reached in, so a control that
+		//only shows on one tab - or one the footer only shows while that tab is up -
+		//is listed without ever being pressed for, and then reads as a pad gap when it
+		//is the walk's own coverage (#1146 review finding 1).
+		//
+		//So the walk is run to the pad's reachability closure instead: for every page
+		//the surface can show (the one it opens on, and each tab of its strip), and for
+		//every control the pad reached and the surface still shows, it presses again -
+		//pass after pass, until a pass reaches no control it had not already reached.
+		//One press per direction from every reached control is the whole relation, so
+		//what is still unreached once this settles is not the walk's coverage: it is a
+		//control the D-pad cannot land on at all.
+		//
+		//The closure is measured in LABELS, not instances: the strip rebuilds its
+		//page on every tab change, and an instance set would read each rebuild as new
+		//unreached controls and never settle.
 		bool stable = false;
 		for(int pass = 0; pass < PassCap; pass++) {
-			int before = reached.Count;
-			foreach(Control node in reachOrder.ToArray()) {
-				Explore(node);
+			int before = reachedLabels.Count;
+			foreach(Control? context in Pages(reachOrder).ToArray()) {
+				foreach(Control node in reachOrder.ToArray()) {
+					//The page is put back before EVERY press, not once per pass: the
+					//presses made from this page's own controls would otherwise walk
+					//the strip on to another tab, and the controls that are only
+					//reachable while THIS page is up - the ones the footer adds for
+					//it, say - would be pressed for with the wrong page showing. That
+					//is the whole coverage gap this closure exists to close.
+					//A tab that is not on screen is not a page the pad can be on.
+					if(context is not null && !Land(window, context)) {
+						continue;
+					}
+					Explore(node);
+				}
 			}
-			if(reached.Count == before) {
+			if(reachedLabels.Count == before) {
 				stable = true;
 				break;
 			}
 		}
 		//A walk that never settled is not a pass with fewer edges; it is a walk whose
 		//result cannot be read at all, so it says so instead of returning one.
-		Assert.True(stable, $"{surface}: the walk did not settle within {PassCap} passes");
+		Assert.True(stable, $"{surface}: the walk did not settle within {PassCap} passes (reached {reachedLabels.Count} of {interactive.Select(Label).Distinct().Count()} listed labels)");
+
+		//The pages the surface can be showing: the one it opens on (null: leave the
+		//surface where it is) and each tab of its strip.
+		static IEnumerable<Control?> Pages(List<Control> order)
+		{
+			yield return null;
+			foreach(Control tab in order.Where(c => c is TabItem)) {
+				yield return tab;
+			}
+		}
 
 		//The chips are entered with the ConsoleFilter action, not the D-pad: press it
 		//once and count them reached only when the focus lands in their ListBox.
@@ -859,6 +944,13 @@ public class PlayPadWalkTests : IDisposable
 		string preset = System.IO.Path.Combine(folder, "padwalk.slangp");
 		System.IO.File.WriteAllText(preset, "shaders = 1\nshader0 = padwalk.slang\n");
 		return preset;
+	}
+
+	//The parameter rows the shader sheet builds from its config, by the class its
+	//own rows carry (the same one PlayPadNavigationTests' shader case reads).
+	private static int ShaderParamRows(MainWindow window)
+	{
+		return window.GetVisualDescendants().OfType<Control>().Count(c => c.Classes.Contains("shaderParam"));
 	}
 
 	private void ClearRecents()
