@@ -765,7 +765,7 @@ namespace Mesen.Windows
 				//on - a library tile, a Home tile or Continue. A second sheet control,
 				//read off the pressed sets like Y; PlayFavoriteCover answers null (and
 				//the press does nothing) wherever no cover has the focus.
-				if(authority && InPlayDoor
+				if(authority && InPlayDoor && _keyboard is null
 					&& PlayPadNavigation.IsSheetEdge(PadNavControls.SheetCode(pad?.Family, pad?.Device ?? -1, PadSheetControl.Favorite, keyCode), pressed, _previous)) {
 					PlayFavoriteCover.Toggle(_model, _window.FocusManager?.GetFocusedElement() as Control);
 				}
