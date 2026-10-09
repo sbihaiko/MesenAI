@@ -252,7 +252,7 @@ namespace Mesen.ViewModels
 				return;
 			}
 
-			if(PadLossPause.ShouldPause(previous, count, IsPlayerMode, IsGameLoaded, paused)) {
+			if(PadLossPause.ShouldPause(previous, count, IsPlayerMode, IsPlayWorkspace, IsGameLoaded, paused)) {
 				SetPadPauseReason(PadPauseReason.ControllerDisconnected);
 				EmuApi.Pause();
 				OpenPauseOverlay();

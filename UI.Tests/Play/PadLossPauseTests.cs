@@ -24,6 +24,18 @@ public class PadLossPauseTests
 		Assert.Equal(expected, PadLossPause.ShouldPause(previous, current, isPlayDoor, gameLoaded, paused));
 	}
 
+	//isPlayerMode, isPlayWorkspace, expected: the Play door is Player mode AND the
+	//Play workspace; Remaster and Share under Player mode have no W-P4 to open.
+	[Theory]
+	[InlineData(true, true, true)]
+	[InlineData(true, false, false)]  //Player-mode Remaster / Share workspace
+	[InlineData(false, true, false)]  //Classic
+	[InlineData(false, false, false)]
+	public void A_pad_loss_pauses_only_inside_the_Play_workspace_of_Player_mode(bool isPlayerMode, bool isPlayWorkspace, bool expected)
+	{
+		Assert.Equal(expected, PadLossPause.ShouldPause(2u, 1u, isPlayerMode, isPlayWorkspace, true, false));
+	}
+
 	[Theory]
 	[InlineData(PadPauseReason.None, 1u, 2u, PadPauseReason.None)]
 	[InlineData(PadPauseReason.ControllerDisconnected, 0u, 1u, PadPauseReason.ControllerReconnected)]

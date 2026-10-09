@@ -22,6 +22,11 @@ public static class PadLossPause
 	public static bool ShouldPause(uint previousCount, uint currentCount, bool isPlayDoor, bool gameLoaded, bool paused)
 		=> currentCount < previousCount && isPlayDoor && gameLoaded && !paused;
 
+	//The Play door is Player mode AND the Play workspace: Remaster and Share under
+	//Player mode have no W-P4 to open, so a pad loss there leaves the game running.
+	public static bool ShouldPause(uint previousCount, uint currentCount, bool isPlayerMode, bool isPlayWorkspace, bool gameLoaded, bool paused)
+		=> ShouldPause(previousCount, currentCount, PlayPadNavigation.InPlayDoor(isPlayerMode, isPlayWorkspace), gameLoaded, paused);
+
 	//A pad coming back turns "disconnected" into "reconnected"; anything else
 	//keeps the line it has. Nothing here ever resumes the game.
 	public static PadPauseReason AfterCountChange(PadPauseReason reason, uint previousCount, uint currentCount)
