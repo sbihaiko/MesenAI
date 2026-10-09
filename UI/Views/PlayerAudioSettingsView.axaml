@@ -18,10 +18,31 @@
 	label left to eat what is left: at 1.5 in 512x505 the page gives a row about
 	220 px, and a 200 px popup (or a 150 px slider beside its 34 px readout)
 	docked right left the label 20 px to draw 91 px of text in. An Auto column
-	holds the label at the width its text needs, and the star gives the control
-	the rest - its drawn width wherever there is room for it, less when there is
-	not, by the same cap the sheet itself takes. The readout keeps its own Auto
-	column, so the slider shrinks first.-->
+	holds the label at the width its text needs, and the control takes the rest,
+	up to the width ADR-0249 draws it at (150, 200) and no further. The readout
+	keeps its own Auto column, so the slider shrinks first.
+	#1145 review: the cap is on the *column* (`1000*` + `MaxWidth`), written
+	nowhere else, and the control stretches into that column. Two other shapes
+	lose at 1024x640, a size where nothing moves. A `Width` on the control
+	cannot shrink at all - Avalonia's MinMax makes it both the minimum and the
+	maximum - so at 1.5 in 512x505 it forced its full 150/200 into a column
+	that had less and was drawn over its own label. A `MaxWidth` on the control
+	in a plain `*` column keeps the cap but centres the control the moment the
+	column is wider than that cap (Avalonia arranges Stretch and Center from
+	the same origin), so the popups and the sliders sat mid-row with the
+	leftover split around them. With the cap on the column the control's box
+	*is* the column's box: as wide as the room up to the cap, and flush at its
+	right edge because there is no leftover inside the column to centre it in.
+	`HorizontalAlignment="Stretch"` on every one of these controls is
+	load-bearing rather than a restatement of a default: Avalonia's ComboBox is
+	Left by default, and a Left child is arranged at min(its column, its own
+	DesiredSize), so the closed popup would shrink to whatever text it happens
+	to hold - 36 px for a device list the host has not enumerated - and float
+	mid-row. The star column before the capped one takes the leftover, which is
+	what keeps the control against its readout (or the row's own right edge),
+	where ADR-0249 draws it. Two tests hold this at 1024x640: this class's
+	InterfaceSizeLayoutTests on the cap *and* that right edge, and
+	PlayerThemeSettingsRenderTests on the 200/150 at factor 1.-->
 	<Border Name="AudioSettingsGroup" Classes="group inset" VerticalAlignment="Top">
 		<StackPanel XYFocus.NavigationModes="Enabled">
 			<Grid Classes="setting-row" ColumnDefinitions="Auto,*">
@@ -29,15 +50,26 @@
 				<ToggleSwitch Grid.Column="1" Name="chkAudioEnabled" IsChecked="{Binding Config.EnableAudio}" HorizontalAlignment="Right" VerticalAlignment="Center" />
 			</Grid>
 			<Separator Classes="row-hairline" />
-			<Grid Classes="setting-row" ColumnDefinitions="Auto,*,Auto">
+			<Grid Classes="setting-row">
+				<Grid.ColumnDefinitions>
+					<ColumnDefinition Width="Auto" />
+					<ColumnDefinition Width="*" />
+					<ColumnDefinition Width="1000*" MaxWidth="150" />
+					<ColumnDefinition Width="Auto" />
+				</Grid.ColumnDefinitions>
 				<TextBlock Grid.Column="0" Classes="callout" Text="{l:Translate lblAudioVolume}" VerticalAlignment="Center" />
-				<Slider Grid.Column="1" Name="sldAudioVolume" MaxWidth="150" Minimum="0" Maximum="100" Value="{Binding Volume}" HorizontalAlignment="Stretch" VerticalAlignment="Center" />
-				<TextBlock Grid.Column="2" Name="txtAudioVolume" Classes="callout" Width="34" TextAlignment="Right" Text="{Binding Volume, StringFormat={}{0:0}}" VerticalAlignment="Center" />
+				<Slider Grid.Column="2" Name="sldAudioVolume" HorizontalAlignment="Stretch" Minimum="0" Maximum="100" Value="{Binding Volume}" VerticalAlignment="Center" />
+				<TextBlock Grid.Column="3" Name="txtAudioVolume" Classes="callout" Width="34" TextAlignment="Right" Text="{Binding Volume, StringFormat={}{0:0}}" VerticalAlignment="Center" />
 			</Grid>
 			<Separator Classes="row-hairline" />
-			<Grid Classes="setting-row" ColumnDefinitions="Auto,*">
+			<Grid Classes="setting-row">
+				<Grid.ColumnDefinitions>
+					<ColumnDefinition Width="Auto" />
+					<ColumnDefinition Width="*" />
+					<ColumnDefinition Width="1000*" MaxWidth="200" />
+				</Grid.ColumnDefinitions>
 				<TextBlock Grid.Column="0" Classes="callout" Text="{l:Translate lblAudioOutput}" VerticalAlignment="Center" />
-				<ComboBox Grid.Column="1" Name="cboAudioDevice" Classes="popup" MaxWidth="200" ItemsSource="{Binding Devices}" SelectedItem="{Binding SelectedDevice}" HorizontalAlignment="Stretch" VerticalAlignment="Center" />
+				<ComboBox Grid.Column="2" Name="cboAudioDevice" HorizontalAlignment="Stretch" Classes="popup" ItemsSource="{Binding Devices}" SelectedItem="{Binding SelectedDevice}" VerticalAlignment="Center" />
 			</Grid>
 			<Separator Classes="row-hairline" IsVisible="{Binding MenuSoundsAvailable}" />
 			<Grid Classes="setting-row" ColumnDefinitions="Auto,*" IsVisible="{Binding MenuSoundsAvailable}">

@@ -325,6 +325,63 @@ public class InterfaceSizeLayoutTests : IDisposable
 		model.ClosePlayerSettings();
 	}
 
+	//#1145 review, item 1: a stretched control whose `MaxWidth` is smaller than
+	//the column it sits in is *centred* in that column - the leftover lands on
+	//both sides of it. At 1024x640 the page's star column is far wider than the
+	//150 / 200 px cap, so the capped controls sat mid-row instead of against
+	//the row's right edge: a slider left a gap before its own 34 px readout and
+	//the two Look popups floated between their label and Adjust. ADR-0249 draws
+	//them on the right ("the toggle and the two popups on the right"), and the
+	//PRD's 1024x640 is a size where nothing moves. Right-aligned, the control
+	//keeps its cap and the leftover is all on the label's side: what follows it
+	//in the row is what it touches, bar that sibling's own margin, and the
+	//row's own right edge when nothing follows.
+	[AvaloniaTheory]
+	[InlineData(ConfigWindowTab.Audio, "sldAudioVolume", 150.0)]
+	[InlineData(ConfigWindowTab.Audio, "cboAudioDevice", 200.0)]
+	[InlineData(ConfigWindowTab.Input, "sldControlsRumble", 150.0)]
+	[InlineData(ConfigWindowTab.Input, "sldControlsDeadzone", 150.0)]
+	[InlineData(ConfigWindowTab.Look, "cboLookPixels", 200.0)]
+	[InlineData(ConfigWindowTab.Look, "cboLookScreen", 200.0)]
+	public void A_capped_row_control_keeps_its_cap_at_its_row_s_right_edge(ConfigWindowTab tab, string name, double cap)
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model) = Show(Workspace.Play, InterfaceSize.ExtraLarge);
+		window.OpenPlayerSettingsSheet();
+		Settle(window);
+		int index = PlayerSettingsEssentials.IndexOf(tab);
+		Assert.True(index >= 0, $"{tab} is not a tab of the Play settings strip");
+		window.FindNamed<TabControl>("PlayerSettingsTabs").SelectedIndex = index;
+		Settle(window);
+
+		Control control = window.FindNamed<Control>(name);
+		Assert.True(control.IsOnScreen(), $"{name} is not on screen on {tab}");
+		Grid row = control.GetVisualAncestors().OfType<Grid>().First(g => g.Classes.Contains("setting-row") || g.Classes.Contains("look-row"));
+		//The cap is the control's own width, before the Interface size transform:
+		//BoxIn reports the drawn box, which is this times 1.5.
+		Assert.Equal(cap, control.Bounds.Width, 0.5);
+		Rect box = BoxIn(control, window);
+
+		//The cell boundary the control has to be flush against: the row's own
+		//right edge, or the cell of the first thing drawn after it. That cell
+		//starts at the sibling's origin less its own left margin, which is a
+		//layout-space offset - it goes through the Interface size transform with
+		//the control, so it is translated rather than subtracted.
+		Rect rowBox = BoxIn(row, window);
+		double flushAt = rowBox.Right;
+		foreach(Control sibling in row.Children) {
+			if(sibling == control || !sibling.IsEffectivelyVisible || sibling.Bounds.Width <= 0) {
+				continue;
+			}
+			Rect siblingBox = BoxIn(sibling, window);
+			if(siblingBox.Left >= box.Right - 0.5) {
+				flushAt = Math.Min(flushAt, sibling.TranslatePoint(new Point(-sibling.Margin.Left, 0), window)!.Value.X);
+			}
+		}
+		Assert.Equal(flushAt, box.Right, 0.5);
+		model.ClosePlayerSettings();
+	}
+
 	//#1123: the cap follows the room, so it shrinks with the window instead of
 	//leaving Done past the right edge - on every tab, at the largest size, in
 	//the window's own starting size.

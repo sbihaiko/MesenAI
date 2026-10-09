@@ -15,14 +15,23 @@
   fixed width kept it inside the narrower sheet and drew its label past the room
   left over, which the review of PR #1145 named as blocking against Decision 6's
   "nothing is clipped". The rows became Auto/star grids whose controls stretch
-  into the star column under a `MaxWidth` cap, and a headless theory walks every
+  into a capped star column, and a headless theory walks every
   tab's rows asserting that no child is drawn outside its row or over a sibling
   — the label-width theory that came with the rows cannot see it, because a
   label in an Auto column is always as wide as its own text; the one spot that
   does not meet the guarantee is named in Decision 6 and is #1149. The same
   review found the cap answering "+Infinity" - no cap - on the first measure
   pass, when the host reports a room of 0: the fallback is now the room itself,
-  so the sheet does not lay out at 480 and flash at 720 for a frame. No new
+  so the sheet does not lay out at 480 and flash at 720 for a frame. A second
+  review round found the same cap still on the control: a control clamped by
+  its own `MaxWidth` inside a column wider than that cap is *centred* there
+  (Avalonia arranges Stretch and Center from one origin), so at 1024x640 - a
+  size where nothing moves - the capped controls sat mid-row. The cap is now on
+  the column (`1000*` + `MaxWidth`) and the control stretches into it, which
+  makes the control's box the column's box; `HorizontalAlignment="Stretch"` is
+  written out on each one because Avalonia's ComboBox is Left by default, and a
+  Left child is arranged at min(its column, its own DesiredSize). A headless
+  theory pins the cap *and* the control's right edge in that window. No new
   panel pick here either: it is the same #1123 criterion, read as covering the
   rows the cap narrows.
   Nothing is implemented by this ADR; PR #1119 implements it and must match
@@ -87,12 +96,17 @@ Nothing in Play is sized for a TV three meters away. Settings › Display has a
    reports 0 — so the cap is the room itself and never "no cap": +Infinity there
    let the sheet lay out at its own 480 and flash at 720 drawn for a frame.
    **The cap does not squeeze the rows it narrows.** A setting row is a Grid
-   whose first column is Auto and whose last is the star: the label holds the
-   width its own text needs and its control stretches into the star column,
-   capped by `MaxWidth` at the width the wireframes draw it (150 for a slider,
-   200 for the settings and Look popups). It is drawn at that width wherever the
-   column has room for it (200 stays 200) and shrinks with the column where it
-   has not. A fixed `Width` was arranged at 150 or 200 whatever cell the control
+   whose first column is Auto and whose last is the capped star (`1000*` +
+   `MaxWidth` at the width the wireframes draw it — 150 for a slider, 200 for
+   the settings and Look popups): the label holds the width its own text needs
+   and the control stretches into that column, so the control's box is the
+   column's box. It is drawn at the cap wherever the column has room for it
+   (200 stays 200), flush at the row's right edge because no leftover is left
+   inside the column to centre it in, and shrinks with the column where the
+   row has not the room. Each control carries an explicit
+   `HorizontalAlignment="Stretch"` for that: Avalonia's ComboBox is Left by
+   default, and a Left child is arranged at min(its column, its own
+   DesiredSize), which would shrink the closed popup to its own text. A fixed `Width` was arranged at 150 or 200 whatever cell the control
    was given, and a Grid does not clip, so the control was drawn over the
    label's own column: 70 px of "Output device" under a 200 px popup, 12 px of
    "Volume" under a 150 px slider beside its 34 px readout, 18 px of "Smoothing"
