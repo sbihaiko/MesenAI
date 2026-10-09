@@ -1,15 +1,26 @@
 # ADR-0270: A menu tick plays through its own output stream, owned by the host audio layer — never as a second writer on the emulator's device
 
-- Status: proposed (2026-10-09). Nothing here authorizes code. The one gate is
-  a pick, and the autonomy panel is the body that makes it: its recorded
-  ruling on issue #1105 (Amendment 2026-10-09, Opus 5.5 as the human proxy,
-  challenger stance) ordered this ADR and is quoted verbatim — "Narrow #1117
-  to the Settings row and pad wiring with the host entry point returning not
+- Status: accepted (2026-10-09), by the autonomy panel (panel-adversary, Opus
+  5.5 as the human proxy; not provisional), pick quoted verbatim:
+  **"Accept D1–D10 as written: menu blips play through their own host-owned
+  output stream, never through SoundMixer/IAudioDevice; #1126 implements it
+  with host-free unit tests against a fake sink (FIFO silence-on-empty,
+  one-blip drop, settle from queued frames, armed-at-start capability), and
+  the Context/Measured claim that the exports are absent is corrected to
+  'present as stubs returning false (InteropDLL/EmuApiWrapper.cpp:272-280)'
+  before merge."**
+  The decision comes from the spec on issue #1102 (slice 6, "Menu sounds").
+  Nothing is implemented by this ADR yet: the slice is #1126 (the stream and
+  its sinks in the audio layer, the two `InteropDLL` exports becoming real,
+  the capability wiring already in place), with #1127 routing the keyboard
+  path through the same seam as its follow-up. This ADR was itself ordered by
+  the panel's recorded ruling on issue #1105 (Amendment 2026-10-09, Opus 5.5
+  as the human proxy, challenger stance), quoted verbatim — "Narrow #1117 to
+  the Settings row and pad wiring with the host entry point returning not
   available; the row stays hidden until a real audio path exists; the audio
-  path gets its own ADR." — but it picks no path, and no go-ahead for the
-  Decision below has been given. To accept, the pick is quoted here as
-  ADR-0240's and ADR-0269's Status lines do; to send it back, the options to
-  weigh are in Alternatives.
+  path gets its own ADR." — which ordered the ADR but picked no path; the
+  pick above is the one that accepts the Decision. The options weighed and
+  not taken are in Alternatives.
 - Date: 2026-10-09
 - Related: spec issue #1102 (slice 6, "Menu sounds"), issue #1105, PR #1117,
   issues #1126 and #1127, ADR-0256 (the pad belongs to the console while a
@@ -51,12 +62,15 @@ by where the effect lands, which is the mistake the area rule names).
   EmuApi.IsRunning() && !EmuApi.IsPaused())`. Judging after `Apply` is
   deliberate: the press that starts or resumes a game has already left the
   game running unpaused, so it does not blip over it.
-- **The seam is declared and empty.** `UI/Windows/MenuSoundOutput.cs` renders
-  the PCM and calls the host entry point `EmuApi.PlayMenuSound(pcm, frames,
-  rate)`, with `EmuApi.MenuSoundsAvailable()` as the capability. Neither
-  export exists in `Core/` or `InteropDLL/` (grep finds neither), so the
-  P/Invoke throws `EntryPointNotFoundException` and
-  `MenuSoundOutput.HostAvailable()` answers false.
+- **The seam is declared, and the host side is a stub.** `UI/Windows/MenuSoundOutput.cs`
+  renders the PCM and calls the host entry point `EmuApi.PlayMenuSound(pcm,
+  frames, rate)`, with `EmuApi.MenuSoundsAvailable()` as the capability. Both
+  exports exist in `InteropDLL/EmuApiWrapper.cpp:272-280` as stubs that return
+  `false` without touching a device or a lock (the same stubs are on
+  `origin/main`), so nothing carries a blip and
+  `MenuSoundOutput.HostAvailable()` answers false on the stub's own answer —
+  not because a P/Invoke threw `EntryPointNotFoundException`, which stays
+  only as the guard for a build that ships no core at all.
   `UI/App.axaml.cs` wires that answer into
   `PlayerSettingsEssentials.MenuSoundsAvailable` (default `() => false`), and
   while it is false the Audio sheet keeps three rows and its height (340 px)
@@ -288,8 +302,11 @@ ADR does not fix, that is a new ADR, not a widened one.
 
 Verified by reading at `3cbcab39d`: `UI/Logic/MenuSounds.cs`,
 `UI/Windows/MenuSoundOutput.cs`, `UI/Interop/EmuApi.cs` (the two `extern`
-declarations and no implementation anywhere in the tree — `grep -rn
-"PlayMenuSound\|MenuSoundsAvailable" Core/ InteropDLL/` returns nothing),
+declarations; their host side is the pair of stubs at
+`InteropDLL/EmuApiWrapper.cpp:272-280`, returning `false` with no device and no
+lock — `grep -rn "PlayMenuSound\|MenuSoundsAvailable" Core/ InteropDLL/` finds
+those two definitions and nothing else; an earlier draft of this section read
+the pair as absent, and both places are corrected),
 `UI/Windows/PlayPadNavigationWiring.cs`,
 `UI/Logic/PlayerSettingsEssentials.cs`, `UI/App.axaml.cs`,
 `Core/Shared/Audio/SoundMixer.cpp:73-180`, `Core/Shared/Emulator.cpp`
