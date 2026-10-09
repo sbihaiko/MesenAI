@@ -746,13 +746,14 @@ namespace Mesen.Windows
 				}
 
 				if(action != PadNavAction.None) {
-					PlayMenuSound(action);
 					Apply(action);
+					PlayMenuSound(action);
 				}
 			}
 
-			//#1105: the optional move / confirm / back sound. Before Apply so a
-			//Back that closes the sheet still sounds; never over a running game.
+			//#1105: the optional move / confirm / back sound. After Apply, judged on
+			//the state the press left: a Confirm on Resume or a start-game press
+			//leaves a game running unpaused, and the blip must not mix into it.
 			private static void PlayMenuSound(PadNavAction action)
 			{
 				if(MenuSounds.For(action) is MenuSoundKind kind

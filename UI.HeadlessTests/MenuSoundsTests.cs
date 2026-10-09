@@ -153,6 +153,65 @@ public class MenuSoundsTests : IDisposable
 		Assert.Empty(_played);
 	}
 
+	//The press that hands the console back (Confirm on the overlay's Resume)
+	//leaves a game running unpaused; the sound is judged after it, so no blip.
+	[AvaloniaFact]
+	public void A_confirm_that_resumes_the_game_does_not_sound()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		ConfigManager.Config.Audio.MenuSounds = true;
+		PreferencesConfig prefs = ConfigManager.Config.Preferences;
+		bool pauseInBackground = prefs.PauseWhenInBackground;
+		bool pauseInMenus = prefs.PauseWhenInMenusAndConfig;
+		prefs.PauseWhenInBackground = false;
+		prefs.PauseWhenInMenusAndConfig = false;
+		MainWindow window = ShowPlayHome();
+		MainWindowViewModel model = Assert.IsType<MainWindowViewModel>(window.DataContext);
+
+		string folder = Path.Combine(Path.GetTempPath(), "mesen-menusounds-" + Guid.NewGuid().ToString("N"));
+		Directory.CreateDirectory(folder);
+		try {
+			string rom = Path.Combine(folder, "synthetic-nrom.nes");
+			File.WriteAllBytes(rom, SyntheticNrom.Build());
+			Assert.True(EmuApi.LoadRom(rom, string.Empty), $"the core refused to load {rom}");
+			WaitUntil(() => EmuApi.IsRunning() && model.RomInfo.Format != RomFormat.Unknown, "the ROM never reported as loaded");
+			EmuApi.Resume();
+			WaitUntil(() => !EmuApi.IsPaused(), "the game never ran unpaused");
+
+			EmuApi.Pause();
+			WaitUntil(() => EmuApi.IsPaused(), "the game never paused");
+			model.OpenPauseOverlay();
+			//The bridge grants the overlay's focus from its own tick.
+			WaitUntil(() => {
+				PlayPadNavigationWiring.TickForTest(window, Array.Empty<ushort>(), TimeSpan.FromMilliseconds(50), BackendName, BackendCode);
+				return (window.FocusManager?.GetFocusedElement() as Avalonia.Controls.Control)?.Name == "OverlayResumeButton";
+			}, "the overlay opened without the focus on Resume");
+			_played.Clear();
+
+			Press(window, PadNavAction.Confirm);
+
+			WaitUntil(() => !EmuApi.IsPaused(), "Confirm on Resume did not resume the game");
+			Assert.Empty(_played);
+		} finally {
+			prefs.PauseWhenInBackground = pauseInBackground;
+			prefs.PauseWhenInMenusAndConfig = pauseInMenus;
+			EmuApi.Stop();
+			Directory.Delete(folder, true);
+		}
+	}
+
+	private static void WaitUntil(Func<bool> condition, string message)
+	{
+		Stopwatch clock = Stopwatch.StartNew();
+		while(!condition()) {
+			if(clock.ElapsedMilliseconds > 10000) {
+				throw new XunitException(message);
+			}
+			Pump();
+			Thread.Sleep(20);
+		}
+	}
+
 	[Fact]
 	public void The_row_is_off_on_a_new_install()
 	{
