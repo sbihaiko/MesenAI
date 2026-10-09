@@ -48,14 +48,12 @@ namespace Mesen.HeadlessTests;
 [Collection(NativeCoreCollection.Name)]
 public class PlayPadWalkTests : IDisposable
 {
-	//The scales a case runs at: 1.0 is what ships today, 1.5 is Extra large.
-	public static IEnumerable<object[]> Scales => new[] {
-		new object[] { 1.0 },
-		new object[] { 1.5 },
-	};
+	//The interface scales a case runs at: 1.0 is Standard, 1.5 is Extra large
+	//(#1111). Every walk is parameterized by it, so a size cannot strand the pad.
+	private static readonly double[] Scales = { 1.0, 1.5 };
 
 	public static IEnumerable<object[]> SurfacesAtEveryScale =>
-		from scale in new[] { 1.0, 1.5 } from surface in WalkedSurfaces select new object[] { surface, scale };
+		from scale in Scales from surface in WalkedSurfaces select new object[] { surface, scale };
 
 	//Registered claims in PlayPadNavigationWiring.RegisterSurfaces plus the
 	//content area, by the surface's name. Walked surfaces have an opener below;
@@ -70,6 +68,15 @@ public class PlayPadWalkTests : IDisposable
 		"QuitGameConfirm", "SelectRomSheet", "ShaderSheet", "BiosSheet", "ControllerSetup", "SettingsSystemTab",
 		"ControllerSheet", "PackDepSheet", "PackPicker", "PackDetail", "Cheats", "Replays",
 		"SettingsDisplay",
+	};
+
+	//The one ToolSheet claim serves every PlayerToolSheet kind; only About is
+	//walked (ToolSheetAbout). The other kinds are named here, and the kind guard
+	//below counts them apart from the claims, so a new kind fails it instead of
+	//hiding behind ToolSheetAbout.
+	public static readonly PlayerToolSheet[] ToolSheetKindsWalked = { PlayerToolSheet.About };
+	public static readonly PlayerToolSheet[] ToolSheetKindsNotWalkedYet = {
+		PlayerToolSheet.CommandLine, PlayerToolSheet.CheckForUpdates, PlayerToolSheet.VideoRecord, PlayerToolSheet.Barcode,
 	};
 
 	//Surfaces that have no declaration on the shared bar yet (Declared() is
@@ -136,6 +143,15 @@ public class PlayPadWalkTests : IDisposable
 		Assert.Equal(ClaimsInWiring, WalkedSurfaces.Length - 2 /*Home and HomeFirstRun are the content area, not a claim*/ + NotWalkedYet.Length);
 	}
 
+	[Fact]
+	public void Every_tool_sheet_kind_is_walked_or_named_as_a_gap()
+	{
+		PlayerToolSheet[] kinds = Enum.GetValues<PlayerToolSheet>().Where(k => k != PlayerToolSheet.None).ToArray();
+		Assert.Empty(ToolSheetKindsWalked.Intersect(ToolSheetKindsNotWalkedYet));
+		Assert.Equal(kinds.Length, ToolSheetKindsWalked.Length + ToolSheetKindsNotWalkedYet.Length);
+		Assert.Empty(kinds.Except(ToolSheetKindsWalked).Except(ToolSheetKindsNotWalkedYet));
+	}
+
 	//---- the live walk
 
 	[AvaloniaTheory]
@@ -146,14 +162,17 @@ public class PlayPadWalkTests : IDisposable
 		ConfigManager.Config.Preferences.InterfaceSize = scale >= 1.5 ? InterfaceSize.ExtraLarge : InterfaceSize.Standard;
 		(MainWindow window, MainWindowViewModel model, Func<bool> isUp, bool isRoot) = Open(surface);
 
-		PadWalkObservation observation = Walk(surface, window, model, isUp, isRoot);
+		(PadWalkObservation observation, int chipCount, bool chipsReached) = Walk(surface, window, model, isUp, isRoot);
 		//A walk that found nothing to reach would pass vacuously.
 		Assert.NotEmpty(observation.Interactive);
-		List<string> problems = PadWalk.Judge(observation);
-		bool chipGap = problems.RemoveAll(p => p.Contains("/ListBoxItem[") && p.Contains("is not reachable")) > 0;
+		//The chips were taken out of the observation, so Judge sees only the
+		//controls the D-pad must reach and no unrelated unreachable ListBoxItem
+		//(a ROM row, another list) can be mistaken for the chip gap.
+		bool chipGap = chipCount > 0 && !chipsReached;
 		Assert.True(chipGap == KnownChipGaps.Contains(surface),
 			chipGap ? $"{surface}: the console chips are not reachable and the surface is not listed in KnownChipGaps"
 				: $"{surface}: the pad reaches the console chips now: remove it from KnownChipGaps");
+		List<string> problems = PadWalk.Judge(observation);
 		Assert.True(problems.Count == 0, string.Join(Environment.NewLine, problems));
 
 		//The known gaps are asserted both ways, so a surface that joins the
@@ -211,7 +230,7 @@ public class PlayPadWalkTests : IDisposable
 		}
 	}
 
-	private PadWalkObservation Walk(string surface, MainWindow window, MainWindowViewModel model, Func<bool> isUp, bool isRoot)
+	private (PadWalkObservation Observation, int ChipCount, bool ChipsReached) Walk(string surface, MainWindow window, MainWindowViewModel model, Func<bool> isUp, bool isRoot)
 	{
 		Arbiter focus = new(window);
 		//A surface's own claim has to have landed (it names a root) before the walk
@@ -258,11 +277,12 @@ public class PlayPadWalkTests : IDisposable
 
 		//The chips are entered with the ConsoleFilter action, not the D-pad: press it
 		//once and count them reached only when the focus lands in their ListBox.
+		bool chipsReached = false;
 		if(chips.Count > 0) {
 			Land(window, start);
 			PressShoulder(window, "Pad1 R1");
 			if(window.FocusManager?.GetFocusedElement() is Control chip && chip.FindAncestorOfType<ListBox>(true)?.Name == "RomPickerConsoleFilter") {
-				reached.UnionWith(chips);
+				chipsReached = true;
 			}
 		}
 
@@ -273,11 +293,12 @@ public class PlayPadWalkTests : IDisposable
 		Pump();
 		backLeft = WaitUntil(() => !isUp());
 
-		return new PadWalkObservation(
+		//The chips are judged on their own line by the caller (chipCount, chipsReached).
+		return (new PadWalkObservation(
 			surface, isRoot,
-			interactive.Select(c => names[c]).Distinct().ToList(),
+			interactive.Except(chips).Select(c => names[c]).Distinct().ToList(),
 			reached.Select(c => names.TryGetValue(c, out string? n) ? n : Label(c)).Distinct().ToList(),
-			isRoot ? false : backLeft, bar, available);
+			isRoot ? false : backLeft, bar, available), chips.Count, chipsReached);
 	}
 
 	//Types a pad player is expected to be able to land on. Template parts
@@ -472,8 +493,6 @@ public class PlayPadWalkTests : IDisposable
 			throw new Xunit.Sdk.XunitException(failure());
 		}
 	}
-
-	private static void WaitFor(Func<bool> condition, string failure) => WaitFor(condition, () => failure);
 
 	private static void Pump()
 	{
