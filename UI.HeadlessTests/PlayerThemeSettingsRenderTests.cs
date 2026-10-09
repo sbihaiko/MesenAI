@@ -263,7 +263,7 @@ public class PlayerThemeSettingsRenderTests : IDisposable
 			AssertInsetGroup(sheet.FindNamed<Border>("DisplaySettingsGroup"));
 			ComboBox size = sheet.FindNamed<ComboBox>("cboDisplayInterfaceSize");
 			AssertPopup(size, 120);
-			Assert.Equal(InterfaceSize.Large, Assert.IsType<PlayerWindowSettingsViewModel.PlayerInterfaceSizeChoice>(size.SelectedItem).Value);
+			Assert.Equal(InterfaceSize.Large, Assert.IsType<PlayerInterfaceSizeChoice>(size.SelectedItem).Value);
 			Assert.Equal(6, ControlsAtRest(sheet));
 
 			Render(window, sheet, "W-P8d");
