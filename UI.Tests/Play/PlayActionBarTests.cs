@@ -94,5 +94,18 @@ namespace Mesen.Tests.Play
 		{
 			Assert.Equal("", Text(PlayInputDevice.Controller, PadFamily.Xbox, declared: System.Array.Empty<PlayBarEntry>()));
 		}
+
+		//The library's A is the focused control's, not the surface's: on a header
+		//action it opens that action, and only on a tile does it play.
+		[Fact]
+		public void The_library_header_actions_name_what_A_opens_not_Play()
+		{
+			Assert.Equal("A BarLibraryFolders     Y BarSearch     LB / RB BarConsole     B BarBack",
+				PlayActionBar.Text(PlayBarDeclarations.LibraryFolders, PlayInputDevice.Controller, PadFamily.Xbox, false, key => key));
+			Assert.Equal("A BarBrowseFile     Y BarSearch     LB / RB BarConsole     B BarBack",
+				PlayActionBar.Text(PlayBarDeclarations.BrowseFile, PlayInputDevice.Controller, PadFamily.Xbox, false, key => key));
+			Assert.Equal("A BarSearch     LB / RB BarConsole     B BarBack",
+				PlayActionBar.Text(PlayBarDeclarations.SearchField, PlayInputDevice.Controller, PadFamily.Xbox, false, key => key));
+		}
 	}
 }

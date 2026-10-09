@@ -247,6 +247,30 @@ public class PlayActionBarViewTests : IDisposable
 		Assert.Equal("A Play", Bar(window));
 	}
 
+	//The empty library parks the ring on Library folders…, and A there opens the
+	//folders sheet - the bar may not promise Play over a header action.
+	[AvaloniaFact]
+	public void An_empty_library_names_Library_folders_not_Play_on_A()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		PreferencesConfig prefs = ConfigManager.Config.Preferences;
+		List<string>? savedFolders = prefs.LibraryFolders;
+		prefs.LibraryFolders = new List<string>();
+		try {
+			(MainWindow window, MainWindowViewModel model) = ShowPlay();
+			model.RecentGames.Init(GameScreenMode.RecentGames);
+			WaitFor(() => Focused(window) == "PlayHomeOpenRomPrimary" || Focused(window) == "PlayHomeContinueButton", "the home opened without a focus");
+			Control opener = window.FindControl<Control>(Focused(window) ?? "")!;
+			model.RomPicker.Show();
+			WaitFor(() => model.RomPicker.IsVisible && Focused(window) == "RomPickerLibraryFolders", "the empty library did not park the ring on Library folders…");
+			string bar = Bar(window);
+			Assert.DoesNotContain("A Play", bar);
+			Assert.StartsWith("A Library folders", bar);
+		} finally {
+			prefs.LibraryFolders = savedFolders;
+		}
+	}
+
 	[AvaloniaFact]
 	public void The_pause_overlay_names_what_the_pad_can_do()
 	{
