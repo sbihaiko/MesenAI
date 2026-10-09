@@ -1,28 +1,16 @@
-using Mesen.Interop;
+using System;
 
 namespace Mesen.Logic
 {
-	//#1106 (spec #1102), the host-free rule: a haptic tick targets ONE pad, so it
-	//only goes to a pad whose backend addresses a single device and that reports
-	//haptics. Mirrors IKeyManager::IsAimable in Core; DirectInput and a pad with
-	//no backend are never aimable.
+	//#1106 (spec #1102), the host-free rule: a haptic tick goes to ONE pad, and only
+	//while the user's switch is on and the core says that pad is aimable. The
+	//aimable answer is the core's alone (IKeyManager::IsAimable); it is taken as a
+	//delegate so the GUI passes InputApi.IsGamepadAimable and tests pass a stub.
 	public static class HapticTickRule
 	{
-		public static bool IsAimable(GamepadBackend backend, bool hasRumble)
+		public static bool ShouldTick(bool enabled, uint padIndex, Func<uint, bool> isAimable)
 		{
-			switch(backend) {
-				case GamepadBackend.XInput:
-				case GamepadBackend.Evdev:
-				case GamepadBackend.GameController:
-					return hasRumble;
-				default:
-					return false;
-			}
-		}
-
-		public static bool ShouldTick(bool enabled, bool aimable)
-		{
-			return enabled && aimable;
+			return enabled && isAimable(padIndex);
 		}
 	}
 }

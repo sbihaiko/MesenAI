@@ -6421,29 +6421,60 @@ namespace
 		Check(!hasRumble.empty() && hasRumble.find("_enableForceFeedback") == string::npos
 			&& hasRumble.find("_rumbleEffect") != string::npos,
 			"#1106: Linux HasRumble reports the effect setup, true on an idle pad");
-		Check(hasRumble.find("_tickEffect") != string::npos,
-			"#1106: Linux HasRumble needs the tick effect too, so an aimable pad can always tick");
+		Check(hasRumble.find("_tickEffect") == string::npos,
+			"#1106: Linux HasRumble does not need the tick effect, so a one-slot pad keeps its rumble");
 		string linuxTick = HapticBackendBody(linux, "bool LinuxGameController::PlayTick()");
 		Check(!linuxTick.empty() && linuxTick.find("_enableForceFeedback") == string::npos,
 			"#1106: Linux PlayTick does not wait for a button press");
 
-		//4. Linux: the tick has an effect of its own; the gameplay one is never reprogrammed.
-		Check(linuxTick.find("_rumbleEffect") == string::npos && linuxTick.find("_tickEffect") != string::npos,
-			"#1106: Linux PlayTick plays its own effect and leaves the gameplay effect alone");
+		//4. Linux: the tick has an effect of its own when a slot was free.
+		Check(linuxTick.find("_tickEffect") != string::npos,
+			"#1106: Linux PlayTick plays its own effect when the pad has one");
+		//...and a one-slot pad (second EVIOCSFF failed, _tickEffect null) borrows the
+		//gameplay effect for a 40 ms pulse, then restores its values.
+		size_t fallback = linuxTick.find("_rumbleEffect");
+		Check(fallback != string::npos && linuxTick.find("= 40;") != string::npos
+			&& linuxTick.find("EVIOCSFF") != string::npos
+			&& linuxTick.rfind("replay.length = length;") != string::npos
+			&& linuxTick.rfind("replay.length = length;") > linuxTick.find("write("),
+			"#1106: Linux PlayTick on a one-slot pad pulses the gameplay effect 40 ms and restores it after");
+		string oneSlot = HapticBackendBody(linux, "if(rc < 0) {\n\t\tMessageManager::Log(\"Could not initialize force feedback");
+		Check(oneSlot.find("_rumbleEffect.reset()") != string::npos,
+			"#1106: Linux setup still drops the rumble effect only when the first upload fails");
+
+		//5. Linux: the tester button bypasses the idle-pad gate that SetForceFeedback keeps.
+		string linuxSet = HapticBackendBody(linux, "void LinuxGameController::SetForceFeedback(");
+		string linuxTest = HapticBackendBody(linux, "void LinuxGameController::TestForceFeedback(");
+		Check(linuxSet.find("_enableForceFeedback") != string::npos
+			&& !linuxTest.empty() && linuxTest.find("_enableForceFeedback") == string::npos
+			&& linuxTest.find("ApplyForceFeedback") != string::npos,
+			"#1106: Linux TestForceFeedback rumbles an idle pad; SetForceFeedback keeps its gate");
+		string linuxKm = ReadBackendSource("Linux/LinuxKeyManager.cpp");
+		string linuxKmTest = HapticBackendBody(linuxKm, "void LinuxKeyManager::TestForceFeedback(");
+		Check(linuxKmTest.find("->TestForceFeedback(") != string::npos,
+			"#1106: the Linux tester entry point calls the ungated path");
 
 		//3. Windows: the tick ends by restoring the requested rumble, not by zeroing it.
+		string winEnd = HapticBackendBody(win, "void XInputManager::EndTick(uint8_t");
+		Check(winEnd.find("SetForceFeedback((uint8_t)i, 0, 0)") == string::npos
+			&& winEnd.find("_desiredRumble") != string::npos && winEnd.find("_rumbleLock") != string::npos,
+			"#1106: Windows tick expiry restores the desired rumble (under the lock) instead of silencing the pad");
 		string winRefresh = HapticBackendBody(win, "void XInputManager::RefreshState()");
-		Check(winRefresh.find("SetForceFeedback((uint8_t)i, 0, 0)") == string::npos
-			&& winRefresh.find("_desiredRumble") != string::npos,
-			"#1106: Windows tick expiry restores the desired rumble instead of silencing the pad");
+		Check(winRefresh.find("_tickStopAt") == string::npos,
+			"#1106: Windows tick expiry does not depend on RefreshState, which stops while input is disabled");
+		string winHdr = ReadBackendSource("Windows/XInputManager.h");
+		Check(winHdr.find("std::atomic<ULONGLONG> _tickStopAt") != string::npos
+			&& winHdr.find("std::mutex _rumbleLock") != string::npos,
+			"#1106: Windows _tickStopAt is atomic and _desiredRumble has a lock");
 		string winTick = HapticBackendBody(win, "bool XInputManager::PlayTick(uint8_t");
 		size_t winTickSet = winTick.find("XInputSetState");
 		size_t winTickArm = winTick.find("_tickStopAt");
 		Check(winTickSet != string::npos && winTick.find("ERROR_SUCCESS") != string::npos
-			&& winTickArm != string::npos && winTickSet < winTickArm,
-			"#1106: Windows PlayTick checks XInputSetState and arms the tick expiry only after it succeeded");
+			&& winTickArm != string::npos && winTickSet < winTickArm
+			&& winTick.find("CreateTimerQueueTimer") != string::npos && winTick.find("_rumbleLock") != string::npos,
+			"#1106: Windows PlayTick checks XInputSetState, then arms a one-shot timer, under the lock");
 		string winSet = HapticBackendBody(win, "void XInputManager::SetForceFeedback(uint8_t");
-		Check(winSet.find("_desiredRumble") != string::npos,
+		Check(winSet.find("_desiredRumble") != string::npos && winSet.find("_rumbleLock") != string::npos,
 			"#1106: Windows remembers each slot's requested rumble");
 	}
 

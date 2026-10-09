@@ -269,6 +269,6 @@ bool LinuxKeyManager::PlayGamepadTick(uint32_t index)
 void LinuxKeyManager::TestForceFeedback(uint32_t index, uint16_t magnitudeRight, uint16_t magnitudeLeft)
 {
 	if(index < _controllers.size()) {
-		_controllers[index]->SetForceFeedback(magnitudeRight, magnitudeLeft);
+		_controllers[index]->TestForceFeedback(magnitudeRight, magnitudeLeft);
 	}
 }

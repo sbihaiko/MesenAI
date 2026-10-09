@@ -1,34 +1,37 @@
-using Mesen.Interop;
 using Mesen.Logic;
 using Xunit;
 
 namespace Mesen.Tests.Input
 {
-	//#1106: the host-free copy of the core's IKeyManager::IsAimable rule plus the
-	//user's enablement switch - a tick is sent only to a pad the host can address
-	//on its own, and only while the feature is on.
+	//#1106: a tick is sent only while the user's switch is on and the core answers
+	//that pad is aimable. The core's answer is stubbed both ways, so the rule can
+	//fail if it stops following it.
 	public class HapticTickRuleTests
 	{
 		[Theory]
-		[InlineData(GamepadBackend.XInput, true, true)]
-		[InlineData(GamepadBackend.Evdev, true, true)]
-		[InlineData(GamepadBackend.GameController, true, true)]
-		[InlineData(GamepadBackend.XInput, false, false)] //no haptics reported
-		[InlineData(GamepadBackend.DirectInput, true, false)] //never addressable
-		[InlineData(GamepadBackend.None, true, false)]
-		public void IsAimable_NeedsAnAddressableBackendThatReportsHaptics(GamepadBackend backend, bool hasRumble, bool expected)
+		[InlineData(true, true, true)]
+		[InlineData(true, false, false)] //the core says not aimable
+		[InlineData(false, true, false)] //switched off
+		[InlineData(false, false, false)]
+		public void ShouldTick_NeedsTheSwitchAndTheCoresAimableAnswer(bool enabled, bool coreAnswer, bool expected)
 		{
-			Assert.Equal(expected, HapticTickRule.IsAimable(backend, hasRumble));
+			Assert.Equal(expected, HapticTickRule.ShouldTick(enabled, 3, index => index == 3 && coreAnswer));
 		}
 
-		[Theory]
-		[InlineData(true, true, true)]
-		[InlineData(false, true, false)] //switched off
-		[InlineData(true, false, false)] //not aimable
-		[InlineData(false, false, false)]
-		public void ShouldTick_NeedsTheSwitchAndAnAimablePad(bool enabled, bool aimable, bool expected)
+		[Fact]
+		public void ShouldTick_AsksTheCoreAboutTheSamePad()
 		{
-			Assert.Equal(expected, HapticTickRule.ShouldTick(enabled, aimable));
+			uint asked = 0;
+			HapticTickRule.ShouldTick(true, 7, index => { asked = index; return true; });
+			Assert.Equal(7u, asked);
+		}
+
+		[Fact]
+		public void ShouldTick_DoesNotAskTheCoreWhileSwitchedOff()
+		{
+			bool asked = false;
+			Assert.False(HapticTickRule.ShouldTick(false, 0, _ => { asked = true; return true; }));
+			Assert.False(asked);
 		}
 	}
 }
