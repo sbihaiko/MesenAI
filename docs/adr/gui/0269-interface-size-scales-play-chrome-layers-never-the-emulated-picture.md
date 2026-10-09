@@ -1,4 +1,4 @@
-# ADR-0269: Interface size scales Play's chrome from the root, never the emulated picture
+# ADR-0269: Interface size scales Play's chrome layers (one transform on each of the four in Decision 3), never the emulated picture
 
 - Status: accepted (2026-10-09), by the autonomy panel (Opus 5.5 as the human
   proxy, issue #1103 comment) with edits, pick quoted verbatim: **"Accept ADR-0268, ADR-0269 and the ADR-0254 amendment with the listed edits; PR #1119 waits until ADR-0269 is accepted with Decisions 3 and 6 matching its code."**

@@ -730,7 +730,7 @@ def w_p20():
         c.text(x0 + 40, y, label, 15, 650)
         for i, t in enumerate(titles):
             tx = x0 + 40 + i * (tw + 20)
-            ty = y + 18
+            ty = y + 26
             c.shadow((tx, ty, tx + tw, ty + th), 10, blur=5, dy=2, alpha=40)
             c.d.rounded_rectangle(scb((tx, ty, tx + tw, ty + th)), radius=sc(10), fill=(0, 0, 0))
             c.scene((tx, ty, tx + tw, ty + th), seed0 + i)
@@ -740,7 +740,7 @@ def w_p20():
             if stars:
                 c.rrect((tx + tw - 30, ty + 8, tx + tw - 8, ty + 30), 6, fill=(255, 255, 255))
                 c.icon("sparkle", tx + tw - 19, ty + 19, 13, ORANGE)
-        c.text(x1 - 40, y + 18 + th / 2, "\u25b8", 16, 500, TEXT3, "rm")
+        c.text(x1 - 40, y + 26 + th / 2, "\u25b8", 16, 500, TEXT3, "rm")
 
     shelf(y0 + 232, "Favorites", ["Castlevania", "The Legend of Zelda", "Metroid", "Mega Man 2"], True, 1, focus_first=True)
     shelf(y0 + 414, "Recent", ["Contra", "Punch-Out!!", "Kirby's Adventure", "Excitebike", "Tetris"], False, 5)

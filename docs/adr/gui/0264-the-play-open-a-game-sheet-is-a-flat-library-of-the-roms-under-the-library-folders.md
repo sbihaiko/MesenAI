@@ -269,8 +269,8 @@ decision when someone asks for it.
 
 ## Amendment (2026-10-09, #1103): X is assigned to Favorite
 
-Recorded by the agent under owner-away autonomy; ADR-0268 is `proposed`, so this
-amendment is `proposed` too and takes effect only when ADR-0268 is accepted.
+Accepted 2026-10-09 together with ADR-0268, by the autonomy panel (Opus 5.5 as
+the human proxy, issue #1103 comment) with edits, pick quoted verbatim: **"Accept ADR-0268, ADR-0269 and the ADR-0254 amendment with the listed edits; PR #1119 waits until ADR-0269 is accepted with Decisions 3 and 6 matching its code."**
 Nothing is implemented by this amendment.
 
 - **Decision 3** left X unassigned; ADR-0268 Decision 1 assigns X to Favorite on
