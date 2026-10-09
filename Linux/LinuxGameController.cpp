@@ -274,7 +274,11 @@ bool LinuxGameController::IsButtonPressed(int buttonNumber)
 		case 54: pressed = CheckButton(BTN_DEAD); break;
 	}
 
-	_enableForceFeedback |= pressed;
+	if(pressed) {
+		//#1122: atomic because the tick reads it from the other thread. Once on,
+		//never off: it is the pad's "has been used" gate, not a live state.
+		_enableForceFeedback.store(true);
+	}
 
 	return pressed;
 }
