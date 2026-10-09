@@ -363,6 +363,26 @@ public class PlaySystemSettingsPadTests : IDisposable
 			$"the pad's Up from the storage choice did not reach the tab strip ({Focused(window)})");
 	}
 
+	//#1133: Right on a Settings strip tab moves the ring on - to the next tab
+	//along the strip, or into the page - instead of leaving it where it was.
+	[AvaloniaFact]
+	public void Right_on_a_Settings_tab_moves_the_focus_ring()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model) = ShowPlay();
+		model.RomInfo = new RomInfo() { ConsoleType = ConsoleType.Nes, Format = RomFormat.iNes };
+		Pump();
+		model.OpenPlayerSettings(new ConfigViewModel(ConfigWindowTab.Audio, playerMode: true));
+		WaitFor(() => window.FocusManager?.GetFocusedElement() is TabItem, () => $"Settings did not open on a tab ({Focused(window)})");
+		Control before = (Control)window.FocusManager!.GetFocusedElement()!;
+
+		Press(window, PadNavAction.Right);
+
+		Control? after = window.FocusManager?.GetFocusedElement() as Control;
+		Assert.True(after is not null && !ReferenceEquals(after, before),
+			$"the pad's Right on a Settings tab left the ring where it was ({Focused(window)})");
+	}
+
 	//Presses one direction until the focus lands on the named control or stops
 	//moving, and returns where it went - the failure names the whole trail.
 	private List<string?> Walk(MainWindow window, PadNavAction action, string until)

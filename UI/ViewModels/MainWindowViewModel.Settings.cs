@@ -29,9 +29,17 @@ namespace Mesen.ViewModels
 		//changes when the player picks another tab, so the claim above would
 		//never be re-asked without this: the sheet tells the window, which
 		//re-raises the one property the arbiter watches.
+		//
+		//Only when the answer changed (#1133): every tab change re-arbitrated the
+		//focus, and the pad's Right onto the next tab selects it, so the arbiter
+		//took the ring straight back to the strip's first tab - a move between
+		//two tabs that both leave the System tab closed asked nothing new.
+		private bool _playerSystemTabWasVisible;
+
 		private void OnPlayerSettingsPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
 		{
-			if(e.PropertyName == nameof(ConfigViewModel.PlayerTabIndex)) {
+			if(e.PropertyName == nameof(ConfigViewModel.PlayerTabIndex) && _playerSystemTabWasVisible != IsPlayerSystemTabVisible) {
+				_playerSystemTabWasVisible = IsPlayerSystemTabVisible;
 				OnPropertyChanged(nameof(IsPlayerSystemTabVisible));
 			}
 		}
@@ -44,6 +52,8 @@ namespace Mesen.ViewModels
 			if(newValue != null) {
 				newValue.PropertyChanged += OnPlayerSettingsPropertyChanged;
 			}
+			_playerSystemTabWasVisible = newValue is { PlayerMode: true } opened
+				&& opened.PlayerTabIndex == PlayerSettingsEssentials.IndexOf(ConfigWindowTab.System);
 		}
 
 		public void OpenPlayerSettings(ConfigViewModel settings)
