@@ -7,6 +7,7 @@ using System.Threading;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Headless.XUnit;
+using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Media.Imaging;
 using Avalonia.Threading;
@@ -153,6 +154,16 @@ public class WireframeCoverageRenderTests : IDisposable
 		Dispatcher.UIThread.RunJobs();
 		window.FindNamed<TabControl>("PlayerSettingsTabs").SelectedIndex = PlayerSettingsEssentials.IndexOf(tab);
 		Dispatcher.UIThread.RunJobs();
+		//#1167: the ring rides the tab whose page is up (AssertRingOnShownTab
+		//checks it), as it does at runtime. SelectedIndex alone is not a move,
+		//so without this the render kept the ring on the tab the sheet opened
+		//on. System is the one tab that is not the strip (ADR-0256 Decision 8):
+		//its claim lands the ring on the storage choice, and picking that tab
+		//here re-arbitrated it already, so it must not be taken back.
+		if(tab != ConfigWindowTab.System) {
+			ShownTab(window).Focus(NavigationMethod.Directional);
+			Dispatcher.UIThread.RunJobs();
+		}
 		window.UpdateLayout();
 		Dispatcher.UIThread.RunJobs();
 		Border sheet = window.FindNamed<Border>("PlayerSettingsSheet");
