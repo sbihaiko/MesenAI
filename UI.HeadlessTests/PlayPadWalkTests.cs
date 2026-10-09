@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
@@ -10,8 +11,10 @@ using Avalonia.Input;
 using Avalonia.VisualTree;
 using Mesen.Config;
 using Mesen.Controls;
+using Mesen.GUI.Utilities;
 using Mesen.Interop;
 using Mesen.Logic;
+using Mesen.Services;
 using Mesen.Utilities;
 using Mesen.ViewModels;
 using Mesen.Windows;
@@ -39,12 +42,15 @@ namespace Mesen.HeadlessTests;
 //    constants; it is not wiring evidence. The wiring pin is
 //    The_wiring_registers_the_claims_the_walk_accounts_for, which skips in CI
 //    (no core), so the filtered class run with MESEN_CORE_LIB is the evidence.
-//  - What the surfaces in NotWalkedYet declare on the shared bar is unknown:
-//    whether each is on the bar or off it (#1108's list) is not asserted until
-//    the walk opens it, so that list is a gap for #1108 as well as for the walk.
-//  - SettingsDisplay is in NotWalkedYet on purpose: its tab strip is not walkable
-//    from this harness (Right on a tab does not move the ring and the page is
-//    rebuilt under the walk), and the walk used to start on the Home under it.
+//  - The walk follows each node the moment a press lands on it, and reads the
+//    landing at the press rather than after the surface's own turn. Both are
+//    needed by a surface that swaps its content under the pad (the Settings
+//    strip replaces the page a press leaves, and selecting the System tab makes
+//    the arbiter move the ring onto that tab's storage choice, ADR-0256
+//    Decision 8) - and both are the difference between a walk that visits every
+//    control the surface shows and one that reports the surface's own moves as
+//    unreachable controls. What the walk proves is reachability, so a landing
+//    the surface re-arbitrates away is still a landing (#1108).
 //
 //Scale: every live case is parameterized by the interface size (1.0 = Standard,
 //1.5 = Extra large, #1111), so a size can never strand the pad.
@@ -55,34 +61,58 @@ public class PlayPadWalkTests : IDisposable
 	//(#1111). Every walk is parameterized by it, so a size cannot strand the pad.
 	private static readonly double[] Scales = { 1.0, 1.5 };
 
+	//The pack list the picker and the detail sheet are opened with, in the
+	//parser's own columns: one pack to open a detail on, two distinct pack_ids
+	//for the picker (W-P5 opens on a choice, not on a single pack).
+	private const string OnePack = "aaa\tAaa Pack\t1.2\tTastic\tCC BY-NC 4.0\ttextures,audio\t1\t0\tissue-1\tc1\n";
+	private const string TwoPacks =
+		"aaa\tAaa Pack\t1.0\t\t\ttextures\t1\t0\tissue-1\tc1\n" +
+		"bbb\tBbb Pack\t1.0\t\t\ttextures\t1\t0\tissue-2\tc2\n";
+	private const string Sha1 = "0000000000000000000000000000000000000000";
+
 	public static IEnumerable<object[]> SurfacesAtEveryScale =>
 		from scale in Scales from surface in WalkedSurfaces select new object[] { surface, scale };
 
 	//Registered claims in PlayPadNavigationWiring.RegisterSurfaces plus the
-	//content area, by the surface's name. Walked surfaces have an opener below;
-	//a surface here that is not walked is a gap the next ticket closes.
-	public static readonly string[] WalkedSurfaces = { "Home", "HomeFirstRun", "PauseOverlay", "SaveStates", "Enhancements", "Library", "ToolSheetAbout" };
-
-	//Registered claims whose opener needs state this harness does not build yet
-	//(a loaded pack, a cheat database, a failed load...). Named so the list
-	//cannot grow silently: Every_surface_is_walked_or_named_as_a_gap and
-	//The_wiring_registers_the_claims_the_walk_accounts_for fail when a claim is
-	//added without a row in WalkedSurfaces or here. The Settings tab bug that
-	//keeps SettingsDisplay out of the walk is #1133.
-	public static readonly string[] NotWalkedYet = {
-		"QuitGameConfirm", "SelectRomSheet", "ShaderSheet", "BiosSheet", "ControllerSetup", "SettingsSystemTab",
+	//content area and the tool sheet's kinds, by the surface's name. Walked
+	//surfaces have an opener below; a surface here that is not walked is a gap
+	//the next ticket closes.
+	public static readonly string[] WalkedSurfaces = {
+		"Home", "HomeFirstRun", "PauseOverlay", "SaveStates", "Enhancements", "Library",
+		"ToolSheetAbout", "ToolSheetCommandLine", "ToolSheetCheckForUpdates", "ToolSheetVideoRecord", "ToolSheetBarcode",
+		"QuitGameConfirm", "SelectRomSheet", "ShaderSheet", "BiosSheet", "SettingsSystemTab",
 		"ControllerSheet", "PackDepSheet", "PackPicker", "PackDetail", "Cheats", "Replays",
 		"SettingsDisplay",
 	};
 
-	//The one ToolSheet claim serves every PlayerToolSheet kind; only About is
-	//walked (ToolSheetAbout). The other kinds are named here, and the kind guard
-	//below counts them apart from the claims, so a new kind fails it instead of
-	//hiding behind ToolSheetAbout.
-	public static readonly PlayerToolSheet[] ToolSheetKindsWalked = { PlayerToolSheet.About };
-	public static readonly PlayerToolSheet[] ToolSheetKindsNotWalkedYet = {
-		PlayerToolSheet.CommandLine, PlayerToolSheet.CheckForUpdates, PlayerToolSheet.VideoRecord, PlayerToolSheet.Barcode,
+	//Registered claims whose opener this harness cannot build. Named so the list
+	//cannot grow silently: Every_surface_is_walked_or_named_as_a_gap and
+	//The_wiring_registers_the_claims_the_walk_accounts_for fail when a claim is
+	//added without a row in WalkedSurfaces or here.
+	//
+	//#1108 closed every entry but one. ControllerSetup is opened by the pad
+	//itself, not by a door: PlayControllerSetupViewModel.Tick asks
+	//UnknownControllerDetector whether an unknown pad was pressed twice inside
+	//the pill's window, and only that answer (DetectorEvent.OpenSheet) opens the
+	//sheet - there is no Open() and no view-model state to set. The headless
+	//backend has no controller to press, so the detector never answers. The gap
+	//is the harness's, not the sheet's: the preconditions are the detector's own
+	//timings over a device the core reports, and the follow-up that closes it is
+	//to drive Tick with a synthetic device once the detector's inputs are
+	//readable without a live pad. It stays named here rather than dropped.
+	public static readonly string[] NotWalkedYet = { "ControllerSetup" };
+
+	//The one ToolSheet claim serves every PlayerToolSheet kind, so every kind is
+	//walked (each gets its own surface name above). The kind guard below counts
+	//the kinds apart from the claims, so a new kind fails it instead of hiding
+	//behind the ones already walked. #1108 named the remaining kinds; About,
+	//Command Line, Check for Updates, the video recorder's settings and the
+	//barcode box are all walked now.
+	public static readonly PlayerToolSheet[] ToolSheetKindsWalked = {
+		PlayerToolSheet.About, PlayerToolSheet.CommandLine, PlayerToolSheet.CheckForUpdates,
+		PlayerToolSheet.VideoRecord, PlayerToolSheet.Barcode,
 	};
+	public static readonly PlayerToolSheet[] ToolSheetKindsNotWalkedYet = { };
 
 	//Surfaces that have no declaration on the shared bar yet (Declared() is
 	//null). Home and the shared bar's own surfaces are on it; these are the
@@ -162,7 +192,11 @@ public class PlayPadWalkTests : IDisposable
 	{
 		Assert.Empty(WalkedSurfaces.Intersect(NotWalkedYet));
 		Assert.Empty(KnownBarGaps.Except(WalkedSurfaces));
-		Assert.Equal(ClaimsInWiring, WalkedSurfaces.Length - 2 /*Home and HomeFirstRun are the content area, not a claim*/ + NotWalkedYet.Length);
+		//Home and HomeFirstRun are the content area, not a claim; the tool sheet
+		//is ONE claim however many of its kinds are walked, so every kind past
+		//the first is subtracted here rather than counted as a surface of its own.
+		Assert.Equal(ClaimsInWiring,
+			WalkedSurfaces.Length - 2 - (ToolSheetKindsWalked.Length - 1) + NotWalkedYet.Length);
 	}
 
 	[Fact]
@@ -250,9 +284,88 @@ public class PlayPadWalkTests : IDisposable
 			case "Library":
 				model.OpenRomPicker();
 				return (window, model, () => model.RomPicker.IsVisible, false);
+			//The one tool sheet claim, once per kind it can show: the surface name
+			//is the kind, and the sheet is the same surface either way.
 			case "ToolSheetAbout":
 				model.ToolSheet.OpenAbout();
 				return (window, model, () => model.ToolSheet.IsVisible, false);
+			case "ToolSheetCommandLine":
+				model.ToolSheet.OpenCommandLine();
+				return (window, model, () => model.ToolSheet.IsVisible, false);
+			case "ToolSheetCheckForUpdates":
+				model.ToolSheet.OpenCheckForUpdates();
+				return (window, model, () => model.ToolSheet.IsVisible, false);
+			case "ToolSheetVideoRecord":
+				model.ToolSheet.OpenVideoRecord();
+				return (window, model, () => model.ToolSheet.IsVisible, false);
+			case "ToolSheetBarcode":
+				model.ToolSheet.OpenBarcode();
+				return (window, model, () => model.ToolSheet.IsVisible, false);
+			//ADR-0249 (W-X1): W-P4's Quit game asks on the overlay card. The
+			//preference decides whether anything asks at all, so it is turned on
+			//for this surface and restored with the rest in Dispose.
+			case "QuitGameConfirm":
+				model.OpenPauseOverlay();
+				model.ConfirmQuitGame(true, () => { });
+				return (window, model, () => model.QuitGameConfirm.IsVisible, false);
+			//ADR-0250's task doors: an archive with more than one ROM asks which.
+			case "SelectRomSheet":
+				_ = model.SelectRomSheet.Request("game.zip", new[] {
+					new ArchiveRomEntry { Filename = "Game (U).nes" },
+					new ArchiveRomEntry { Filename = "Game (J).nes" },
+				});
+				return (window, model, () => model.SelectRomSheet.IsVisible, false);
+			//Look's Adjust…: the sheet over the Settings sheet it was opened from,
+			//which is the only door it has - it is reached from Look's own row.
+			case "ShaderSheet":
+				window.OpenPlayerSettingsSheet();
+				model.OpenShaderSheet(new ShaderConfigViewModel(false, ""));
+				return (window, model, () => model.IsShaderSheetVisible, false);
+			//The core asked for a BIOS it cannot find (a failed load, ADR-0249).
+			case "BiosSheet":
+				_ = model.BiosSheet.Request(FirmwareType.FDS, "disksys.rom", 8192, 8192, "Game");
+				return (window, model, () => model.BiosSheet.IsVisible, false);
+			//ADR-0255's Controller sheet, which replaces Settings' Controls landing.
+			case "ControllerSheet":
+				model.ControllerSheet.Open();
+				return (window, model, () => model.ControllerSheet.IsVisible, false);
+			//W-P8: Settings opens on Display, and ADR-0256 Decision 8 makes the
+			//System tab a surface of its own - so the same sheet is walked twice,
+			//once on the strip it opens on and once on that tab.
+			case "SettingsDisplay":
+				window.OpenPlayerSettingsSheet();
+				return (window, model, () => model.IsPlayerSettingsVisible, false);
+			case "SettingsSystemTab":
+				window.OpenPlayerSettingsSheet();
+				model.PlayerSettings!.SelectedIndex = ConfigWindowTab.System;
+				return (window, model, () => model.IsPlayerSystemTabVisible, false);
+			//The dependency sheet a pack's missing external files raise.
+			case "PackDepSheet":
+				model.PackDepSheet.SetPending("Contra 80s", new[] {
+					new CommunityPackDepPrompt("yamaha-fm", "YM2413 instruments", "CC BY 4.0", "/packs/Contra 80s/deps"),
+				});
+				model.PackDepSheet.Open();
+				return (window, model, () => model.PackDepSheet.IsVisible, false);
+			//W-P5: two distinct packs to choose between, so the picker opens.
+			case "PackPicker":
+				Assert.True(model.OpenPlayerPackPickerForChange(TwoPacks, Sha1), "the pack picker did not open for two packs");
+				return (window, model, () => model.IsPlayerPackPickerVisible, false);
+			//W-P6: what one pack holds. The folder is empty on purpose - the
+			//sheets's own state is what the pad walks, not a scan of real files.
+			case "PackDetail":
+				model.OpenPackDetail(OnePack, Sha1, "", "", null);
+				return (window, model, () => model.IsPackDetailVisible, false);
+			//R.4/R.5 (ADR-0248): the cheats sheet opens on the stored list; the
+			//community catalog is stubbed empty so the walk does not wait on a
+			//network fetch the case never needs.
+			case "Cheats":
+				model.CommunityCheatsSource = () => Task.FromResult<IReadOnlyList<CommunityCheatGame>?>(Array.Empty<CommunityCheatGame>());
+				model.OpenCheatsSheet();
+				return (window, model, () => model.CheatsSheet.IsVisible, false);
+			case "Replays":
+				model.CommunityReplaysSource = () => Task.FromResult<IReadOnlyList<CommunityReplayGame>?>(Array.Empty<CommunityReplayGame>());
+				model.OpenReplaysSheet();
+				return (window, model, () => model.ReplaysSheet.IsVisible, false);
 			default:
 				throw new ArgumentException("no opener for " + surface);
 		}
@@ -275,7 +388,6 @@ public class PlayPadWalkTests : IDisposable
 		interactive.AddRange(chips);
 		Dictionary<Control, string> names = interactive.Concat(new[] { start }).Distinct().ToDictionary(c => c, Label);
 		HashSet<Control> reached = new() { start };
-		Queue<Control> frontier = new(new[] { start });
 		List<(string, IReadOnlyList<PlayBarEntry>?, bool)> bar = new();
 		List<(string From, string To)> outside = new();
 		Dictionary<Control, bool> seenForBar = new();
@@ -283,31 +395,42 @@ public class PlayPadWalkTests : IDisposable
 		//Edges: with the focus on a node, one pad press per direction. The press
 		//is the only thing that moves the ring between nodes; Focus() only sets
 		//the node a press is made from, which is where the player would be.
-		while(frontier.Count > 0 && reached.Count < 200) {
-			Control node = frontier.Dequeue();
-			//Moving across a tab strip swaps the tab's content for a new tree: a
-			//node of the old one is gone and is reached again as its twin.
+		//
+		//A node is followed the moment the press lands on it, before the next
+		//direction is pressed from its parent - a player walks INTO a page, and
+		//the walk has to as well: a tab strip REPLACES the page a press moved
+		//away from, so a node left queued while the strip moves on is gone by the
+		//time it is read (#1108). Depth-first is what makes "the walk visits
+		//every control the surface shows" hold on a surface that swaps its own
+		//content, and it is the only difference from a plain breadth-first walk:
+		//the presses, the edges and the judgement are the same.
+		void Explore(Control node)
+		{
 			if(!node.IsAttachedToVisualTree()) {
-				continue;
+				return;
 			}
 			foreach(PadNavAction direction in new[] { PadNavAction.Down, PadNavAction.Right, PadNavAction.Up, PadNavAction.Left }) {
-				Land(window, node);
+				//The node is gone: the press before this one landed somewhere that
+				//took it away (a tab strip replacing its page). Nothing left to press from.
+				if(!Land(window, node)) {
+					return;
+				}
 				if(!seenForBar.ContainsKey(node)) {
 					seenForBar[node] = true;
 					bar.Add((Label(node), focus.Declared(), Arbiter.CoverHasFocus(model, node)));
 				}
-				Press(window, direction);
-				if(window.FocusManager?.GetFocusedElement() is Control focusedNext && Canonical(focusedNext) is Control next && next != node) {
+				if(Press(window, direction) is Control focusedNext && Canonical(focusedNext) is Control next && next != node) {
 					//A press that lands outside the surface is a leak to report, not an edge to follow.
 					if(!root.IsVisualAncestorOf(next)) {
 						outside.Add((Label(node), Label(next)));
-					} else if(reached.Add(next)) {
-						frontier.Enqueue(next);
+					} else if(reached.Count < 200 && reached.Add(next)) {
 						names.TryAdd(next, Label(next));
+						Explore(next);
 					}
 				}
 			}
 		}
+		Explore(start);
 
 		//The chips are entered with the ConsoleFilter action, not the D-pad: press it
 		//once and count them reached only when the focus lands in their ListBox.
@@ -372,7 +495,12 @@ public class PlayPadWalkTests : IDisposable
 			//Not filtered by Focusable / IsTabStop: a visible, enabled control the ring
 			//cannot land on is exactly the pointer-only control the walk must report.
 			.Where(c => c.IsEffectivelyVisible && c.IsEffectivelyEnabled)
-			.Where(c => !c.GetVisualAncestors().TakeWhile(a => a != root).Any(a => a is ComboBox or Slider or TextBox))
+			//A scrollbar is a composite like the other three: its arrow, page and
+			//line buttons are the bar's own parts, and a pad scrolls the view by
+			//walking the content it holds, never by landing on them. Without this
+			//a page whose content overflows (the System tab's keyboard block)
+			//reports four unreachable PART_*Buttons that no player aims at.
+			.Where(c => !c.GetVisualAncestors().TakeWhile(a => a != root).Any(a => a is ComboBox or Slider or TextBox or ScrollBar))
 			.Where(c => c is not ListBoxItem item || !item.GetVisualDescendants().OfType<Button>().Any())
 			//The library's console chips are one ListBox the pad enters with the
 			//ConsoleFilter action (the bar's own entry), not with the D-pad.
@@ -447,10 +575,22 @@ public class PlayPadWalkTests : IDisposable
 		return string.Join("/", path);
 	}
 
-	private static void Land(MainWindow window, Control node)
+	//Put the ring back on a node before pressing from it. False when the node is
+	//no longer on screen: a surface that replaced its own content under the walk
+	//took the node away, and there is nothing to press from - a detach is the
+	//surface's doing, not a failure of the walk (the judge answers for the
+	//controls the surface shows, and a detached one is not shown).
+	private static bool Land(MainWindow window, Control node)
 	{
-		WaitFor(() => node.IsEffectivelyVisible && node.Focus(NavigationMethod.Directional), () => $"{Label(node)} never took the focus");
+		//Both reads matter: a detach leaves IsEffectivelyVisible at its last value,
+		//so a node the walk took away still claims to be on screen.
+		if(!node.IsAttachedToVisualTree() || !node.IsEffectivelyVisible) {
+			return false;
+		}
+		WaitFor(() => node.IsAttachedToVisualTree() && node.IsEffectivelyVisible && node.Focus(NavigationMethod.Directional),
+			() => $"{Label(node)} never took the focus (visible={node.IsEffectivelyVisible}, attached={node.IsAttachedToVisualTree()}, focusable={node.Focusable}, enabled={node.IsEffectivelyEnabled}, focused={(window.FocusManager?.GetFocusedElement() is Control f ? Label(f) : "null")})");
 		Pump();
+		return true;
 	}
 
 	//---- plumbing shared in shape with PlayPadNavigationTests (kept local so the
@@ -479,11 +619,21 @@ public class PlayPadWalkTests : IDisposable
 	private PadNavMapping Mapping => _mapping ??= PadNavControls.Resolve(PadFamily.Xbox, 0, BackendCode)
 		?? throw new InvalidOperationException("the stand-in table does not answer the Xbox preset's names");
 
-	private void Press(MainWindow window, PadNavAction action)
+	//Where the press moved the ring, read before the surface is given its turn.
+	//The press applies its move synchronously; a surface that re-arbitrates on
+	//its own state (the Settings strip selects the tab it lands on, and the
+	//System tab's claim then puts the ring on that tab's storage choice -
+	//ADR-0256 Decision 8) moves it again on the next pumped turn, and that
+	//second move is the surface's, not the pad's. Reading the landing at the
+	//press is what tells "the pad reached it" apart from "the surface kept it",
+	//and the walk asks only the first: the judge's rule is reachability.
+	private Control? Press(MainWindow window, PadNavAction action)
 	{
 		PlayPadNavigationWiring.TickForTest(window, Array.Empty<ushort>(), TimeSpan.FromMilliseconds(50), BackendName, BackendCode);
 		PlayPadNavigationWiring.TickForTest(window, new ushort[] { PlayPadNavigation.CodeOf(Mapping, action) }, TimeSpan.FromMilliseconds(50), BackendName, BackendCode);
+		Control? landed = window.FocusManager?.GetFocusedElement() as Control;
 		Pump();
+		return landed;
 	}
 
 	//LB/RB are the ConsoleFilter action; they are not one of the six nav actions.
