@@ -106,7 +106,9 @@ public class PlayPadWalkTests : IDisposable
 	//disappears and any unlisted leak both fail the walk.
 	public static readonly Dictionary<(string Surface, double Scale), string[]> KnownFocusLeaks = new() {
 		[("Home", 1.0)] = new[] { "ProfileButton", "ToolsMenuButton" },
-		[("Home", 1.5)] = new[] { "ProfileButton", "ToolsMenuButton" },
+		//At ExtraLarge the header re-lays out and only ToolsMenuButton is reached
+		//by the pad, so the entry has to name exactly that or the set check fails.
+		[("Home", 1.5)] = new[] { "ToolsMenuButton" },
 		[("HomeFirstRun", 1.0)] = new[] { "ProfileButton", "ToolsMenuButton" },
 		[("HomeFirstRun", 1.5)] = new[] { "ProfileButton", "ToolsMenuButton" },
 	};
