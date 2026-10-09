@@ -39,43 +39,18 @@
   Nothing is implemented by this ADR; PR #1119 implements it and must match
   Decisions 3 and 6. The width cap, the Auto/star rows and the 512x505 guarantee
   for the settings sheet (Decision 6) are in PR #1145 (#1123).
-  Amended 2026-10-09 (Decision 6, the empty spot it named) - **proposed, not
-  decided**: no recorded pick covers the shape below, so it is written down as
-  what is on the branch and what the tests pin, and it binds nobody. The Look
-  footer's Hold to Compare note was the one spot on the sheet the guarantee
-  missed, and #1149 is the work on it. W-P10 draws that note in the footer's row
-  beside Hold to Compare, wrapped over more than one line, and that is where it
-  stays wherever the row has room for it. The row's room is not the same at the
-  two sizes the guarantee names: about 184 px of the 441 px page at the
-  ~1024x640 the wireframe is drawn at, and about 14 px of the 271 px page at
-  512x505 at 1.5, which is LookFooter.MinNoteWidth's floor and below it. Where
-  the row has no room the branch takes the note's own line above the row, on the
-  page's own width. Either way the note wraps and is never trimmed: it is the
-  tab's reason for refusing a compare, so what the room decides is how many
-  lines it takes, never how much of it is drawn.
-  Two claims this does not make, because the tests do not hold them. First, that
-  the ~1024x640 page is unchanged: main drew that note on one line, ellipsized,
-  and the branch wraps it in the row's ~184 px instead, so the footer there is
-  taller by the line the wrap adds and the page's scroller above it loses that
-  line. Second, that "share Done's row" and "the whole text visible" both hold
-  at 512x505 at 1.5, which is #1149's Expected: at that size the row leaves the
-  note the 14 px above beside a 137 px button and a 90 px Done, where the reason
-  needs about 129 px of height and the hold-to-compare hint about 198 px, while
-  the tab's own box is about 134 px tall - so the row cannot draw either of the
-  tab's two lines whole there without the footer taking the whole tab and
-  leaving the group scroller nothing. Which of the two gives is a W-P10 design
-  decision and is open; the issue says so itself ("Reflowing the footer - the
-  button on its own line, or the note above the row - is a W-P10 design
-  decision, which is why it is out of that slice").
-  What the tests hold, exactly: the pure rule (LookFooter, host-free, in
-  UI.Tests/Play/LookFooterTests) reads the room the row leaves the note at the
-  drawn size and at the guaranteed one; UI.HeadlessTests/
-  InterfaceSizeLayoutTests walks the same note in both branches and asserts it
-  asks for no trimming and that the room it was given covers the lines its text
-  needs there, and that the reserve line the footer's height is kept at - the
-  taller of the two lines the tab can carry - is out of the automation tree and
-  takes no hit, so toggling Pixels or Screen neither moves the footer nor has a
-  screen reader read both lines at once. PR #1163 implements it.
+  Amended 2026-10-09 (Decision 6, #1149), decider: owner via panel pick,
+  2026-10-09. Where Done's row leaves the Hold to Compare note less than the
+  width its text needs (at 1.5 in 512x505 the note gets 33 px against 198 px
+  for the hint and 129 px for the reason), the note moves to its own line
+  above the row and wraps there, whole. Hold to Compare and Done keep the row.
+  Where the row has room (1024x640) the note shares it as W-P10 draws. Keeping
+  the note on the row at any size by making the footer taller is ruled out: at
+  512x505 that footer is taller than the 134 px tab and leaves the groups'
+  scroller 0 px tall. The Look footer now meets "nothing is clipped" like
+  every other row on the sheet, and a headless test pins the note whole in
+  both layouts. W-P10's element count is unchanged (7; the note is not
+  interactive).
 - Date: 2026-10-09
 - Related: ADR-0249 (tokens come from the renderer; the drift test), ADR-0241,
   ADR-0256, wireframe W-P8d, issues #1102 and #1103.
