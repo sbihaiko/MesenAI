@@ -266,7 +266,7 @@
 					<ScrollViewer VerticalScrollBarVisibility="Hidden">
 					<StackPanel Name="OverlayControls" Margin="8 0" XYFocus.NavigationModes="Enabled">
 						<TextBlock Name="OverlayGameTitle" Classes="title2" Text="{Binding OverlayGameTitle}" TextTrimming="CharacterEllipsis" />
-						<TextBlock Classes="secondary" Text="{l:Translate lblOverlayPaused}" Margin="0 4 0 16" />
+						<TextBlock Name="OverlayPausedLine" Classes="secondary" Text="{Binding OverlayPausedLine}" Margin="0 4 0 16" />
 						<!--W-P4: a drawn play icon leads the label (no ▶ glyph in the string).-->
 						<Button Name="OverlayResumeButton" Classes="primary large" HorizontalAlignment="Stretch" Click="OnOverlayResume" Margin="0 0 0 20">
 							<StackPanel Orientation="Horizontal">
