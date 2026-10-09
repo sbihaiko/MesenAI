@@ -18,8 +18,10 @@
   ADR-0236 (recorded captures are keyed to 256-wide cell positions); PRD Part B §6.1 (the WideScrn
   row) and §8 (the W.1–W.7 slices); `docs/specs/MEP-v1.md` §5.5 (the `widescreen` section).
 - Supersedes / amends: **the accepted option B amends ADR-0253 §1** ("the stretch to 16:9 is
-  dropped"), **§3** ("a border or black alone never makes a game supported") and **§4** ("SMS/SG-1000
-  without pack art are known unsupported before the game runs, so the switch is disabled at once").
+  dropped"), **§3** ("The border and black are per-frame fill-ins for a game that does support a
+  mode. On their own they never make a game *"supported"*, so they never keep the switch enabled.")
+  and **§4** ("SMS/SG-1000 without pack art are known unsupported before the game runs, so the
+  switch is disabled at once").
   B leaves **§2 untouched** and adds **no source** to §3's fallback chain — it re-enables the switch
   and applies the existing `VideoAspectRatio.Widescreen` fill, it does not reveal anything. **The §2
   amendment is owed only when option C lands**, and C states it in two places: the per-console scope
@@ -62,9 +64,9 @@ So this is not a bug to fix. The gap the report exposes is in the product:
 
 1. **ADR-0253 contradicts itself about exactly this console.** §2 lists "SMS/SG-1000: Reveal is
    offered but has no map columns to show, so it always uses the fallback (decision 3)", while §3
-   says the border and black "never on their own make a game supported, so they never keep the
-   switch enabled", and §4 says SMS/SG-1000 "are known unsupported before the game runs, so the
-   switch is disabled at once". §4 (what the code does) is the only implementable reading: a
+   says "The border and black are per-frame fill-ins for a game that does support a mode. On their
+   own they never make a game *"supported"*, so they never keep the switch enabled.", and §4 says
+   SMS/SG-1000 "are known unsupported before the game runs, so the switch is disabled at once". §4 (what the code does) is the only implementable reading: a
    fallback that cannot make a game supported cannot keep its switch on. §2's sentence about SMS
    is dead prose — it promises a player a fallback that §3 and §4 forbid.
 2. **The literal want is already reachable elsewhere, with the distortion ADR-0253 §1 removed.**
@@ -97,15 +99,18 @@ smallest change that answers the report as written: it changes `WidescreenSuppor
 It amends ADR-0253 §1/§3/§4 and **leaves §2 alone**, because a fill is not a fallback source and §2
 is about the Reveal's own scope. This ADR does not implement it.
 
-**Stage 2 — option C, in slices, after B.** The edge band follows once B has shipped, in this order
-and no other: **C1** the synthesized edge-band source and its position in
-`WidescreenFallback::ApplyChain`, with the `W253C:`-family host-free tests; **C2b** the SMS HD-pack
-path sized from the frame it is handed — the RGB555 pixel buffer and the `HdTilePixelInfo`
+**Stage 2 — option C, in slices, after B.** The edge band follows once B has shipped, in one order
+and no other — **C1 → C5 → C2 + C2b → C3 → C4**, with **C5 no later than C2**: **C1** the synthesized
+edge-band source and its position in `WidescreenFallback::ApplyChain`, with the `W253C:`-family
+host-free tests; **C5** the MEP §5.5 wording that admits a host-synthesized edge band; **C2**
+`SmsVdp` emitting the extra columns and the "synthesized" mark; **C2b** the SMS HD-pack path sized
+from the frame it is handed — the RGB555 pixel buffer and the `HdTilePixelInfo`
 provenance grid taken from the frame's own width instead of the hard-coded 256, with the band
 columns' provenance synthesized — which lands *with* C2, since the widened frame reaches the
 composer the moment C2 ships; **C3** §3/§4's rule (`WidescreenFallback::SupportsWidescreen`,
-`WidescreenSupportRule`) and the reworded reason string. C2, C4 and C5 keep the meaning they carry
-in the slice plan below. **The §2 amendment is owed with C, not before it.**
+`WidescreenSupportRule`) and the reworded reason string; **C4** the band's frame-capture wiring
+test. The slice plan below carries each one's full text. **The §2 amendment is owed with C, not
+before it.**
 
 - **Option A — status quo; reconcile the prose.** Keep the switch disabled for SMS/SG-1000 and
   point the player at Player Settings → Display → Aspect ratio → Widescreen for the plain stretch.
@@ -194,7 +199,8 @@ in the slice plan below. **The §2 amendment is owed with C, not before it.**
   `SmsWidescreenReveal`'s arithmetic instead. So the same shape applies — the HD grid's width taken
   from the frame's own width (never a constant), and the band column's synthesized provenance — plus a
   bounds assertion that the stride the composer walks is the grid's own width, which is exactly the
-  read that overruns today. The composer over a real extended SMS frame is the C4 wiring case.
+  read that overruns today. The composer over a real extended SMS frame is C4's case, in the new
+  `UI.HeadlessTests/SmsWidescreenBandTests.cs` named in the slice plan below.
 - **Option D — a per-game user override.** Leave the switch enabled everywhere, demote the reason
   to a hint, and let the player turn widescreen on for any game. Cost: ADR-0253 §4's per-ROM
   memory becomes advisory and the switch can no longer be trusted as "this game has a mode"; and
@@ -211,9 +217,12 @@ remove, and C is what retires it again.
 
 **B and C are new PRD slices** in Part B §8, after W.7, with W.5's switch state revisited (§4's
 early-disable clause) and §6.1's WideScrn row updated. **B is implemented by a separate PR**; the C
-slices below follow it once B has landed. Slice plan for C:
+slices below follow it once B has landed. Slice plan for C, in the one order stated above —
+**C1 → C5 → C2 + C2b → C3 → C4**:
 **C1** the edge-band source and its position in `WidescreenFallback::ApplyChain`, with the
-`W253C:`-family host-free tests; **C2** `SmsVdp` emitting the extra columns and the "synthesized"
+`W253C:`-family host-free tests; **C5** the MEP §5.5 wording that admits a host-synthesized edge
+band — it must land with or before C2 or the host ships against its own published spec; **C2**
+`SmsVdp` emitting the extra columns and the "synthesized"
 mark; **C2b** the SMS HD-pack path sized to the frame it is handed — the RGB555 pixel buffer and the
 `HdTilePixelInfo` provenance grid allocated from the frame's own width instead of the hard-coded 256,
 and the band columns' provenance synthesized there (no BG tile, no sprite tile, and the repeated edge
@@ -222,9 +231,11 @@ asked for a tile the VDP never drew), with the host-free coverage named above. C
 C2: `SmsHdTileVideoFilter::AcceptsExtendedFrame()` already answers true for the SMS, so the widened
 frame reaches the composer the moment C2 ships, and the buffers have to be able to hold it — see
 Consequences; **C3** §3/§4's rule (`WidescreenFallback::SupportsWidescreen`, `WidescreenSupportRule`) and
-the reworded reason string; **C4** the wiring tests, in `UI.HeadlessTests/PlaySheetsViewTests.cs`;
-**C5** the MEP §5.5 wording that admits a host-synthesized edge band — it must land with or before
-C2 or the host ships against its own published spec. **Version (owner decision 2026-10-09, #1090,
+the reworded reason string; **C4** the band's frame-capture wiring test, a new
+`UI.HeadlessTests/SmsWidescreenBandTests.cs` modeled on `GbaWidescreenRevealTests.cs` — a synthetic
+SMS ROM on the real core, the frame read back through `FrameCaptureApi` — asserting that the
+widened frame's width is `256 + 2N`, that each row's side columns are the same color class as that
+row's own edge pixel, and that switching the switch off returns a 256-wide frame. **Version (owner decision 2026-10-09, #1090,
 option A, verbatim: "A"):** packs keep declaring `mep: 1.x`; there is no major bump. The §5.5
 wording lands as a minor revision of MEP-v1 that *clarifies the scope* of the ban (a host MUST NOT
 synthesize widescreen *art*; a per-row edge band derived from the picture's own pixels is not
