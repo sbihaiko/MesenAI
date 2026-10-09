@@ -7,6 +7,7 @@ using System.Linq;
 using System.Threading;
 using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
+using Avalonia.Input;
 using Avalonia.Threading;
 using Mesen.Config;
 using Mesen.Controls;
@@ -181,7 +182,7 @@ public class PlayFavoritesHomeTests : IDisposable
 
 	private static void Focus(Control control)
 	{
-		Assert.True(PlayFocusOnOpen.Enter(control), "the control did not take the focus: " + control.Name);
+		Assert.True(control.Focus(NavigationMethod.Directional), "the control did not take the focus: " + control.Name);
 		Pump();
 	}
 
