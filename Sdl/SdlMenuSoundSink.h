@@ -2,14 +2,11 @@
 #include "pch.h"
 #include "Sdl/include/Sdl2.h"
 #include "Core/Shared/Audio/AsyncAudioDeviceOpen.h"
+#include "Core/Shared/Audio/MenuSoundArming.h"
 #include "Core/Shared/Audio/MenuSoundAudioSubsystem.h"
 #include "Core/Shared/Audio/MenuSoundSinkHealth.h"
 #include "Core/Shared/Audio/MenuSoundStream.h"
-#include "Core/Shared/Emulator.h"
-#include "Core/Shared/EmuSettings.h"
 #include "Core/Shared/MessageManager.h"
-
-class Emulator;
 
 //ADR-0270 D9 (issue #1126): the menu-sound sink on the SDL backends - macOS and
 //Linux, the same pair the game device uses (D2: the blip goes out through the
@@ -31,9 +28,13 @@ public:
 		&& MenuSoundSinkHealth::AudioPaused == SDL_AUDIO_PAUSED,
 		"MenuSoundSinkHealth's audio statuses mirror SDL_AudioStatus");
 
-	explicit SdlMenuSoundSink(Emulator* emu)
+	//The device and the backend travel in with the sink, read once on the thread
+	//that applied the settings. Every thread below - the stream's owner thread and
+	//the open's own - reads them from here and never from AudioConfig, which the
+	//settings apply path rewrites under them (MenuSoundArming.h).
+	explicit SdlMenuSoundSink(const MenuSoundArming& arming)
+		: _deviceName(arming.Device)
 	{
-		_emu = emu;
 	}
 
 	//ADR-0270 D9: SDL's audio subsystem init, run once and on the caller that
@@ -99,9 +100,10 @@ public:
 		AsyncAudioDeviceOpen::LogFn log = [](const string& message) { MessageManager::Log(message); };
 
 		//D2: the same device the player picked for the game, so the blip goes out
-		//through the output device and audio stack they already chose.
-		const char* configuredDevice = _emu->GetSettings()->GetAudioConfig().AudioDevice;
-		_deviceName = configuredDevice != nullptr ? configuredDevice : "";
+		//through the output device and audio stack they already chose. The name came
+		//in with the sink, on the thread that applied the settings - reading it here
+		//would be an off-thread read of a field the apply path reassigns
+		//(MenuSoundArming.h).
 		_deviceOpen.Start(_deviceName, open, log);
 	}
 
@@ -214,9 +216,10 @@ private:
 
 	static constexpr int CallbackFrames = 1024;
 
-	Emulator* _emu = nullptr;
 	IMenuSoundReader* _reader = nullptr;
 	AsyncAudioDeviceOpen _deviceOpen;
+	//The device the player picked, carried in from the arming rather than read off
+	//the live settings.
 	string _deviceName;
 	SDL_AudioDeviceID _audioDeviceID = 0;
 	//D9: one-way, fed by the device's own status.

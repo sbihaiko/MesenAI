@@ -117,6 +117,7 @@
 #include "Shared/Audio/ReplacementMuteMask.h"
 #include "Shared/Audio/AsyncAudioDeviceOpen.h"
 #include "Shared/Audio/MenuSoundStream.h"
+#include "Shared/Audio/MenuSoundArming.h"
 #include "Shared/Audio/MenuSoundHost.h"
 #include "Shared/Audio/MenuSoundSinkHealth.h"
 #include "Shared/Audio/MenuSoundDeviceResolve.h"
@@ -17455,7 +17456,7 @@ namespace
 	}
 
 	//Core/Shared/SettingTypes.h's AudioBackendType as the int the host-free
-	//MenuSoundHost::Arming carries: Default=0, Wasapi=1, DirectSound=2, Sdl2=3.
+	//MenuSoundArming carries: Default=0, Wasapi=1, DirectSound=2, Sdl2=3.
 	//This suite links nothing but the core, so the enum itself is not included;
 	//EmuApiWrapper.cpp static_asserts that the two still agree.
 	constexpr int TestBackendWasapi = 1;
@@ -17488,7 +17489,7 @@ namespace
 	class FakeMenuSoundDevicePool
 	{
 	public:
-		std::unique_ptr<IMenuSoundSink> Create(const MenuSoundHost::Arming& arming)
+		std::unique_ptr<IMenuSoundSink> Create(const MenuSoundArming& arming)
 		{
 			Devices.push_back(arming.Device);
 			Backends.push_back(arming.Backend);
@@ -17509,7 +17510,7 @@ namespace
 	std::unique_ptr<MenuSoundHost> MakeMenuSoundHost(std::shared_ptr<FakeMenuSoundDevicePool> pool, std::shared_ptr<FakeMenuSoundPolicy> policy)
 	{
 		return std::make_unique<MenuSoundHost>(
-			[pool](const MenuSoundHost::Arming& arming) { return pool->Create(arming); },
+			[pool](const MenuSoundArming& arming) { return pool->Create(arming); },
 			[policy]() { return policy->AudioEnabled.load(); },
 			[policy]() { return policy->MasterVolume.load(); },
 			[policy]() { return policy->GameRunning.load(); },
@@ -17717,7 +17718,7 @@ void TestABackendChangeToAnApiWithNoMenuSinkDisarmsTheStream()
 	//DirectSound has no menu sink: the factory answers "none" for it, which is
 	//D9's unavailable answer rather than a route through another audio API.
 	auto host = std::make_unique<MenuSoundHost>(
-		[pool](const MenuSoundHost::Arming& arming) -> std::unique_ptr<IMenuSoundSink> {
+		[pool](const MenuSoundArming& arming) -> std::unique_ptr<IMenuSoundSink> {
 			return arming.Backend == TestBackendDirectSound ? nullptr : pool->Create(arming);
 		},
 		[policy]() { return policy->AudioEnabled.load(); },
@@ -17766,6 +17767,52 @@ void TestAnUnchangedArmingLeavesTheRunningMenuSoundStreamAlone()
 	Check(host->IsAvailable(), "menu sound: the stream stays up across an unchanged apply");
 
 	host->Stop();
+}
+
+//The launch sequence, at the seam the app has: building the host opens nothing,
+//and the arming that reaches the device factory is the one the first apply named.
+//The app builds the host as it starts and arms it from its first audio apply,
+//because an arm taken before the UI has applied the settings carries Device ""
+//and Backend Default: that device is opened and then torn down when the player's
+//own settings arrive, the first press after launch plays nothing while the second
+//open runs (AC1), and on Windows a WASAPI client opens for a player who picked
+//DirectSound (D9). This is the host-free half of that rule - the other half is the
+//order of InitializeEmu and the audio apply in InteropDLL/EmuApiWrapper.cpp.
+void TestTheMenuSoundHostOpensNothingUntilAnApplyNamesADevice()
+{
+	auto policy = std::make_shared<FakeMenuSoundPolicy>();
+	auto pool = std::make_shared<FakeMenuSoundDevicePool>();
+	auto host = MakeMenuSoundHost(pool, policy);
+
+	Check(pool->Sinks.empty(), "menu sound: a host that was only built opens no device", std::to_string(pool->Sinks.size()));
+	Check(!host->IsAvailable(), "menu sound: a host that was only built answers unavailable");
+	std::vector<int16_t> blip = MenuSoundBlip(2400);
+	Check(!host->Submit(blip.data(), 2400, MenuSoundsTestRate), "menu sound: a host that was only built refuses a blip");
+
+	//The first apply is the arm, and the device it opens is the one that apply
+	//named - a host-supplied default would show up here as a device named "".
+	host->Apply({"USB Headset", TestBackendWasapi});
+	Check(pool->Devices.size() == 1, "menu sound: the first apply opens one device", std::to_string(pool->Devices.size()));
+	Check(!pool->Devices.empty() && pool->Devices[0] == "USB Headset",
+		"menu sound: the first device opened is the one the first apply named",
+		pool->Devices.empty() ? "<none>" : pool->Devices[0]);
+	Check(pool->Backends.size() == 1 && pool->Backends[0] == TestBackendWasapi,
+		"menu sound: the first device is opened on the backend the first apply named");
+
+	//And that apply is the arm, not the first of two: the same settings arriving
+	//again - which is what the launch sequence does for every config object - must
+	//not open a second device.
+	host->Apply({"USB Headset", TestBackendWasapi});
+	Check(pool->Sinks.size() == 1, "menu sound: the apply that armed the stream does not open a second device",
+		std::to_string(pool->Sinks.size()));
+
+	FakeMenuSoundSink* device = pool->Sinks[0];
+	Check(WaitForMenuSound([&]() { return host->IsAvailable(); }), "menu sound: the capability comes up on the device the first apply named");
+	Check(host->Submit(blip.data(), 2400, MenuSoundsTestRate), "menu sound: the armed stream accepts the first blip");
+	Check(WaitForMenuSound([&]() { return device->Unpauses.load() == 1; }), "menu sound: the first blip plays on that device");
+
+	host->Stop();
+	Check(device->Releases.load() == 1, "menu sound: stopping the host releases the device the first apply named");
 }
 
 void TestAMenuSoundSubsystemInitThatFailsFailsTheOpen()
@@ -18477,6 +18524,7 @@ int main()
 	TestAPickedDeviceChangeReArmsTheMenuSoundStream();
 	TestABackendChangeToAnApiWithNoMenuSinkDisarmsTheStream();
 	TestAnUnchangedArmingLeavesTheRunningMenuSoundStreamAlone();
+	TestTheMenuSoundHostOpensNothingUntilAnApplyNamesADevice();
 	TestAMenuSoundSubsystemInitThatFailsFailsTheOpen();
 	TestAMenuSoundSubsystemInitRunsOnceForTheSession();
 	TestTheMenuSoundDeviceIsTheOneThePlayerPicked();

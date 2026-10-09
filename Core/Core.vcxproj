@@ -704,6 +704,7 @@
     <ClInclude Include="Shared\Audio\MenuSoundSinkHealth.h" />
     <ClInclude Include="Shared\Audio\MenuSoundDeviceResolve.h" />
     <ClInclude Include="Shared\Audio\MenuSoundAudioSubsystem.h" />
+    <ClInclude Include="Shared\Audio\MenuSoundArming.h" />
     <ClInclude Include="pch.h" />
     <ClInclude Include="Shared\SystemActionManager.h" />
     <ClInclude Include="Shared\Video\VideoDecoder.h" />

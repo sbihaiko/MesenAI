@@ -1,10 +1,9 @@
 #pragma once
 #include "pch.h"
+#include "Core/Shared/Audio/MenuSoundArming.h"
 #include "Core/Shared/Audio/MenuSoundDeviceResolve.h"
 #include "Core/Shared/Audio/MenuSoundSinkHealth.h"
 #include "Core/Shared/Audio/MenuSoundStream.h"
-#include "Core/Shared/Emulator.h"
-#include "Core/Shared/EmuSettings.h"
 #include "Core/Shared/MessageManager.h"
 #include "Utilities/UTF8Util.h"
 #include <audioclient.h>
@@ -12,8 +11,6 @@
 #include <wrl/client.h>
 
 using Microsoft::WRL::ComPtr;
-
-class Emulator;
 
 //ADR-0270 D9 (issue #1126): the menu-sound sink on the Windows backend that
 //ships - a WASAPI shared-mode render client of its own, never the game device's.
@@ -33,9 +30,13 @@ public:
 	static_assert(MenuSoundSinkHealth::DeviceInvalidated == (int32_t)AUDCLNT_E_DEVICE_INVALIDATED,
 		"MenuSoundSinkHealth::DeviceInvalidated mirrors AUDCLNT_E_DEVICE_INVALIDATED");
 
-	explicit WasapiMenuSoundSink(Emulator* emu)
+	//The device and the backend travel in with the sink, read once on the thread
+	//that applied the settings. The open worker below reads them from here and
+	//never from AudioConfig, which the settings apply path rewrites under it
+	//(MenuSoundArming.h).
+	explicit WasapiMenuSoundSink(const MenuSoundArming& arming)
+		: _arming(arming)
 	{
-		_emu = emu;
 	}
 
 	~WasapiMenuSoundSink() override
@@ -177,9 +178,11 @@ public:
 private:
 	bool OpenDevice()
 	{
-		//D9: the sink follows the backend the game device would use. Default lands
-		//on WASAPI in SoundManager::Create, so only DirectSound is refused here.
-		if(_emu->GetSettings()->GetAudioConfig().AudioBackend == AudioBackendType::DirectSound) {
+		//D9: the sink follows the backend the game device would use, and the factory
+		//answers "no menu sink" for the backend that has none rather than building
+		//this one. Should it ever be built for one anyway, the open fails here
+		//instead of sending the blip through an audio API the player did not pick.
+		if(_arming.Backend == DirectSoundBackend) {
 			return false;
 		}
 
@@ -196,9 +199,8 @@ private:
 		//default endpoint would put the game on the player's device and the blips
 		//on another one.
 		ComPtr<IMMDevice> device;
-		const char* configuredDeviceId = _emu->GetSettings()->GetAudioConfig().AudioDevice;
 		bool resolved = MenuSoundDeviceResolve::Resolve(
-			configuredDeviceId != nullptr ? configuredDeviceId : "",
+			_arming.Device,
 			[&enumerator, &device](const std::string& deviceId) {
 				std::wstring wideDeviceId = utf8::utf8::decode(deviceId);
 				return SUCCEEDED(enumerator->GetDevice(wideDeviceId.c_str(), &device)) && device.Get() != nullptr;
@@ -257,7 +259,13 @@ private:
 	//floor, so this is a request, not a guarantee.
 	static constexpr int BufferMs = 50;
 
-	Emulator* _emu = nullptr;
+	//Core/Shared/SettingTypes.h's AudioBackendType::DirectSound, as the int the
+	//host-free MenuSoundArming carries; EmuApiWrapper.cpp static_asserts the pair.
+	static constexpr int DirectSoundBackend = 2;
+
+	//The device the player picked and the backend they picked, carried in from the
+	//arming rather than read off the live settings.
+	MenuSoundArming _arming;
 	IMenuSoundReader* _reader = nullptr;
 
 	std::thread _openWorker;

@@ -1,10 +1,10 @@
 #pragma once
+#include "Core/Shared/Audio/MenuSoundArming.h"
 #include "Core/Shared/Audio/MenuSoundStream.h"
 
 #include <functional>
 #include <memory>
 #include <mutex>
-#include <string>
 
 //ADR-0270 D9's "Traps" (issue #1126): the stream's lifetime across a settings
 //change. A sink is opened once for the session, so an arm that is never revisited
@@ -17,39 +17,36 @@
 //and lets that thread release the old device (D4) - and a new stream is built
 //from a fresh sink and started.
 //
+//The stream is armed by an apply and by nothing else. A host that is only
+//constructed opens no device at all, and the arming that reaches the factory is
+//the one the caller's apply carried - never a default of the host's own. That is
+//what keeps the app's first arm on the player's own device and backend: the host
+//is built as the app starts, and the first audio apply, which carries the
+//settings the player actually has, is what opens the device. An arm taken at
+//construction would open the default endpoint first and tear it down again on
+//that apply, which costs the first press after launch its blip while the new
+//device opens (AC1).
+//
 //Host-free: the device is a factory the caller hands in, so
 //scripts/core_unit_tests.cpp changes the device and the backend under a fake and
 //watches the next blip land on the new device.
 class MenuSoundHost
 {
 public:
-	//Where the stream is armed: which output device the player picked, and which
-	//backend. The backend is the C#-facing enum as an int
-	//(Core/Shared/SettingTypes.h's AudioBackendType: Default, Wasapi,
-	//DirectSound, Sdl2), kept an int here because this unit is host-free.
-	struct Arming
-	{
-		std::string Device;
-		int Backend = 0;
-
-		bool operator==(const Arming& other) const { return Backend == other.Backend && Device == other.Device; }
-		bool operator!=(const Arming& other) const { return !(*this == other); }
-	};
-
 	//The sink for one arming, or null when that backend has no menu sink - which
 	//is D9's "unavailable" answer, never a fallback to a different audio API.
-	using SinkFactory = std::function<std::unique_ptr<IMenuSoundSink>(const Arming& arming)>;
+	using SinkFactory = std::function<std::unique_ptr<IMenuSoundSink>(const MenuSoundArming& arming)>;
 
 	MenuSoundHost(SinkFactory sinkFactory, MenuSoundStream::AudioEnabledFn audioEnabled, MenuSoundStream::MasterVolumeFn masterVolume, MenuSoundStream::GameRunningFn gameRunning, MenuSoundStream::LogFn log)
 		: _sinkFactory(std::move(sinkFactory)), _audioEnabled(std::move(audioEnabled)), _masterVolume(std::move(masterVolume)), _gameRunning(std::move(gameRunning)), _log(std::move(log))
 	{
 	}
 
-	//Arms the stream on this device and backend, and re-arms it when either one
-	//changed. Safe to call on every settings apply: an unchanged arming leaves the
-	//running stream alone, because the player saving the audio sheet is not a
-	//device change.
-	void Apply(const Arming& arming)
+	//Arms the stream on this device and backend on the first call, and re-arms it
+	//when either one changed after that. Safe to call on every settings apply: an
+	//unchanged arming leaves the running stream alone, because the player saving
+	//the audio sheet is not a device change.
+	void Apply(const MenuSoundArming& arming)
 	{
 		std::lock_guard<std::mutex> lock(_applyLock);
 		std::shared_ptr<MenuSoundStream> current = std::atomic_load(&_stream);
@@ -95,7 +92,7 @@ public:
 	}
 
 private:
-	void Arm(const Arming& arming)
+	void Arm(const MenuSoundArming& arming)
 	{
 		_armed = arming;
 
@@ -125,5 +122,6 @@ private:
 	//Atomic load/store on the shared pointer: Apply swaps it, everything else
 	//reads it.
 	std::shared_ptr<MenuSoundStream> _stream;
-	Arming _armed;
+	//Until the first apply this is only the default value; nothing opens on it.
+	MenuSoundArming _armed;
 };
