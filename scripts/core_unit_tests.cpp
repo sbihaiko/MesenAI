@@ -17942,8 +17942,21 @@ void TestAMenuSoundTeardownWaitsForTheOwnerThreadItDetached()
 {
 	auto policy = std::make_shared<FakeMenuSoundPolicy>();
 	auto pool = std::make_shared<FakeMenuSoundDevicePool>();
-	auto host = MakeMenuSoundHost(pool, policy);
 
+	//Every policy read is counted, because that is the shape EmuApiWrapper has:
+	//the lambdas capture an Emulator* and Release destroys it on the line after
+	//it stops the host. A read that lands after the teardown returned is exactly
+	//the use-after-free the review found.
+	auto reads = std::make_shared<std::atomic<uint32_t>>(0);
+	auto host = std::make_unique<MenuSoundHost>(
+		[pool](const MenuSoundArming& arming) { return pool->Create(arming); },
+		[policy, reads]() { reads->fetch_add(1); return policy->AudioEnabled.load(); },
+		[policy, reads]() { reads->fetch_add(1); return policy->MasterVolume.load(); },
+		[policy, reads]() { reads->fetch_add(1); return policy->GameRunning.load(); },
+		[](const std::string&) {});
+
+	//Part A: the stop lands while the device is still opening - the #733 window,
+	//where a detached owner thread would outlive the teardown by seconds.
 	//The device answers its open only after the teardown is already under way, so
 	//a teardown that only publishes leaves its owner thread running past the
 	//caller - and past the emulator the caller is about to destroy.
@@ -17980,6 +17993,29 @@ void TestAMenuSoundTeardownWaitsForTheOwnerThreadItDetached()
 	//Idempotent, like Stop: a second teardown has nothing left to wait for.
 	host->StopAndWait();
 	Check(slow->Releases.load() == 1, "menu sound: a second waited teardown releases nothing again");
+
+	//Part B: the stop lands on a stream that is up, with its owner thread inside
+	//the D7 branch reading the running predicate - the window the review named as
+	//the actual use-after-free, since the call is what dereferences the captured
+	//emulator.
+	policy->GameRunning.store(true);
+	host->Apply({"USB Headset", TestBackendWasapi});
+	Check(pool->Sinks.size() == 2, "menu sound: the running stream armed a device of its own", std::to_string(pool->Sinks.size()));
+	FakeMenuSoundSink* running = pool->Sinks[1];
+	Check(WaitForMenuSound([&]() { return host->IsAvailable(); }), "menu sound: that device comes up");
+
+	std::vector<int16_t> runningBlip = MenuSoundBlip(2400);
+	Check(host->Submit(runningBlip.data(), 2400, MenuSoundsTestRate), "menu sound: a blip is queued on the running device");
+	Check(WaitForMenuSound([&]() { return reads->load() > 0; }),
+		"menu sound: the owner thread is inside the D7 branch reading the running predicate");
+
+	host->StopAndWait();
+	uint32_t readsAtStop = reads->load();
+	std::this_thread::sleep_for(std::chrono::milliseconds(50));
+	Check(running->Releases.load() == 1, "menu sound: the running device is released before that teardown returns");
+	Check(reads->load() == readsAtStop,
+		"menu sound: nothing reads the policy the caller destroys after the teardown returned",
+		std::to_string(reads->load() - readsAtStop) + " read(s) after");
 }
 
 void TestAMenuSoundSubsystemInitThatFailsFailsTheOpen()
