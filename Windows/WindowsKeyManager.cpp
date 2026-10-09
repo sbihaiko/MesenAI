@@ -351,6 +351,29 @@ void WindowsKeyManager::TestForceFeedback(uint32_t index, uint16_t magnitudeRigh
 	//DirectInput pads have no force feedback implemented - nothing to do
 }
 
+bool WindowsKeyManager::PlayGamepadTick(uint32_t index)
+{
+	if(!_xInput || !_directInput) {
+		return false;
+	}
+
+	//#1121: `index` is the pad index GetGamepadInfo hands out - the connected
+	//XInput slots first, in slot order, then the joysticks - so this is that walk
+	//with the tick at the end of it, and nothing else. A DirectInput ordinal has
+	//no tick to reach: its pads are never aimable (IKeyManager::IsAimable), and a
+	//joystick that claimed rumble must not tick the XInput pad the walk lands on.
+	int xinputCount = 0;
+	for(int i = 0; i < XUSER_MAX_COUNT; i++) {
+		if(_xInput->IsConnected(i)) {
+			if(xinputCount == (int)index) {
+				return _xInput->PlayTick((uint8_t)i);
+			}
+			xinputCount++;
+		}
+	}
+	return false;
+}
+
 void WindowsKeyManager::ResetKeyState()
 {
 	memset(_keyState, 0, sizeof(_keyState));

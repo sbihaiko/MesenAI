@@ -6485,9 +6485,10 @@ namespace
 		Check(keyManager.find("bool WindowsKeyManager::PlayGamepadTick(uint32_t index)") != string::npos,
 			"#1121: Windows answers the shared per-pad tick hook");
 		string routing = HapticBackendBody(keyManager, "bool WindowsKeyManager::PlayGamepadTick(uint32_t index)");
-		Check(routing.find("_xInput->PlayTick(") != string::npos
-			&& routing.find("_directInput") == string::npos,
-			"#1121: the tick goes to the XInput slot, and a DirectInput joystick is never ticked");
+		Check(routing.find("_xInput->PlayTick((uint8_t)i)") != string::npos,
+			"#1121: the tick goes to the XInput SLOT the walk resolved, not to the index it was handed");
+		Check(routing.find("_directInput->") == string::npos && routing.find("return false;") != string::npos,
+			"#1121: ...and a joystick ordinal reaches no DirectInput tick, it answers false");
 	}
 
 	void TestPadChordFiresOnWhicheverPadIsInHand()

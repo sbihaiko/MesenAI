@@ -3,12 +3,33 @@
 #include "Core/Shared/Emulator.h"
 #include "Core/Shared/EmuSettings.h"
 
+//The chain is per slot, and its slots are XInput's: a tick on the third pad must
+//not touch the first, so the two counts are the same number on purpose.
+static_assert(HapticTickChain::SlotCount == (uint32_t)XUSER_MAX_COUNT,
+	"HapticTickChain::SlotCount must be XInput's XUSER_MAX_COUNT");
+
 XInputManager::XInputManager(Emulator* emu)
 {
 	_emu = emu;
+	InitializeCriticalSection(&_tickLock);
+	//One queue for every tick timer. A queue that could not be created is not an
+	//error here: PlayTick answers false, and the input tester is unaffected.
+	_tickTimerQueue = CreateTimerQueue();
 	for(int i = 0; i < XUSER_MAX_COUNT; i++) {
 		_gamePadConnected[i] = true;
 	}
+}
+
+XInputManager::~XInputManager()
+{
+	//INVALID_HANDLE_VALUE deletes the queue and every timer still in it, and waits
+	//for a callback that is running right now, so nothing reaches _tickChain after
+	//it is gone. The lock is deliberately not held across that wait.
+	if(_tickTimerQueue != nullptr) {
+		DeleteTimerQueueEx(_tickTimerQueue, INVALID_HANDLE_VALUE);
+		_tickTimerQueue = nullptr;
+	}
+	DeleteCriticalSection(&_tickLock);
 }
 
 void XInputManager::RefreshState()
@@ -127,8 +148,86 @@ void XInputManager::SetForceFeedback(uint8_t gamepadPort, uint16_t magnitudeRigh
 	if(gamepadPort >= XUSER_MAX_COUNT || !_gamePadConnected[gamepadPort]) {
 		return;
 	}
+	//#1121: this is what a tick has to put back, both the game's rumble and the
+	//input tester's - recorded before it is applied, and only from here: a tick's
+	//own magnitude goes through ApplyVibration, or a tick would restore itself.
+	EnterCriticalSection(&_tickLock);
+	_tickChain.RecordApplied(gamepadPort, magnitudeRight, magnitudeLeft);
+	LeaveCriticalSection(&_tickLock);
+	ApplyVibration(gamepadPort, magnitudeRight, magnitudeLeft);
+}
+
+void XInputManager::ApplyVibration(uint8_t gamepadPort, uint16_t magnitudeRight, uint16_t magnitudeLeft)
+{
 	XINPUT_VIBRATION settings = {};
 	settings.wRightMotorSpeed = magnitudeRight;
 	settings.wLeftMotorSpeed = magnitudeLeft;
 	XInputSetState(gamepadPort, &settings);
+}
+
+//The second parameter is the type's, not this function's: a tick timer is one-shot
+//(due time, no period), so it only ever fires on its due date.
+void CALLBACK XInputManager::TickElapsed(PVOID context, BOOLEAN)
+{
+	TickTimerContext* tick = (TickTimerContext*)context;
+
+	//The tick's own handle, not the slot's newest one: a tick that a later tick
+	//superseded must leave the pad to it, and the newer tick's timer is the one
+	//that stops it (HapticTickChain::EndTick).
+	EnterCriticalSection(&tick->Manager->_tickLock);
+	optional<HapticTickChain::Magnitudes> restore = tick->Manager->_tickChain.EndTick(tick->Port, tick->Handle);
+	LeaveCriticalSection(&tick->Manager->_tickLock);
+
+	if(restore) {
+		tick->Manager->ApplyVibration(tick->Port, restore->Right, restore->Left);
+	}
+}
+
+bool XInputManager::PlayTick(uint8_t gamepadPort)
+{
+	if(!IsConnected(gamepadPort)) {
+		return false;
+	}
+
+	//The tap goes out first: a tick whose timer cannot be armed is still a tick,
+	//and the branch below puts the pad back rather than leaving it buzzing.
+	ApplyVibration(gamepadPort, HapticTickChain::TickMagnitude, HapticTickChain::TickMagnitude);
+
+	EnterCriticalSection(&_tickLock);
+	uint32_t handle = _tickChain.BeginTick(gamepadPort);
+	uint8_t contextIndex = (uint8_t)(_tickContextInUse[gamepadPort] ^ 1);
+	_tickContextInUse[gamepadPort] = contextIndex;
+	TickTimerContext& tick = _tickContexts[gamepadPort][contextIndex];
+	tick.Manager = this;
+	tick.Port = gamepadPort;
+	tick.Handle = handle;
+
+	//A timer of its own for every tick: re-arming a one-shot that has already
+	//expired does not fire it again, and then nothing ends the tick - #1121 names
+	//that as the way a pad is left buzzing. The handle the previous tick armed is
+	//deleted below, which is also what keeps a slot from accumulating timers.
+	HANDLE armedTimer = nullptr;
+	bool armed = _tickTimerQueue != nullptr
+		&& CreateTimerQueueTimer(&armedTimer, _tickTimerQueue, XInputManager::TickElapsed,
+			&tick, HapticTickChain::TickDurationMs, 0, WT_EXECUTEINTIMERTHREAD) != FALSE;
+	HANDLE previous = _tickTimers[gamepadPort];
+	_tickTimers[gamepadPort] = armed ? armedTimer : nullptr;
+	LeaveCriticalSection(&_tickLock);
+
+	if(previous != nullptr) {
+		//A pending timer is deleted without calling back; one that is already in its
+		//callback is only marked, and its tick is superseded in the chain, so it
+		//stops nothing.
+		DeleteTimerQueueTimer(_tickTimerQueue, previous, nullptr);
+	}
+
+	if(!armed) {
+		EnterCriticalSection(&_tickLock);
+		optional<HapticTickChain::Magnitudes> restore = _tickChain.EndTick(gamepadPort, handle);
+		LeaveCriticalSection(&_tickLock);
+		if(restore) {
+			ApplyVibration(gamepadPort, restore->Right, restore->Left);
+		}
+	}
+	return armed;
 }

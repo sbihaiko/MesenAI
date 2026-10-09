@@ -71,7 +71,7 @@ public:
 	//or when nothing is ticking there.
 	std::optional<Magnitudes> EndTick(uint32_t slot, uint32_t handle)
 	{
-		if(slot >= SlotCount || !_slots[slot].Ticking) {
+		if(slot >= SlotCount || !_slots[slot].Ticking || _slots[slot].Handle != handle) {
 			return std::nullopt;
 		}
 		_slots[slot].Ticking = false;
