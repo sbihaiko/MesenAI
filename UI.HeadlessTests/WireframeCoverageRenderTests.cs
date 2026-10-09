@@ -255,6 +255,18 @@ public class WireframeCoverageRenderTests : IDisposable
 	public void Settings_controls_renders_as_W_P8c()
 	{
 		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		//#1112: pinned here, not left to whatever pad an earlier case or the machine has in hand.
+		Func<bool> originalAimable = PlayerSettingsEssentials.MenuTickAimable;
+		PlayerSettingsEssentials.MenuTickAimable = () => false;
+		try {
+			RenderControlsSheetWithoutMenuTick();
+		} finally {
+			PlayerSettingsEssentials.MenuTickAimable = originalAimable;
+		}
+	}
+
+	private void RenderControlsSheetWithoutMenuTick()
+	{
 		(MainWindow window, MainWindowViewModel model) = ShowPlay();
 		Border sheet = OpenSettings(window, model, ConfigWindowTab.Input);
 
@@ -263,11 +275,97 @@ public class WireframeCoverageRenderTests : IDisposable
 		Assert.True(sheet.FindNamed<TextBlock>("txtControlsPads").IsOnScreen());
 		Assert.True(sheet.FindNamed<Slider>("sldControlsRumble").IsOnScreen());
 		Assert.True(sheet.FindNamed<Slider>("sldControlsDeadzone").IsOnScreen());
+		Assert.False(sheet.FindNamed<ToggleButton>("chkControlsMenuTick").IsOnScreen(), "Menu tick stays hidden until the pad in hand is aimable (#1112)");
 		Assert.True(sheet.FindNamed<Button>("btnPlayerSettingsMoreInOptions").IsOnScreen());
 		Assert.True(sheet.FindNamed<Button>("btnPlayerSettingsDone").IsOnScreen());
 		Assert.DoesNotContain(sheet.FindAll<ScrollBar>(), s => s.IsOnScreen());
 
 		PlayerRender.Save(PlayerRender.Capture(window), "W-P8c");
+	}
+
+	//Runs a case with the host answering "the pad in hand is aimable" - the one
+	//seam, so no hardware is needed - and puts both seams and Rumble back.
+	private static void WithAimablePad(uint rumble, Action body)
+	{
+		Func<bool> original = PlayerSettingsEssentials.MenuTickAimable;
+		uint originalRumble = ConfigManager.Config.Input.ForceFeedbackIntensity;
+		try {
+			HapticTickOutput.SetSeamsForTest(_ => true, null);
+			HapticTickOutput.PadInHand = 0;
+			PlayerSettingsEssentials.MenuTickAimable = HapticTickOutput.PadInHandAimable;
+			ConfigManager.Config.Input.ForceFeedbackIntensity = rumble;
+			body();
+		} finally {
+			PlayerSettingsEssentials.MenuTickAimable = original;
+			TestAppBuilder.ResetPadSeams();
+			ConfigManager.Config.Input.ForceFeedbackIntensity = originalRumble;
+		}
+	}
+
+	//ADR-0249: the fresh render's regions (the settings sheet, the Menu tick row)
+	//must match the wireframe save for the known deviations, and match the
+	//committed baseline in UI.Tests/Theme/PlayerRenders/.
+	private static void AssertWireframeRegions(Bitmap frame, string wId)
+	{
+		RgbFrame fresh = PlayerRender.Rgb(frame);
+		IReadOnlyList<RegionResult> results = PlayerWireframe.Compare(wId, fresh, RgbFrame.FromPng(PlayerRender.WireframePath(wId)));
+		List<string> violations = PlayerWireframe.Gate(wId, results, PlayerRender.DeviationsOnThisHost(wId)).ToList();
+		string committed = PlayerRender.DriftBaselinePath(wId);
+		//The Linux baseline is not committed yet for W-P8e (the render-gate job's
+		//player-renders artifact refreshes it), so off macOS only the wireframe
+		//half gates until it exists.
+		if(OperatingSystem.IsMacOS() || File.Exists(committed)) {
+			Assert.True(File.Exists(committed), $"{wId} has no committed render at {committed}; commit {Path.Combine(PlayerRender.OutputFolder, wId + ".png")} there");
+			violations.AddRange(PlayerWireframe.Drift(wId, fresh, RgbFrame.FromPng(committed), committed));
+		}
+		Assert.True(violations.Count == 0, string.Join(Environment.NewLine, violations));
+	}
+
+	//W-P8e: Controls with the Menu tick row, which exists only because the host
+	//answered that the pad in hand is aimable (#1112).
+	[AvaloniaFact]
+	public void Settings_controls_with_menu_tick_renders_as_W_P8e()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		WithAimablePad(5, () => {
+			(MainWindow window, MainWindowViewModel model) = ShowPlay();
+			Border sheet = OpenSettings(window, model, ConfigWindowTab.Input);
+
+			Assert.Equal(388, sheet.Bounds.Height, 0.5);
+			Assert.True(sheet.FindNamed<Slider>("sldControlsRumble").IsOnScreen());
+			Assert.True(sheet.FindNamed<Slider>("sldControlsDeadzone").IsOnScreen());
+			ToggleButton tick = sheet.FindNamed<ToggleButton>("chkControlsMenuTick");
+			Assert.IsType<ToggleSwitch>(tick);
+			Assert.True(tick.IsOnScreen());
+			Assert.True(tick.IsEnabled);
+			Assert.False(tick.IsChecked, "Menu tick is off until the player turns it on");
+			Assert.False(sheet.FindNamed<TextBlock>("txtControlsMenuTickReason").IsOnScreen());
+			Assert.True(sheet.FindNamed<Button>("btnPlayerSettingsMoreInOptions").IsOnScreen());
+			Assert.True(sheet.FindNamed<Button>("btnPlayerSettingsDone").IsOnScreen());
+			Assert.DoesNotContain(sheet.FindAll<ScrollBar>(), s => s.IsOnScreen());
+
+			Bitmap frame = PlayerRender.Capture(window);
+			PlayerRender.Save(frame, "W-P8e");
+			AssertWireframeRegions(frame, "W-P8e");
+		});
+	}
+
+	//With Rumble at 0 the row stays but is disabled, and says why.
+	[AvaloniaFact]
+	public void Settings_controls_disables_menu_tick_with_its_reason_when_rumble_is_0()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		WithAimablePad(0, () => {
+			(MainWindow window, MainWindowViewModel model) = ShowPlay();
+			Border sheet = OpenSettings(window, model, ConfigWindowTab.Input);
+
+			ToggleButton tick = sheet.FindNamed<ToggleButton>("chkControlsMenuTick");
+			Assert.True(tick.IsOnScreen());
+			Assert.False(tick.IsEnabled);
+			TextBlock reason = sheet.FindNamed<TextBlock>("txtControlsMenuTickReason");
+			Assert.True(reason.IsOnScreen());
+			Assert.Equal("Rumble is off", reason.Text);
+		});
 	}
 
 	//W-P9: while a pack installs over the running game, the pill names it and

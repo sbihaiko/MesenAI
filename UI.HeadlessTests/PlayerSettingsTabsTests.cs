@@ -28,6 +28,7 @@ namespace Mesen.HeadlessTests;
 //Decision 8) with the hint and Done and no Advanced tab list, and that
 //Advanced's ConfigWindow still shows every tab and no strip.
 [NativeCoreFree("Opens the Settings sheet (with injected device and pad sources) and ConfigWindow on the Input tab; only the classic Audio/Video/Display/Look tab view-models reach ConfigApi/EmuApi on construction.")]
+[Collection(PlayerSettingsSeamsCollection.Name)]
 public class PlayerSettingsTabsTests
 {
 	//Input is the tab a host-free run opens: its classic view-model does not

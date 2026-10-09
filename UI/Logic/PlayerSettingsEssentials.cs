@@ -48,13 +48,18 @@ public static class PlayerSettingsEssentials
 	//window), and Play's System tab (ADR-0256 Decision 8) needs the same room: two storage choices with their
 	//folder lines, two keyboard choices, and the restart line a folder change
 	//puts there.
-	public static double SheetHeight(ConfigWindowTab tab) => tab switch {
+	public static double SheetHeight(ConfigWindowTab tab) => SheetHeight(tab, MenuTickAimable());
+
+	//#1112: the Menu tick answer is passed in, so a sheet that froze it for the row's
+	//visibility sizes itself from the same read (the pad in hand can change mid-sheet).
+	public static double SheetHeight(ConfigWindowTab tab, bool menuTickAimable) => tab switch {
 		ConfigWindowTab.Look or ConfigWindowTab.System => 480,
 		//#1111: Display's fourth row (Interface size) is one 46 px row and its hairline taller.
 		ConfigWindowTab.Display => 387,
 		//#1105: Audio's fourth row (Menu sounds) needs one more row's height, but
 		//only while the host can play it.
 		ConfigWindowTab.Audio when MenuSoundsAvailable() => 388,
+		ConfigWindowTab.Input when menuTickAimable => 388,
 		_ => 340
 	};
 
@@ -63,6 +68,16 @@ public static class PlayerSettingsEssentials
 	//own ADR), so today the row is hidden and Audio keeps its three rows. A test
 	//swaps this seam to exercise the row.
 	public static Func<bool> MenuSoundsAvailable { get; set; } = () => false;
+
+	//#1112: the Menu tick row is shown only while the host reports the pad in the
+	//player's hand as aimable (App wires HapticTickOutput.PadInHandAimable); with no
+	//pad in hand, or on a backend that cannot aim, there is no row at all. A test
+	//swaps this seam.
+	public static Func<bool> MenuTickAimable { get; set; } = () => false;
+
+	//Raised when the pad in hand changes; an open sheet re-reads MenuTickAimable.
+	public static event Action? MenuTickAimableChanged;
+	public static void RaiseMenuTickAimableChanged() => MenuTickAimableChanged?.Invoke();
 
 	//#852: the strip's segment width. ADR-0249's sheet is 480 px wide behind
 	//19 px of padding a side, and the reference mockups (docs/media/
@@ -89,11 +104,16 @@ public static class PlayerSettingsEssentials
 
 	//PRD rule 2: an inset list of at most three rows per essentials tab, except
 	//Display's fourth (#1111, Interface size), which still fits the 7 elements,
-	//and Audio's (Menu sounds, #1105) while the host reports it available.
+	//and the fourth of Audio (Menu sounds, #1105) and Controls (Menu tick, #1112)
+	//while the host reports it available.
 	public const int MaxRows = 4;
-	public static int MaxRowsFor(ConfigWindowTab tab) => tab switch {
+	public static int MaxRowsFor(ConfigWindowTab tab) => MaxRowsFor(tab, MenuTickAimable());
+
+	//#1112: like SheetHeight, takes the Menu tick answer a sheet froze when it opened.
+	public static int MaxRowsFor(ConfigWindowTab tab, bool menuTickAimable) => tab switch {
 		ConfigWindowTab.Display => 4,
 		ConfigWindowTab.Audio when MenuSoundsAvailable() => 4,
+		ConfigWindowTab.Input when menuTickAimable => 4,
 		_ => 3
 	};
 
@@ -120,12 +140,18 @@ public static class PlayerSettingsEssentials
 		new("Rumble", PlayerSettingsRowKind.Slider),
 		new("Deadzone", PlayerSettingsRowKind.Slider)
 	};
+	//#1112: the optional focus-move tick, off until turned on.
+	private static readonly PlayerSettingsRow[] ControlsRowsWithMenuTick = ControlsRows
+		.Append(new("MenuTick", PlayerSettingsRowKind.Switch)).ToArray();
 
 	//The rows of a tab's inset list; Look has its own W-P10 page (empty here).
-	public static IReadOnlyList<PlayerSettingsRow> Rows(ConfigWindowTab tab) => tab switch {
+	public static IReadOnlyList<PlayerSettingsRow> Rows(ConfigWindowTab tab) => Rows(tab, MenuTickAimable());
+
+	//#1112: the Menu tick answer is the one a sheet froze when it opened.
+	public static IReadOnlyList<PlayerSettingsRow> Rows(ConfigWindowTab tab, bool menuTickAimable) => tab switch {
 		ConfigWindowTab.Display => DisplayRows,
 		ConfigWindowTab.Audio => MenuSoundsAvailable() ? AudioRowsWithMenuSounds : AudioRows,
-		ConfigWindowTab.Input => ControlsRows,
+		ConfigWindowTab.Input => menuTickAimable ? ControlsRowsWithMenuTick : ControlsRows,
 		_ => Array.Empty<PlayerSettingsRow>()
 	};
 

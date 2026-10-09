@@ -12,5 +12,13 @@ namespace Mesen.Logic
 		{
 			return enabled && isAimable(padIndex);
 		}
+
+		//#1112: the focus-move tick. Never with Rumble at 0 (the row is disabled
+		//then), and never over a game that is running: the pad belongs to the
+		//console (ADR-0256 Decision 1) and a cartridge's own rumble owns the motor.
+		public static bool ShouldTickOnMove(bool enabled, uint rumble, bool gameRunningUnpaused, uint padIndex, Func<uint, bool> isAimable)
+		{
+			return rumble > 0 && !gameRunningUnpaused && ShouldTick(enabled, padIndex, isAimable);
+		}
 	}
 }

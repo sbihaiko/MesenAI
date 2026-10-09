@@ -62,6 +62,10 @@ public static class PlayerWireframe
 			new("resume button", new LogicalBox(390, 168, 320, 32)),
 			new("grouped rows", new LogicalBox(376, 230, 348, 250)),
 		},
+		["W-P8e"] = new WireframeRegion[] {
+			new("settings sheet", new LogicalBox(310, 77, 480, 388)),
+			new("menu tick row", new LogicalBox(330, 312, 440, 45)),
+		},
 		["W-P15"] = new WireframeRegion[] { new("setup sheet", new LogicalBox(320, 120, 460, 440)) },
 	};
 
@@ -116,6 +120,19 @@ public static class PlayerWireframe
 		//sheet sits ~36 px below the wireframe's (centred in the whole window),
 		//so the region crops it differently: 10 text lines where the wireframe,
 		//the reference, has 11. Colour and ink box stay gated on the sheet.
+		//The wireframe draws a running game and the shell's status text behind the
+		//sheet; the headless render has the sheet over the dimmed fixture, so the
+		//content and status line differ. Within the sheet the Menu tick row is
+		//gated whole; the text-line centres sit 10.5 px off the wireframe's
+		//(measured on the macOS render, 2026-10-09), past the 8 px tolerance.
+		["W-P8e"] = new KnownDeviation[] {
+			new("content", Colour, NoGameBehind, false),
+			new("content", InkBox, NoGameBehind, false),
+			new("content", TextLines, NoGameBehind, false),
+			new("status line", Colour, NoGameBehind, false),
+			new("status line", InkBox, NoGameBehind, false),
+			new("settings sheet", TextLines, "line centres 10.5 px off the wireframe's, measured", false),
+		},
 		["W-P15"] = new KnownDeviation[] {
 			new("title bar", InkBox, NoChrome, false),
 			new("title bar", TextLines, NoChrome, false),
@@ -129,6 +146,7 @@ public static class PlayerWireframe
 		},
 	};
 
+	private const string NoGameBehind = "the wireframe draws a running game and its status text behind the sheet; the headless render has the fixture";
 	private const string NoChrome = "bare sheet over the HUD background, no Player chrome";
 
 	private const string ActionBar = "the shared action bar's footer line (#1104), which the wireframe does not draw";

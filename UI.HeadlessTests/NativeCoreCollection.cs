@@ -36,3 +36,13 @@ public sealed class NativeCoreFreeAttribute(string reason) : Attribute
 {
 	public string Reason { get; } = reason;
 }
+
+//#1112 review. MenuTickSheetSeamTests swaps the process-wide
+//PlayerSettingsEssentials.MenuTickAimable seam, which ConfigViewModel reads on
+//construction. Every class that builds the player-mode Settings sheet shares this
+//collection and DisableParallelization keeps the swap from racing those readers.
+[CollectionDefinition(Name, DisableParallelization = true)]
+public sealed class PlayerSettingsSeamsCollection
+{
+	public const string Name = "PlayerSettingsSeams";
+}

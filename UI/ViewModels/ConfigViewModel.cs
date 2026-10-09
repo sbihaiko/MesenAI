@@ -2,6 +2,7 @@
 using Mesen.Config;
 using Mesen.Logic;
 using Mesen.Utilities;
+using Avalonia.Threading;
 using Mesen.Interop;
 using System;
 using System.Collections.Generic;
@@ -50,7 +51,7 @@ namespace Mesen.ViewModels
 		//#910: Display's Exit fullscreen, in Done's row while the window is fullscreen.
 		public bool ShowsPlayerExitFullscreen => PlayerSettingsEssentials.ShowsExitFullscreen(PlayerSettingsEssentials.TabAt(PlayerTabIndex), Display?.IsFullscreen == true);
 		//ADR-0249 (W-P8, W-P10): the Settings sheet is as high as its tab needs.
-		public double PlayerSheetHeight => PlayerSettingsEssentials.TabAt(PlayerTabIndex) is ConfigWindowTab tab ? PlayerSettingsEssentials.SheetHeight(tab) : PlayerSettingsEssentials.SheetHeight(ConfigWindowTab.Display);
+		public double PlayerSheetHeight => PlayerSettingsEssentials.TabAt(PlayerTabIndex) is ConfigWindowTab tab ? PlayerSettingsEssentials.SheetHeight(tab, MenuTickAimable) : PlayerSettingsEssentials.SheetHeight(ConfigWindowTab.Display);
 
 		//Video and Look edit the same VideoConfig, so they share one snapshot
 		//for Cancel/IsDirty, taken when the first of them opens.
@@ -67,6 +68,25 @@ namespace Mesen.ViewModels
 		private readonly Func<PlayerSystemSettingsViewModel>? _createSystem;
 		private readonly Func<IReadOnlyList<string>> _audioDevices;
 		private readonly Func<int> _connectedPads;
+		//#1112: the ONE availability value - the Menu tick row and the sheet's height
+		//both read it, and it is re-read whenever the pad in hand changes.
+		[ObservableProperty, NotifyPropertyChangedFor(nameof(PlayerSheetHeight))] public partial bool MenuTickAimable { get; set; } = PlayerSettingsEssentials.MenuTickAimable();
+
+		partial void OnMenuTickAimableChanged(bool value)
+		{
+			if(PlayerControls != null) {
+				PlayerControls.MenuTickAvailable = value;
+			}
+		}
+
+		protected override void DisposeView()
+		{
+			PlayerSettingsEssentials.MenuTickAimableChanged -= OnPadInHandChanged;
+		}
+
+		public void RefreshMenuTickAimable() => MenuTickAimable = PlayerSettingsEssentials.MenuTickAimable();
+
+		private void OnPadInHandChanged() => Dispatcher.UIThread.Post(RefreshMenuTickAimable);
 
 		[Obsolete("For designer only")]
 		public ConfigViewModel() : this(ConfigWindowTab.Audio) { }
@@ -83,6 +103,9 @@ namespace Mesen.ViewModels
 			_connectedPads = connectedPads ?? (() => (int)InputApi.GetConnectedGamepadCount());
 			//§6: Player starts on one of the essentials tabs; a non-essentials
 			//selection (e.g. Preferences from the Advanced GUI) clamps to Display.
+			if(playerMode) {
+				PlayerSettingsEssentials.MenuTickAimableChanged += OnPadInHandChanged;
+			}
 			SelectTab(playerMode ? PlayerSettingsEssentials.ClampToEssentials(selectedTab) : selectedTab);
 		}
 
@@ -168,7 +191,7 @@ namespace Mesen.ViewModels
 				case ConfigWindowTab.Emulation: Emulation ??= AddDisposable(new EmulationConfigViewModel()); break;
 				case ConfigWindowTab.Input:
 					if(PlayerMode) {
-						PlayerControls ??= AddDisposable(new PlayerControlsSettingsViewModel(ConfigManager.Config.Input, _connectedPads()));
+						PlayerControls ??= AddDisposable(new PlayerControlsSettingsViewModel(ConfigManager.Config.Input, _connectedPads(), MenuTickAimable));
 					} else {
 						Input ??= AddDisposable(new InputConfigViewModel());
 						if(PlayerControls != null) {

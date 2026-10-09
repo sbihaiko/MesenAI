@@ -40,7 +40,19 @@ public static class TestAppBuilder
 		return AppBuilder.Configure<Mesen.App>()
 			.UseSkia()
 			.WithInterFont()
-			.UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false });
+			.UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false })
+			.AfterSetup(_ => ResetPadSeams());
+	}
+
+	//#1112: the host answers "the pad in hand is aimable" from real hardware (a
+	//Mac with a haptic pad), and App wires the Menu tick row to that answer. The
+	//headless host must not depend on what is plugged in, so the default is "not
+	//aimable, ticks go nowhere", and a case that wants a pad swaps it and puts THIS
+	//default back - never the host (SetSeamsForTest(null, null)).
+	internal static void ResetPadSeams()
+	{
+		Mesen.Windows.HapticTickOutput.SetSeamsForTest(_ => false, _ => { });
+		Mesen.Windows.HapticTickOutput.PadInHand = -1;
 	}
 
 	//Mesen resolves ConfigManager.HomeFolder to the executable's own folder as
