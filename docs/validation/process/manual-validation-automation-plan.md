@@ -154,7 +154,7 @@ step 6 is the only one that still needs a human at a display.
 |---|---|---|
 | 1 | **P.6**: amend the PRD row (toast pending item is stale). Zero code | **done** - the PRD P.6 row now records that no separate "Updated ..." toast exists nor is needed |
 | 2 | **ADR-0142**: file the block-step bug, amend the ADR, fix the ramp, inject the run-ahead probe, add the `core_unit_tests` case | **done** - bug #151 (filed, fixed, closed); ADR-0142 Consequences amended; per-sample ramp in `Core/NES/HdPacks/OggFadeRamp.h` (16.16 fixed point) behind the new `IOggSource`; `OggMixer`/`OggReader` decoupled from `Emulator` via an injected run-ahead probe; `scripts/core_unit_tests.cpp` Bloco I, 192/192 cases pass, and reverting the ramp fails it (worst jump 1906 vs 6.27 allowed) |
-| 3 | **P.7**: `PlayerChrome` helper in `UI/Logic/` consumed by both `MainWindowViewModel` and `MouseManager`, plus tests. HQ4x check via `headless_record` screenshot | **done** - `UI/Logic/PlayerChrome.cs` (`IsMenuVisible` + `IsCursorInMenuBand`) consumed by both call sites, 8 `UI.Tests` cases, 386 total green; `scripts/headless_record.cpp` gained a `filter=<name>` flag (it never pushed a `VideoConfig`, so no filter was reachable headlessly) and `scripts/check_hq4x_screenshot.sh` measures 256x240 -> 1024x960 with interpolated colours (11 -> 146 distinct) |
+| 3 | **P.7**: `PlayerChrome` helper in `UI/Logic/` consumed by both `MainWindowViewModel` and `MouseManager`, plus tests. HQ4x check via `headless_record` screenshot | **done** - `UI/Logic/PlayerChrome.cs` (`IsMenuVisible` + `IsCursorInMenuBand`) consumed by both call sites, 8 `UI.Tests` cases, 386 total green; `scripts/headless_record.cpp` gained a `filter=<name>` flag (it never pushed a `VideoConfig`, so no filter was reachable headlessly) and `scripts/check_hq4x_screenshot.sh` measures 256x240 -> 1024x960 with interpolated colors (11 -> 146 distinct) |
 | 4 | **F6.5**: write the manual checklist; run it once with a wired-patch audio pack; gate the result with `smoke_pack_headless.sh` | **checklist written, run pending** - `docs/validation/slices/f65-install-acceptance-checklist.md`. Gap found: all 11 published catalog rows are `kind: "hd-legacy"` with no `deps`/`recipe`, so no live row can raise the pending-dependency prompt; Part B therefore uses a seeded catalog |
 | 5 | **P.6 real fetch**: on-demand script, log-line check | **script written, phase 1 verified live** - `scripts/catalog_update_live_check.sh`; phase 2 needs a logged-in desktop session and reports the headless-shell case instead of passing silently |
 | 6 | **Manual screen pass** for 16:9 and the cards, last | **superseded by wave 2 (2026-09-03)** - the cards are asserted by `UI.HeadlessTests/PlayerHomeCardsTests.cs` and the aspect-ratio math by `core_unit_tests` Bloco N; only the on-window letterbox fit is still a human pass |
@@ -216,7 +216,7 @@ what now answers it.
 |---|---|---|
 | F5.4g Block C item 8 | "loop-intro não repete" (listening) | **done** - `scripts/core_unit_tests.cpp` **Bloco J** covers ADR-0134's loop-point rule through the new decoder-agnostic `Core/NES/HdPacks/OggLoopStream.h` (an `IOggDecoder` seam the production `OggReader` delegates to): consuming past the track end returns to `loopPosition`, not to 0, and a track without a loop point behaves exactly as before. Defect-probed - seeking to 0 instead fails 3 cases |
 | F5.4g Block C item 9 | SMB1/Zelda SFX audible | **done** - the ADR-0133 mask is now the shared header `Core/Shared/Audio/ReplacementMuteMask.h` (`FullTonalMute`/`IsMuted`/`Compute(roles)`; a template, so the mixer never includes `ChannelRoleClassifier`, as ADR-0133 requires), consumed by `NesAudioFingerprint::UpdateReplacementMuteMask` and `NesSoundMixer::GetChannelOutput`. **Bloco K** asserts that exactly the fingerprinted channel is muted and that SFX / expansion / DMC channels are not. Defect-probed. The audible end-to-end (real game, real ears) is the residue |
-| F5.4g Block B | "GUI/listening validation of the rendered audio" | **done** - **Bloco L** renders the `EnhancedSynthEngine` against the committed PCM golden `docs/specs/golden/synth/enhanced-synth-pcm.txt` (128 frames from a synthetic preset declared in the test, ±2 LSB tolerance plus a >1000 peak gate so a silent render cannot pass; cwd-relative golden per ADR-0129). Defect-probed - moving the harmony mix from 0.80 to 0.79 shifts 8 samples. Timbre judgement stays subjective; regression coverage no longer is |
+| F5.4g Block B | "GUI/listening validation of the rendered audio" | **done** - **Bloco L** renders the `EnhancedSynthEngine` against the committed PCM golden `docs/specs/golden/synth/enhanced-synth-pcm.txt` (128 frames from a synthetic preset declared in the test, ±2 LSB tolerance plus a >1000 peak gate so a silent render cannot pass; cwd-relative golden per ADR-0129). Defect-probed - moving the harmony mix from 0.80 to 0.79 shifts 8 samples. Timbre judgment stays subjective; regression coverage no longer is |
 | ADR-0120 §4 | the C++ E2E zip harness "does not exist"; zip/slip recipe kinds "that is a manual" | **done** - **Bloco M** drives the whole `PrepareZip` pipeline through the new `Core/Shared/EnhancementPacks/MepZipExtract.h` (stamp/cache reuse, stale-cache wipe, zip-slip plan validation, ADR-0120 fallback-subfolder resolution, extraction), which `MepPackManager::PrepareZip` now delegates to; an `IArchive` seam keeps the real archive readers out of the test link. Covers path traversal, absolute path (incl. a Windows drive letter), nested wrapper fallback, cache-stamp reuse, stale-cache wipe, a symlink left in the cache being wiped, the empty-archive guard and the `.mep-source` stamp. Defect-probed per check. Caveat recorded in ADR-0120 §4: miniz's writer cannot author a true `S_IFLNK` entry, so symlinks are covered by their two reachable halves (a path-payload entry writes as a plain file; a pre-existing cache symlink is wiped), not by a real symlink inside an archive |
 | P.7 | 16:9 stretch | **done for the math** - the destination-size rule is extracted into `Core/Shared/Video/AspectRatioMath.h` and asserted by **Bloco N** per `VideoAspectRatio` setting (NoStretching/Auto/4:3/16:9/NTSC/PAL/Custom → the destination size; e.g. 240 rows → 256/320/427 columns). **Residue**: the on-window letterbox fit (`RendererPanel_LayoutUpdated` in `UI/Windows/MainWindow.axaml.cs`, `FullscreenForceIntegerScale`) is not in that header and stays untested geometry |
 | P.4 | "Player cannot reach Debug without switching", Esc-while-playing | **done, and it was a real defect** - `UI/Logic/PlayerDebugAccess.cs` (`IsDebugReachable(UiMode)` + `IsDebugEntryEnabled`) is consumed by the new `ApplyPlayerDebugGate` in `UI/ViewModels/MainMenuViewModel.cs`, which sets every Debug action's `IsEnabled` *before* `DebugShortcutManager.RegisterActions`; `UI.Tests/Config/PlayerDebugAccessTests.cs` covers it. The old claim was false: hiding the menu only blocked the mouse, and the debugger hotkeys still fired in Player via `DebugShortcutManager`. Gating `IsEnabled` closes both paths in Player (what PRD §6 specifies) and is a strict no-op in Advanced. The Esc-while-playing keyboard-block exemption for `ToggleOverlay` is now `Core/Shared/ShortcutKeyRules.h` + **Bloco O** |
@@ -261,11 +261,11 @@ available") — clean `UI/obj` between RID switches.
 | Item | Why |
 |---|---|
 | I.1, I.3 hardware items — pad GUI run, MBC7/GBA tilt UI, Linux `UpdateDevices()`, macOS pads without `extendedGamepad` | Needs the physical device and, for two of them, the other OS |
-| P.5 "toast noise judgement", F5.4g timbre/listening quality | Subjective; a test can assert the toast fires, never that it is welcome |
+| P.5 "toast noise judgment", F5.4g timbre/listening quality | Subjective; a test can assert the toast fires, never that it is welcome |
 | H7 / ADR-0128 GB/SMS cheat support, ADR-0004 v1-draft community review | Product decisions, not validations |
 | F6.5 `LIVE_VALIDATION_ENABLED` → `'true'` | Deferred by explicit user decision 2026-08-29 |
 | P.6 phase 2 of `catalog_update_live_check.sh` | Needs a logged-in desktop session; the script already detects and reports the headless-shell case instead of passing silently |
-| ADR-0130 `.gitignore` exclusion for new harness binaries | A process rule for authors, not a runtime behaviour |
+| ADR-0130 `.gitignore` exclusion for new harness binaries | A process rule for authors, not a runtime behavior |
 
 ### Order followed by wave 2 (executed 2026-09-03)
 
@@ -295,7 +295,7 @@ available") — clean `UI/obj` between RID switches.
   end-to-end, and the 2C items below.
 - **Subjective audio** — timbre quality (F5.4g Block B), the audible
   SFX-during-OGG end-to-end (Block C item 9), the P.5 toast-noise
-  judgement.
+  judgment.
 
 ## Wave 3 — the F9.15 frame capture, and the 16:9 residue (2026-09-05)
 
@@ -314,7 +314,7 @@ question the tool invites: does it close any of the items above?
 | **F6.5 / P.5 OSD toast appearing** | none today — genuinely manual | **Not the capture**, see below |
 | **Installer GUI end-to-end** | none — genuinely manual | Same picker, plus a human confirming the prompt |
 | **Physical pad (I.2 polling half, I.3 end-to-end)** | hardware | Unchanged |
-| **Timbre / "click-free" listening / toast-noise judgement** | human ears | Unchanged; the *regression* halves are Blocos I, K, L |
+| **Timbre / "click-free" listening / toast-noise judgment** | human ears | Unchanged; the *regression* halves are Blocos I, K, L |
 
 ### Why the capture is the wrong instrument for the two it looks like it fits
 
@@ -354,7 +354,7 @@ Following `PlayerChrome`'s shape (the pattern this note adopted in wave 1):
   window: the panel bounds, `_rendererSize`, the DPI scale, the window
   state (it resolves the `FullscreenForceIntegerScale && maximized/
   fullscreen` conjunction) and the assignments.
-  One deliberate behaviour change: degenerate inputs (an aspect ratio of
+  One deliberate behavior change: degenerate inputs (an aspect ratio of
   `0.0`, which `AspectRatioMath` returns for an unknown setting, or a panel
   with no bounds yet) used to produce `NaN`/`Infinity` on a control's
   `Width` — silently meaning "auto". They now fill the available space.
@@ -394,7 +394,7 @@ pixel". The rule and its tests are in
   end-to-end, and the 2C items.
 - **Subjective audio** — timbre quality (F5.4g Block B), the audible
   SFX-during-OGG end-to-end (Block C item 9), the P.5 toast-noise
-  judgement.
+  judgment.
 
 16:9 is no longer on this list. The OSD toast was the last item on it
 that was a structural code gap rather than a wall — **closed by wave 4
@@ -415,7 +415,7 @@ queue until a real render pass draws it.
 ADR-0167 (accepted; extends the F9.15 capture pattern) adds:
 
 - `VideoRenderer::CaptureSystemHud(w, h, out)` — draws the system HUD alone
-  into a caller-owned ARGB buffer, same-thread and software-only, modelled on
+  into a caller-owned ARGB buffer, same-thread and software-only, modeled on
   the `ProcessAviRecording` overlay path (no `_renderer`, no render thread).
 - `HeadlessCaptureHud` / `HeadlessReadCapturedHudPixels` exports, mirroring
   F9.15's two-call shape, plus `HeadlessSetOsdEnabled` (see below).

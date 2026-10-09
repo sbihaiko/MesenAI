@@ -3,7 +3,7 @@
 - Status: superseded (2026-09-12, by the user, on the cover measurement) —
   Superseded by: ADR-0179 §4 (`variantOf`), which is the part story the data
   supports. Measured on the golden kit
-  (`runs/golden-20260912/spike-pose-parts.md`, summarised at the end of §4):
+  (`runs/golden-20260912/spike-pose-parts.md`, summarized at the end of §4):
   the best cover reaches 21–43 % of the poses with 1.0–1.4 parts each, i.e.
   the "part" is the whole figure recurring inside its projectile variant;
   genuine limb parts tile 10 of 37 Contra stage-1 poses and none on Mega
@@ -33,7 +33,7 @@ Two things the artist's pack does that our sheets do not:
 1. **The figure is shown whole, the part is stored once.** ADR-0171 already decided storage-once for `sprNNN`; what is missing is the *view*: a pose shown as "torso T3 at (0,0) + legs L2 at (0,3)", so painting T3 and L2 changes eighteen figures.
 2. **A shared part under two figures needs a condition to be painted differently.** Bill and Lance share 136 of 137 tile hashes and the same head/torso palette; the artist spent 98 `spriteNearby` conditions anchored on the trousers tile to give Lance his own torso art. A recorder that knows which parts compose a pose can emit that condition instead.
 
-The spike measured plausibility only: the largest rigid tile subset shared by each pair of kept non-fusion poses (same nodes, same internal offsets, >= 4 tiles) yields 40 distinct parts on the Contra golden sidecar — the soldier's 2x2 leg halves (in 31 and 30 pose pairs), the player's 2x4 blue trousers (18), the 2x5 blue torso-and-trousers (13) — and a naive greedy cover tiles 24 of 64 poses completely with <= 3 of the top-40 parts. That says a decomposition exists, not which one: the naive cover leaves 40 poses with a remainder, the "part" that is a whole soldier body (25 pairs) walks into other figures rather than being a limb, and no measurement yet says which cover an artist would recognise as torso / legs / arm.
+The spike measured plausibility only: the largest rigid tile subset shared by each pair of kept non-fusion poses (same nodes, same internal offsets, >= 4 tiles) yields 40 distinct parts on the Contra golden sidecar — the soldier's 2x2 leg halves (in 31 and 30 pose pairs), the player's 2x4 blue trousers (18), the 2x5 blue torso-and-trousers (13) — and a naive greedy cover tiles 24 of 64 poses completely with <= 3 of the top-40 parts. That says a decomposition exists, not which one: the naive cover leaves 40 poses with a remainder, the "part" that is a whole soldier body (25 pairs) walks into other figures rather than being a limb, and no measurement yet says which cover an artist would recognize as torso / legs / arm.
 
 Non-goals: changing what a pose is or how it is counted (`tiles[]` is still the truth of the entry); naming parts ("torso"); emitting anything into `hires.txt` here — §4 lists that as the follow-up it enables; any change to the `sprNNN` grouping (ADR-0153 §2), whose fragments often coincide with parts but are cut by a different rule for a different file.
 
@@ -63,7 +63,7 @@ A kept pose gains an optional `composition[]`: the parts that tile it, with each
 
 ### 3. The consumer paints parts, and shows figures
 
-The composition editor's sprite picker keeps offering **poses** (ADR-0171 untouched) and, when the sidecar has parts, draws a pose's parts as distinct, labelled regions and lets the artist open the `sprNNN` sheet a part's tiles live on (ADR-0174 provides the join). A pose with `rest > 0` is drawn whole; the rest is unlabelled. With ADR-0179 §5 this is the artist's grid: rows from cycles, columns from phases, cells decomposed into the parts actually stored.
+The composition editor's sprite picker keeps offering **poses** (ADR-0171 untouched) and, when the sidecar has parts, draws a pose's parts as distinct, labeled regions and lets the artist open the `sprNNN` sheet a part's tiles live on (ADR-0174 provides the join). A pose with `rest > 0` is drawn whole; the rest is unlabelled. With ADR-0179 §5 this is the artist's grid: rows from cycles, columns from phases, cells decomposed into the parts actually stored.
 
 ### 4. The open points that were never closed before this was superseded
 

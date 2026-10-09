@@ -45,6 +45,17 @@
 	</ItemGroup>
 
 	<ItemGroup>
+		<!-- #1038: the committed No-Intro table, embedded under the same
+		     LogicalName UI.csproj uses, so UI.Tests/Play/NoIntroNameTableTests
+		     reads the real generated artifact through Mesen.Logic's own loader
+		     (asserting only against a table built inside the test would let the
+		     generator and the reader drift apart while both stayed green). The
+		     file is one generated .gz, not code: nothing Avalonia- or
+		     native-tainted reaches this project through it. -->
+		<EmbeddedResource Include="../scripts/no_intro_sha1.tsv.gz" LogicalName="Mesen.no_intro_sha1.tsv.gz" />
+	</ItemGroup>
+
+	<ItemGroup>
 		<PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
 		<PackageReference Include="xunit" Version="2.9.2" />
 		<PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />

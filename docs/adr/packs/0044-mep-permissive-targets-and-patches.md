@@ -1,4 +1,4 @@
-# ADR-0044: Permissive ROM targets — dump normalisation and per-hash patches
+# ADR-0044: Permissive ROM targets — dump normalization and per-hash patches
 
 - Status: accepted (F5.1, 2026-08-25)
 - Date: 2026-08-25
@@ -15,9 +15,9 @@ made for one revision to another produces a corrupt ROM, so the hash gate on
 patches is a real safety property, not friction.
 
 ## Decision
-1. **Dump normalisation** in `MepPackManager::ComputeNoIntroSha1`: for iNES,
+1. **Dump normalization** in `MepPackManager::ComputeNoIntroSha1`: for iNES,
    hash exactly the PRG+CHR size declared by the header (drops trailing
-   garbage); trainer handling unchanged. Log raw and normalised hash.
+   garbage); trainer handling unchanged. Log raw and normalized hash.
 2. **`patches[]`** in `pack.json`: `[{ "sha1": "...", "file": "rel/path.ips" }]`.
    A ROM that matches any `target` loads textures/audio/synth; the patch is
    applied only when an entry matches the ROM's sha1, otherwise skipped with a

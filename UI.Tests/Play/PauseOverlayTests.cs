@@ -125,7 +125,6 @@ namespace Mesen.Tests.Play
 		[InlineData(PlaySheet.Enhancements)]
 		[InlineData(PlaySheet.Cheats)]
 		[InlineData(PlaySheet.SaveStates)]
-		[InlineData(PlaySheet.SaveStateGrid)]
 		//G.4 (W-P6): the current-pack detail.
 		[InlineData(PlaySheet.PackDetail)]
 		//R.2 (ADR-0205 §7): Shared replays, opened from the Save states sheet.

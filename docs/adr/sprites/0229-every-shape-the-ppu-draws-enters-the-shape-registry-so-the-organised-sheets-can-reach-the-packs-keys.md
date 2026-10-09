@@ -1,4 +1,4 @@
-# ADR-0229: Every shape the PPU draws enters the shape registry, so the organised sheets can reach the pack's keys
+# ADR-0229: Every shape the PPU draws enters the shape registry, so the organized sheets can reach the pack's keys
 
 - Status: **superseded 2026-09-24**, closed as option (iii) by the user's
   decision of 2026-09-24, answering "What do we do with ADR-0229?" with the
@@ -62,9 +62,9 @@ schema or `mep_build.py`.
 **(i) Register every shape `ProcessTile` draws.** `ProcessTile` also interns the
 tile through `ShapeIdFor`, so the registry becomes the set of shapes the PPU
 drew during the recording, not the set the retained stream kept. The extra shapes
-carry no organisation (no pose, no scenery group, no map position), so they land
+carry no organization (no pose, no scenery group, no map position), so they land
 where the remainder already lands — the `unsorted` sheet, as `seen: true` cells;
-the organised sheets are unchanged. Costs to measure: registry size (ids are
+the organized sheets are unchanged. Costs to measure: registry size (ids are
 `uint16_t`, with `kEmptyCell` = 0xFFFF as the cap), the grid dump's `K` lines,
 the size of the `unsorted` sheet, and per-tile interning cost on the PPU path.
 The lines land in `HdPackBuilder.cpp`, under a line ceiling, so either the change
@@ -79,7 +79,7 @@ retained frames is still missed.
 
 **(iii) Leave it and document the split.** The CHR pattern pages already carry
 every key the pack holds (ADR-0194), so an artist can reach any key there, just
-not organised. The docs would say the organised sheets cover what the retained
+not organized. The docs would say the organized sheets cover what the retained
 stream saw and the pattern pages cover the rest; costs nothing in code. The
 artist still meets 81–83 % of the pack's keys only as an unordered page.
 
@@ -127,7 +127,7 @@ What the numbers show:
 - The 19 shapes (i) added on Castlevania are unflipped forms of mirrored sprites
   already reachable through the sidecar's `source` key (ADR-0178). ADR-0209's
   19.2 % did not credit `source`; 19.9 % is the same baseline with it credited.
-- As prototyped, (i) also shifts the organised output (ids and first-seen
+- As prototyped, (i) also shifts the organized output (ids and first-seen
   palettes). Zelda's never-firing `spriteNearby` conditions, the ones that name a
   background palette, go from 1 to 6.
 - The hook fits `HdPackBuilder.cpp`'s ADR-0137 ceiling with 0 lines to spare.
@@ -146,7 +146,7 @@ above.
 - Under (i) or (ii), every kit regenerated after the change differs from its
   predecessor, so artists' painted sheets from before must be re-imported through
   the round trip, not copied.
-- Under (iii), the organised-sheet coverage figure stays near 18 % by design, and
+- Under (iii), the organized-sheet coverage figure stays near 18 % by design, and
   every artist-facing doc has to say so.
 
 ## Amendment 2026-09-24: closed as (iii), superseded by ADR-0230
@@ -156,9 +156,9 @@ Appended on the user's decision of 2026-09-24, verbatim *"Reenquadrar
 
 - **Option (i) is not adopted.** Its prototype reached no key today's sheets do
   not already reach (19.9 → 19.9 % of shapes on Castlevania, 16.0 → 16.0 % on
-  Zelda), and it moved the organised output (ids, first-seen palettes). It was
+  Zelda), and it moved the organized output (ids, first-seen palettes). It was
   never merged.
-- **Option (iii) is what this ADR closes as.** The organised and `unsorted`
+- **Option (iii) is what this ADR closes as.** The organized and `unsorted`
   sheets already give a cell to every shape the recording drew (100 % on both
   games). The rest of the pack's keys are tiles the recording never drew: the
   bootstrap's PRG-scan `defaultTile=Y` export (Castlevania 2 141 of 2 673 shapes,

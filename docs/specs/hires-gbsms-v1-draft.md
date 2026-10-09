@@ -120,14 +120,14 @@ file: a proposal, not a freeze.
 - **Form.** A tag with no arguments, on or off for the whole pack. It MUST
   NOT carry parameters; a loader that finds some SHOULD ignore them. Its
   absence means the format's existing draw order, unchanged.
-- **Semantics (MUST, when honoured).** A behind-background sprite (OAM
+- **Semantics (MUST, when honored).** A behind-background sprite (OAM
   attribute bit 5) stays visible on every pixel where the ROM's background
-  pixel is colour index 0, even when a `<background>` in the "behind
+  pixel is color index 0, even when a `<background>` in the "behind
   foreground sprites" layer (priority 20–29) covers that pixel. Everywhere
   else — opaque background under the sprite, no sprite, front sprites, the
   other priority layers, `<tile>` rules — the output is byte-identical to a
   pack without the tag. The test is the hardware's, on the ROM's background
-  colour index, never on the HD image's alpha.
+  color index, never on the HD image's alpha.
 - **Why a tag and not an `<options>` token.** An unknown `<options>` token
   fails the load in Mesen 2 and HD Mesen (`Invalid option`); an unknown tag
   is skipped in silence. A pack that carries this line therefore still
@@ -142,7 +142,7 @@ file: a proposal, not a freeze.
   a pack without the line — every community pack in the catalog today, every
   HD Mesen pack, every pack recorded before the tag existed — MUST render
   byte-identically to the pre-tag draw order. An implementation MUST NOT
-  apply the behaviour globally or infer it from anything but the line. In a
+  apply the behavior globally or infer it from anything but the line. In a
   stack of packs (a human layer over a recorded `auto/` layer) the flag is
   ORed upward: if any layer carries the line the combined pack is opted in.
 - **Layer 3 (priority 30–39) — declared edge.** The tag restores the sprite
@@ -192,7 +192,7 @@ always did — but it is the first tag in this draft that binds to the line
     dictionary size, is **invalid**, and an implementation MUST reject the
     whole line rather than read it short or re-index it: a grid read one cell
     off is a different screen.
-- **Semantics (MUST, when honoured).** The record is the frame the capture
+- **Semantics (MUST, when honored).** The record is the frame the capture
   was taken from: for each of the 960 screen cells, the key the run time
   read at that cell's origin pixel `(col*8, row*8)` on that frame, sampled
   through the same comparison the pack's `tileAtPosition` condition makes.
@@ -237,4 +237,4 @@ always did — but it is the first tag in this draft that binds to the line
 
 Decision record: ADR-0236 (F14.11, issue #499: a recorded capture draws only
 the cells whose live key matches its per-cell record; supersedes nothing —
-the pre-tag behaviour for packs without a record is preserved exactly).
+the pre-tag behavior for packs without a record is preserved exactly).

@@ -2,7 +2,7 @@
 
 - Status: accepted (2026-09-14, at the user's direction — the option picked
   was "ADR + Dropbox e Mega" over a Dropbox-only variant, after the
-  Dropbox/MEGA split of the romhacking.net NES pack catalogue was measured).
+  Dropbox/MEGA split of the romhacking.net NES pack catalog was measured).
   Reflected in `scripts/pack_host_allowlist.json`, `scripts/fetch_pack.py`
   and `UI/Services/CommunityPackDownloader.cs`.
 - Date: 2026-09-14
@@ -17,7 +17,7 @@
 
 ## Context
 
-The NES sprite-replacement packs catalogued by the Emulation General Wiki
+The NES sprite-replacement packs cataloged by the Emulation General Wiki
 are published almost entirely through romhacking.net forum threads, which
 overwhelmingly host their zips on Dropbox and MEGA. Of the thirteen listed
 on 2026-09-14, six had no issue in this repo; where their bytes live:
@@ -37,7 +37,7 @@ this shape — written because the LiQuiDzGit audio assets sat on "Google
 Drive/MEGA (hosts outside the CI allow-list)" — but resolved it by recording
 external dependencies in the recipe rather than widening the list. That does
 not help: these are whole packs, not side assets, and a pack whose only link
-is unreachable cannot be validated, catalogued or auto-installed.
+is unreachable cannot be validated, cataloged or auto-installed.
 
 The non-goal is a general "download from anywhere" escape hatch. Adding a
 host stays a trust-boundary decision (§41); the two here are major

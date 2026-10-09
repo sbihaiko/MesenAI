@@ -259,7 +259,11 @@ namespace Mesen.ViewModels
 			EnhWidescreen = draft.Widescreen;
 			EnhOverclock = draft.Overclock;
 			EnhPackRowText = ResourceHelper.GetMessage("EnhancementsPackRow", PackRowName());
-			EnhOverclockReason = IsOverclockSupported ? "" : ResourceHelper.GetMessage("EnhancementsOverclockUnavailable", ResourceHelper.GetEnumText(RomInfo.ConsoleType));
+			//#1081: the row names the console, and the console's name is a string
+			//the player reads - so it is the locale file's own word for it
+			//(ConsoleTypeNames names the id), not the core enum, whose missing
+			//label `GetEnumText` answered with the raw `[[Sms]]` placeholder.
+			EnhOverclockReason = IsOverclockSupported ? "" : ResourceHelper.GetMessage("EnhancementsOverclockUnavailable", ResourceHelper.GetMessage(ConsoleTypeNames.MessageId(RomInfo.ConsoleType)));
 			UpdateEnhancementsApplyText();
 		}
 

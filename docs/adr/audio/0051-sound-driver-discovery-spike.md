@@ -16,7 +16,7 @@ C. **Enumerate.** Per id: reload the title save state, break at `P` (inside the 
 
 Result on Mega Man: ids 0–50 valid (ids ≥ `$33` rejected by the game's queue drain, `CMP #$33`); 51 ids × 4 s → **18 bgm, 22 sfx, 11 very short (1–5 audible frames), 40 distinct fingerprints** — every stage theme, boss, Wily, ending, game over, jingles and effects, from a ROM whose title screen is silent, without a frame of gameplay. With `SPIKE_BOOTSTRAP=1` the run happens on a private ROM copy with the MEP bootstrap on and a 1.3 s silent gap between ids (the F5.3 segmenter closes a track after 60 silent frames): the recorder wrote `auto/audio/fingerprints.json` with **50 tracks (18 bgm + 32 sfx) and 50 MIDI files** in one 5-minute run.
 
-## Generalisation (12 ROMs, 24 ids × 3 s, same binary, no per-game knowledge)
+## Generalization (12 ROMs, 24 ids × 3 s, same binary, no per-game knowledge)
 The first version trusted whatever call fired after the Start press; on Zelda, Excitebike and Castlevania that picked per-channel update routines and produced garbage. The second **validates** every candidate trigger: ≥ 3 ids must give distinct results, and the same id must reproduce the same *novel* onsets (those absent from the title's background tune, measured on two save states 45 frames apart). Candidates come from JSR sites into the driver (any register), then from every RAM address the tick reads (trace-based mailbox fallback).
 
 | Game | Tick | Trigger | Verdict |

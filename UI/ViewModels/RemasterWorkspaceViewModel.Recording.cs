@@ -1,7 +1,11 @@
 using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
+using Mesen.Config;
 using Mesen.Interop;
 using Mesen.Localization;
 using Mesen.Logic;
@@ -165,5 +169,64 @@ namespace Mesen.ViewModels
 			IsStopWaitVisible = Transition == RecordingTransition.Stopping;
 			StopWaitText = IsStopWaitVisible ? ResourceHelper.GetMessage("RemasterRecordingStopping") : "";
 		}
+
+		//#969 (W-X2, rule 10): W-R1's "⚠ This is not the game the project was
+		//recorded from." with Open the Right Game…, which loads the project's ROM
+		//(RemasterScreen.RightGameStep) or opens the ROM picker on the games folder.
+		[ObservableProperty] public partial bool IsWrongGame { get; private set; }
+		[ObservableProperty] public partial string WrongGameText { get; private set; } = "";
+		//Remaster's own picker: the shell's sits on Play's load layer.
+		public PlayerRomPickerViewModel RightGamePicker => _rightGamePicker ??= NewRightGamePicker();
+		private PlayerRomPickerViewModel? _rightGamePicker;
+
+		//Seams: the game load, the recent games and the games folder's files.
+		public Action<string> LoadRom { get; set; } = LoadRomHelper.LoadFile;
+		public Func<IEnumerable<string>> RecentRoms { get; set; } = ConfiguredRecentRoms;
+		public Func<string?> GamesFolder { get; set; } = ConfiguredGamesFolder;
+
+		private void RefreshWrongGame(bool wrongGame)
+		{
+			IsWrongGame = wrongGame;
+			WrongGameText = IsWrongGame ? Reason(RemasterReason.NotThisProjectsGame) : "";
+		}
+
+		//Returns the step it took (null when the game is already the project's).
+		public RemasterRightGame? OpenRightGame()
+		{
+			string? games = GamesFolder();
+			RemasterRightGame? step = RemasterScreen.RightGameStepOnDisk(Evaluate().Record.Reason, _project?.Folder ?? "",
+				RecentRoms(), games);
+			if(step == null) {
+				return null;
+			}
+			if(!step.OpensPicker) {
+				LoadRom(step.RomPath);
+				return step;
+			}
+			RightGamePicker.Open();
+			//Rooted at the games folder: descend into it when it is a root.
+			PlayerRomPickerRow? root = games == null ? null : RightGamePicker.Rows.FirstOrDefault(r => r.Kind == RomPickerRowKind.Folder && RemasterProjectLocator.SameFolder(r.Path, games));
+			if(root != null) {
+				RightGamePicker.Choose(root);
+			}
+			return step;
+		}
+
+		private PlayerRomPickerViewModel NewRightGamePicker()
+		{
+			PlayerRomPickerViewModel picker = new();
+			//#1032 (ADR-0264): the Play sheet opens on the flat library now. This
+			//one is not that sheet - it picks the single *right game* for a
+			//remaster project - so it opens on the folder browser, which is the
+			//surface it has always been and the one a one-file choice wants.
+			picker.OpenMode = RomPickerMode.BrowseFile;
+			picker.RomChosen += path => LoadRom(path);
+			return picker;
+		}
+
+		private static IEnumerable<string> ConfiguredRecentRoms() => ConfigManager.Config.RecentFiles.Items.Select(i => i.RomFile.Path);
+
+		private static string? ConfiguredGamesFolder() => GamesFolderChoice.Usable(
+			ConfigManager.Config.Preferences.OverrideGameFolder ? ConfigManager.Config.Preferences.GameFolder : null);
 	}
 }

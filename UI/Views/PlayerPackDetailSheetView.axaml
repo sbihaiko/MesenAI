@@ -83,6 +83,20 @@
 				</DockPanel>
 			</Border>
 
+			<!--#939 (W-P16): a file only the user can add - the orange line, and
+			Add the File… opens W-P16's sheet, the one add flow. It goes once the
+			file is in place.-->
+			<Border Name="PackDetailPendingFile" Classes="warning notice large" IsVisible="{Binding PackDepSheet.HasPending}" Margin="0 0 0 16">
+				<DockPanel>
+					<PathIcon Classes="warning" DockPanel.Dock="Left" Data="{StaticResource PlayerIconWarning}" Width="16" Height="16" VerticalAlignment="Top" Margin="0 1 10 0" />
+					<StackPanel Spacing="2">
+						<TextBlock Name="PackDetailPendingFileTitle" Classes="notice-title" Text="{Binding PackDepSheet.PendingTitle}" TextWrapping="Wrap" />
+						<TextBlock Name="PackDetailPendingFileBody" Text="{l:Translate lblPackDetailPendingFileBody}" TextWrapping="Wrap" />
+						<Button Name="PackDetailAddFileButton" Classes="secondary regular" HorizontalAlignment="Left" Margin="0 8 0 0" Content="{l:Translate btnPackDetailAddFile}" Click="OnAddFile" />
+					</StackPanel>
+				</DockPanel>
+			</Border>
+
 			<!--#736: an accepted community pack for this game is not the one
 			rendering. Plain words for why, and one button that offers it - never
 			forced: auto-install off and a turned-off pack are the player's choice.-->

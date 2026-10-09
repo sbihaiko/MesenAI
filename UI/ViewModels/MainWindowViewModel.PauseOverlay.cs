@@ -39,15 +39,14 @@ namespace Mesen.ViewModels
 		public Func<(PlayInputDevice Device, PadFamily? Family)> InHandDevice { get; set; }
 			= () => (PlayInputDevice.Keyboard, null);
 
-		//The Save states sheet (W-P4's merged Save/Load row). It offers today's
-		//two slot grids (GameScreenMode.SaveState / LoadState); Esc closes it,
-		//and either grid, back to the overlay.
+		//The Save states sheet (W-P4's merged Save/Load row). Since #909 it is one
+		//grid over the game - the ten slots and the auto-save, each with *Save
+		//here* / *Load* (MainWindowViewModel.SaveStateSheet.cs) - and Esc closes
+		//it back to the overlay.
 		[ObservableProperty] public partial bool IsSaveStatesSheetVisible { get; set; }
 
-		//The slot grid and the pack picker can also open without the overlay
-		//(the quick save/load dialog shortcuts, the picker over an un-enhanced
+		//The pack picker can also open without the overlay (over an un-enhanced
 		//first start), where Esc must not bring an overlay back.
-		private bool _stateGridFromOverlay;
 		private bool _packPickerFromOverlay;
 
 		private bool IsGameLoaded => RomInfo.Format != RomFormat.Unknown;
@@ -133,9 +132,6 @@ namespace Mesen.ViewModels
 			if(IsSaveStatesSheetVisible) {
 				return PlaySheet.SaveStates;
 			}
-			if(_stateGridFromOverlay && RecentGames.Visible && RecentGames.Mode != GameScreenMode.RecentGames) {
-				return PlaySheet.SaveStateGrid;
-			}
 			//#845: over the home rather than over the game, so it is read last -
 			//it is the one Play sheet that is not opened from W-P4.
 			if(_romPicker?.IsVisible == true) {
@@ -220,12 +216,6 @@ namespace Mesen.ViewModels
 				case PlaySheet.PackDep: PackDepSheet.CloseOnEsc(); break;
 				case PlaySheet.Settings: ClosePlayerSettings(); break;
 				case PlaySheet.Controller: CloseControllerSheet(); break;
-				case PlaySheet.SaveStateGrid:
-					//Init with the grid's own mode hides it (RecentGamesViewModel);
-					//the overlay had already paused, so nothing resumes.
-					RecentGames.Init(RecentGames.Mode);
-					_stateGridFromOverlay = false;
-					break;
 			}
 		}
 
@@ -283,8 +273,11 @@ namespace Mesen.ViewModels
 			return ResourceHelper.GetMessage("SaveStatesRowSlot", newest.Slot, age);
 		}
 
+		//#909: the sheet opens on the grid (MainWindowViewModel.SaveStateSheet.cs),
+		//read off the disk as it opens.
 		public void OpenSaveStatesSheet()
 		{
+			RefreshSaveStateSlots();
 			IsPlayerOverlayVisible = false;
 			IsSaveStatesSheetVisible = true;
 		}
@@ -293,27 +286,6 @@ namespace Mesen.ViewModels
 		{
 			IsSaveStatesSheetVisible = false;
 			OpenPauseOverlay();
-		}
-
-		//The sheet's two buttons: today's slot grid, in save or load mode.
-		public void OpenSlotGrid(GameScreenMode mode)
-		{
-			IsSaveStatesSheetVisible = false;
-			_stateGridFromOverlay = true;
-			RecentGames.Init(mode);
-		}
-
-		//#692: the slot grid's own X. Opened from W-P4 it closes back to W-P4,
-		//like Esc (the overlay paused the game, so the grid has nothing to
-		//resume). Returns false for a grid opened any other way.
-		public bool CloseSlotGridToOverlay()
-		{
-			if(CurrentPlaySheet() != PlaySheet.SaveStateGrid) {
-				return false;
-			}
-			CloseSheet(PlaySheet.SaveStateGrid);
-			OpenPauseOverlay();
-			return true;
 		}
 
 		//W-P4's Pack row: OpenPackFromOverlay (MainWindowViewModel.PlaySheets.cs,
@@ -368,7 +340,6 @@ namespace Mesen.ViewModels
 			}
 			ToolSheet.Close();
 			IsPlayerOverlayVisible = false;
-			_stateGridFromOverlay = false;
 			_packPickerFromOverlay = false;
 		}
 	}

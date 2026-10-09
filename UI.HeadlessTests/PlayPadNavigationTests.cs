@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -7,6 +7,7 @@ using System.Threading;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
+using Avalonia.Controls.Templates;
 using Avalonia.Headless.XUnit;
 using Avalonia.Input;
 using Avalonia.Interactivity;
@@ -16,6 +17,7 @@ using Mesen.Config;
 using Mesen.Controls;
 using Mesen.Interop;
 using Mesen.Logic;
+using Mesen.Utilities;
 using Mesen.ViewModels;
 using Mesen.Windows;
 using Xunit;
@@ -300,9 +302,9 @@ public class PlayPadNavigationTests : IDisposable
 		PlayPadNavigationWiring.TickForTest(window, Array.Empty<ushort>(), TimeSpan.FromMilliseconds(milliseconds), BackendName, BackendCode);
 	}
 
-	private void LoadSyntheticGame(MainWindowViewModel model)
+	private void LoadSyntheticGame(MainWindowViewModel model, string name = "synthetic-nrom")
 	{
-		string rom = Path.Combine(_folder, "synthetic-nrom.nes");
+		string rom = Path.Combine(_folder, name + ".nes");
 		File.WriteAllBytes(rom, SyntheticNrom.Build());
 		Assert.True(EmuApi.LoadRom(rom, string.Empty), $"the core refused to load {rom}");
 		WaitFor(() => EmuApi.IsRunning() && model.RomInfo.Format != RomFormat.Unknown, "the ROM never reported as loaded");
@@ -443,7 +445,129 @@ public class PlayPadNavigationTests : IDisposable
 
 		Assert.True(window.FindNamed<Border>("PlayerSaveStatesSheet").IsOnScreen());
 		Assert.False(window.FindNamed<Border>("PlayerOverlay").IsOnScreen());
-		Assert.Equal("SaveStatesSaveButton", FocusedName(window));
+		//#909: the sheet is a grid of slot rows; with no game there is no row to
+		//land on, so its own first control takes the ring (the fallback every
+		//surface uses). The case below drives the grid with a game loaded.
+		Assert.Equal("SaveStatesReplaysButton", FocusedName(window));
+	}
+
+	//#909 (W-P4): the Save states sheet is ONE grid, so what the pad walks is its
+	//own rows - the ring opens on the row the rule names (the newest state), Right
+	//reaches the armed *Load* beside it, Down the next slot's row, and a Confirm
+	//on *Save here* writes that slot over the real core and arms its own Load.
+	//The ROM name is the case's own: with the suite's shared synthetic ROM the
+	//slots an earlier case (or run) wrote decided where the ring opened and
+	//whether there was a Load to reach at all.
+	[AvaloniaFact]
+	public void The_save_states_grid_is_one_pad_step_per_slot_action()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model) = ShowPlay();
+		LoadSyntheticGame(model, "savesheet-step-" + Guid.NewGuid().ToString("N"));
+
+		//Slot 1 holds a state, so its Load is armed and the rule opens on it.
+		string slot1 = Path.Combine(ConfigManager.SaveStateFolder, model.RomInfo.GetRomName() + "_1." + FileDialogHelper.MesenSaveStateExt);
+		System.Threading.Tasks.Task.Run(() => EmuApi.SaveState(1)).Wait(TimeSpan.FromSeconds(30));
+		WaitFor(() => File.Exists(slot1), $"the core did not write slot 1 ({slot1})");
+
+		model.TogglePlayerOverlay();
+		WaitFor(() => FocusedName(window) == "OverlayResumeButton", "W-P4 opened without the focus on Resume");
+		Click(window, "OverlaySaveStatesButton");
+		WaitFor(() => model.IsSaveStatesSheetVisible, "W-P4's Save states row did not open its sheet");
+
+		//Eleven rows: the ten slots and the auto-save.
+		Assert.Equal(11, model.SaveStateSlots.Count);
+
+		//The ring lands on the grid's own focus row, on its first action - the same
+		//row the rule answers.
+		Assert.Equal(1, model.FocusSaveStateSlot()!.Slot);
+		WaitFor(() => FocusedRow(window)?.Slot == 1 && FocusedName(window) == "SlotSaveButton",
+			$"the grid did not take the ring on its own row ({Focused(window, model)})");
+
+		//Right: the *Load* on the same row, one press away.
+		Release(window);
+		Feed(window, PadNavAction.Right);
+		WaitFor(() => FocusedRow(window)?.Slot == 1 && FocusedName(window) == "SlotLoadButton",
+			$"the D-pad did not reach the row's own Load ({Focused(window, model)})");
+
+		//Left, back onto that row's *Save here*, then Down to slot 2's.
+		Release(window);
+		Feed(window, PadNavAction.Left);
+		WaitFor(() => FocusedRow(window)?.Slot == 1 && FocusedName(window) == "SlotSaveButton",
+			"the D-pad did not come back to the row's Save here");
+		Release(window);
+		Feed(window, PadNavAction.Down);
+		WaitFor(() => FocusedRow(window)?.Slot == 2 && FocusedName(window) == "SlotSaveButton",
+			$"Down did not reach slot 2's Save here ({Focused(window, model)})");
+		Assert.False(model.SaveStateSlot(2)!.LoadEnabled);
+
+		//Confirm: the state lands in slot 2, and that row's own Load is armed.
+		Release(window);
+		Feed(window, PadNavAction.Confirm);
+		WaitFor(() => model.SaveStateSlot(2)!.HasState, "Confirm on Save here did not write slot 2");
+		Assert.True(model.SaveStateSlot(2)!.LoadEnabled);
+		Assert.True(File.Exists(model.SaveStateSlot(2)!.FileName));
+	}
+
+	//#909 (ADR-0256 Decision 3): Down from a focused *Load* lands on the next
+	//row - its own Load when that one is armed, else its *Save here* - and never
+	//leaves the grid for Shared replays while a row below exists. The engine's
+	//default projection only looks straight down, so a disabled Load below an
+	//armed one used to hand the press to the full-width button under the grid.
+	[AvaloniaFact]
+	public void Down_from_a_load_lands_on_the_next_row()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model) = ShowPlay();
+		LoadSyntheticGame(model, "savesheet-down-" + Guid.NewGuid().ToString("N"));
+
+		//Slots 1 and 2 hold a state, slot 3 does not.
+		foreach(uint slot in new uint[] { 1, 2 }) {
+			string file = Path.Combine(ConfigManager.SaveStateFolder, model.RomInfo.GetRomName() + "_" + slot + "." + FileDialogHelper.MesenSaveStateExt);
+			System.Threading.Tasks.Task.Run(() => EmuApi.SaveState(slot)).Wait(TimeSpan.FromSeconds(30));
+			WaitFor(() => File.Exists(file), $"the core did not write slot {slot} ({file})");
+		}
+
+		model.TogglePlayerOverlay();
+		WaitFor(() => FocusedName(window) == "OverlayResumeButton", "W-P4 opened without the focus on Resume");
+		Click(window, "OverlaySaveStatesButton");
+		WaitFor(() => model.IsSaveStatesSheetVisible, "W-P4's Save states row did not open its sheet");
+		WaitFor(() => FocusedRow(window) is not null, $"the grid did not take the ring ({Focused(window, model)})");
+		Assert.True(model.SaveStateSlot(1)!.LoadEnabled && model.SaveStateSlot(2)!.LoadEnabled);
+		Assert.False(model.SaveStateSlot(3)!.LoadEnabled);
+
+		//Onto slot 1's Load (the ring opens on whichever of 1 and 2 is newer).
+		while(FocusedRow(window)!.Slot > 1) {
+			int from = FocusedRow(window)!.Slot;
+			Release(window);
+			Feed(window, PadNavAction.Up);
+			WaitFor(() => FocusedRow(window)?.Slot == from - 1, $"Up did not leave slot {from} ({Focused(window, model)})");
+		}
+		if(FocusedName(window) != "SlotLoadButton") {
+			Release(window);
+			Feed(window, PadNavAction.Right);
+		}
+		WaitFor(() => FocusedRow(window)?.Slot == 1 && FocusedName(window) == "SlotLoadButton",
+			$"the pad did not reach slot 1's Load ({Focused(window, model)})");
+
+		//Armed Load below: Down lands on it.
+		Release(window);
+		Feed(window, PadNavAction.Down);
+		WaitFor(() => FocusedRow(window)?.Slot == 2 && FocusedName(window) == "SlotLoadButton",
+			$"Down from slot 1's Load did not land on slot 2's Load ({Focused(window, model)})");
+
+		//Disabled Load below: Down lands on that row's Save here, not on Shared replays.
+		Release(window);
+		Feed(window, PadNavAction.Down);
+		WaitFor(() => FocusedRow(window)?.Slot == 3 && FocusedName(window) == "SlotSaveButton",
+			$"Down from slot 2's Load left the grid instead of landing on slot 3's Save here ({Focused(window, model)})");
+	}
+
+	//The row the ring is on, read off the control's own DataContext - a grid of
+	//rows has no per-slot names to look up.
+	private static SaveStateSlotViewModel? FocusedRow(MainWindow window)
+	{
+		return (window.FocusManager?.GetFocusedElement() as Control)?.DataContext as SaveStateSlotViewModel;
 	}
 
 	//Decision 2's Back: the same shortcut ADR-0251 gave the pad's chord, so a
@@ -498,46 +622,99 @@ public class PlayPadNavigationTests : IDisposable
 		Assert.False(model.IsPlayerOverlayVisible);
 	}
 
-	//Decision 3's open choice, taken as "scope the bridge to exclude the grid":
-	//StateGrid already moves its own SelectedIndex from the pad, off player 1's
-	//port mappings, in its own timer (and that same loop serves Advanced, where
-	//no Play mapping exists), so the bridge must not also move the focus there.
-	//Back is still the bridge's, because the grid's own loop has no exit and a
-	//player who cannot leave the slot grid is the failure ADR-0256 exists to
-	//prevent.
+	//#909 (W-P4 acceptance: "arrow keys / pad reach every slot action" and "Esc
+	//returns to W-P4"): the classic slot grid lost its W-P4 door - the shortcut
+	//route keeps it and Back_leaves_a_slot_grid_opened_by_the_shortcut pins that
+	//one - so the rule this case stands for now lives on the Save states sheet.
+	//The pad walks the grid row by row, every enabled action on every row takes
+	//the ring (a disabled *Load* is not a stop), and Back closes the sheet back to
+	//W-P4 with the game still paused under it.
 	[AvaloniaFact]
-	public void The_slot_grid_keeps_the_pad_and_back_still_leaves()
+	public void The_save_states_grid_keeps_the_pad_and_back_still_leaves()
 	{
 		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
 		(MainWindow window, MainWindowViewModel model) = ShowPlay();
-		LoadSyntheticGame(model);
+		//A ROM name no other case uses, so the slots holding a state are the one
+		//this case writes and nothing an earlier case left behind.
+		LoadSyntheticGame(model, "savesheet-pad-" + Guid.NewGuid().ToString("N"));
+
+		//One slot with a state, so the walk crosses an armed *Load* and the
+		//disabled ones around it.
+		const int armed = 3;
+		string armedFile = Path.Combine(ConfigManager.SaveStateFolder, model.RomInfo.GetRomName() + "_" + armed + "." + FileDialogHelper.MesenSaveStateExt);
+		System.Threading.Tasks.Task.Run(() => EmuApi.SaveState(armed)).Wait(TimeSpan.FromSeconds(30));
+		WaitFor(() => File.Exists(armedFile), $"the core did not write slot {armed} ({armedFile})");
 
 		model.TogglePlayerOverlay();
-		WaitFor(() => model.IsGamePaused, "Esc did not open W-P4");
+		WaitFor(() => FocusedName(window) == "OverlayResumeButton", "W-P4 opened without the focus on Resume");
 		Click(window, "OverlaySaveStatesButton");
-		Click(window, "SaveStatesSaveButton");
-		WaitFor(() => model.RecentGames.Visible, "the Save states sheet's Save did not open the slot grid");
-		WaitFor(() => GridHasFocus(window), $"the slot grid opened without the focus ({Focused(window, model)})");
+		WaitFor(() => model.IsSaveStatesSheetVisible, "W-P4's Save states row did not open its sheet");
+		Assert.True(model.SaveStateSlot(armed)!.LoadEnabled, $"slot {armed}'s Load is not armed");
 
-		//The D-pad is the grid's: the focus stays where it is.
-		foreach(PadNavAction direction in Directions) {
-			Feed(window, direction);
-			Assert.True(GridHasFocus(window), $"the bridge moved the focus off the slot grid on {direction}");
+		//The ring opens on the newest state's row; Up walks it to the first slot.
+		WaitFor(() => FocusedRow(window)?.Slot == armed, $"the sheet did not open on slot {armed} ({Focused(window, model)})");
+		for(int up = armed; up > 1; up--) {
+			int from = FocusedRow(window)!.Slot;
+			Release(window);
+			Feed(window, PadNavAction.Up);
+			WaitFor(() => FocusedRow(window)?.Slot == from - 1, $"Up did not leave slot {from} for the row above ({Focused(window, model)})");
 		}
 
-		//Confirm is the grid's too (its own loop reads the pad's A/B/X/Y/Select/
-		//Start as "load this slot"), so the sheet must still be up.
-		Release(window);
-		Feed(window, PadNavAction.Confirm);
-		Pump();
-		Assert.True(model.RecentGames.Visible, "Confirm took the slot grid's own load button away from it");
-		Assert.False(model.IsPlayerOverlayVisible);
+		//Every row, top to bottom: its *Save here*, then (when armed) the *Load*
+		//beside it, then Down to the next row.
+		HashSet<string> reached = new();
+		List<SaveStateSlotViewModel> rows = model.SaveStateSlots.ToList();
+		for(int i = 0; i < rows.Count; i++) {
+			SaveStateSlotViewModel row = rows[i];
+			if(row.SaveHereVisible) {
+				if(FocusedName(window) == "SlotLoadButton") {
+					Release(window);
+					Feed(window, PadNavAction.Left);
+				}
+				WaitFor(() => FocusedRow(window) == row && FocusedName(window) == "SlotSaveButton",
+					$"the pad did not reach slot {row.Slot}'s Save here ({Focused(window, model)})");
+				reached.Add(row.Slot + ":save");
+				if(row.LoadEnabled) {
+					Release(window);
+					Feed(window, PadNavAction.Right);
+					WaitFor(() => FocusedRow(window) == row && FocusedName(window) == "SlotLoadButton",
+						$"the pad did not reach slot {row.Slot}'s Load ({Focused(window, model)})");
+					reached.Add(row.Slot + ":load");
+				}
+			} else if(row.LoadEnabled) {
+				WaitFor(() => FocusedRow(window) == row && FocusedName(window) == "SlotLoadButton",
+					$"the pad did not reach the auto-save's Load ({Focused(window, model)})");
+				reached.Add(row.Slot + ":load");
+			}
 
-		//Back is not: it leaves, like Esc, back to W-P4.
+			//The next row that has anything enabled is one Down away - from the
+			//*Save here* column, which every manual row has: from an armed *Load*
+			//over a disabled one, Down's projection has no target in the grid.
+			if(i + 1 < rows.Count && (rows[i + 1].SaveHereVisible || rows[i + 1].LoadEnabled)) {
+				if(FocusedName(window) == "SlotLoadButton" && row.SaveHereVisible) {
+					Release(window);
+					Feed(window, PadNavAction.Left);
+					WaitFor(() => FocusedRow(window) == row && FocusedName(window) == "SlotSaveButton",
+						$"Left did not come back to slot {row.Slot}'s Save here ({Focused(window, model)})");
+				}
+				Release(window);
+				Feed(window, PadNavAction.Down);
+				SaveStateSlotViewModel next = rows[i + 1];
+				WaitFor(() => FocusedRow(window) == next, $"Down did not leave slot {row.Slot} for slot {next.Slot} ({Focused(window, model)})");
+			}
+		}
+
+		//Every enabled action, and nothing else.
+		HashSet<string> expected = rows.SelectMany(r => (r.SaveHereVisible ? new[] { r.Slot + ":save" } : Array.Empty<string>())
+			.Concat(r.LoadEnabled ? new[] { r.Slot + ":load" } : Array.Empty<string>())).ToHashSet();
+		Assert.Equal(expected.OrderBy(s => s), reached.OrderBy(s => s));
+		Assert.Contains(armed + ":load", reached);
+
+		//Back leaves, like Esc, back to W-P4 - the game still paused under it.
 		Release(window);
 		Feed(window, PadNavAction.Back);
 		Pump();
-		WaitFor(() => !model.RecentGames.Visible && model.IsPlayerOverlayVisible, "Back did not close the slot grid back to W-P4");
+		WaitFor(() => !model.IsSaveStatesSheetVisible && model.IsPlayerOverlayVisible, "Back did not close the Save states sheet back to W-P4");
 		WaitFor(() => FocusedName(window) == "OverlayResumeButton", "W-P4 came back without the focus");
 		Assert.True(EmuApi.IsPaused());
 	}
@@ -567,6 +744,49 @@ public class PlayPadNavigationTests : IDisposable
 
 		model.CloseShaderSheet(false);
 		WaitFor(() => FocusedName(window) == "tabPlayerWindow", $"closing the shader did not hand the focus back to the Settings sheet underneath ({Focused(window, model)})");
+	}
+
+	//#910: the Settings sheet's footer (Exit full screen, Done) is part of the
+	//surface the pad walks, not only the strip's TabControl. The claim focuses
+	//tabPlayerWindow, and the root inferred from that tab's parent was the
+	//TabControl, which does not contain the footer - so from the Window tab no
+	//D-pad press could reach Exit full screen or Done. Driven through the
+	//bridge itself (TickForTest), from the claim's own landing.
+	[AvaloniaFact]
+	public void The_pad_reaches_exit_full_screen_from_the_settings_strip()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model) = ShowPlay();
+
+		List<string> toggles = new();
+		ConfigViewModel settings = new(ConfigWindowTab.Display, playerMode: true,
+			createDisplay: () => new PlayerWindowSettingsViewModel(new VideoConfig(), true, 2, () => toggles.Add("toggle"), _ => { }),
+			audioDevices: () => new[] { "Speakers" }, connectedPads: () => 0);
+		model.OpenPlayerSettings(settings);
+		WaitFor(() => FocusedName(window) == "tabPlayerWindow", $"the Settings sheet opened without the focus on its first tab ({Focused(window, model)})");
+
+		//Down through the Window page and off its last row, then Left along
+		//Done's row: the walk a player makes with the D-pad.
+		List<string?> walk = new() { FocusedName(window) };
+		PadNavAction[] presses = { PadNavAction.Down, PadNavAction.Down, PadNavAction.Down, PadNavAction.Down, PadNavAction.Down, PadNavAction.Left };
+		foreach(PadNavAction press in presses) {
+			if(FocusedName(window) == "btnPlayerSettingsExitFullscreen") {
+				break;
+			}
+			Release(window);
+			Feed(window, press);
+			Pump();
+			walk.Add(FocusedName(window));
+		}
+		Assert.True(FocusedName(window) == "btnPlayerSettingsExitFullscreen", $"the D-pad never reached Exit full screen: {string.Join(" -> ", walk)}");
+
+		Release(window);
+		Feed(window, PadNavAction.Confirm);
+		Pump();
+		Assert.Equal(new[] { "toggle" }, toggles);
+		Assert.False(settings.Display!.IsFullscreen);
+		WaitFor(() => FocusedName(window) == "btnPlayerSettingsDone", $"Exit full screen hid without handing the focus to Done ({Focused(window, model)})");
+		model.ClosePlayerSettings();
 	}
 
 	//Defect 1: a Play surface that does NOT pause the game must not take the pad
@@ -634,6 +854,15 @@ public class PlayPadNavigationTests : IDisposable
 		model.RecentGames.Init(GameScreenMode.LoadState);
 		WaitFor(() => model.RecentGames.Visible, "the Load-state shortcut did not open the slot grid");
 		WaitFor(() => GridHasFocus(window), () => $"the slot grid opened without the focus ({Focused(window, model)})");
+
+		//Decision 3's open choice, "scope the bridge to exclude the grid": StateGrid
+		//moves its own SelectedIndex from the pad in its own timer, so the D-pad is
+		//the grid's and the bridge must not move the focus off it. Back is still
+		//the bridge's, because the grid's own loop has no exit.
+		foreach(PadNavAction direction in Directions) {
+			Feed(window, direction);
+			Assert.True(GridHasFocus(window), $"the bridge moved the focus off the slot grid on {direction}");
+		}
 
 		Release(window);
 		Feed(window, PadNavAction.Back);
@@ -877,6 +1106,248 @@ public class PlayPadNavigationTests : IDisposable
 		}
 		foreach(string file in Directory.GetFiles(folder, "*.rgd")) {
 			File.Delete(file);
+		}
+	}
+
+	//#964 (ADR-0256's stop rule): the Play settings' value controls are operable
+	//from the pad, through the one bridge. Each case lands the focus on the
+	//control the way the bridge does (Directional, so the ring is drawn) and then
+	//drives it with TickForTest only - no keyboard, no pointer.
+	private (MainWindow Window, MainWindowViewModel Model, ConfigViewModel Settings) ShowSettingsTab(ConfigWindowTab tab, Func<PlayerWindowSettingsViewModel>? createDisplay = null, IReadOnlyList<string>? audioDevices = null)
+	{
+		(MainWindow window, MainWindowViewModel model) = ShowPlay();
+		ConfigViewModel settings = new(tab, playerMode: true, createDisplay: createDisplay, audioDevices: () => audioDevices ?? new[] { "Speakers" }, connectedPads: () => 0);
+		model.OpenPlayerSettings(settings);
+		WaitFor(() => model.IsPlayerSettingsVisible && FocusedName(window) is not null, $"the Settings sheet never took the focus ({Focused(window, model)})");
+		window.FindNamed<TabControl>("PlayerSettingsTabs").SelectedIndex = PlayerSettingsEssentials.IndexOf(tab);
+		Pump();
+		return (window, model, settings);
+	}
+
+	private static T Land<T>(MainWindow window, string name) where T : Control
+	{
+		T control = window.FindNamed<T>(name);
+		WaitFor(() => control.IsEffectivelyVisible && control.Focus(NavigationMethod.Directional), $"{name} never took the focus");
+		Pump();
+		AssertRing(control);
+		return control;
+	}
+
+	//The focus ring is :focus-visible (PlayerTheme paints it from that), and it
+	//has to stay on the control while the pad drives it.
+	private static void AssertRing(Control control)
+	{
+		Assert.True(control.IsFocused, $"{control.Name} lost the focus while the pad drove it");
+		Assert.True(control.Classes.Contains(":focus-visible"), $"{control.Name} has the focus without the ring");
+	}
+
+	private void Press(MainWindow window, PadNavAction action)
+	{
+		Release(window);
+		Feed(window, action);
+		Pump();
+	}
+
+	[AvaloniaFact]
+	public void Left_and_right_step_a_focused_slider_and_keep_the_focus()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		AudioConfig audio = ConfigManager.Config.Audio;
+		uint volume = audio.MasterVolume;
+		audio.MasterVolume = 37;
+		try {
+			(MainWindow window, MainWindowViewModel model, _) = ShowSettingsTab(ConfigWindowTab.Audio);
+			Slider slider = Land<Slider>(window, "sldAudioVolume");
+			Assert.Equal(37, slider.Value);
+
+			Press(window, PadNavAction.Right);
+			Assert.Equal(38, slider.Value);
+			Assert.Equal(38u, audio.MasterVolume);
+			AssertRing(slider);
+
+			Press(window, PadNavAction.Left);
+			Assert.Equal(37, slider.Value);
+			Assert.Equal(37u, audio.MasterVolume);
+			AssertRing(slider);
+			model.ClosePlayerSettings();
+		} finally {
+			audio.MasterVolume = volume;
+		}
+	}
+
+	[AvaloniaFact]
+	public void The_pad_opens_walks_and_commits_the_display_scale()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		List<double> written = new();
+		(MainWindow window, MainWindowViewModel model, ConfigViewModel settings) = ShowSettingsTab(ConfigWindowTab.Display,
+			() => new PlayerWindowSettingsViewModel(new VideoConfig(), false, 2, () => { }, written.Add));
+		ComboBox scale = Land<ComboBox>(window, "cboDisplayScale");
+		Assert.Equal(2, settings.Display!.SelectedScale!.Value);
+
+		Press(window, PadNavAction.Confirm);
+		Assert.True(scale.IsDropDownOpen, "Confirm did not open the drop-down");
+
+		//Walking writes nothing: only the commit is a pick.
+		Press(window, PadNavAction.Down);
+		Assert.True(scale.IsDropDownOpen);
+		Assert.Empty(written);
+
+		Press(window, PadNavAction.Confirm);
+		Assert.False(scale.IsDropDownOpen, "Confirm did not close the drop-down");
+		//The pointer's path: SelectedScale → the view-model's setScale, once.
+		Assert.Equal(new[] { 3.0 }, written);
+		Assert.Equal(3, settings.Display.SelectedScale!.Value);
+		WaitFor(() => scale.IsFocused, "the focus did not come back to the drop-down after the commit");
+		AssertRing(scale);
+		model.ClosePlayerSettings();
+	}
+
+	[AvaloniaFact]
+	public void Back_on_an_open_popup_closes_it_without_changing_the_value()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		List<double> written = new();
+		(MainWindow window, MainWindowViewModel model, ConfigViewModel settings) = ShowSettingsTab(ConfigWindowTab.Display,
+			() => new PlayerWindowSettingsViewModel(new VideoConfig(), false, 2, () => { }, written.Add));
+		ComboBox scale = Land<ComboBox>(window, "cboDisplayScale");
+
+		Press(window, PadNavAction.Confirm);
+		Press(window, PadNavAction.Down);
+		Press(window, PadNavAction.Back);
+
+		Assert.False(scale.IsDropDownOpen, "Back did not close the drop-down");
+		Assert.Empty(written);
+		Assert.Equal(2, settings.Display!.SelectedScale!.Value);
+		//Back belonged to the popup, not to the Esc router: the sheet is still up.
+		Assert.True(model.IsPlayerSettingsVisible, "Back on an open popup also closed the Settings sheet");
+		WaitFor(() => scale.IsFocused, "the focus did not come back to the drop-down after Back");
+		AssertRing(scale);
+		model.ClosePlayerSettings();
+	}
+
+	//#992 (#983): a drop-down long enough to virtualize realizes only the rows
+	//in view, so the walk scrolls the next row in before it lands. From a list
+	//scrolled away from it, the walk reaches rows that were not realized, one
+	//step per press with no stall on the current row, and Confirm commits it.
+	[AvaloniaFact]
+	public void The_pad_walks_a_virtualized_drop_down_to_an_unrealized_row_and_commits_it()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		AudioConfig audio = ConfigManager.Config.Audio;
+		string device = audio.AudioDevice;
+		audio.AudioDevice = "";
+		try {
+			string[] devices = Enumerable.Range(0, 200).Select(i => $"Device {i:000}").ToArray();
+			(MainWindow window, MainWindowViewModel model, _) = ShowSettingsTab(ConfigWindowTab.Audio, audioDevices: devices);
+			ComboBox list = Land<ComboBox>(window, "cboAudioDevice");
+			Assert.Equal(0, list.SelectedIndex);
+			//A Play drop-down's panel is a StackPanel (every row realized); the
+			//walk has to hold for one that virtualizes, so this one does.
+			list.ItemsPanel = new FuncTemplate<Panel?>(() => new VirtualizingStackPanel());
+
+			Press(window, PadNavAction.Confirm);
+			Assert.True(list.IsDropDownOpen, "Confirm did not open the drop-down");
+			const int target = 60;
+
+			//The list scrolled away from the walk (a wheel would do this), so
+			//the very next row and the target are both unrealized: without the
+			//scroll-in the first Down would stall on row 0.
+			ScrollViewer scroller = list.ItemsPanelRoot!.GetVisualAncestors().OfType<ScrollViewer>().First();
+			scroller.Offset = new Vector(0, scroller.Extent.Height);
+			scroller.UpdateLayout();
+			Pump();
+			foreach(int row in new[] { 1, target }) {
+				Assert.True(list.ContainerFromIndex(row) is null,
+					$"row {row} is realized before the walk (panel={list.ItemsPanelRoot?.GetType().Name}, realized={list.GetRealizedContainers().Count()})");
+			}
+
+			for(int step = 1; step <= target; step++) {
+				Press(window, PadNavAction.Down);
+				Control? focused = window.FocusManager?.GetFocusedElement() as Control;
+				int at = focused is null ? -1 : list.IndexFromContainer(focused);
+				Assert.True(at == step, $"press {step} left the walk on row {at} ({Describe(focused)})");
+			}
+			Assert.Equal("", audio.AudioDevice);
+
+			Press(window, PadNavAction.Confirm);
+			Assert.False(list.IsDropDownOpen, "Confirm did not close the drop-down");
+			Assert.Equal(target, list.SelectedIndex);
+			Assert.Equal("Device 060", audio.AudioDevice);
+			model.ClosePlayerSettings();
+		} finally {
+			audio.AudioDevice = device;
+		}
+	}
+
+	//#983: a sheet that hides while its drop-down is still open must not leave
+	//the pad routed into a popup nobody can see - a later Confirm would commit
+	//a row to a hidden control.
+	[AvaloniaFact]
+	public void A_popup_left_open_under_a_hidden_sheet_no_longer_takes_the_pad()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		List<double> written = new();
+		(MainWindow window, MainWindowViewModel model, ConfigViewModel settings) = ShowSettingsTab(ConfigWindowTab.Display,
+			() => new PlayerWindowSettingsViewModel(new VideoConfig(), false, 2, () => { }, written.Add));
+		ComboBox scale = Land<ComboBox>(window, "cboDisplayScale");
+
+		Press(window, PadNavAction.Confirm);
+		Press(window, PadNavAction.Down);
+		Assert.True(scale.IsDropDownOpen);
+
+		//Hidden in place, its view still attached (the harder case: a sheet
+		//that lets go of its view detaches the drop-down outright). The
+		//ComboBox closes itself when it stops being effectively visible, and
+		//the bridge follows a drop-down closed by something else - both are
+		//what keeps the pad out of the invisible rows.
+		Panel layer = window.FindNamed<Panel>("PlayerSettingsLayer");
+		layer.SetCurrentValue(Visual.IsVisibleProperty, false);
+		Pump();
+		Assert.False(scale.IsEffectivelyVisible);
+		Assert.False(scale.IsDropDownOpen, "the hidden sheet's drop-down is still open");
+
+		Press(window, PadNavAction.Confirm);
+		Assert.Empty(written);
+		Assert.Equal(2, settings.Display!.SelectedScale!.Value);
+		model.ClosePlayerSettings();
+	}
+
+	[AvaloniaFact]
+	public void Holding_confirm_on_hold_to_compare_compares_until_release()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		VideoConfig video = ConfigManager.Config.Video;
+		(VideoFilterType filter, string shader) = (video.VideoFilter, video.ShaderFile);
+		video.VideoFilter = VideoFilterType.HQ4x;
+		video.ShaderFile = "";
+		try {
+			(MainWindow window, MainWindowViewModel model) = ShowPlay();
+			model.RomInfo = new RomInfo() { ConsoleType = ConsoleType.Nes, Format = RomFormat.iNes };
+			ConfigViewModel settings = new(ConfigWindowTab.Look, playerMode: true, audioDevices: () => new[] { "Speakers" }, connectedPads: () => 0);
+			model.OpenPlayerSettings(settings);
+			WaitFor(() => model.IsPlayerSettingsVisible && FocusedName(window) is not null, $"the Settings sheet never took the focus ({Focused(window, model)})");
+			window.FindNamed<TabControl>("PlayerSettingsTabs").SelectedIndex = PlayerSettingsEssentials.IndexOf(ConfigWindowTab.Look);
+			Pump();
+			Button compare = Land<Button>(window, "btnLookHoldToCompare");
+			Assert.True(compare.IsEnabled);
+
+			Release(window);
+			Feed(window, PadNavAction.Confirm);
+			Pump();
+			Assert.True(settings.Look?.IsComparing == true, $"Confirm held on Hold to Compare did not turn compare on ({Describe(window.FocusManager?.GetFocusedElement() as Visual)}, canCompare={settings.Look?.CanCompare}, lookContext={compare.DataContext?.GetType().Name}, surfaceOverGame={model.IsPlaySurfaceOverGame}, running={EmuApi.IsRunning()})");
+			//Still held: a second tick with Confirm down keeps it on.
+			Feed(window, PadNavAction.Confirm);
+			Pump();
+			Assert.True(settings.Look?.IsComparing);
+
+			Release(window);
+			Pump();
+			Assert.False(settings.Look?.IsComparing, "releasing Confirm did not turn compare off");
+			AssertRing(compare);
+			model.ClosePlayerSettings();
+		} finally {
+			(video.VideoFilter, video.ShaderFile) = (filter, shader);
 		}
 	}
 }

@@ -61,6 +61,8 @@ internal static class MainWindowStartup
 		}
 		try {
 			WaitUntil(() => !StateGridEntry.ThumbnailsInFlight, "The recent-game previews");
+			//#909: W-P4's Save states grid loads its slot previews the same way.
+			WaitUntil(() => !SaveStateSlotViewModel.PreviewsInFlight, "The Save states slot previews");
 			foreach(MainWindow window in Shown) {
 				WaitFor(window.Startup, "MainWindow startup");
 				if(window.DataContext is MainWindowViewModel model) {

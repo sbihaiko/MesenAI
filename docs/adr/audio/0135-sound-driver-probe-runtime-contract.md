@@ -46,7 +46,7 @@ Proposed runtime contract for the productised probe:
    traps into a `JMP`-self stub is recorded as "no result" and the run moves
    on; the whole run stops at the wall-clock cap with a partial result.
 3. **Abortable.** The run is cancellable from the UI at any time; abort is
-   honoured at the next frame boundary. Abort or budget exhaustion always
+   honored at the next frame boundary. Abort or budget exhaustion always
    restores the pre-run state (see 5) and keeps whatever was already written.
 4. **Guaranteed no-op on unsupported ROMs.** Phase A/B validation (≥ 3 ids give
    distinct results, same id reproduces the same novel onsets on two save

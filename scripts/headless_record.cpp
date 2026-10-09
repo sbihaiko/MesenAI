@@ -370,6 +370,11 @@ void HeadlessSetScriptStartFrame(uint32_t frame);
 	//InteropDLL/EmuApiWrapperHeadless.cpp - the NES internal RAM, for the
 	//declared invariant of a "sync-watch=".
 	bool HeadlessReadNesRam(uint16_t start, uint32_t length, uint8_t* out);
+	//InteropDLL/EmuApiWrapperHeadless.cpp - ADR-0245 Decision 4 as amended by
+	//#934: the session's `watch`/`hits` verbs, the emulated CPU's reads of
+	//one internal-RAM address (debugger and probe reads never count).
+	bool HeadlessWatchNesRamReads(uint16_t address, int32_t compare);
+	bool HeadlessGetNesRamReadHits(uint32_t* reads, uint32_t* hits);
 	//F14.12 (ADR-0238 sec. 1) - the same state bytes SaveStateFile writes, in
 	//memory, so "session" mode can hold candidate states without a file round
 	//trip per candidate. out=nullptr asks for the size alone. Both take the
@@ -927,6 +932,29 @@ static int RunStepSession(const std::string& rom, double fps, EnhancementPackCon
 				err("ram: bad address spec (" + argument + ")");
 			} else {
 				send("ok " + out);
+			}
+		} else if(verb == "watch") {
+			//"watch <address>[:<compare>]" arms and zeroes the read-hit counter
+			//on one $0000-$07FF address; "hits" answers "<reads> <hits>" since.
+			size_t colon = argument.find(':');
+			unsigned long address = 0;
+			unsigned long compare = 0;
+			bool hasCompare = colon != std::string::npos;
+			if(!parseAddress(argument.substr(0, colon), address) || address >= 0x800
+			   || (hasCompare && (!parseAddress(argument.substr(colon + 1), compare) || compare > 0xFF))) {
+				err("watch: <address>[:<compare>] must name $0000-$07FF and a byte (" + argument + ")");
+			} else if(!HeadlessWatchNesRamReads((uint16_t)address, hasCompare ? (int32_t)compare : -1)) {
+				err("watch: no NES game running");
+			} else {
+				send("ok");
+			}
+		} else if(verb == "hits") {
+			uint32_t reads = 0;
+			uint32_t hits = 0;
+			if(!HeadlessGetNesRamReadHits(&reads, &hits)) {
+				err("hits: no watch armed");
+			} else {
+				send("ok " + std::to_string(reads) + " " + std::to_string(hits));
 			}
 		} else if(verb == "save") {
 			uint32_t size = HeadlessSaveState(nullptr, 0);

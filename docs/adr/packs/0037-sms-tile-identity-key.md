@@ -12,7 +12,7 @@ whole palette key for SMS/GG mode 4. CRAM contents are rewritten constantly
 (fades, palette swaps), so tile data + base half alone does not identify
 appearance: a replacement captured during one CRAM state would render stale
 colors later, violating the F2 1:1 criterion. The NES precedent keys on
-palette *values*; the SMS analogue is the CRAM half the tile can address.
+palette *values*; the SMS analog is the CRAM half the tile can address.
 
 ## Decision
 An SMS/GG mode-4 tile is identified by

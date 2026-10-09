@@ -314,9 +314,64 @@ public class PlaySheetsViewTests : IDisposable
 			Assert.False(widescreen.IsEnabled);
 			TextBlock reason = window.FindNamed<TextBlock>("EnhancementsWidescreenReason");
 			Assert.True(reason.IsVisible);
-			Assert.Equal("This game has nothing to show beside the picture", reason.Text);
+			//ADR-0267 stage 1 (option B): the one-line reason names the fill now
+			//- a NES game measured with nothing beside the picture is offered no
+			//Reveal and no fill, and the sentence says what the fill would cost.
+			Assert.Equal("Nothing to reveal beside the picture; widescreen will only stretch it", reason.Text);
 		} finally {
 			ConfigManager.Config.PlayerEnhancements.RomWidescreenSupport.Remove(Sha1);
+		}
+	}
+
+	//ADR-0267 stage 1 (option B): a console with no side map (SMS/SG-1000) keeps
+	//the Widescreen switch enabled and its reason visible - the fill sentence,
+	//not a claim of a Reveal - and turning it on applies the fill
+	//(`VideoAspectRatio.Widescreen`) through the switch's usual path, stashing
+	//the aspect ratio it replaced so turning it back off restores exactly that.
+	[AvaloniaFact]
+	public void Widescreen_switch_fills_a_console_with_no_side_map()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model) = ShowPlayWithGame();
+		VideoAspectRatio wasAspect = ConfigManager.Config.Video.AspectRatio;
+		VideoAspectRatio wasPrior = ConfigManager.Config.PlayerEnhancements.WideScrnPriorAspectRatio;
+
+		try {
+			ConfigManager.Config.Video.AspectRatio = VideoAspectRatio.NoStretching;
+			model.RomInfo = new RomInfo() { ConsoleType = ConsoleType.Sms, Format = RomFormat.Sms };
+			model.OpenEnhancementsPanel();
+			Dispatcher.UIThread.RunJobs();
+
+			CheckBox widescreen = window.FindNamed<CheckBox>("EnhancementsWidescreenCheckBox");
+			Assert.True(widescreen.IsEnabled);
+			Assert.False(widescreen.IsChecked);
+			TextBlock reason = window.FindNamed<TextBlock>("EnhancementsWidescreenReason");
+			Assert.True(reason.IsVisible);
+			Assert.Equal("Nothing to reveal beside the picture; widescreen will only stretch it", reason.Text);
+
+			//Turning it on is a real change the one button applies.
+			widescreen.IsChecked = true;
+			Dispatcher.UIThread.RunJobs();
+			Button apply = window.FindNamed<Button>("EnhancementsApplyButton");
+			Assert.Equal("Apply", apply.Content);
+			Click(apply);
+			Assert.Equal(VideoAspectRatio.Widescreen, ConfigManager.Config.Video.AspectRatio);
+
+			//It persists: the switch comes back on from what is applied.
+			model.OpenEnhancementsPanel();
+			Dispatcher.UIThread.RunJobs();
+			CheckBox reopened = window.FindNamed<CheckBox>("EnhancementsWidescreenCheckBox");
+			Assert.True(reopened.IsEnabled);
+			Assert.True(reopened.IsChecked);
+
+			//And turning it off restores the aspect ratio it stashed.
+			reopened.IsChecked = false;
+			Dispatcher.UIThread.RunJobs();
+			Click(window.FindNamed<Button>("EnhancementsApplyButton"));
+			Assert.Equal(VideoAspectRatio.NoStretching, ConfigManager.Config.Video.AspectRatio);
+		} finally {
+			ConfigManager.Config.Video.AspectRatio = wasAspect;
+			ConfigManager.Config.PlayerEnhancements.WideScrnPriorAspectRatio = wasPrior;
 		}
 	}
 

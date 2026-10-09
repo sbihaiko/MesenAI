@@ -4,9 +4,9 @@ This is the number the AI-in-the-loop review harness and the artist-tool
 goal both hinge on: is the `confidently_wrong` rate low enough to wire an AI
 reviewer into the kit pipeline? `scripts/artist_ai_review.py score` gives a
 real answer for the first time, run against a real reviewer pass rather than
-a synthetic one. (The design decision to keep an AI's judgement out of
+a synthetic one. (The design decision to keep an AI's judgment out of
 evidence is tracked by the still-unmerged ADR for "an AI judges the rendered
-surface, and its judgement never becomes evidence" — this file doesn't cite
+surface, and its judgment never becomes evidence" — this file doesn't cite
 its number since that ADR isn't on `main` yet.)
 
 ## Setup
@@ -65,13 +65,13 @@ from raw sheets, provided `promote` stays a gated human step (it does — see
 mode this run found is not "confidently wrong," it's "confidently right about
 the majority figure in a box it should have flagged as `multiple`" — worth a
 follow-up nudge to the reviewer protocol (spell out `multiple` more
-insistently for boxes with two disjoint colour schemes), not a blocker.
+insistently for boxes with two disjoint color schemes), not a blocker.
 
 ## Round 2 — the sheet-only variant (rule 1's own test)
 
 Rule 1 exists because "naming figures from 8px thumbnails put three green
 enemies on the player's sheet" — the claim is that resolution changes the
-verdict. The first round only exercised `--crops` (nearest-neighbour
+verdict. The first round only exercised `--crops` (nearest-neighbor
 enlargements, 2x the sheet's own scale). This round answers the same 36
 figure asks from the kit's own sheet PNGs, cropped to the ask's `rect` at
 **native scale, no enlargement** — half the linear resolution of a crop, the

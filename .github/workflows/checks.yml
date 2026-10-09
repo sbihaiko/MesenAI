@@ -277,8 +277,28 @@ jobs:
         # the dual-compile below is still the authoritative gate.
         run: ./scripts/verify-ui-logic-firewall.sh
 
+      # #951: PlayerWireframeTests feeds the committed W-P renders
+      # (UI.Tests/Theme/PlayerRenders/) through the host-free wireframe
+      # comparator and gate, and writes each <W-id>.wireframe.md here. This is
+      # the CI-side comparison: this job has no core (ADR-0131), so it compares
+      # the committed renders, not fresh ones - a layout change reaches CI only
+      # once its render is re-committed (the headless gate catches it locally).
       - name: Run unit tests
+        id: ui-unit-tests
+        env:
+          MESEN_PLAYER_RENDERS: ${{ runner.temp }}/wireframe-reports
         run: dotnet test UI.Tests/UI.Tests.csproj --nologo
+
+      # #974: a missing report is an error only when the tests passed; when
+      # the test step failed or never ran (a build that died before writing
+      # any report) it is a warning, so this step adds no second, misleading red.
+      - name: Upload wireframe reports of the committed Player renders
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: wireframe-reports
+          path: ${{ runner.temp }}/wireframe-reports
+          if-no-files-found: ${{ steps.ui-unit-tests.outcome == 'success' && 'error' || 'warn' }}
 
   # ADR-0150 (accepted 2026-09-03): headless Avalonia XAML-wiring tests in a
   # separate project that references UI/UI.csproj. Kept as its own job - NOT a
@@ -307,4 +327,20 @@ jobs:
           dotnet-version: 10.x
 
       - name: Run headless UI wiring tests
+        env:
+          MESEN_PLAYER_RENDERS: ${{ runner.temp }}/player-renders
         run: dotnet test UI.HeadlessTests/UI.HeadlessTests.csproj -p:RuntimeIdentifier=linux-x64 --nologo
+
+      # ADR-0249 Decision 5 / #951: the Player renders and their per-region
+      # wireframe reports (<W-id>.wireframe.md). Without a built core the render
+      # tests self-skip here, so this folder is empty; the fresh renders of a
+      # UI pull request come from render-gate.yml, which builds the core and
+      # fails on a skipped render (ADR-0263), and the committed renders are
+      # compared by ui-tests' wireframe-reports.
+      - name: Upload Player renders and wireframe reports
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: player-renders
+          path: ${{ runner.temp }}/player-renders
+          if-no-files-found: ignore

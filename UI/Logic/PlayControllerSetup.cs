@@ -120,6 +120,17 @@ public static class ControllerDevices
 		return name.Length > 0 ? name : Label(keyName);
 	}
 
+	//#913: the unknown-controller pill's sentence. A pad the host names is named
+	//here too, the way the sheet's title names it (named formats the localized
+	//"New controller “{0}”..." sentence); a pad it cannot name keeps the generic
+	//sentence (unnamed). The key-name prefix is not used: "Pad1" is the generic
+	//label #913 removes, so the pill says nothing rather than that.
+	public static string PillText(string? deviceName, Func<string, string> named, string unnamed)
+	{
+		string name = (deviceName ?? "").Trim();
+		return name.Length > 0 ? named(name) : unnamed;
+	}
+
 	//#913: the controller's own name for a key-code device index, off the host's
 	//own pad list - the enumerated pad whose block the index's codes carry, found
 	//the way the controller sheet finds a pad (PadBlock of its backend and its
@@ -160,10 +171,20 @@ public static class ControllerDevices
 
 //#913: one pad as the host enumerated it, for the naming rule (DeviceName): the
 //block its keys carry (PadBlock of its backend and its family-relative slot) and
-//the name its backend reports for it. The name is "" where the backend has none
-//- macOS (GameController) and Windows XInput report no product name at all - and
+//the controller's product name. The name is "" where the backend has none and
 //the caller falls back to the key manager's device prefix.
-public sealed record HostPad(int Block, string Name);
+public sealed record HostPad(int Block, string Name)
+{
+	//The pad as GetGamepadInfo describes it. XInput carries no product name:
+	//WindowsKeyManager fills GamepadInfo.Name with a synthetic "XInput Pad N"
+	//label, which names the slot, not the controller, so it is dropped here and
+	//the pad takes the fallback like any other unnamed pad.
+	public static HostPad From(GamepadBackend backend, int slot, string? name)
+	{
+		string product = backend == GamepadBackend.XInput ? "" : (name ?? "").Trim();
+		return new HostPad(ControllerDevices.PadBlock(backend, slot), product);
+	}
+}
 
 //The host whose pads a GamepadBackend enumerates (ControllerDevices.HostOf). One
 //backend per family per host is what keeps a key-code block unambiguous between

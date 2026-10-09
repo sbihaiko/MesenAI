@@ -17,6 +17,13 @@
 			<Setter Property="FontSize" Value="{StaticResource PlayerFontSubhead}" />
 			<Setter Property="Foreground" Value="{StaticResource PlayerText2Brush}" />
 		</Style>
+		<!-- #1013: a folder path stays on one line, ellipsized - the sheet is a
+		fixed 480 px and a long app path wrapped to three lines pushed the
+		keyboard caption past the group's bottom edge.-->
+		<Style Selector=".player TextBlock.system-detail.system-path">
+			<Setter Property="TextWrapping" Value="NoWrap" />
+			<Setter Property="TextTrimming" Value="CharacterEllipsis" />
+		</Style>
 	</UserControl.Styles>
 
 	<!--ADR-0256 Decision 8: Settings › System - the two questions the retired
@@ -29,16 +36,27 @@
 		<StackPanel XYFocus.NavigationModes="Enabled">
 			<TextBlock Name="lblSystemStorageRow" Classes="callout strong" Text="{l:Translate lblSystemStorageRow}" Margin="14 12 14 2" />
 			<RadioButton Name="SystemStorageUserFolder" Classes="choice" GroupName="SystemStorage" Content="{l:Translate radSystemUserFolder}" IsChecked="{Binding StoreInUserProfile}" Margin="14 0 14 0" />
-			<TextBlock Name="txtSystemUserFolder" Classes="system-detail" Text="{Binding UserFolder}" />
+			<TextBlock Name="txtSystemUserFolder" Classes="system-detail system-path" Text="{Binding UserFolder}" />
 			<RadioButton Name="SystemStoragePortable" Classes="choice" GroupName="SystemStorage" Content="{l:Translate radSystemPortable}" IsChecked="{Binding !StoreInUserProfile}" Margin="14 8 14 0" />
-			<TextBlock Name="txtSystemPortableFolder" Classes="system-detail" Text="{Binding PortableFolder}" />
+			<TextBlock Name="txtSystemPortableFolder" Classes="system-detail system-path" Text="{Binding PortableFolder}" />
 
 			<Separator Classes="hairline" Margin="14 12 14 0" />
 
 			<TextBlock Name="lblSystemKeyboardRow" Classes="callout strong" Text="{l:Translate lblSystemKeyboardRow}" Margin="14 12 14 2" />
 			<RadioButton Name="SystemKeyboardArrows" Classes="choice" GroupName="SystemKeyboard" Content="{l:Translate cboSystemArrows}" IsChecked="{Binding UsesArrowKeys}" Margin="14 0 14 0" />
 			<RadioButton Name="SystemKeyboardWasd" Classes="choice" GroupName="SystemKeyboard" Content="{l:Translate cboSystemWasd}" IsChecked="{Binding UsesWasd}" Margin="14 6 14 0" />
-			<TextBlock Classes="system-detail" Text="{l:Translate lblSystemGamepads}" Margin="42 6 14 0" />
+			<TextBlock Classes="system-detail" Text="{l:Translate lblSystemGamepads}" Margin="42 6 14 12" />
+
+			<Separator Classes="hairline" Margin="14 12 14 0" />
+
+			<!--#1039 (ADR-0265 section 8): the library's box-art switch. The one
+			choice on this sheet that is about the app talking to a server, so it
+			says what it does rather than only what it is called - the tile carries
+			the generic cover either way, and a cover already downloaded is kept
+			(the app stops asking, it does not throw away what the player has).-->
+			<TextBlock Name="lblSystemBoxArtRow" Classes="callout strong" Text="{l:Translate lblSystemBoxArtRow}" Margin="14 12 14 2" />
+			<CheckBox Name="SystemBoxArtSwitch" Classes="choice" Content="{l:Translate chkDownloadBoxArt}" IsChecked="{Binding DownloadBoxArt}" Margin="14 0 14 0" />
+			<TextBlock Classes="system-detail" Text="{l:Translate lblSystemBoxArtDetail}" Margin="42 6 14 12" />
 
 			<TextBlock Name="SystemNotice" Classes="reason" Text="{Binding NoticeText}" IsVisible="{Binding NoticeText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" TextWrapping="Wrap" Margin="14 12 14 0" />
 			<!-- The relaunch the wizard's flow ended with (Program.cs started the

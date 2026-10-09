@@ -56,4 +56,8 @@ public:
 	//available for force feedback.
 	std::string GetName();
 	bool HasRumble();
+
+	//#925: light the pad in a player colour through GCController.light. False
+	//when the pad has no light (`light` is nil on an Xbox pad - not an error).
+	bool SetLight(uint8_t r, uint8_t g, uint8_t b);
 };

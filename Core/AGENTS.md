@@ -85,7 +85,7 @@ needs no local rules beyond the root DOX.
   draws there is secondary OAM left over from line 239, fetched on the
   pre-render line, so the latch can never register it.
 - **`textures/sheets/poses.json`** is written by `SheetRender::SerializePoses`
-  from `PoseStats` and nothing in it is computed at serialisation time — with
+  from `PoseStats` and nothing in it is computed at serialization time — with
   one named exception: the `label` beside each pose and run is a *rendering*
   of the fields already in that entry (ADR-0209 Q1 (b),
   `Core/NES/HdPacks/SheetLabels.h`), never a new measurement, and it always
@@ -104,7 +104,7 @@ needs no local rules beyond the root DOX.
   direction+action pairs no single port ever held at once); per `cycles[]`
   entry `driver: "port1"|"port2"` (ADR-0181 §3, F9.23) when the
   interruption rule fired — `PoseRun::Windows`/`Stops[2]`/`Driver` hold the
-  judgement, constants `kDriverMinWindows`, `kDriverStopLag`,
+  judgment, constants `kDriverMinWindows`, `kDriverStopLag`,
   `kDriverStopShareNum/Den` in `TileSheetTypes.h`; absent means not
   classified. Consumers: `scripts/compose_engine.py` (`Poses`, `PoseInput`,
   `PoseRun.driver`).
@@ -115,7 +115,7 @@ needs no local rules beyond the root DOX.
   `tileNearby`, auto-attached from the co-occurrence table
   (`MesenSheets::SelectTileNearby`, thresholds `kTileNearbyMinFrames` /
   `kTileNearbyMinProbability` in `TileSheetTypes.h`). The twin is not an
-  optimisation: `HdNesPack::GetMatchingTile` walks a key's entries in
+  optimization: `HdNesPack::GetMatchingTile` walks a key's entries in
   **file order** and returns the first whose conditions pass, so a wrong or
   unevaluable condition falls through to the bare line and the pack renders
   exactly as it did before. **The failure mode is "no improvement", never a

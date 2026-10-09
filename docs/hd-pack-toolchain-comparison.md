@@ -34,7 +34,7 @@ the HD Pack Builder window still ships here
 column is also in the right column unless the row says otherwise. A row is
 marked *inherited* when MesenAI did nothing to it.
 
-Two facts about the base that colour the rest:
+Two facts about the base that color the rest:
 
 - Upstream is in **maintenance**: the last functional change to its
   `HdPackBuilder.cpp` was 2024-07-15, the format has been frozen at version 109
@@ -60,7 +60,7 @@ Two facts about the base that colour the rest:
 | **Conditions deliberately refused** | All 13 available to a human author | Onto a `<tile>` rule, `frameRange`, `tileAtPosition` and `memoryCheckConstant` are not emitted (ADR-0189 §4) | **MesenCE** (a hand author can do what our tool will not) |
 | **Sprite composition** | Nothing in the emulator; the community's answer is an external editor (`mkwong98/HDNes-Graphics-Pack-Editor`, CHR ROM only, wxWidgets) | `compose_editor.py`: MVVM tkinter over a host-free engine, poses as the unit, export as legal build input; and `mep_figure.py export`/`import` hands one figure to the artist's own editor as a single PNG and takes the paint back cell by cell (ADR-0209 Q2/Q3) | **MesenAI** |
 | **Extra tiles drawn on match** | `<addition>` — composes sprites without spending the 8-per-scanline limit; 1987 uses in one community pack | Emitted from the composition editor's overflow layer (F12.5, ADR-0196): anchored on the pose's root cell, target key proved unmatched against the ROM's CHR, linted | **Even** — upstream's format, authored by tool here |
-| **A recorded screen** | A `<background>` capture draws its whole bitmap on every frame its conditions match, and a behind-background sprite over colour-0 canvas disappears under it | Two tags the recorder writes and the loader honours, and a reader that does not know them skips them: a per-cell record (`<bgCellRecord>`, bound to the `<background>` line above it), so a capture draws a cell only where the live key equals the key it was captured with (ADR-0236, F14.11 — the 30-ROM library re-recorded: stale frames 2 995 → 618, 219 of 219 captures kept), and `<bgPreservesBehindBgSprites>`, so a behind-background sprite survives the screen (ADR-0224, F12.15). A pack without either renders as before | **MesenAI** |
+| **A recorded screen** | A `<background>` capture draws its whole bitmap on every frame its conditions match, and a behind-background sprite over color-0 canvas disappears under it | Two tags the recorder writes and the loader honors, and a reader that does not know them skips them: a per-cell record (`<bgCellRecord>`, bound to the `<background>` line above it), so a capture draws a cell only where the live key equals the key it was captured with (ADR-0236, F14.11 — the 30-ROM library re-recorded: stale frames 2 995 → 618, 219 of 219 captures kept), and `<bgPreservesBehindBgSprites>`, so a behind-background sprite survives the screen (ADR-0224, F12.15). A pack without either renders as before | **MesenAI** |
 | **Writing `hires.txt`** | By hand, or by the author's own generator (the most prolific author ships a 9.9 MB, 34-sheet Excel workbook) | `mep_build.py build` regenerates it from sheets; the guide forbids hand-editing | **MesenAI** |
 | **File-level duplicate bitmaps (CHR ROM)** | `automaticFallbackTiles` exists in the format and the builder never set it | Set on every CHR ROM recording (ADR-0195) | **MesenAI** |
 | **Validation** | None. No linter, no spec that matches the code | `mep_lint.py`, versioned MEP-v1, canonical `content_id`, sha256 errata, pack CI | **MesenAI** |

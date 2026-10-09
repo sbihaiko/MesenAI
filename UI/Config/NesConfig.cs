@@ -133,11 +133,19 @@ namespace Mesen.Config
 
 		public void ApplyConfig()
 		{
+			ConfigApi.SetNesConfig(ToInterop());
+		}
+
+		//The struct ApplyConfig hands the Core, built without calling it, so the
+		//host-free side of a config change (e.g. the ADR-0255 reconnect repair) can
+		//be checked against what the Core actually receives.
+		public InteropNesConfig ToInterop()
+		{
 			UInt32[] palette = new UInt32[512];
 			Array.Copy(UserPalette, palette, UserPalette.Length);
 			bool isFullPalette = UserPalette.Length == 512;
 
-			ConfigApi.SetNesConfig(new InteropNesConfig() {
+			return new InteropNesConfig() {
 				Port1 = Port1.ToInterop(),
 				Port1A = Port1.ToInterop(Port1A.Type),
 				Port1B = Port2.ToInterop(Port1B.Type),
@@ -247,7 +255,7 @@ namespace Mesen.Config
 
 				IsFullColorPalette = isFullPalette,
 				UserPalette = palette,
-			});
+			};
 		}
 
 		public void InitializeDefaults(DefaultKeyMappingType defaultMappings)

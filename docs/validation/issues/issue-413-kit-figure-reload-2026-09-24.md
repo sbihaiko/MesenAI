@@ -227,9 +227,9 @@ and its screen position `(484, 364)`:
 | expected frame pixels | 165, bbox `(489, 371)`–`(514, 393)` |
 | control vs reference: pixels differing | **165**, bbox `(489, 371)`–`(514, 393)` |
 | control-vs-reference diff **equal** to the painted set | **true** |
-| reference: painted pixels carrying the stroke colour | 165 / 165 |
+| reference: painted pixels carrying the stroke color | 165 / 165 |
 | reload vs reference: pixels differing (whole frame) | **0** |
-| reload: painted pixels carrying the stroke colour | 165 / 165 |
+| reload: painted pixels carrying the stroke color | 165 / 165 |
 | reload: opaque pixels of the whole painted cell matching the frame | 758 / 758 |
 
 The checksums are F14.1's own. The reference `0x06DC9F9A` is the frame F14.1

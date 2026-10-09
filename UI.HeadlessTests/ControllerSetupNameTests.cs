@@ -1,10 +1,13 @@
 using System;
 using System.Collections.Generic;
+using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
+using Avalonia.Threading;
 using Mesen.Config;
 using Mesen.Interop;
 using Mesen.Logic;
 using Mesen.ViewModels;
+using Mesen.Views;
 using Xunit;
 
 namespace Mesen.HeadlessTests;
@@ -34,8 +37,9 @@ public class ControllerSetupNameTests
 			new(ControllerDevices.PadBlock(GamepadBackend.DirectInput, device), "8BitDo SN30")
 		};
 
-		(string title, string? result, ushort bound) = RunSetup(pads, Key, "Joy3");
+		(string pill, string title, string? result, ushort bound) = RunSetup(pads, Key, "Joy3");
 
+		Assert.Equal("New controller “8BitDo SN30”. Press Start on it to set it up.", pill);
 		Assert.Equal("Set up “8BitDo SN30”", title);
 		Assert.Equal("8BitDo SN30 is set up.", result);
 		Assert.Equal(Key(20), bound);
@@ -53,8 +57,10 @@ public class ControllerSetupNameTests
 			new(ControllerDevices.PadBlock(GamepadBackend.DirectInput, device), "")
 		};
 
-		(string title, string? result, ushort bound) = RunSetup(pads, Key, "Joy3");
+		(string pill, string title, string? result, ushort bound) = RunSetup(pads, Key, "Joy3");
 
+		//The pill keeps its generic sentence: "Joy3" is the label #913 replaces.
+		Assert.Equal("New controller. Press Start on it to set it up.", pill);
 		Assert.Equal("Set up “Joy3”", title);
 		Assert.Equal("Joy3 is set up.", result);
 		Assert.Equal(Key(20), bound);
@@ -62,9 +68,9 @@ public class ControllerSetupNameTests
 
 	//W-P15's flow, driven exactly as the window drives it: the pill on the pad's
 	//first press, Start opens the sheet, and one press/release per step. Returns
-	//the sheet's title, the sentence it finished with and the key written to the
+	//the text the rendered pill shows, the sheet's title, the sentence it finished with and the key written to the
 	//free slot, so the caller can say what the pad was named.
-	private static (string Title, string? Result, ushort Bound) RunSetup(List<HostPad> pads, Func<int, ushort> key, string prefix)
+	private static (string Pill, string Title, string? Result, ushort Bound) RunSetup(List<HostPad> pads, Func<int, ushort> key, string prefix)
 	{
 		NesControllerConfig port = ConfigManager.Config.Nes.Port1;
 		NesKeyMapping[] saved = { port.Mapping1, port.Mapping2, port.Mapping3, port.Mapping4 };
@@ -86,11 +92,17 @@ public class ControllerSetupNameTests
 		};
 		string? result = null;
 		setup.Finished += r => result = r;
+		PlayControllerSetupView view = new() { DataContext = setup };
+		Window window = new() { Width = 800, Height = 600, Content = view };
+		window.Show();
 		try {
 			TimeSpan t = setup.Now;
 			ushort[] none = Array.Empty<ushort>();
 			setup.Tick(new[] { key(1) }, t);
 			Assert.True(setup.IsPillVisible);
+			Dispatcher.UIThread.RunJobs();
+			string pill = window.FindNamed<TextBlock>("ControllerSetupPillText").Text ?? "";
+			Assert.Equal(setup.PillText, pill);
 			setup.Tick(none, t += TimeSpan.FromMilliseconds(100));
 			setup.Tick(new[] { key(9) }, t += TimeSpan.FromMilliseconds(100));
 			Assert.True(setup.IsVisible, "the sheet did not open on Start");
@@ -102,8 +114,9 @@ public class ControllerSetupNameTests
 			}
 			Assert.False(setup.IsVisible, "the sheet stayed open after every step");
 			Assert.Equal(key(20), port.Mapping4.A);
-			return (title, result, port.Mapping4.A);
+			return (pill, title, result, port.Mapping4.A);
 		} finally {
+			window.Close();
 			port.Mapping1 = saved[0];
 			port.Mapping2 = saved[1];
 			port.Mapping3 = saved[2];

@@ -238,7 +238,19 @@ can be exercised by real xunit tests without Avalonia or the native
   would answer the first step and no other.
   `Enter` is the only place focus is taken, and always with
   `NavigationMethod.Directional`: that is what makes it a `:focus-visible`
-  focus, which is what paints `PlayerFocusRing`. Before it, each surface posted
+  focus, which is what paints `PlayerFocusRing` on the pad's own carriers.
+  **A control the theme paints the ring on needs two things off, and
+  `PlayerTheme.axaml` turns both off in one rule** (`#1089`): Fluent's
+  `AdornerLayer.DefaultFocusAdorner` — a 2 px
+  black frame over a 1 px white hairline — which `Control.cs` draws over any
+  focused control that leaves `FocusAdorner` unset, and `ClipToBounds`, which
+  Avalonia 12 turns on for every `TemplatedControl`, so the control ate its own
+  outward bloom and only the framework's frame was left. A new ring carrier
+  goes in that rule's selector list — and its clip has to be keyed on **the
+  pseudo-class that carrier's own ring is set on**, not on `:focus-visible` by
+  default: the field's ring is on plain `:focus` (`#1089` review 4), so a click
+  or a host's `Focus()` reached it with the clip still on and the pad's
+  `:focus-visible` lift never fired. Before it, each surface posted
   its own `Focus()` (the `MainWindow` constructor, `PlayEdgeFlowsWiring`,
   `PlayHomeView`, `StateGrid`) and they raced; #625's cross-window guard lives
   here once now.
@@ -333,9 +345,19 @@ can be exercised by real xunit tests without Avalonia or the native
   `kit/rec-NNN/kit.json` and `kit/pages/kit.json` (never
   `kit-proposals.json`, ADR-0188); `RemasterPaintProbe` calls a surface
   painted only when it differs from its `*.orig.png` twin upscaled
-  nearest-neighbour, as `mep_build`'s `_EditedProbe` does, and only for the
+  nearest-neighbor, as `mep_build`'s `_EditedProbe` does, and only for the
   units whose twin is a pre-paint copy (grid, object, element, panorama) -
   pattern pages, scene captures and imported sheets say "cannot tell".
+  A pattern-page thumbnail marks its cells (ADR-0219, #911) only from the
+  page's own sidecar beside the picture (ADR-0172's `<stem>.json`,
+  `kind: chr`, per-cell `state`), read by host-free
+  `UI/Logic/RemasterPageMarks.cs` and sized off the PNG's IHDR: `fill`
+  (filled from the game's data) is dimmed, `empty` gets a red outline, and
+  every seen state (`evidence`/`borrowed`/`donated`/`folded`) stays as
+  drawn. A missing, foreign-kind or unreadable sidecar, an unknown `state`
+  or an unsizeable picture is "cannot tell" and marks nothing - never a
+  count, never the pixels. The row re-reads when the sidecar's stamp
+  changes, not only the picture's.
   A tile opens with the OS default through `UI/Services/RemasterFileOpener.cs`
   (ADR-0209's first user-configured launch). `RemasterHandOff` builds the
   `mep_import.py import` job and the `compose_editor.py <recording>` child;
@@ -373,7 +395,7 @@ can be exercised by real xunit tests without Avalonia or the native
   (silent apply). `DistinctPackIdCount` uses `DerivePackId` (ADR-0140 id, else
   `local:<container>`). The owning VM (`MainWindowViewModel`) injects the pack
   list + ROM sha1 (data-injected from the code-behind), builds the choices
-  from the core's `GetPackListText` columns (name/author/version/licence/
+  from the core's `GetPackListText` columns (name/author/version/license/
   sections/origin already there), and `PickPlayerPack` stores the P.3
   preference then applies it through `LoadRomHelper.ApplyPackChange` (in
   place, or the old power cycle; see `PackChangePolicy`); `DismissPlayerPackPicker`
@@ -427,7 +449,7 @@ can be exercised by real xunit tests without Avalonia or the native
 - `CommunityPackCatalogMatcher` (F6.4b, MEI-v1 §2.3): auto-match is exact
   No-Intro `rom.sha1` / `rom.sha1s` first, then a same-game identity
   fallback (`SameGame`: core-title token multiset after stripping trailing
-  region/dump tags) so a nearby dump of a catalogued title still
+  region/dump tags) so a nearby dump of a cataloged title still
   auto-installs. The fallback only runs on entries that already carry a
   sha1 — `rom: {}` stays listable/manual. SHA1 always wins over the
   filename. IPS/patches stay hash-gated (ADR-0044). `CommunityPackCatalogFetcher`
@@ -532,7 +554,7 @@ can be exercised by real xunit tests without Avalonia or the native
   3924215).** `MainWindow` sizes the renderer only from its result; don't
   round inline there. Invariants, covered by `RendererViewportFitTests` and
   the headless `RendererLetterboxTests`:
-  - `RealWidth`/`RealHeight` are even (no shader centre seam) and never
+  - `RealWidth`/`RealHeight` are even (no shader center seam) and never
     exceed `floor(panel * dpi)`. The one exception is the integer-scale
     clamp to 1x on a panel shorter than one screen.
   - The binding axis rounds **down** to even. Upstream's round-up overflows
@@ -580,6 +602,16 @@ can be exercised by real xunit tests without Avalonia or the native
   Cheat ↗* (`CheatShare`, the user's own codes only) open URLs through the
   injected `openUrl`; `MainWindowViewModel.CommunityCheatsSource`/`LastKnown`
   are swapped in headless tests so none reaches the network.
+  **Checked web codes (P.12, ADR-0245 §4, #924).** For a copy not in the
+  bundled list, *Look Online* runs `scripts/cheat_web_lookup.py` through
+  `ICheatWebChecker` (`CheatWebLookupScriptChecker`, the ROM by path; the
+  client calls no model, ADR-0247). `CheatWebLookup.ParseOutput` reads a code
+  as `Passed` only when it carries the script's exact label; `BuildRows` lists
+  only passed codes (`CheatRowSource.WebFound`, marked *found online, checked
+  on your copy*), toggled into the same list. The check rule is the script's
+  (pending #934; it fails closed today). Rules in
+  `UI.Tests/Cheats/CheatWebLookupTests`, the view in
+  `UI.HeadlessTests/PlayerCheatsWebCodesTests` (core-free, fake checker).
 - **Shared replays sheet (`UI/Logic/CommunityReplayCatalog`, `ReplayWatch`,
   R.2 / ADR-0205 §7–§9).** W-P4 › Save states › *Shared replays…* opens
   `UI/Views/PlayerReplaysSheetView` (W-P4 is at its seven controls, so it is
@@ -615,6 +647,54 @@ can be exercised by real xunit tests without Avalonia or the native
   `<MovieFolder>/Shared/`, and on Stop reveals the file and opens the
   pre-filled `[Replay]` issue form from the host-free `ReplayShare`
   (`UI.Tests/Recording/ReplayShareTests.cs`). No upload, no credential.
+- **Library folders — *Library folders…* on the Play sheet
+  (`UI/Logic/LibraryFolders`, `PlayerRomPickerViewModel.Folders`, ADR-0264
+  Decision 8).** The single `Preferences.GameFolder` the app already had seeds
+  a stored list and is not read again. The list persists as
+  `PreferencesConfig.LibraryFolders`, and **`null` and `[]` are different
+  states**: `null` means the preference was never seeded, `[]` that the player
+  emptied it. Only `null` seeds — `StoredLibraryFolders()` answers the stored
+  list, or `LibraryFolders.Seed` off `GameFolder` when the preference is
+  absent — and `SeedLibraryFolders()` writes that seed **only when it holds a
+  folder**, so a start with no games folder cannot become an emptied library
+  and a folder the player removed cannot come back on the next start. Every
+  edit goes through `CommitLibraryFolders`, which writes the preference and
+  re-reads `_folders` from it, and which deliberately does **not** reassign
+  `LibraryFolderSource`: that is a seam a caller or a test injects, and writing
+  it back destroyed the injected list.
+  The list rules are host-free in `UI/Logic/LibraryFolders.cs` — `Normalize`
+  (the one spelling a folder is stored as), `Seed`, `Add`, `Remove`, `Union`,
+  and `HeaderResourceId`, the plural rule behind the header's one sentence
+  *Your library · N games in M folders*. `M` is that list's own row count,
+  never the folders a scan happened to answer with. The comparison that decides
+  whether two folders are one is a parameter, not a constant
+  (`DefaultComparison`, and why `null` means the OS's own rule). Nothing there
+  reaches a disk or an Avalonia type — the `UI/Logic/` boundary above — which
+  is what lets `UI.Tests/Play/LibraryFoldersTests` pin every rule against
+  literals.
+  The host half is `PlayerRomPickerViewModel.Folders.cs`: the rows, the notice,
+  and the **two doors an add comes through**. A mouse raises the native folder
+  dialog (`AddFolderFromMouse`) — the mouse-reachability clause ADR-0256
+  Decision 6 leans on — while a pad uses the sheet's own folder browser,
+  because a native dialog owns the screen once it is up and the focus engine
+  cannot draw a ring in it; the bridge answers Confirm on *Add a folder…* with
+  `AddFolderFromPad`, which is the only reason one control can have two doors.
+  Removing is a list edit and nothing else: `LibraryFolders.Remove` has no file
+  API to call and the preference is the only write, so a folder taken out of
+  the library keeps every game in it. `IsFoldersSheetVisible` and
+  `IsLibrarySurfaceVisible` keep one surface of the sheet up at a time, and
+  `IsPickingLibraryFolder` is the browser's pick mode — a mode of one open, so
+  `Open()` resets it and a pick that ends on a game row disarms it before
+  `RomChosen` fires.
+  Headless wiring: `UI.HeadlessTests/PlayerLibraryFoldersTests` drives both
+  doors, the pad-only add and remove, B's one-step ascent and its cancel at the
+  roots (ADR-0256's stop rule), and the named empty states, with
+  `LibraryFolderSource` injected and `RunLibraryScanInline`/`RunScanInline`
+  keeping the scan in the `Open()` turn. A suite that drives the library
+  through `GameFolder` must hold `Preferences.LibraryFolders`, null it in the
+  constructor and restore it in `Dispose`: `Open()` now persists a seed, so a
+  saved list would otherwise win over the tree the case builds and the suite
+  would pass only on a machine that never used the feature.
 
 ## Player theme (ADR-0249)
 
@@ -654,7 +734,7 @@ drawn by `scripts/render_gui_wireframes.py`), not classic Mesen. The theme is
   (`UI/Controls/PlayerTheme.cs`) are inherited attached brushes: the scope
   sets Play's blue; a `remaster` or `share` class on any element inside it
   switches to purple / green below that element. Tinted components bind to
-  them, so never hard-code a workspace colour.
+  them, so never hard-code a workspace color.
 - **Components** (classes, inside the scope):
   - Buttons: `Button.primary` (tint fill, white semibold), `.secondary`
     (white, hairline, shadow), `.tinted` (TintSoft fill, TintText label),
@@ -663,7 +743,7 @@ drawn by `scripts/render_gui_wireframes.py`), not classic Mesen. The theme is
     up to 32 high, 11 above). A leading icon is `PathIcon Classes="leading"`.
   - Grouped list: `Border.group` holding `Button.row` items (50 high, the
     last row has no hairline). Row content: a DockPanel with
-    `Border.badge` (background = a badge colour) + `PathIcon`,
+    `Border.badge` (background = a badge color) + `PathIcon`,
     `PathIcon.chevron` docked right, `TextBlock.value` docked right,
     `TextBlock.title`. `Button.row.text` is a row without a badge.
   - Badges: `Border.badge` 26 (`.small` 22, `.medium` 32, `.xlarge` 40
@@ -682,7 +762,7 @@ drawn by `scripts/render_gui_wireframes.py`), not classic Mesen. The theme is
   - Text: `TextBlock.large-title`, `title1`, `title2`, `title3` (for 26
     bold and 16 semibold use `display` and `card-title`, below),
     `headline`, `callout`, `body`, `subhead`, `footnote`, `caption`,
-    `section-header`; colour modifiers `secondary` (TEXT2), `tertiary`
+    `section-header`; color modifiers `secondary` (TEXT2), `tertiary`
     (TEXT3), `tint`.
   - Settings groups (W-P8, W-P10): `Border Classes="group inset"` (the
     play sheets' `Border.inset` fill, #F8F8FA, radius 12) holding `:is(Panel).setting-row` rows (46 high) split by
@@ -712,7 +792,7 @@ drawn by `scripts/render_gui_wireframes.py`), not classic Mesen. The theme is
     beats Remaster's `Border.warning`.
   - Controls: `ComboBox.popup` / `c:EnumComboBox Classes="popup"` (the
     renders' 24-high macOS pop-up button: white, hairline, radius 6, Play-blue
-    up/down stepper in every workspace; its own template, greyed with no
+    up/down stepper in every workspace; its own template, grayed with no
     stepper when disabled), `TabControl.segmented`
     (a TabControl with the segmented strip, 96 px segments),
     `RadioButton.choice` (tint-filled, 13.5 medium), `Border.hud.compact`
@@ -745,12 +825,12 @@ drawn by `scripts/render_gui_wireframes.py`), not classic Mesen. The theme is
   - What each Play sheet holds. *Enhancements* (W-P7,
     `PlayerEnhancementsSheetView`) is one inset list of four switches that
     edit a draft - Modern instruments, Border ("Applies on reload" under it
-    where the change restarts), Widescreen, Overclock (grey with its reason
+    where the change restarts), Widescreen, Overclock (gray with its reason
     where the console has no knob) - then the Pack row, `Pack: <name> ›`,
     which opens W-P6, or W-P5 with 2+ packs; one Apply button writes the
     draft. *Pack detail* (W-P6, `PlayerPackDetailSheetView`) holds this
     game's Textures / Music / ROM Patch switch rows, never a global one:
-    a layer the pack lacks is grey ("Not in this pack"), one whose global
+    a layer the pack lacks is gray ("Not in this pack"), one whose global
     default is off reads "Off for every game — Tools ⋯ › Enhancement
     Packs", and those three defaults live only in the Enhancement Packs
     window (Classic's Tools ▸, the Remaster door's ⋯). When the only pack is
@@ -758,10 +838,11 @@ drawn by `scripts/render_gui_wireframes.py`), not classic Mesen. The theme is
     byline is the game's name plus "Made on this computer from what you
     played", naming the scaler in parentheses when the project's
     `.bootstrap` stamp does ("(xBRZ 4×)"). *Settings* (W-P8) is the
-    Display | Look | Audio | Controls strip: Audio (Sound, Volume, Output
+    Display | Look | Audio | Controls | System strip (System: ADR-0256, the
+    storage and keyboard choices the first-run wizard used to ask): Audio (Sound, Volume, Output
     device) and Controls (pads, Rumble, deadzone) are three-row lists whose
     "More in Options…" opens that tab's classic page, Display carries the
-    "Everything else: Tools ⋯ › Options" hint, Look its own footer.
+    "Everything else: Classic › Settings" hint, Look its own footer.
   - Icons (`StreamGeometry`, 20 x 20 box, use with `PathIcon`):
     `PlayerIconPlay`, `Remaster`, `Pencil`, `Share`, `Pack`, `SaveStates`,
     `Enhancements`, `Cheats`, `Settings`, `Folder`, `ChevronRight`,
@@ -785,7 +866,7 @@ drawn by `scripts/render_gui_wireframes.py`), not classic Mesen. The theme is
       `FlyoutPresenterClasses="popover"` on a `Flyout`.
     - `Border.hud` (the dark pill over the game: `PlayerHud`, radius 12,
       white text; `secondary` / `tint` text inside it read
-      `PlayerHudText2` / `PlayerHudTintText`), `Button.primary.hud` (grey
+      `PlayerHudText2` / `PlayerHudTintText`), `Button.primary.hud` (gray
       Stop); `PlayerGameBackgroundBrush` (black behind the game).
     - Tile tokens `PlayerTileFill` / `PlayerTileBorder` and `PlayerChipFill`.
 - **No classic dialog from a Player flow** (ADR-0249 final audit). Quit
@@ -810,7 +891,7 @@ drawn by `scripts/render_gui_wireframes.py`), not classic Mesen. The theme is
   root-level `BiosSheetLayer`, so W-P13 asks in every workspace.
   `UI.HeadlessTests/PlayerNoClassicDialogTests` pins all of it.
 - **Restyling a screen.** Keep every `Name`, binding, handler and focus
-  order (the headless suites find controls by name). Swap local colours and
+  order (the headless suites find controls by name). Swap local colors and
   sizes for classes; add a render test next to
   `UI.HeadlessTests/PlayerThemeRenderTests` that saves the PNG and asserts
   font, size, radius, tint and background of the named controls.
@@ -844,3 +925,9 @@ drawn by `scripts/render_gui_wireframes.py`), not classic Mesen. The theme is
 
 (none — `Logic/` and `Services/` are convention-only subfolders, not
 separately governed subtrees)
+
+- **Library folders** — the Play sheet's *Library folders…* list, its
+  persistence and its two doors for an add (ADR-0264 Decision 8): the last
+  bullet under `## Local Contracts`, above. Its host-free rules are
+  `UI/Logic/LibraryFolders.cs` and its host half
+  `UI/ViewModels/PlayerRomPickerViewModel.Folders.cs`.

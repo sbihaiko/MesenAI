@@ -38,5 +38,5 @@ Verified by `BlocoU` in `scripts/core_unit_tests.cpp` (18 cases): the notice's p
 ## Consequences
 
 - Under (a), anything asserting on `GetLog()` sees a new first line when truncation happened. Audited before shipping: the only two consumers are `UI/Windows/LogWindow.axaml.cs` and `headless_record`'s `log` flag, and both display the string without parsing it — so the notice lands where a reader is already looking and no capture-tool rebuild is required.
-- Under (d), a long session can lose its own early lines from disk, which is exactly what `mesen.log` is currently the only defence against. This is why the two halves are one decision: capping the disk log while leaving the ring silently lossy would remove the last place the truth survives.
+- Under (d), a long session can lose its own early lines from disk, which is exactly what `mesen.log` is currently the only defense against. This is why the two halves are one decision: capping the disk log while leaving the ring silently lossy would remove the last place the truth survives.
 - Whatever is chosen, #302's dedupe stands on its own — it reduced a real producer from 8 234 lines to 28 and is not superseded by any option here.

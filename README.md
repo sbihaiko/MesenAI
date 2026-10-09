@@ -50,6 +50,8 @@ Not included: SNES (incl. Super Game Boy), PC Engine, WonderSwan, ColecoVision.
 
 The channel is **built on demand** — `build.yml` on a pull request against `prod`, or a manual dispatch (ADR-0200, ADR-0203), never on a push to `main`. Code on `main` that has not been promoted is [built from source](docs/COMPILING.md).
 
+The current `ci-latest` (published 2026-10-07) was built from `prod` @ 6ceb6f44e, whose tree equals `main` @ 3c2f113cd, and carries the Play / Remaster / Share / Classic workspaces, including the Player GUI work: the Settings strip (Display | Look | Audio | Controls | System), pad-only Play, and the cheats sheet with checked web lookup.
+
 ### Previous, signed build
 
 The only tagged release is **[v0.1.0 (2026-09-15)](https://github.com/sbihaiko/MesenAI/releases/latest)**: macOS Apple Silicon only, cut locally from a tagged commit, ad-hoc signed (open it once, then **System Settings → Privacy & Security → Open Anyway**). It predates the three task workspaces — it opens in the earlier Player shell — and its `mesenai-tools-<version>.zip` predates scripts added since; for those, use the CI build above or a checkout. Because `ci-latest` is a pre-release, [Releases](https://github.com/sbihaiko/MesenAI/releases/latest) still resolves to this tag.
@@ -102,7 +104,7 @@ This fork also loads HD textures on **Game Boy/GBC and SMS/Game Gear**, and keep
 
 | Console | Picture | With the Reveal | What the sides show |
 |---|---|---|---|
-| **NES** | 256×240 | 384×240 — 64 px per side | the neighbouring nametable, through the mapper's mirroring |
+| **NES** | 256×240 | 384×240 — 64 px per side | the neighboring nametable, through the mapper's mirroring |
 | **GB / GBC** | 160×144 | 256×144 — 48 px per side | the wrapping 256×256 BG map and the window |
 | **Game Gear** | 160×144 | 256×144 — 48 px per side | the 96 px its shipped preset crops, which the VDP drew all along |
 | **GBA** | 240×160 | 284×160 — 22 px per side | text backgrounds only |

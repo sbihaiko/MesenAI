@@ -53,7 +53,7 @@ substitution runs on a frame that still holds `0F0F0F0F` and keeps passing.
 Four cases are new: Tetris 2, several recorded palettes none drawable, only
 drawable palettes count, and the per-layer packing.
 
-Red. The API stub was in place and `Resolve` kept the old behaviour:
+Red. The API stub was in place and `Resolve` kept the old behavior:
 
 ```
 [FAIL] A_recorded_palette_the_frame_does_not_hold_is_not_substituted_431   Expected: RecordedNotDrawn  Actual: Substituted
@@ -69,9 +69,9 @@ Green: 10/10. The whole `UI.Tests` run: 516 passed. `make headless-ui-tests`:
 
 | Mutant | Result |
 |---|---|
-| no frame filter (the old behaviour) | killed, 3 FAIL |
+| no frame filter (the old behavior) | killed, 3 FAIL |
 | `RecordedNotDrawn` hands out the recorded palette | killed, 2 FAIL |
-| sprite palettes lead with the background colour | killed, 1 FAIL |
+| sprite palettes lead with the background color | killed, 1 FAIL |
 | sprite layer reads background palette RAM | killed, 1 FAIL |
 | no-candidate case falls through to the refusal | killed, 2 FAIL |
 

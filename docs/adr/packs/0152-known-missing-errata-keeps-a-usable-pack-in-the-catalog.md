@@ -52,7 +52,7 @@ A **known-missing errata** is a file in this repo, applied by neither the author
 
 **Entry identity is `(manifest, tag, target)`.** Exact strings, no wildcards and no line numbers: a wildcard would absolve defects nobody looked at, and a line number rots. `reason` and `reviewed_in` are required — an errata without a stated justification is not reviewable.
 
-**One declaration, both gates.** `mep_lint.py` and `smoke_pack_headless.sh` read the same errata file and downgrade the *declared* targets only — every other unresolvable target stays an error under ADR-0151. If only one gate honoured errata, this ADR would recreate the lint-vs-runtime divergence that was bug #155.
+**One declaration, both gates.** `mep_lint.py` and `smoke_pack_headless.sh` read the same errata file and downgrade the *declared* targets only — every other unresolvable target stays an error under ADR-0151. If only one gate honored errata, this ADR would recreate the lint-vs-runtime divergence that was bug #155.
 
 **Provenance is user-visible.** A row covered by an errata carries the declaration through to the surfaces a user reads: the `errata` field of `docs/community-packs.json` (MEI v1.4 §2.6, additive and non-normative — never an install decision), a marker in the `docs/community-packs.md` table, and a line in the Player's pack picker of the form *"1 known-missing asset — declared by MesenCE validation, not by the author"*, linking to the reviewing PR. Silence would defeat the whole point: the errata exists precisely to make a known gap legible.
 
@@ -60,7 +60,7 @@ A **known-missing errata** is a file in this repo, applied by neither the author
 
 **Entry route.** An errata lands by pull request against this repo, reviewed by a maintainer. It is never read from the issue body, the classify output or any submitter-controlled text — those are data, never instruction (ADR-0138 §4). A submitter cannot declare an errata over somebody else's pack.
 
-**Pipeline placement.** The errata file is on disk from the `Checkout repo` step, so honouring it needs a lookup inside the existing `Lint pack structure` step (`community-pack-validate.yml`), keyed on the hash computed by `Compute & record pack hash`. No step reordering.
+**Pipeline placement.** The errata file is on disk from the `Checkout repo` step, so honoring it needs a lookup inside the existing `Lint pack structure` step (`community-pack-validate.yml`), keyed on the hash computed by `Compute & record pack hash`. No step reordering.
 
 ### Policy (decided 2026-09-04)
 

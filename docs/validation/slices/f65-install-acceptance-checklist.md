@@ -60,7 +60,7 @@ Runners-up, if the tester cannot supply a Mega Man (USA) dump:
 |---|---|---|
 | #139 The Legend of Zelda (USA) | `ZeldaHD.ips` wired | Textures only — exercises patch + extraction but no audio dependency. Its No-Intro sha1 `BE2F5DC8…` is the one the repo's own `roms/Zelda.nes` has, so it is the easiest to run |
 | #141 Zelda II (USA) | `Revamp.ips` wired, `Revamp+Music.ips` **not** wired | Mixed; the audio-bearing patch is the unwired one |
-| #143 Castlevania, #148 Metroid | not verified here | `patch:ips` labelled but their artifacts were not re-linted for this checklist |
+| #143 Castlevania, #148 Metroid | not verified here | `patch:ips` labeled but their artifacts were not re-linted for this checklist |
 
 The other six catalog rows carry no patch at all.
 
@@ -196,7 +196,7 @@ Nothing here patches the client.
       With your dep **absent** from
       `.cache/downloads/`, an on-screen message appears, worded exactly:
       `Missing file '<hints>' (licence: <license>) - drop it into <home>/EnhancementPacks/.cache/downloads and power cycle`
-      (an undeclared licence must render as the literal `not declared`, never
+      (an undeclared license must render as the literal `not declared`, never
       blank). The log shows `pendingDeps=1` on the
       `[CommunityPackInstall] calling EmuApi.InstallMepRecipe` line.
 - [ ] **B6. (outcome 2 — hash validation)** Copy your `.ogg` into

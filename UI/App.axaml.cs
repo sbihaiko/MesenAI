@@ -9,11 +9,14 @@ using Avalonia.Threading;
 using Mesen.Config;
 using Mesen.Interop;
 using Mesen.Localization;
+using Mesen.Logic;
 using Mesen.Utilities;
 using Mesen.ViewModels;
 using Mesen.Windows;
 using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Reflection;
 
 namespace Mesen
@@ -107,9 +110,15 @@ namespace Mesen
 				Gesture = new Avalonia.Input.KeyGesture(Avalonia.Input.Key.OemComma, Avalonia.Input.KeyModifiers.Meta)
 			};
 			settings.Click += (s, e) => WithMainWindow((wnd, model) => model.MainMenu.OpenSettings(wnd));
-			menu.Items.Add(about);
-			menu.Items.Add(new NativeMenuItemSeparator());
-			menu.Items.Add(settings);
+			//Issue #1008: Avalonia may already have appended its standard items
+			//(Services… Quit); MacAppMenu puts About and Settings… above them.
+			List<NativeMenuItemBase> items = MacAppMenu.Arrange<NativeMenuItemBase>(menu.Items, about, settings, () => new NativeMenuItemSeparator(), item => item is NativeMenuItemSeparator).ToList();
+			foreach(NativeMenuItemBase item in menu.Items.ToList()) {
+				menu.Items.Remove(item);
+			}
+			foreach(NativeMenuItemBase item in items) {
+				menu.Items.Add(item);
+			}
 			NativeMenu.SetMenu(this, menu);
 		}
 

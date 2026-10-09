@@ -25,7 +25,7 @@ current three parameters plus one `const string& packPresetPath`.
 ## Consequences
 - "User always wins" holds field-by-field: a user file that sets only
   `CompThreshold` keeps every other pack value.
-- No behaviour change when no MEP pack is installed (empty path → old path).
+- No behavior change when no MEP pack is installed (empty path → old path).
 - Section suffixes (`""`, `.Gb`, `.Sms`) work identically in pack files, so
   a single pack preset can tune all three engines.
 

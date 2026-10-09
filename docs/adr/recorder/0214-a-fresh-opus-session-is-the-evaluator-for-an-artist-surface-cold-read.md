@@ -13,7 +13,7 @@
   ajuste o que for necessário"*.
   **Amended 2026-09-25 (criterion 1):** the action is findable *from the guide handed to the evaluator plus the visible labels*. The artist guide (`remastering-a-game.md`) names *Copy as MEP sheet cell* on purpose — a real artist should be told — so the F14.2 confirmation retest (`~/retest16/runs/retest16/COMPARE-confirm.md`, 4 of 5 DeepSeek runs) showed the old "without being told which" clause could not hold for anyone who reads the guide first. User go-ahead, verbatim: *"pode reescrever o C1 como você sugeriu"*. Criterion 1 now measures that the guide leads to the right menu line; a name reached from outside the sandbox (commit subjects, memory) is still contamination.
 - Date: 2026-09-19
-- Related: PRD Part A F12.2 (and any later Phase 12 slice whose stop rule is a cold-read of what the artist sees), ADR-0188 (an AI judgement is a proposal), ADR-0150 (Avalonia.Headless), C.5 logs (`docs/validation/process/c5-fable-artist-run-zelda-2026-09-14.md`, `…-mega-man-3-2026-09-14.md`), `docs/validation/slices/f12.2-fable-panel-2026-09-19.md` (the Fable half, kept as the record of the two-game panel this amendment supersedes as the standing evaluator)
+- Related: PRD Part A F12.2 (and any later Phase 12 slice whose stop rule is a cold-read of what the artist sees), ADR-0188 (an AI judgment is a proposal), ADR-0150 (Avalonia.Headless), C.5 logs (`docs/validation/process/c5-fable-artist-run-zelda-2026-09-14.md`, `…-mega-man-3-2026-09-14.md`), `docs/validation/slices/f12.2-fable-panel-2026-09-19.md` (the Fable half, kept as the record of the two-game panel this amendment supersedes as the standing evaluator)
 - Amends: PRD Part A Phase 12 principle "a person who did not build it logs the cold-read rows"; F12.2's "human panel row"; the F12.2 mechanical-replay log's claim that the remaining half is only measurable on a person. Does **not** amend F9.18, S10.b, or ADR-0188 §5 (promotion stays gated).
 
 ## Context
@@ -148,7 +148,7 @@ acceptance even if the figure appears. That is the rule C.5 lacked.
 - **The dispatcher must not contaminate the session.** The briefing file is the
   only evaluator-facing document. A future similar panel gets its own briefing;
   it does not reuse this one with the answers filled in.
-- **Criterion 1 is weaker than a person's right-click and is labelled so.** A
+- **Criterion 1 is weaker than a person's right-click and is labeled so.** A
   pass on the label dump does not prove the flyout opens, that hovering was not
   mistaken for a click, or that the silent clipboard (known trap 2) was
   understood. Those stay in the dispatcher script as known traps and in

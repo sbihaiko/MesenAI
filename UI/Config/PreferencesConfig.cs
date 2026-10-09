@@ -49,6 +49,16 @@ namespace Mesen.Config
 		[ObservableProperty] public partial bool AssociateGameGearRomFiles { get; set; } = false;
 		[ObservableProperty] public partial bool AssociateSgRomFiles { get; set; } = false;
 
+		//ADR-0265 (#1039, owner decision 2026-10-07): the flat library's master
+		//switch for box art. On by default, like AutoInstallCommunityPacks and
+		//PauseWhenInBackground above; the row that flips it is Settings › System.
+		//Off means the app makes no box-art request at all, so a missing key in an
+		//existing settings.json reads as on - the switch is a refusal, and nobody
+		//has made it yet. It lives in the preferences because it is one global
+		//choice about the app talking to a server, not a per-game or per-console
+		//one; nothing here reaches the core (no Interop struct field).
+		[ObservableProperty] public partial bool DownloadBoxArt { get; set; } = true;
+
 		[ObservableProperty] public partial bool EnableAutoSaveState { get; set; } = true;
 		[ObservableProperty] public partial UInt32 AutoSaveStateDelay { get; set; } = 5;
 
@@ -111,6 +121,18 @@ namespace Mesen.Config
 		[ObservableProperty] public partial string SaveStateFolder { get; set; } = "";
 		[ObservableProperty] public partial string ScreenshotFolder { get; set; } = "";
 		[ObservableProperty] public partial string WaveFolder { get; set; } = "";
+
+		//#1036 (ADR-0264 Decision 8): the folders "Your library" scans. `GameFolder`
+		//above is the app's old single folder and seeds this list on first run
+		//(LibraryFolders.Seed), after which the list is the one source of truth - the
+		//picker's folder is not read again.
+		//
+		//Null and empty are two different states, and the difference is the whole
+		//point: `null` means the preference was never seeded, `[]` means the player
+		//emptied it. Only `null` seeds, so a folder the player removed cannot come
+		//back on the next start. `[]` is also what the sheet shows as its named empty
+		//state, so an emptied library stays emptied.
+		[ObservableProperty] public partial List<string>? LibraryFolders { get; set; } = null;
 
 		public PreferencesConfig()
 		{

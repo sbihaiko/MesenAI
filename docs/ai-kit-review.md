@@ -1,6 +1,6 @@
 # AI review of an artist kit
 
-The kit generators cut a recording into surfaces an artist recognises, and
+The kit generators cut a recording into surfaces an artist recognizes, and
 prove the cut is lossless by rebuilding the pack from it. What they cannot do is
 **judge**: which tiles form one figure, what that figure is called, which of
 1642 recorded shapes matter and which are HUD or fade noise. Mesen's answer to
@@ -22,7 +22,7 @@ PNG and write JSON can take the job.
 ## Four rules
 
 1. **The reviewer looks at the rendered surface, never at raw data.** The unit
-   of review is a PNG a human would recognise — a figure grid, a scenery
+   of review is a PNG a human would recognize — a figure grid, a scenery
    object, a panorama region, a pattern page — plus a rectangle inside it. Never
    a tile array, never a hex key, never a bare 8x8 crop. This is the first rule
    because it is the one that was learned the hard way: naming figures from 8 px
@@ -46,7 +46,7 @@ PNG and write JSON can take the job.
 
 `packet <kit>` walks the kit's fragments in the kit's own reading order —
 figures, scenery, stage maps, pattern pages — because a reviewer that has
-already seen the player as a whole figure is the one who can recognise its torso
+already seen the player as a whole figure is the one who can recognize its torso
 on a pattern page, never the other way round. It writes two files:
 
 - `kit-review.json` — the machine-readable ask list plus the answer schema and
@@ -54,7 +54,7 @@ on a pattern page, never the other way round. It writes two files:
 - `kit-review.md` — the same thing as the page a reviewing agent reads,
   grouped by surface.
 
-One ask per unit of judgement:
+One ask per unit of judgment:
 
 | kind | one ask per | the question |
 | --- | --- | --- |
@@ -65,15 +65,15 @@ One ask per unit of judgement:
 | `page` | CHR pattern page | only where a whole thing is laid out contiguously — abstaining is the expected answer |
 
 A sprite sheet does not record which cell belongs to which pose; the layout
-does. `artist_kit.py` pads every figure to its row's box, centres it, and leaves
+does. `artist_kit.py` pads every figure to its row's box, centers it, and leaves
 exactly one empty column between boxes, emitting the cells box by box in reading
 order. The segmenter recovers the boxes from that and settles the rows a sheet
 could be read several ways by making them add up to the sheet's pose count. A
 sheet with no reading at all is listed under `skipped` — never approximated.
 
-`--crops <dir>` additionally writes one enlarged, nearest-neighbour PNG per
+`--crops <dir>` additionally writes one enlarged, nearest-neighbor PNG per
 figure ask. That is rule 1's lever: the same figure judged at 16x32 and at
-128x256 is not the same judgement. Crops are written outside the kit, because a
+128x256 is not the same judgment. Crops are written outside the kit, because a
 crop is a reviewing aid and not a painting surface.
 
 ## The answer schema
@@ -133,9 +133,9 @@ accepted id the packet never made is refused.
 
 ## Measuring it
 
-An AI judgement nobody measures is worse than none, because it looks
+An AI judgment nobody measures is worse than none, because it looks
 authoritative. Where a hand-made HD pack exists for the same ROM, it is a
-labelled set produced by a human who knew the game: its file names (`BillRizer`,
+labeled set produced by a human who knew the game: its file names (`BillRizer`,
 `Enemies_Gunner`, `LargeTank1`) say what its tiles are.
 
 ```
@@ -153,14 +153,14 @@ or sent anywhere — the one thing wanted from it is the names.
 Two things make the labels trustworthy rather than merely available:
 
 - **Exact `(pattern, palette)` keys only.** Matching on the pattern alone is a
-  guess, and Contra's grey rock faces share patterns with the light tiles of the
+  guess, and Contra's gray rock faces share patterns with the light tiles of the
   player's sheet — a palette-blind lookup cheerfully labels a mountain
   `player`. A tile that does not match exactly contributes nothing.
 - **Exclusive tiles only.** A tile that appears in files of two different
   subjects says nothing about either and is dropped. What labels a box is the
   tiles belonging to one subject and no other.
 
-A box whose exclusive tiles give no subject a 60% majority is labelled `mixed`,
+A box whose exclusive tiles give no subject a 60% majority is labeled `mixed`,
 not unknown: the kit really does put two overlapping figures in one box, and a
 reviewer who says so is right.
 

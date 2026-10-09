@@ -822,6 +822,38 @@ namespace Mesen.Tests.Play
 				suggestions.Select(s => s.Folder).ToArray());
 		}
 
+		//#1060 (ADR-0264 Decision 8): a library folder that answers no games is a
+		//named state with a next step rather than a blank grid - and it is a
+		//DIFFERENT state from having no library folder at all, because the two
+		//tell the player different things. The rule is the decision table, and the
+		//ids it answers are the ones the locale file must hold.
+		[Fact]
+		public void A_library_folder_that_yields_no_games_is_its_own_named_state()
+		{
+			Assert.Equal("RomPickerLibraryNoFolders", PlayRomPicker.LibraryEmptyMessageId(0, 0));
+			Assert.Equal("RomPickerLibraryEmpty", PlayRomPicker.LibraryEmptyMessageId(1, 0));
+			Assert.Equal("RomPickerLibraryEmpty", PlayRomPicker.LibraryEmptyMessageId(4, 0));
+			Assert.Null(PlayRomPicker.LibraryEmptyMessageId(1, 1));
+			Assert.Null(PlayRomPicker.LibraryEmptyMessageId(4, 250));
+		}
+
+		//#1060 review finding 2: the empty sentence belongs to a scan that ANSWERED
+		//nothing, never to a library that has not been scanned yet. `gamesFound` is
+		//nullable for exactly that reason - null is "no scan has answered" - and a
+		//library WITH folders then has nothing to say: borrowing the sentence for a
+		//scan that came back empty would put "No games found in your library folder."
+		//next to "Looking for your games…" for the whole scan, which is a false fact
+		//on a slow or large drive.
+		[Fact]
+		public void A_library_that_has_not_been_scanned_yet_claims_nothing_about_its_games()
+		{
+			Assert.Null(PlayRomPicker.LibraryEmptyMessageId(1, null));
+			Assert.Null(PlayRomPicker.LibraryEmptyMessageId(4, null));
+			//The missing-folder state is known BEFORE any scan - it is the folder
+			//list's own answer, not the scan's - so it still speaks.
+			Assert.Equal("RomPickerLibraryNoFolders", PlayRomPicker.LibraryEmptyMessageId(0, null));
+		}
+
 		private static FolderLister FakeLister(Dictionary<string, (string[] Folders, string[] Files)> tree, Action<string>? onCall = null)
 		{
 			return folder => {

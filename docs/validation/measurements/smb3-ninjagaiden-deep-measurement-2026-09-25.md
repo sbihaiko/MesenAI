@@ -115,7 +115,7 @@ painted on `figures/usr001-figure.png`, the `pose000` node 18 cell
   — which is ADR-0231 §1: the whole 8×8 tile stops being the filtered page
   and becomes the sheet cell.
 - The counts are what that whole-tile swap predicts, not a local edit:
-  83 of the tile's px are where the sheet's nearest-neighbour and the
+  83 of the tile's px are where the sheet's nearest-neighbor and the
   page's xBRZ disagree, and 22 more are px the sheet cell does not draw at
   all. So 1 + 83 + 22 = 106, and 576 + 22 = 598. The 4×4 block is 116
   because 5 of its 16 px were already among the 83: 16 + (83 − 5) + 22.
@@ -169,7 +169,7 @@ the landing pose `pose003` (hold 164, 494 frames).
 | #449 (CHR kit `seen:true` on a never-drawn index) | absent: 381 cells = the 358 drawn keys, 0 never-drawn | absent: 183 cells, all drawn |
 | #493 (moving figure classified as HUD) | not seen: 0 HUD-excluded; the SMB3 HUD is BG | **present**: `pose003` (8 tiles, all `screenFixed: true`) left out as HUD |
 | #498 / Excitebike A3 (import lands in `sheets/sprites.png`) | **present**, with the warning | **present**, without the warning |
-| Excitebike A4 (a painted cell swaps the whole tile to nearest-neighbour, so more px change than were painted) | present: whole-cell stroke 598 px (576 magenta + **22 attributed** to the xBRZ fringe) — see the A4 follow-up | present: whole-cell stroke 905 px (896 magenta + **9 attributed** to the xBRZ fringe) |
+| Excitebike A4 (a painted cell swaps the whole tile to nearest-neighbor, so more px change than were painted) | present: whole-cell stroke 598 px (576 magenta + **22 attributed** to the xBRZ fringe) — see the A4 follow-up | present: whole-cell stroke 905 px (896 magenta + **9 attributed** to the xBRZ fringe) |
 | B1 / Punch-Out!! C | absent | absent |
 | B2 (`artist_map --verify`) | n/a (CHR ROM refusal) | n/a |
 | B3 (blank member tiles) | not exercised | not exercised |

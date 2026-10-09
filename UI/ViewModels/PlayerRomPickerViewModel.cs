@@ -1,3 +1,4 @@
+using Avalonia.Media;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Mesen.Config;
@@ -9,10 +10,83 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
+using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace Mesen.ViewModels
 {
+	//#1032 (ADR-0264): which of the sheet's two surfaces is up. The LIBRARY is
+	//the sheet the Play home opens - every openable ROM under the library
+	//folders, at once (Decision 1). The folder browser survives behind
+	//*Browse a file…* (Decision 11), unchanged, for the one ROM outside the
+	//library.
+	public enum RomPickerMode
+	{
+		Library,
+		BrowseFile
+	}
+
+	//One tile of the library grid: the path that opens it, the title it carries,
+	//the console it is for (Decision 7) and the cover it draws.
+	//
+	//The generic cover is "a console-coloured cover carrying the title"
+	//(Decision 6 case 4), so the colour is part of the answer the library gives
+	//and not a styling decision the template is free to make - which is why it
+	//is chosen here and only here. The palette is the wireframe's own
+	//(scripts/render_gui_wireframes.py, CONSOLE_TINT), so a render of this sheet
+	//and W-P19 agree on what a Game Boy game looks like.
+	public partial class PlayerLibraryTile : ViewModelBase
+	{
+		//`cover` is the library module's answer for this entry (ADR-0264 Decision
+		//6): the art the entry already carries, or the screenshot the player's
+		//Recent list holds for it (#1035). The tile draws it and decides nothing -
+		//the priority is GameLibraryCover's, and this side only turns the answer
+		//into a brush.
+		public PlayerLibraryTile(LibraryEntry entry, string consoleName, LibraryCoverPick cover)
+		{
+			Path = entry.Path;
+			Title = entry.Title;
+			Console = entry.Console;
+			ConsoleName = consoleName;
+			(Cover, ShowsTitleOnCover, CoverArt) = TileCover(entry, cover);
+		}
+
+		public string Path { get; }
+		//Settable and notifying because a tile outlives the title it was built
+		//with: the canonical-title pass (#1038) renames it in place once the
+		//ROM's hash is known, and a new Title has to reach the template without
+		//the grid rebuilding - the container, and the focus ring on it, are the
+		//reason the pass does not replace the tile.
+		[ObservableProperty] public partial string Title { get; internal set; }
+		public RomConsole Console { get; }
+		//Read by the player, so it comes from the locale files like every other
+		//string on this sheet (the caller resolves it, the way a root's label is
+		//already resolved).
+		public string ConsoleName { get; }
+		public IBrush Cover { get; }
+
+		private static readonly Dictionary<RomConsole, Color> _tint = new() {
+			[RomConsole.Nes] = Color.FromRgb(84, 88, 96),
+			[RomConsole.GameBoy] = Color.FromRgb(104, 116, 84),
+			[RomConsole.GameBoyColor] = Color.FromRgb(128, 104, 44),
+			[RomConsole.GameBoyAdvance] = Color.FromRgb(74, 62, 132),
+			[RomConsole.MasterSystem] = Color.FromRgb(44, 92, 122),
+			[RomConsole.Sg1000] = Color.FromRgb(96, 74, 52),
+			[RomConsole.GameGear] = Color.FromRgb(52, 70, 112)
+		};
+
+		//A console with no tint of its own is grey, never a colour borrowed from
+		//another machine: the tile says "a game whose console we could not name"
+		//rather than claiming one.
+		private static readonly Color _unknownTint = Color.FromRgb(142, 142, 147);
+
+		private static IBrush ConsoleCover(RomConsole console)
+		{
+			return new SolidColorBrush(_tint.TryGetValue(console, out Color color) ? color : _unknownTint);
+		}
+	}
+
 	//One row of the picker's list: a folder to descend into, a game to open, or
 	//the action that names the folder as the games folder. The rules that
 	//produced it (roots, rows, ranking) are PlayRomPicker's, host-free; this only
@@ -34,6 +108,29 @@ namespace Mesen.ViewModels
 		public bool IsFolder => Kind == RomPickerRowKind.Folder;
 		public bool IsGame => Kind == RomPickerRowKind.Game;
 		public bool IsAction => Kind == RomPickerRowKind.Action;
+	}
+
+	//#1032 review finding 1: both scans of this sheet run off the UI thread and
+	//are answered later, so the sheet has to know WHICH surface a late answer
+	//belongs to. This is that bookkeeping and nothing else: a counter every scan
+	//is tagged with. It is bumped when a scan is scheduled and again when the
+	//surface a scan reads is rebuilt, so an answer whose tag is no longer the
+	//current generation was read from a folder the sheet has already left - and
+	//applying it would put the old folder's tiles back on the grid, or its
+	//suggestions back under the rows, which is the bug this guards.
+	//
+	//A type of its own, free of Avalonia and of the core, because the rule is
+	//about which answer wins and not about the sheet it is drawn on.
+	internal sealed class ScanGeneration
+	{
+		private int _current;
+
+		//The generation the next unit of scan work carries. Called both when a
+		//scan starts and when the surface it reads is reset: either way every
+		//scan already in flight is left behind by it.
+		public int Next() => Interlocked.Increment(ref _current);
+
+		public bool IsCurrent(int generation) => generation == Volatile.Read(ref _current);
 	}
 
 	//#845 (ADR-0256 Decision 9): the in-app ROM picker, which is what the Play
@@ -58,7 +155,9 @@ namespace Mesen.ViewModels
 	public partial class PlayerRomPickerViewModel : ViewModelBase
 	{
 		[ObservableProperty] public partial bool IsVisible { get; private set; }
-		[ObservableProperty] public partial string Title { get; private set; } = "";
+		[ObservableProperty]
+		[NotifyPropertyChangedFor(nameof(SheetHeading))]
+		public partial string Title { get; private set; } = "";
 		//What the path line reads; empty on the roots list, where there is no
 		//folder to name. It is also what tells the focus arbiter the list was
 		//rebuilt by a step (see MainWindowViewModel's claim): every descend and
@@ -78,6 +177,57 @@ namespace Mesen.ViewModels
 		//with nothing to press Confirm on.
 		[ObservableProperty] public partial int SuggestionRevision { get; private set; }
 
+		//#1032 (ADR-0264): which surface is up, and the two flags the template
+		//reads. The mode is the state; the flags exist because a XAML binding
+		//cannot test an enum for equality without a converter, and two booleans
+		//are cheaper to read than a converter is to register.
+		[ObservableProperty]
+		[NotifyPropertyChangedFor(nameof(SheetHeading))]
+		public partial RomPickerMode Mode { get; private set; }
+		//ShowSearchClear rides the mode as well as the query (#1033): the Clear action
+		//is the library's, and the step into the browser has to take it off screen
+		//with the box it belongs to.
+		//#1036: the library SURFACE (PlayerRomPickerViewModel.Folders.cs) is this
+		//flag AND "the folders sheet is down", so the view binds the surface's own
+		//controls to the computed property - and it has to be told when this half of
+		//it changes.
+		[ObservableProperty]
+		[NotifyPropertyChangedFor(nameof(ShowSearchClear))]
+		[NotifyPropertyChangedFor(nameof(IsLibrarySurfaceVisible))]
+		public partial bool IsLibraryMode { get; private set; } = true;
+		[ObservableProperty] public partial bool IsBrowseMode { get; private set; }
+
+		//The library's header: "Your library" until the scan answers, then "Your
+		//library · <N> games in <M> folders" (Decision 8). The count is what the scan actually found, so a
+		//capped scan and a complete one read differently.
+		[ObservableProperty]
+		[NotifyPropertyChangedFor(nameof(SheetHeading))]
+		public partial string HeaderText { get; private set; } = "";
+		//The one thing the header has to say about a capped scan: it stopped
+		//collecting (Decision 9). Never shown otherwise.
+		[ObservableProperty] public partial string TruncatedText { get; private set; } = "";
+		//Bumped whenever the grid is rebuilt, for the same reason
+		//SuggestionRevision exists: the rows are new containers, and whatever the
+		//focus arbiter had the ring on went with the old ones.
+		[ObservableProperty] public partial int TilesRevision { get; private set; }
+
+		//The one heading the sheet has. It is the library's own when the library
+		//is up and the sheet's title when the browser is, because the heading is a
+		//single control the player reads either way - two TextBlocks swapping
+		//places would be two headings that happen to be exclusive, and the one the
+		//sheet's own case reads would be off screen half the time.
+		//#1036 (ADR-0264 Decision 8): *Library folders…* is a surface of this sheet,
+		//so the heading is its own while it is up - the same one heading the player
+		//reads either way.
+		public string SheetHeading => IsFoldersSheetVisible
+			? ResourceHelper.GetMessage("RomPickerFoldersTitle")
+			: Mode == RomPickerMode.Library ? HeaderText : Title;
+
+		//The grid itself: one instance for the life of the view-model, mutated in
+		//place so a scan that lands while the sheet is up does not rebuild the
+		//list under the player - and so the focus ring survives it.
+		public ObservableCollection<PlayerLibraryTile> Tiles { get; } = new();
+
 		//The list itself: one instance for the life of the view-model, mutated in
 		//place. Suggestions arrive asynchronously, and appending to the same
 		//collection keeps the rows already on screen - and the focus ring with
@@ -88,8 +238,10 @@ namespace Mesen.ViewModels
 		//it, and so does a platform the default does not know.
 		public Func<IReadOnlyList<string>> VolumeSource { get; set; } = MountedVolumes.List;
 		//One folder's entries. A seam for the same reason, and the one the rules
-		//are pinned through in UI.Tests without touching a disk.
-		public Func<string, (IReadOnlyList<string> Folders, IReadOnlyList<string> Files)> FolderSource { get; set; } = ReadFolder;
+		//are pinned through in UI.Tests without touching a disk. The default is
+		//the app's own lister, shared with the library scan and the background
+		//walk (DiskFolderLister), so the three cannot read a folder differently.
+		public Func<string, (IReadOnlyList<string> Folders, IReadOnlyList<string> Files)> FolderSource { get; set; } = DiskFolderLister.List;
 		//The scan, behind a seam: a test injects fake hits and drives the sheet
 		//deterministically, and the shell stays off the thread pool. It answers per
 		//PASS, because one scan is two of them - a shallow answer published as soon
@@ -107,6 +259,25 @@ namespace Mesen.ViewModels
 		//A test runs the scan in the Open() turn instead of on the thread pool.
 		public bool RunScanInline { get; set; }
 
+		//#1032 (ADR-0264 Decision 8): the folders the library reads. #1036 arrived
+		//by replacing this seam's DEFAULT, exactly as that note said it would and
+		//without changing the scan: the stored list (Preferences.LibraryFolders,
+		//seeded once from the single games folder) is what the sheet reads now.
+		public Func<IReadOnlyList<string>> LibraryFolderSource { get; set; } = StoredLibraryFolders;
+		//The library scan and its own seams live in PlayerRomPickerViewModel.Scan.cs:
+		//#1037 made it a stream, and a stream is a lifetime of its own.
+		//
+		//A test runs the library scan in the Open() turn too.
+		public bool RunLibraryScanInline { get; set; }
+
+		//Which surface Open() lands on. The Play home's sheet opens on the
+		//LIBRARY - that is the whole of ADR-0264 Decision 1 - but this view-model
+		//is also the Remaster workspace's *right game* chooser, where the player
+		//is picking one file for a project rather than browsing a shelf, and there
+		//the folder walk is the right surface. One default, one override, so the
+		//two callers differ by a property instead of by a copy of this sheet.
+		public RomPickerMode OpenMode { get; set; } = RomPickerMode.Library;
+
 		//The chosen game. The owner loads it; the picker never does.
 		public event Action<string>? RomChosen;
 
@@ -115,6 +286,10 @@ namespace Mesen.ViewModels
 		public IReadOnlyList<RomPickerSuggestion> Suggestions => _suggestions;
 
 		private IReadOnlyList<RomPickerRoot> _roots = Array.Empty<RomPickerRoot>();
+		//The library folders of the open that is up, so the background scan reads
+		//the same list the sheet was built from even if the settings change under
+		//it.
+		private IReadOnlyList<string> _folders = Array.Empty<string>();
 		//The folder being shown, or null for the roots list.
 		private string? _folder;
 		private IReadOnlyList<RomPickerSuggestion> _suggestions = Array.Empty<RomPickerSuggestion>();
@@ -123,6 +298,19 @@ namespace Mesen.ViewModels
 		private readonly List<PlayerRomPickerRow> _suggestionRows = new();
 		private bool _scanStarted;
 		private bool _scanDone;
+		//The surface every LIBRARY scan in flight was read for. A result carries
+		//the generation it was scheduled under and is dropped when that is no
+		//longer the one on the sheet (see ScanGeneration).
+		private readonly ScanGeneration _scanGeneration = new();
+		//The suggestion walk gets a counter of its own (review finding 2 on
+		//#1032). It is not an answer about the library folders - it looks in the
+		//standard places a library hides in, and its hits are the roots list's own
+		//tail - so a library rebuild must not invalidate it: with one shared
+		//counter, a player who stepped into *Browse a file…* and came straight
+		//back before the deep pass landed (measured, 0.86 s) dropped the walk's
+		//only answer AND left _scanStarted set, so the roots showed no suggestion
+		//for the rest of the session.
+		private readonly ScanGeneration _suggestionGeneration = new();
 
 		//Opens on the roots. Called by the Play home's own action, and only when
 		//there is nothing to pause: the picker is what a machine with no game
@@ -133,12 +321,135 @@ namespace Mesen.ViewModels
 		//(and if) it returns.
 		public void Open()
 		{
+			//#1036: the mode belongs to ONE open. A pick that outlived the open it
+			//was armed in would offer *Add this folder to your library* on the next
+			//*Browse a file…* where *Make this my games folder* belongs, and the
+			//press that means "name my games folder" would pop the folders sheet
+			//instead. Whatever closed the last open, this one starts clean.
+			IsPickingLibraryFolder = false;
+			IsFoldersSheetVisible = false;
+			FoldersNoticeText = "";
+			SeedLibraryFolders();
 			_roots = BuildRoots(GamesFolder);
 			_folder = null;
 			Title = ResourceHelper.GetMessage("RomPickerTitle");
-			ShowRoots();
 			IsVisible = true;
+			//#1032 (ADR-0264 Decision 1): the Play sheet opens on the LIBRARY,
+			//not on a list of folders to descend. The folder browser is one press
+			//away, behind *Browse a file…* (Decision 11) - and a caller whose job
+			//is a single file (the Remaster workspace's right game) says so
+			//through OpenMode and lands on the browser directly.
+			if(OpenMode == RomPickerMode.BrowseFile) {
+				IsLibraryMode = false;
+				IsBrowseMode = true;
+				Mode = RomPickerMode.BrowseFile;
+				ShowRoots();
+				StartScan();
+				return;
+			}
+			ShowLibrary();
+		}
+
+		//#1032 (ADR-0264 Decision 1/9): the library, which is the sheet's own
+		//surface. It shows the empty state instantly when there is no library
+		//folder to read - a named state with a next step, never an empty grid -
+		//and otherwise kicks the bounded scan and fills the grid as it lands.
+		private void ShowLibrary()
+		{
+			//The surface is rebuilt here from the folders as they are NOW, so
+			//every scan still in flight was read for the surface this replaces -
+			//and a folder list that no longer answers anything (the early return
+			//below) is as much a rebuild as one that does. The bump is what makes
+			//the rebuild, not the new scan, the thing that decides which answer
+			//may land: a scan scheduled before it can only fill a grid the player
+			//has already left.
+			_scanGeneration.Next();
+			Mode = RomPickerMode.Library;
+			IsLibraryMode = true;
+			IsBrowseMode = false;
+			HeaderText = ResourceHelper.GetMessage("RomPickerLibraryTitle");
+			PathText = "";
+			NoticeText = "";
+			//#1033 (ADR-0264 Decision 4): fresh visit, empty box and no entries
+			//from the previous scan (PlayerRomPickerViewModel.Search).
+			BeginLibraryVisit();
+			TruncatedText = "";
+			EmptyText = "";
+			//The grid is going: the pictures the previous visit decoded go back
+			//with it (#1035). ResetLibraryGrid is what does that here - it is
+			//ClearTiles plus the entries behind the tiles, and the two must move
+			//together or a batch arriving for the new scan would be merged into
+			//the old scan's order.
+			ResetLibraryGrid();
+			//#1034: the console filter is part of the library surface, so it comes
+			//back with it - the row is redrawn from the scan that is about to run,
+			//never left carrying the last one's selection.
+			ResetConsoleFilter();
+			//Nothing to browse, so the searching line belongs to no state: it is
+			//set below, by the scan that is actually about to run.
+			SearchingText = "";
+
+			_folders = LibraryFolderSource();
+			//#1060: nothing scanned yet, so the only state known here is the folder
+			//list's own; a library with folders waits for its scan to say anything.
+			//The null is that "nothing scanned yet" - the rule cannot answer the empty
+			//sentence without a scan's count, so the wait cannot read as a verdict
+			//(review finding 1 on #1060: passing zero here showed "No games found in
+			//your library folder." next to "Looking for your games…" for the whole
+			//scan). FinishLibraryStream is the only caller that has an answer to give.
+			EmptyText = LibraryEmptyText(PlayRomPicker.LibraryEmptyMessageId(_folders.Count, null));
+			if(_folders.Count == 0) {
+				//#1069 (ADR-0264 Decision 8): no scan is coming to write the header,
+				//and the header of a library with no folder is still the counted one
+				//- "0 games in 0 folders". The plain sheet title set above is the
+				//one state the counted sentence never reaches, which is exactly the
+				//state that has to explain itself.
+				HeaderText = ResourceHelper.GetMessage(
+					LibraryFolders.HeaderResourceId(0, _folders.Count), 0, _folders.Count);
+				//No stream starts here, so no finish will ever clear the wait of
+				//the one this replaced: its finish is for a generation that is
+				//gone. The rebuild ends that wait itself.
+				_scanCancellation?.Cancel();
+				IsScanning = false;
+				_pendingChunks = 0;
+				return;
+			}
+			StartLibraryStream();
+		}
+
+		//#1032 (ADR-0264 Decision 11): *Browse a file…*. The folder browser is
+		//exactly what it always was - its roots, its walk, its *Make this my
+		//games folder* row and the first-row focus guard that protects it - and
+		//it is reached from inside the library rather than instead of it.
+		public void BrowseFile()
+		{
+			if(!IsVisible) {
+				return;
+			}
+			Mode = RomPickerMode.BrowseFile;
+			IsLibraryMode = false;
+			IsBrowseMode = true;
+			_folder = null;
+			EmptyText = "";
+			//#1033: the box is not on this surface, so a query left in it would be
+			//one the player cannot see, cannot clear and would still be holding when
+			//they stepped back into the library. The browser is a fresh start, so the
+			//query goes with the rest of the surface's state - after the mode, so the
+			//grid this empties is the one going away.
+			SearchQuery = "";
+			ShowRoots();
 			StartScan();
+		}
+
+		//A tile's press: the pick, exactly as a game row's was. Nothing else on
+		//this sheet opens a game, so the tile IS the choice.
+		public void Play(PlayerLibraryTile tile)
+		{
+			if(!IsVisible) {
+				return;
+			}
+			IsVisible = false;
+			RomChosen?.Invoke(tile.Path);
 		}
 
 		//Esc, and the sheet's own Back button - the same step, because they are
@@ -151,8 +462,48 @@ namespace Mesen.ViewModels
 			if(!IsVisible) {
 				return;
 			}
-			if(_folder is null) {
+			//#1036 (ADR-0264 Decision 8): *Library folders…* is a surface of this
+			//sheet, so B closes it back to the library rather than leaving the whole
+			//picker - the same step the sheet's own Back button takes.
+			if(IsFoldersSheetVisible) {
+				CloseFoldersSheet();
+				return;
+			}
+			//On the library there is nowhere back to: it is the sheet, so the
+			//step is the dismiss (ADR-0264 Decision 3, ADR-0256's stop rule).
+			if(Mode == RomPickerMode.Library) {
 				IsVisible = false;
+				return;
+			}
+			//#1036 (ADR-0264 Decision 8, and ADR-0256's stop rule that B is a STEP
+			//and not a dismiss): the browser is also the pad's door onto adding a
+			//library folder, and B there walks the same tree backwards one folder at
+			//a time. Only at the roots - where there is nowhere left to ascend to -
+			//is it the CANCEL of the pick: back to *Library folders…*, with the list
+			//as it was, rather than a step out of a sheet the player opened to do one
+			//thing. Cancelling one folder deep would throw the whole walk away and
+			//make the player start it again.
+			if(IsPickingLibraryFolder && _folder is null) {
+				CancelFolderPick();
+				return;
+			}
+			//The browser is INSIDE the sheet (Decision 11), so walking out of
+			//its roots lands back on the library rather than closing the sheet:
+			//the escape hatch leads back, not away.
+			//
+			//Unless the browser IS the sheet, which is the case for the one
+			//caller that says so through OpenMode: the Remaster workspace's right
+			//game chooser picks a single file for a project and has no library to
+			//lead back to - rebuilding the Play grid under it would turn that
+			//sheet into a surface the artist never opened (review finding 1 on
+			//#1032). There, out of the roots is the dismiss, the way it was before
+			//the library landed.
+			if(_folder is null) {
+				if(OpenMode == RomPickerMode.BrowseFile) {
+					IsVisible = false;
+					return;
+				}
+				ShowLibrary();
 				return;
 			}
 			string? parent = PlayRomPicker.Ascend(_folder, _roots);
@@ -174,6 +525,14 @@ namespace Mesen.ViewModels
 			}
 			switch(row.Kind) {
 				case RomPickerRowKind.Action:
+					//#1036 (ADR-0264 Decision 8): the action row is the press that
+					//acts on the folder it sits in, and which action that is depends
+					//on why the browser is up - adding a library folder, or naming
+					//the games folder.
+					if(IsPickingLibraryFolder) {
+						AddLibraryFolder(row.Path);
+						return;
+					}
 					MakeGamesFolder(row.Path);
 					return;
 				case RomPickerRowKind.Folder:
@@ -181,6 +540,10 @@ namespace Mesen.ViewModels
 					ShowFolder(row.Path);
 					return;
 				default:
+					//#1036: a game row ENDS whatever mode the browser was in. The
+					//sheet closes on the load, so the pick dies with it rather than
+					//staying armed behind it (see Open()).
+					IsPickingLibraryFolder = false;
 					IsVisible = false;
 					RomChosen?.Invoke(row.Path);
 					return;
@@ -188,8 +551,15 @@ namespace Mesen.ViewModels
 		}
 
 		//The game changed under it (another ROM opened, the device unplugged):
-		//the sheet goes without loading anything.
-		public void Hide() => IsVisible = false;
+		//the sheet goes without loading anything. Every mode goes with it - the
+		//sheet is not coming back where it was, and a pick left armed behind a
+		//sheet nobody can see is a mode with no surface (#1036).
+		public void Hide()
+		{
+			IsVisible = false;
+			IsPickingLibraryFolder = false;
+			IsFoldersSheetVisible = false;
+		}
 
 		//The action row's press: this folder becomes the games folder. It is the
 		//same two properties the classic Advanced Options row writes, saved the
@@ -256,6 +626,24 @@ namespace Mesen.ViewModels
 			NoticeText = ResourceHelper.GetMessage(usable is null ? "RomPickerGamesFolderEmpty" : "RomPickerGamesFolderSaved");
 		}
 
+		//#1032 (ADR-0264 Decision 9), streamed since #1037: the library's one
+		//bounded scan lives in PlayerRomPickerViewModel.Scan.cs - it runs off the
+		//UI thread, fills the grid as it finds games and shows the wait - and
+		//StartLibraryStream is the whole of how this file calls into it.
+		//
+		//It carries the two things this file's one-shot version had grown since:
+		//the cover of a played game, resolved on the scanning thread (#1035), and
+		//the empty state a scan that found nothing earns (#1060). Both are the
+		//streamed scan's now, applied per batch and at the finish respectively.
+
+		//#1060: the id PlayRomPicker answered, in the player's own words. Nothing to
+		//say is an empty line, which is the length the sentence's own visibility
+		//binding reads.
+		private static string LibraryEmptyText(string? messageId)
+		{
+			return messageId is null ? "" : ResourceHelper.GetMessage(messageId);
+		}
+
 		private void ShowRoots()
 		{
 			PathText = "";
@@ -274,7 +662,14 @@ namespace Mesen.ViewModels
 			//posted, so it would survive either order today - this is so that it
 			//still does if it is ever made to answer in the same turn.
 			ReplaceRows(PlayRomPicker.FolderRows(
-				folder, GamesFolder, ResourceHelper.GetMessage("RomPickerMakeGamesFolder"), folders, files));
+				folder,
+				//#1036 (ADR-0264 Decision 8): the action row reads and does what the
+				//pick is for. In pick mode no folder is already "the one to make", so
+				//every folder offers the row - which is what lets a player walk to the
+				//folder they want and add THAT one.
+				IsPickingLibraryFolder ? null : GamesFolder,
+				ResourceHelper.GetMessage(IsPickingLibraryFolder ? "RomPickerAddThisFolder" : "RomPickerMakeGamesFolder"),
+				folders, files));
 			//Both lines belong to the state they were set in: the searching line
 			//belongs to the roots list, and a save notice belongs to the folder it
 			//was made in. A step clears them; a save sets the notice after this.
@@ -316,17 +711,25 @@ namespace Mesen.ViewModels
 			}
 			_scanStarted = true;
 			SearchingText = ResourceHelper.GetMessage("RomPickerSearching");
+			//This scan's tag, taken before any of its work is handed out: the
+			//surface it reads is the one the sheet is on now (see
+			//ScanGeneration), and every answer below is dropped if that surface
+			//is rebuilt before the answer lands. Its own counter, because the
+			//walk answers about the places it looked in and not about the
+			//library folders a rebuild re-reads - which is why a walk in flight
+			//survives one (review finding 2 on #1032).
+			int generation = _suggestionGeneration.Next();
 
 			if(RunScanInline) {
-				PublishInline(RomScanPass.Shallow);
-				PublishInline(RomScanPass.Deep);
-				FinishScan();
+				PublishInline(RomScanPass.Shallow, generation);
+				PublishInline(RomScanPass.Deep, generation);
+				FinishScan(generation);
 				return;
 			}
 			Task.Run(() => {
-				Publish(RomScanPass.Shallow);
-				Publish(RomScanPass.Deep);
-				Dispatcher.UIThread.Post(FinishScan);
+				Publish(RomScanPass.Shallow, generation);
+				Publish(RomScanPass.Deep, generation);
+				Dispatcher.UIThread.Post(() => FinishScan(generation));
 			});
 		}
 
@@ -334,20 +737,20 @@ namespace Mesen.ViewModels
 		//leaves whatever the other one found in place: the scan runs on a machine
 		//whose disks are not ours, and an exception there is not a reason to erase
 		//the rows the player is reading.
-		private void Publish(RomScanPass pass)
+		private void Publish(RomScanPass pass, int generation)
 		{
 			try {
 				IReadOnlyList<RomPickerHit> hits = SuggestionSource(pass);
-				Dispatcher.UIThread.Post(() => ApplySuggestions(pass, hits));
+				Dispatcher.UIThread.Post(() => ApplySuggestions(pass, hits, generation));
 			} catch {
 				//The shallow pass's rows, or the roots alone, stay.
 			}
 		}
 
-		private void PublishInline(RomScanPass pass)
+		private void PublishInline(RomScanPass pass, int generation)
 		{
 			try {
-				ApplySuggestions(pass, SuggestionSource(pass));
+				ApplySuggestions(pass, SuggestionSource(pass), generation);
 			} catch {
 				//As above.
 			}
@@ -355,10 +758,21 @@ namespace Mesen.ViewModels
 
 		//The line belongs to the scan, not to a pass: it goes when the deep pass
 		//is done, once, and it goes whatever that pass answered.
-		private void FinishScan()
+		private void FinishScan(int generation)
 		{
+			//The scan is over, and that is a fact about the scan, not about the
+			//sheet: it is recorded even when the surface was rebuilt under it, so
+			//the roots list does not go on claiming a wait that has ended (the
+			//scan runs once, and a lost flag would leave "Searching…" there
+			//forever). Only the LINE is refused to a scan that no longer owns it:
+			//by then it belongs to the scan the rebuild started.
 			_scanDone = true;
-			SearchingText = "";
+			//As with the rows below: the line is the walk's own, so it goes only
+			//where the walk's surface is the one up. While the library is, the
+			//line belongs to the library scan (review finding 5's rule).
+			if(_suggestionGeneration.IsCurrent(generation) && Mode == RomPickerMode.BrowseFile) {
+				SearchingText = "";
+			}
 		}
 
 		//One pass's answer. It is always cached, so later Opens include the
@@ -370,8 +784,18 @@ namespace Mesen.ViewModels
 		//the point of the whole thing: a deep pass that offers FEWER rows than the
 		//shallow one already did is discarded. "The scan finished" must never read
 		//as "your libraries are gone".
-		private void ApplySuggestions(RomScanPass pass, IReadOnlyList<RomPickerHit> hits)
+		private void ApplySuggestions(RomScanPass pass, IReadOnlyList<RomPickerHit> hits, int generation)
 		{
+			//A pass superseded by a LATER walk of the same roots is dropped whole
+			//(the walk runs once per session, so today this only guards a scan
+			//the sheet started twice). The library's own rebuild does not
+			//supersede it: this answer is about the places the walk looked in,
+			//and _suggestions is the cache every later visit to the roots reads
+			//- dropping it there is what left the roots bare for the session
+			//(review finding 2 on #1032).
+			if(!_suggestionGeneration.IsCurrent(generation)) {
+				return;
+			}
 			IReadOnlyList<RomPickerSuggestion> offered = PlayRomPicker.Suggestions(hits, _roots);
 			if(pass == RomScanPass.Deep && offered.Count < _suggestions.Count) {
 				return;
@@ -383,7 +807,11 @@ namespace Mesen.ViewModels
 				return;
 			}
 			_suggestions = offered;
-			if(IsVisible && _folder is null) {
+			//The rows are the BROWSER's, so a pass that lands while the library
+			//is up only fills the cache above: rewriting the list under a grid
+			//the player is reading would move the ring for a surface that is not
+			//on screen.
+			if(IsVisible && Mode == RomPickerMode.BrowseFile && _folder is null) {
 				ShowSuggestionRows();
 				//The rebuilt rows are new containers, so whatever the arbiter put
 				//the ring on is gone with the old one.
@@ -477,18 +905,5 @@ namespace Mesen.ViewModels
 			}
 		}
 
-		//A folder's entries, split. A folder that cannot be read (a volume pulled
-		//out between listing and descending, a permission) reads as empty rather
-		//than throwing out of a pad press.
-		private static (IReadOnlyList<string> Folders, IReadOnlyList<string> Files) ReadFolder(string folder)
-		{
-			try {
-				string[] folders = Directory.GetDirectories(folder);
-				string[] files = Directory.GetFiles(folder);
-				return (folders, files);
-			} catch {
-				return (Array.Empty<string>(), Array.Empty<string>());
-			}
-		}
 	}
 }

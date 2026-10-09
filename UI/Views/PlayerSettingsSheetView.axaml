@@ -30,7 +30,7 @@
 	<!--ADR-0249 (PRD Part B §13.5.2 W-P8, W-P10): Player mode's Settings is a
 	sheet inside the main window, over the dimmed game like the other Play
 	sheets - 480 wide, as high as the tab needs (PlayerSettingsEssentials.
-	SheetHeight), 24 px under the bar. The title, the segmented Window | Video |
+	SheetHeight), 24 px under the bar. The title, the segmented Display | Look |
 	Audio | Controls | System strip, the page, and one Done that keeps the
 	changes (Esc does the same, back to W-P4). Advanced keeps the classic
 	ConfigWindow. ADR-0256 Decision 8 added System: the first run's storage and
@@ -58,7 +58,7 @@
 			</Grid.Styles>
 			<TextBlock Grid.Row="0" Name="lblPlayerSettingsTitle" Classes="title3" Text="{l:Translate lblPlayerSettingsTitle}" Margin="0 0 0 14" />
 			<!--G.4 (W-P8): the strip in PlayerSettingsEssentials.Tabs order -
-			Window (the window) and Video (the pixels) are the two halves of
+			Display (the window) and Look (the pixels) are the two halves of
 			Advanced's Video tab, the pixels half being the page Advanced calls
 			Look (ADR-0246). The XAML names below keep the older `PlayerDisplay`
 			/ `PlayerLook` spelling; only the labels follow the strip.-->
@@ -83,7 +83,14 @@
 			<StackPanel Grid.Row="1" VerticalAlignment="Bottom">
 				<TextBlock Name="lblPlayerSettingsEverythingElse" Classes="subhead secondary" Text="{l:Translate lblPlayerSettingsEverythingElse}" Margin="2 0 0 12" IsVisible="{Binding IsPlayerHintTab}" />
 				<Button Name="btnPlayerSettingsMoreInOptions" Classes="plain small" HorizontalAlignment="Left" Margin="-9 -6 0 6" Click="OnMoreInOptions" IsVisible="{Binding IsPlayerMoreTab}" Content="{l:Translate btnPlayerSettingsMoreInOptions}" />
-				<Button Name="btnPlayerSettingsDone" Classes="primary regular wide" HorizontalAlignment="Right" Click="OnDone" Content="{l:Translate btnPlayerSettingsDone}" />
+				<!--#910 (§13.5.2 W-P4: "Exit fullscreen moves into Settings"): the
+				explicit way back to windowed, in Done's row, only while the window is
+				fullscreen and on Window (PlayerSettingsEssentials.ShowsExitFullscreen).
+				Look's Hold to Compare holds this place on its own tab.-->
+				<DockPanel>
+					<Button Name="btnPlayerSettingsExitFullscreen" DockPanel.Dock="Left" Classes="secondary regular" Click="OnExitFullscreen" IsVisible="{Binding ShowsPlayerExitFullscreen}" Content="{l:Translate btnPlayerSettingsExitFullscreen}" />
+					<Button Name="btnPlayerSettingsDone" Classes="primary regular wide" HorizontalAlignment="Right" Click="OnDone" Content="{l:Translate btnPlayerSettingsDone}" />
+				</DockPanel>
 			</StackPanel>
 		</Grid>
 	</Border>

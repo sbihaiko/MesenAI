@@ -2,7 +2,7 @@
 
 - Status: accepted (2026-09-15, at the user's direction: asked "podemos habilitar o CI somente no Main?", shown that the post-merge run is the only gate for direct-to-`main` pushes and for merge-commits whose tree was never the tested PR head, chose "Não mexer + registrar o porquê". Documented in the same change; per ADR-0191's precedent the verifier assertions are its tests, and the go-ahead is quoted here and in the PR body.)
 - Date: 2026-09-15
-- Related: ADR-0191 (the five jobs, Linux-only, the required-check names), ADR-0131 (the invariants that travelled with them), ADR-0137 (`make doc-checks` as the wiring point), PRD Part A §4 Phase 11 C.1, and `.github/AGENTS.md` "The PR gate's invariants"
+- Related: ADR-0191 (the five jobs, Linux-only, the required-check names), ADR-0131 (the invariants that traveled with them), ADR-0137 (`make doc-checks` as the wiring point), PRD Part A §4 Phase 11 C.1, and `.github/AGENTS.md` "The PR gate's invariants"
 - Supersedes / amends: nothing. This records a **refused** change to `checks.yml`'s triggers, with the evidence that refused it, so the next session does not re-open it from a smaller sample.
 
 ## Context
@@ -34,7 +34,7 @@ Non-goals. This adds no trigger anywhere, does not touch `build.yml` (dispatch-o
 ## Consequences
 
 - `checks.yml`'s history shows two runs per merged PR, and during a burst of merges most of the `push` ones end `cancelled`. That is the price of covering the bypass paths, and it is visible noise, not a cost — nothing is billed and nothing is queued behind it.
-- The post-merge net is *intermittent* by construction: it does not survive a burst of merges (17 of 30 cancelled). The commits it actually protects are the spaced-out ones — a hand fix, a merge-commit tree — which is where no other gate exists. Since #266 it no longer protects catalog regenerations: those go through a PR now, gated by the `pull_request` trigger like anything else.
+- The post-merge net is *intermittent* by construction: it does not survive a burst of merges (17 of 30 canceled). The commits it actually protects are the spaced-out ones — a hand fix, a merge-commit tree — which is where no other gate exists. Since #266 it no longer protects catalog regenerations: those go through a PR now, gated by the `pull_request` trigger like anything else.
 - The catalog's move to a PR **was** taken the same day, by #266, and it was not a run-count decision: branch protection rejected the job's own push (GH013, run 34953429060). The cost this ADR priced at "5 jobs per regeneration against 1 push run" was therefore paid for a reason that is not this trigger's cost — which is why the trigger's justification has to be restated in terms of the *remaining* bypass path (§Decision 1, §5).
 - A future session that finds the push run "redundant" — as this one did, from a 40-commit sample that happened to be squash-only — has the counter-sample in the header comment and in §Context here.
 - The deliverable of this ADR is two comments and one verifier assertion. No workflow file changes.

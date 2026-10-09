@@ -356,6 +356,21 @@ class StepEmu:
         reply = self._request("ram " + ram_spec(items))
         return parse_ram_reply(reply, items)
 
+    def watch_reads(self, address, compare=-1):
+        """Arms the read-hit counter on one NES internal-RAM address and zeroes
+        it (ADR-0245 Decision 4 as amended by #934). From here on the session
+        counts the emulated CPU's reads of that exact bus address, and the hits
+        among them: reads whose raw byte met `compare` (-1: every read), which
+        is when a RAM cheat's intercept applies. `read_ram` and the debugger do
+        not go through that path, so they never count."""
+        spec = f"0x{address:04x}" if compare < 0 else f"0x{address:04x}:0x{compare:02x}"
+        self._request(f"watch {spec}")
+
+    def read_hits(self):
+        """`(reads, hits)` since the last `watch_reads`."""
+        reads, hits = self._request("hits").split()
+        return int(reads), int(hits)
+
     def frame(self):
         """The frame the session is on: the one the last `run` ended on, before
         any run the frame of the state the session started from. It does not

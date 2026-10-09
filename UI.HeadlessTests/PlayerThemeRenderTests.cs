@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
@@ -158,6 +159,42 @@ public class PlayerThemeRenderTests : IDisposable
 		Assert.Equal(background, PlayerRender.SolidColor(button.Background));
 	}
 
+	//#951: the regions that match the wireframe today must keep matching, and
+	//each known deviation (PlayerWireframe.KnownDeviationsOf, with its reason)
+	//must still fail on its named kind, so the fix that closes it also promotes
+	//it to a gated region. The rule is host-free; this only feeds it the render.
+	//#974: the fresh render must also match its committed copy in
+	//UI.Tests/Theme/PlayerRenders/, which is all CI can gate (ADR-0131); a
+	//drift fails here with a "re-commit the render" line per region.
+	private static void AssertWireframeRegions(Bitmap frame, string wId)
+	{
+		RgbFrame fresh = PlayerRender.Rgb(frame);
+		IReadOnlyList<RegionResult> results = PlayerWireframe.Compare(wId, fresh, RgbFrame.FromPng(PlayerRender.WireframePath(wId)));
+		List<string> violations = PlayerWireframe.Gate(wId, results, DeviationsOnThisHost(wId)).ToList();
+		string committed = PlayerRender.DriftBaselinePath(wId);
+		Assert.True(File.Exists(committed), $"{wId} has no committed render at {committed}; commit {Path.Combine(PlayerRender.OutputFolder, wId + ".png")} there");
+		violations.AddRange(PlayerWireframe.Drift(wId, fresh, RgbFrame.FromPng(committed), committed));
+		Assert.True(violations.Count == 0, string.Join(Environment.NewLine, violations));
+	}
+
+	//#968: the wireframes draw the macOS window, where the shell bar extends
+	//under the traffic lights and starts 80 px in (ShellTitleBar.ExtendsIntoTitleBar).
+	//Off macOS - the Linux render-gate runner, ADR-0191 - the bar is not
+	//inset, so its badge sits left of the title-bar region and the ink box
+	//moves (16 px on the runner). Only that kind is tolerated, only there:
+	//the region's colour and text lines stay gated against the wireframe, and
+	//the drift check holds the whole region to the Linux baseline.
+	private const string NoTrafficLightInset = "no traffic-light inset off macOS";
+
+	private static IReadOnlyList<KnownDeviation> DeviationsOnThisHost(string wId)
+	{
+		IReadOnlyList<KnownDeviation> known = PlayerWireframe.KnownDeviationsOf(wId);
+		if(OperatingSystem.IsMacOS() || known.Any(k => k.Region == "title bar" && k.Kind == PlayerWireframe.InkBox)) {
+			return known;
+		}
+		return known.Append(new KnownDeviation("title bar", PlayerWireframe.InkBox, NoTrafficLightInset, false)).ToArray();
+	}
+
 	//W-S1's chrome on W-P1: light bar with the tinted Play badge and the
 	//15 px semibold name, the 11.5 px status line, and the first-run home on
 	//the light window background with its one 44 px primary button.
@@ -194,6 +231,11 @@ public class PlayerThemeRenderTests : IDisposable
 		PlayerRender.AssertPixel(WindowBackground, frame, 1070, 600);
 		//The bar is the light chrome.
 		PlayerRender.AssertPixel(Color.Parse("#FAFAFB"), frame, 600, 10);
+		//The drop block (badge, title, subtitle, button) sits ~20 px below the
+		//wireframe's, the primary button carries a focus outline, the hint is
+		//one line where the wireframe has two, and the status line ends in the
+		//P1-P4 port chips the wireframe does not draw.
+		AssertWireframeRegions(frame, "W-P1");
 	}
 
 	//W-P2: the Continue card (white, radius 16) with its 36 px primary
@@ -244,6 +286,10 @@ public class PlayerThemeRenderTests : IDisposable
 		PlayerRender.AssertPixel(WindowBackground, frame, 12, 300);
 		Point art = preview.TranslatePoint(new Point(preview.Bounds.Width / 2, preview.Bounds.Height / 2), window)!.Value;
 		PlayerRender.AssertPixel(shot, frame, (int)art.X, (int)art.Y, 6);
+		//The seeded data, not the layout, differs: three tiles where the
+		//wireframe draws five and a subtitle without the wireframe's pack name.
+		//The status line ends in the P1-P4 port chips.
+		AssertWireframeRegions(frame, "W-P2");
 	}
 
 	//W-P4: the light overlay card (radius 18) with the 44 px tinted Resume,
@@ -307,7 +353,17 @@ public class PlayerThemeRenderTests : IDisposable
 
 		Bitmap frame = PlayerRender.Capture(window);
 		PlayerRender.Save(frame, "W-P4");
-		PlayerRender.AssertPixel(Color.Parse("#FAFAFC"), frame, 550, (int)(overlay.TranslatePoint(new Point(0, 0), window)!.Value.Y + 70));
+		//The card sits ~38 px below the wireframe's (so its Resume button and
+		//rows are off too) over a flat dimmed home rather than the blurred game
+		//frame, and the status line carries the P1-P4 port chips.
+		AssertWireframeRegions(frame, "W-P4");
+		//#1089: 8 px in from the card's left edge, not its middle. The Resume
+		//press is the card's one focused control, so PlayerFocusRing draws a
+		//bloom ~19 px around it, and a sample on the card's centre line at this
+		//height reads that bloom (#F2F5FB) instead of the card's own surface.
+		//The point is still on the card and off the press by 22 px.
+		Point card = overlay.TranslatePoint(new Point(0, 0), window)!.Value;
+		PlayerRender.AssertPixel(Color.Parse("#FAFAFC"), frame, (int)card.X + 8, (int)card.Y + 70);
 
 		window.FindNamed<Button>("OverlaySaveStatesButton").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
 		Dispatcher.UIThread.RunJobs();

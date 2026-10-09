@@ -48,7 +48,7 @@
   `ConfigManager`/`ApplyConfig()` pair the classic Input page uses. The host-free
   rules are `UI/Logic/ControllerSheetRemap.cs` (with
   `UI.Tests/Play/ControllerSheetRemapTests.cs`), the sheet half is
-  `UI/ViewModels/ControllerSheetViewModel.Remap.cs`, and the window behaviour is
+  `UI/ViewModels/ControllerSheetViewModel.Remap.cs`, and the window behavior is
   `UI.HeadlessTests/PlayerControllerSheetTests.cs`. The two rules:
   - **While a capture is armed, the pad is the capture's** - and it says so
     through the predicate ADR-0256's bridge already asks
@@ -62,7 +62,7 @@
     focus and confirmed nothing anywhere in the Play door. The case is
     `Closing_the_sheet_ends_the_capture_it_was_in`.
   Four more defects the same review found are fixed in the slice, each with a
-  RED: the Master System rows were labelled with the console's buttons the wrong
+  RED: the Master System rows were labeled with the console's buttons the wrong
   way round (the core's `GetKeyNames()` is "UDLR12P", so the field it reads as B
   is button 1 and the field it reads as A is button 2; W-P15's older copy of the
   swap is fixed with it, through the one rule in
@@ -77,12 +77,34 @@
   the pad's own and leaves the pad split across two - the PLAYERS move then has to
   move both slots and refuses with NoFreeSlot where one would have fit. It now
   joins the pad's slot (`ControllerSheetRemap.TargetSlot`'s `padSlot`).
-  Three limits are carried rather than solved: a rebind does not clear the same
-  pad button from another control, the port light reads the first non-zero field
-  across the port's four slots, and the section was never visually evaluated with
-  the pad, PLAYERS and REMAP all on screen at once.
-  **Still not implemented**: slice 4's surface (the extra buttons), so the sheet
-  is not yet the whole of what the Decision describes.
+  One limit is carried rather than solved: the section was never visually
+  evaluated with the pad, PLAYERS and REMAP all on screen at once. (A second, a
+  rebind not clearing the same pad button from another control, is closed by
+  #941: assigning a button already used on the same port moves it, and the sheet
+  names the control that lost it. A third, the port light reading the first
+  non-zero field across the port's four slots, is closed by #965: the light
+  reads the slot the selected pad holds, `ControllerSheetRemap.BoundCode`.)
+  Slice 4's surface (the extra buttons) is implemented: the sheet's EXTRA
+  BUTTONS section, `UI/ViewModels/ControllerSheetViewModel.Extra.cs`
+  (2026-10-04, #844, above).
+  **The pad's own light has an owner (2026-10-06, #925), by the panel ruling on
+  #916**, quoted verbatim: *"macOS only, through `GCController.light`
+  (DualShock 4 / DualSense): a core light call with a default no-op,
+  implemented by the macOS key manager; `nil` (Xbox pads) is normal; Windows and
+  Linux stay no-ops."* The ruling was "AGREED 2–1, option (a)"; the dissent
+  (Codex) is recorded on #916 verbatim: *"(b) DEFER; NO SLICE — Keep port-label
+  color; defer physical lighting until hardware verification is available.
+  Cross-platform builds alone cannot validate LEDs."* What landed:
+  `IKeyManager::SetGamepadLight` (default no-op returning false, pinned by
+  `TestAPadLightIsANoOpUnlessTheBackendHasOne` in `scripts/core_unit_tests.cpp`),
+  the `SetGamepadLight` export, `MacOSGameController::SetLight`, and the
+  host-free `UI/Logic/PadLights` - a pad lights in the color of the port whose
+  keys it holds (`ControllerSheetPorts.HoldsDevice`), so a PLAYERS reassignment
+  moves the color with the keys, from the window's 1 s pad-lamp poll. The
+  palette moved to `PadLights.PlayerColors`, which the PLAYERS rows paint from,
+  so label and light cannot drift. The bullet below ("the one promise above with
+  no owner") is therefore historical. Unverified here: no DualShock 4 or
+  DualSense was attached, so the physical light is the human check on #926.
 - Date: 2026-10-04
 - Related: ADR-0241 (the four-door Player GUI), ADR-0249 (the Play sheets, the Esc router and W-P15 — the setup sheet this one sits beside), ADR-0250 (one place per door), ADR-0251 (the pad's way into the overlay), ADR-0254 (the sibling decision about focus loss), PRD Part B §8 and §13.5.2.
 - Supersedes / amends: none.
@@ -315,29 +337,44 @@ theirs.
   (W-P4) makes free.
 - The player color has three places to appear - the port label, the pad's own
   light where it has one (DualShock 4/DualSense via `GCController.light`; `nil` on
-  an Xbox pad, which is not an error state), and nowhere else. Colour that appears
+  an Xbox pad, which is not an error state), and nowhere else. Color that appears
   once is decoration, not language.
-- **The reconnect repair has two limits that survive it, and they are limits of
+- **The reconnect repair has one limit that survives it, and it is a limit of
   the identity, not of the implementation (recorded 2026-10-04 with slice 5).** A
   **single** pad of a model that appeared twice cannot be told from its sibling:
   with only one of two identical pads present after a disconnect, nothing
   distinguishes it, so a reconnect can still move its keys. Point 4 only drops the
   move when both are *present*; no VID:PID scheme can disambiguate a lone sibling,
   and inventing one (a serial, a connection order) is the guess this ADR refuses.
-  Second, the repair walks `Port1A`/`Port1B` (the Four Score's P3/P4) but
-  `NesConfig.ApplyConfig` pushes those two from `Port1`/`Port2`, so that part of
-  the walk is decorative until the Four Score's own push path is fixed —
-  pre-existing, named here so it is not mistaken for coverage.
+- **Correction, not a second limit: the repair covers all four Four Score
+  players (corrected 2026-10-06,
+  [issue #943](https://github.com/sbihaiko/MesenAI/issues/943)).** This
+  supersedes the 2026-10-04 wording, which mis-mapped `Port1A`/`Port1B` as P3/P4
+  and called the walk over P3/P4 decorative. The P3/P4 are `Port1C`/`Port1D`, not `Port1A`/`Port1B`:
+  `InteropNesConfig` (`UI/Config/NesConfig.cs:283-300`) lays `Port1A`…`Port1D`
+  onto the Core's `Port1SubPorts[0..3]` (`Core/Shared/SettingTypes.h:715-722`),
+  and the Four Score takes those four in order as P1–P4
+  (`Core/NES/NesControlManager.cpp:128-130`). So `Port1A`/`Port1B` are P1/P2,
+  and `NesConfig.ApplyConfig` fills them with `Port1`'s/`Port2`'s keys under
+  their own type (`UI/Config/NesConfig.cs:150-151`); `Port1C`/`Port1D` go out
+  with their own keys (`UI/Config/NesConfig.cs:152-153`). The repair walks all
+  of them (`UI/Config/ControllerKeyMigration.cs:55-56`), so P1–P4 are covered.
+  What `Port1A`/`Port1B` hold as their own keys is redundant storage: only their
+  `Type` reaches the Core or the classic Input page
+  (`UI/Views/NesInputConfigView.axaml:56,64`), so walking those keys moves
+  nothing a player plays with — harmless, and not a gap in the repair.
+  `UI.HeadlessTests/ControllerKeyMigrationTests.cs` pins it: a P3/P4 repair
+  reaches `NesConfig.ToInterop()`, the struct `ApplyConfig` hands the Core.
 - **The pad's own light is the one promise above with no owner, and it is
   recorded here rather than silently dropped (2026-10-04).** No slice carries it,
   and it cannot be built from what exists: `GamepadInfo`
   (`Core/Shared/Interfaces/IKeyManager.h`) has no light field, nothing in `Core/`
   or `UI/` reads or writes one, and the only way to make a DualShock's light
-  follow a player colour is a new output path - a core call the macOS key manager
+  follow a player color is a new output path - a core call the macOS key manager
   implements through the GameController framework, a no-op on Windows and Linux,
   whose pads have no addressable light at all. That is new cross-backend work with
   no headless test behind it and no pad carrying an addressable light in this
   environment, which is why it is named here instead of guessed at. Until it
-  exists, the colour language this ADR asks for is the port label alone - and by
-  this ADR's own test ("colour that appears once is decoration") that is a weaker
+  exists, the color language this ADR asks for is the port label alone - and by
+  this ADR's own test ("color that appears once is decoration") that is a weaker
   language than the one it specifies.

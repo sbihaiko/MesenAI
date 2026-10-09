@@ -18,11 +18,11 @@ versioned like any other doc, owned by `docs/AGENTS.md`. Accepted ADRs are
    better than minting a second one on the same topic.
 2. **Pick the area.** The register is split into seven subfolders by the
    decision's **subject** — `packs` (MEP/HD pack storage, discovery, install,
-   catalogue, and the on-disk formats), `sprites` (tile and sprite capture,
+   catalog, and the on-disk formats), `sprites` (tile and sprite capture,
    identity, sheets), `recorder` (recording, the TAS driver, coverage sweeps),
    `ci-build` (the makefile, CI wiring, unit tests, guards, release
    packaging), `audio` (export, replacement, enhanced audio), `gui` (the
-   Avalonia player), `core` (the emulator core's own behaviour — rendering and
+   Avalonia player), `core` (the emulator core's own behavior — rendering and
    the PPU, and the shared services behind them). A decision that touches two
    goes where its subject is, not where its effect lands; `formats` was folded
    into `packs` for exactly that reason, and `core` exists because three

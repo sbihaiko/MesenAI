@@ -69,6 +69,7 @@
 #include "Shared/MovieSyncGate.h"
 #include "Shared/Movies/ShareRecordingSettings.h"
 #include "Shared/ShortcutKeyRules.h"
+#include "Shared/KeyMonitorRouting.h"
 #include "Shared/GamepadButtonOrder.h"
 #include "Shared/AliasedKeyState.h"
 #include "Debugger/CdlFileCheck.h"
@@ -89,6 +90,7 @@
 #include "Shared/MemoryOperationType.h"
 #include "NES/NesTypes.h"
 #include "NES/HdPacks/HdData.h"
+#include "NES/NesReadHitCounter.h"
 #include "NES/HdPacks/HdBehindBgSpriteRule.h"
 #include "NES/HdPacks/OamFetchLatch.h"
 #include "NES/HdPacks/SpriteFetchLog.h"
@@ -6249,6 +6251,43 @@ namespace
 			"#902: ...in the backend's own order, because the shortcut handler compares two reads position by position");
 	}
 
+	//#925 / #916's ruling: the pad's light follows its player colour on macOS
+	//alone (GCController.light), and is an explicit no-op everywhere else. The
+	//default is what Windows, Linux and any backend without a light inherit, so a
+	//key manager that does not override it must answer "no light" and do nothing.
+	//The channel scale is what the macOS backend hands GCColor: a byte of the
+	//player colour on GameController's 0..1 float, with both ends exact.
+	void TestAPadLightIsANoOpUnlessTheBackendHasOne()
+	{
+		struct LightlessKeyManager : IKeyManager
+		{
+			void RefreshState() override {}
+			void UpdateDevices() override {}
+			bool IsMouseButtonPressed(MouseButton) override { return false; }
+			bool IsKeyPressed(uint16_t) override { return false; }
+			vector<uint16_t> GetPressedKeys() override { return {}; }
+			string GetKeyName(uint16_t) override { return ""; }
+			uint16_t GetKeyCode(string) override { return 0; }
+			bool SetKeyState(uint16_t, bool) override { return false; }
+			void ResetKeyState() override {}
+			void SetDisabled(bool) override {}
+		};
+
+		LightlessKeyManager keyManager;
+		Check(!keyManager.SetGamepadLight(0, 0xFF, 0x3B, 0x30),
+			"#925: a backend with no pad light answers that it lit nothing");
+		Check(!keyManager.SetGamepadLight(3, 0x00, 0x7A, 0xFF),
+			"#925: ...on every pad index, not only the first");
+
+		Check(IKeyManager::LightChannel(0) == 0.0f,
+			"#925: a zero byte is an unlit channel");
+		Check(IKeyManager::LightChannel(255) == 1.0f,
+			"#925: a full byte is a full channel, not 255/256");
+		float mid = IKeyManager::LightChannel(0x7A);
+		Check(mid > 0.478f && mid < 0.479f,
+			"#925: a byte between scales linearly (0x7A -> 122/255)");
+	}
+
 	void TestPadChordFiresOnWhicheverPadIsInHand()
 	{
 		Check(PadChordFires({ PadKey(0, kPadSelectButton), PadKey(0, kPadStartButton) }),
@@ -6657,6 +6696,39 @@ namespace
 		state.SetKeyState(36, false);
 		Check(!state.IsPressed(6),
 			"BlocoO.6: a repeated key-down of one host key still needs only one release");
+	}
+
+	//#1097: the macOS backend calls Reset() from ResetKeyState(), which the host
+	//runs on every window-activation change and on entering a menu - and it is the
+	//only place besides its own constructor that asks for a reset. The table is
+	//not the state's to clear: MacOSKeyManager fills its 128 rows once, right after
+	//construction, and never refills them, so a Reset() that also zeroed _map left
+	//every host key unmapped for the rest of the process, and no game key, shortcut
+	//or overlay binding published again. The rule: Reset() drops the key state and
+	//the counters and leaves the host-code table standing.
+	void TestResetKeepsTheHostCodeTable()
+	{
+		AliasedKeyState state;
+		state.SetMapping(1, 44);   //S
+		state.SetMapping(36, 6);   //Return
+
+		//What Reset() is for: nothing stays held across it, whatever was down.
+		state.SetKeyState(1, true);
+		Check(state.IsPressed(44), "BlocoO.6: a host key published before the reset is held");
+		state.Reset();
+		Check(!state.IsPressed(44), "BlocoO.6: Reset drops the key that was held (#1097)");
+		Check(state.GetPressedKeys().empty(), "BlocoO.6: ...and reports none pressed");
+
+		//The counters are cleared with it: the next key-down is a first key-down,
+		//not a repeat of one the reset already dropped, so it publishes.
+		Check(state.SetKeyState(1, true),
+			"BlocoO.6: a host key still publishes after Reset - the table survives it (#1097)");
+		Check(state.IsPressed(44), "BlocoO.6: ...and the code it names reads pressed");
+
+		//Both halves of a shared code still answer, so the table is whole and not
+		//just the one row that happened to be exercised above.
+		Check(state.SetKeyState(36, true), "BlocoO.6: ...and so does a second row of the table");
+		Check(state.IsPressed(6), "BlocoO.6: ...publishing its own code");
 	}
 
 	//A binding may name pad keys from two families at once, and no single pad can
@@ -17116,6 +17188,355 @@ static void TestToastTextWrapsAtWords()
 	Check(lines.size() == 1 && lines[0].empty(), "toast: an empty message is one empty line");
 }
 
+//ADR-0245 Decision 4, condition (3) (P.12, #998): the read-hit counter the
+//cheat check arms over one internal-RAM address. NesMemoryManager needs an
+//Emulator, so the bus itself is not built here: the counter is driven through
+//the INesMemoryHandler calls the bus makes, and the source guard below pins
+//which call each path makes and the compare gate the counter mirrors.
+static std::string ReadRepoSource(const std::string& path)
+{
+	std::ifstream in(path, std::ios::in | std::ios::binary);
+	std::stringstream text;
+	text << in.rdbuf();
+	if(text.str().empty()) {
+		Check(false, "P.12: could not read " + path, "run from the repo root");
+	}
+	return text.str();
+}
+
+//The body of the function whose signature is 'signature': from its own
+//opening brace to the brace that closes it. Empty when the signature is gone
+//or the braces never balance, so a rename fails the guard instead of widening
+//the window to the rest of the file.
+static std::string FunctionBody(const std::string& source, const std::string& signature)
+{
+	size_t start = source.find(signature);
+	size_t open = start == std::string::npos ? std::string::npos : source.find('{', start + signature.size());
+	if(open == std::string::npos) {
+		return "";
+	}
+	int depth = 0;
+	for(size_t i = open; i < source.size(); i++) {
+		if(source[i] == '{') {
+			depth++;
+		} else if(source[i] == '}' && --depth == 0) {
+			return source.substr(open, i - open + 1);
+		}
+	}
+	return "";
+}
+
+static bool CallsReadOrReadRam(const std::string& body)
+{
+	return body.find("ReadRam") != std::string::npos || body.find("Read(") != std::string::npos || body.find("Read<") != std::string::npos;
+}
+
+static void TestTheReadHitCounterRegistersForReadsOfItsOneAddressOnly()
+{
+	uint8_t ram[0x800] = {};
+	NesReadHitCounter counter(ram, 0x0033, -1);
+	MemoryRanges ranges;
+	counter.GetMemoryRanges(ranges);
+	std::vector<uint16_t>* reads = ranges.GetRAMReadAddresses();
+	Check(reads->size() == 1 && (*reads)[0] == 0x0033, "P.12: the read-hit counter is registered for reads of its one address",
+		std::to_string(reads->size()));
+	Check(ranges.GetRAMWriteAddresses()->empty(), "P.12: the read-hit counter takes no writes");
+	Check(ranges.GetAllowOverride(), "P.12: the read-hit counter overrides the internal RAM's own read handler");
+}
+
+static void TestACpuReadCountsAHitAndPassesTheRawByteThrough()
+{
+	uint8_t ram[0x800] = {};
+	ram[0x033] = 0x42;
+	NesReadHitCounter counter(ram, 0x0033, -1);
+	uint8_t value = counter.ReadRam(0x0033);
+	Check(value == 0x42, "P.12: a CPU read through the counter returns the raw RAM byte", std::to_string(value));
+	Check(counter.Reads == 1 && counter.Hits == 1, "P.12: a CPU read (ReadRam) counts a read and a hit",
+		std::to_string(counter.Reads) + "/" + std::to_string(counter.Hits));
+	//Mirrors are not counted: the counter registers $0033 alone, so the bus
+	//routes a CPU read of $0833/$1033/$1833 to the internal RAM handler, not to
+	//the counter. A game that reads the watched byte only through a mirror
+	//shows zero hits.
+	MemoryRanges ranges;
+	counter.GetMemoryRanges(ranges);
+	std::vector<uint16_t>* reads = ranges.GetRAMReadAddresses();
+	bool mirrorRegistered = false;
+	for(uint16_t mirror : { (uint16_t)0x0833, (uint16_t)0x1033, (uint16_t)0x1833 }) {
+		mirrorRegistered |= std::find(reads->begin(), reads->end(), mirror) != reads->end();
+	}
+	Check(reads->size() == 1 && (*reads)[0] == 0x0033 && !mirrorRegistered,
+		"P.12: no RAM mirror of the address is registered, so a CPU read of a mirror is not counted", std::to_string(reads->size()));
+}
+
+static void TestDebuggerProbeAndRawRamReadsNeverCount()
+{
+	uint8_t ram[0x800] = {};
+	ram[0x033] = 0x42;
+	NesReadHitCounter counter(ram, 0x0033, -1);
+	uint8_t peeked = counter.PeekRam(0x0033);
+	Check(peeked == 0x42, "P.12: a debugger read (PeekRam) still sees the RAM byte", std::to_string(peeked));
+	Check(counter.Reads == 0 && counter.Hits == 0, "P.12: a debugger read (PeekRam) counts nothing",
+		std::to_string(counter.Reads) + "/" + std::to_string(counter.Hits));
+
+	//The probe's raw RAM read: HeadlessReadNesRam copies GetInternalRam() and
+	//never goes through the bus, so it cannot reach the counter's ReadRam.
+	std::string headless = ReadRepoSource("InteropDLL/EmuApiWrapperHeadless.cpp");
+	std::string probe = FunctionBody(headless, "DllExport bool __stdcall HeadlessReadNesRam(");
+	Check(probe.find("GetInternalRam()") != std::string::npos && !CallsReadOrReadRam(probe),
+		"P.12: HeadlessReadNesRam copies the internal RAM array and reaches neither Read nor ReadRam");
+}
+
+static void TestAHitIsAReadWhoseRawByteMeetsTheCompareValue()
+{
+	uint8_t ram[0x800] = {};
+	ram[0x033] = 0x05;
+	NesReadHitCounter counter(ram, 0x0033, 0x05);
+	counter.ReadRam(0x0033);
+	Check(counter.Reads == 1 && counter.Hits == 1, "P.12: a read whose byte equals compare is a hit");
+	ram[0x033] = 0x06;
+	counter.ReadRam(0x0033);
+	Check(counter.Reads == 2 && counter.Hits == 1, "P.12: a read whose byte differs from compare counts as a read, not a hit",
+		std::to_string(counter.Reads) + "/" + std::to_string(counter.Hits));
+
+	NesReadHitCounter any(ram, 0x0033, -1);
+	ram[0x033] = 0x00;
+	any.ReadRam(0x0033);
+	ram[0x033] = 0xFF;
+	any.ReadRam(0x0033);
+	Check(any.Hits == 2, "P.12: compare -1 makes every read a hit", std::to_string(any.Hits));
+}
+
+//A source guard rather than a NesMemoryManager under test: the manager needs
+//an Emulator. Each check reads one function's own body (brace-matched), so it
+//covers direct calls in that body only, not calls made through a helper.
+static void TestTheBusRoutesCpuReadsToReadRamAndDebugReadsToPeekRam()
+{
+	std::string header = ReadRepoSource("Core/NES/NesMemoryManager.h");
+	std::string source = ReadRepoSource("Core/NES/NesMemoryManager.cpp");
+	std::string cheats = ReadRepoSource("Core/Shared/CheatManager.cpp");
+	std::string read = FunctionBody(header, "__forceinline uint8_t Read(uint16_t addr");
+	Check(read.find("_ramReadHandlers[addr]->ReadRam(addr)") != std::string::npos && read.find("PeekRam") == std::string::npos,
+		"P.12: NesMemoryManager::Read reaches a registered handler's ReadRam, never PeekRam");
+	std::string debugRead = FunctionBody(source, "uint8_t NesMemoryManager::DebugRead(uint16_t addr)");
+	Check(debugRead.find("_ramReadHandlers[addr]->PeekRam(addr)") != std::string::npos && !CallsReadOrReadRam(debugRead),
+		"P.12: NesMemoryManager::DebugRead reaches PeekRam, never Read or ReadRam");
+	Check(cheats.find("if(result->second.Compare == -1 || result->second.Compare == value)") != std::string::npos,
+		"P.12: CheatManager::ApplyCheat still gates on compare -1 or the raw byte, the gate the counter mirrors");
+}
+
+//--- Bloco U: the host key monitor's routing (#1080) -----------------------
+//The macOS key monitor (MacOS/MacOSKeyManager.mm) is the app-level handler every
+//host key event passes through before a window or the core sees the key, and
+//Core/Shared/KeyMonitorRouting.h is the decision it makes. The case this block
+//exists for is the reported repro: the app is foreground (not InBackground), the
+//press is the overlay's own - Esc, the ToggleOverlay binding's key - and the
+//monitor swallowed it, so it never reached the window that answers it and the
+//Play overlay could not be opened from the state the game view is left in.
+//
+//The codes are the shared key table's (Core/Shared/KeyDefinitions.h), as literals
+//because this suite is host-free: Esc 13, F1 90, Shift 116-117, Ctrl 118-119, Alt
+//120-121, and the pad key space (1 for Pad1 B here) which no keyboard event maps
+//to.
+namespace
+{
+	using KeyMonitorRouting::Route;
+
+	const KeyMonitorRouting::ModifierKeyCodes kModifierKeys = { 116, 117, 118, 119, 120, 121 };
+
+	KeyCombination OverlayCombo(uint16_t key1, uint16_t key2 = 0, uint16_t key3 = 0)
+	{
+		KeyCombination comb = {};
+		comb.Key1 = key1;
+		comb.Key2 = key2;
+		comb.Key3 = key3;
+		return comb;
+	}
+
+	//The overlay's press, both of its key sets in play.
+	bool IsTheOverlaysPress(uint16_t pressedKeyCode, int pressedModifiers,
+		KeyCombination first = OverlayCombo(13), KeyCombination second = KeyCombination())
+	{
+		return KeyMonitorRouting::IsTheOverlaysPress(pressedKeyCode, pressedModifiers, first, second, kModifierKeys);
+	}
+
+	void TestTheOverlayKeyIsNotSwallowedWhileTheAppIsForeground()
+	{
+		//#1080, the case the fix is about: foreground (not InBackground), no
+		//Command, and the press is the overlay's own. It has to be left to the UI -
+		//returning the event is what lets AppKit dispatch it to the window, whose
+		//arm answers it (HandleEscInTheUi). Swallowing it here is the repro: the
+		//press never reaches the window's keyboard, and the overlay is unreachable
+		//from the focus state the game view is left in.
+		Check(KeyMonitorRouting::For(false, false, true, true) == Route::LeaveItToTheUi,
+			"BlocoU: the overlay's own press is left to the UI, not swallowed while the app is foreground (#1080)");
+
+		//The two pass-throughs the monitor has always had, now stated as rows of the
+		//same table: the app is not the emulator's keyboard when it is in the
+		//background, and Command chords stay the app's (cmd+Q and friends). Both are
+		//asked before the overlay question, so `false` is the honest input for the
+		//fourth column here - the app in the background is the app with no window of
+		//its own holding the keyboard.
+		Check(KeyMonitorRouting::For(true, false, false, false) == Route::LeaveItToTheUi,
+			"BlocoU: with the emulator in the background every event is the UI's");
+		Check(KeyMonitorRouting::For(false, true, false, true) == Route::LeaveItToTheUi,
+			"BlocoU: a Command chord is passed through to the app");
+		Check(KeyMonitorRouting::For(true, true, true, false) == Route::LeaveItToTheUi,
+			"BlocoU: background and Command both answer 'the UI's', whichever holds");
+	}
+
+	//#1080 (3): who has the keyboard is a second question, and it is the one that
+	//says whether the window that answers the overlay is there to answer it.
+	void TestTheOverlayPressIsTheUisOnlyWhileTheMainWindowHasTheKeyboard()
+	{
+		//InBackground is false whenever *any* window of the app is active, so it
+		//cannot stand in for this: with a Settings dialog, the debugger or a tool
+		//window focused, the event returned here is dispatched by AppKit to that
+		//window, which has no arm for the overlay - and the arms the core owns
+		//(Remaster, Share, Classic) lose the press they always had, while a dialog
+		//with a cancel button closes on it. On main the press went to the core.
+		Check(KeyMonitorRouting::For(false, false, true, false) == Route::FeedTheCore,
+			"BlocoU: the overlay's press goes to the core while another of the app's windows has the keyboard (#1080)");
+
+		//...and it is the UI's again the moment the window that answers it has the
+		//keyboard, which is the #1080 case row for row.
+		Check(KeyMonitorRouting::For(false, false, true, true) == Route::LeaveItToTheUi,
+			"BlocoU: and to the UI while the main window has it (#1080)");
+
+		//A Command chord is the app's whatever window has the keyboard: that
+		//pass-through is about the platform, not about this window.
+		Check(KeyMonitorRouting::For(false, true, true, false) == Route::LeaveItToTheUi,
+			"BlocoU: a Command chord is the app's even while another window has the keyboard");
+
+		//The second question is only asked about the overlay's own press; every
+		//other key is the core's either way.
+		Check(KeyMonitorRouting::For(false, false, false, false) == Route::FeedTheCore,
+			"BlocoU: an ordinary key is the core's whoever has the keyboard");
+	}
+
+	//#1080 (1): a key-up goes where its own key-down went, not where the modifiers
+	//it is released with would send it.
+	void TestAKeyUpFollowsTheRouteOfItsOwnDown()
+	{
+		KeyMonitorRouting::DownRoutes routes;
+
+		//(a) Ctrl+Esc down, Ctrl released, Esc up. The chord is not the overlay's
+		//press, so the core got the down.
+		Route ctrlEsc = KeyMonitorRouting::For(false, false,
+			IsTheOverlaysPress(13, KeyMonitorRouting::ControlModifier), true);
+		Check(ctrlEsc == Route::FeedTheCore,
+			"BlocoU: Ctrl+Esc is not the overlay's press, so its down is the core's");
+		Check(routes.Down(13, ctrlEsc) == Route::FeedTheCore,
+			"BlocoU: a key-down takes the route the rule gives it");
+
+		//The bare Esc up *is* the press a bare-Esc binding names, so the rule alone
+		//would hand the release to the UI: the core would never see Esc released,
+		//Esc would stay held until the next ResetKeyState, and every later Ctrl
+		//would read as Ctrl+Esc.
+		Check(KeyMonitorRouting::For(false, false,
+			IsTheOverlaysPress(13, KeyMonitorRouting::NoModifier), true) == Route::LeaveItToTheUi,
+			"BlocoU: the bare Esc up is the press the rule alone hands to the UI");
+		Check(routes.Up(13) == Route::FeedTheCore,
+			"BlocoU: Esc's release follows the chord's down to the core, not the bare press it looks like (#1080)");
+
+		//(b) Esc held, Shift pressed, Esc released - the same split the other way
+		//round. The down is the overlay's press; the release, carrying a modifier
+		//the binding does not name, is not, and the window would never see its key
+		//released.
+		KeyMonitorRouting::DownRoutes second;
+		Route bareEsc = KeyMonitorRouting::For(false, false,
+			IsTheOverlaysPress(13, KeyMonitorRouting::NoModifier), true);
+		Check(bareEsc == Route::LeaveItToTheUi, "BlocoU: the bare Esc press is the UI's");
+		Check(second.Down(13, bareEsc) == Route::LeaveItToTheUi,
+			"BlocoU: a key-down takes the route the rule gives it");
+		Check(KeyMonitorRouting::For(false, false,
+			IsTheOverlaysPress(13, KeyMonitorRouting::ShiftModifier), true) == Route::FeedTheCore,
+			"BlocoU: Shift+Esc is not the press of a bare-Esc binding");
+		Check(second.Up(13) == Route::LeaveItToTheUi,
+			"BlocoU: Esc's release stays the UI's while its own press was (#1080)");
+
+		//A release ends its pair: a second release with no down in between is not
+		//remembered as the UI's.
+		Check(second.Up(13) == Route::FeedTheCore,
+			"BlocoU: one release ends the pair");
+
+		//A raw code whose down was never seen - held when the monitor was installed
+		//- goes to the core, which is where every key went before #1080.
+		Check(routes.Up(90) == Route::FeedTheCore,
+			"BlocoU: a release with no down of its own goes to the core");
+
+		//ResetKeyState means nothing is held, and nothing is the UI's either.
+		KeyMonitorRouting::DownRoutes third;
+		third.Down(13, Route::LeaveItToTheUi);
+		third.Reset();
+		Check(third.Up(13) == Route::FeedTheCore,
+			"BlocoU: Reset forgets the downs that were the UI's");
+	}
+
+	void TestEveryOtherPressIsStillTheCores()
+	{
+		//The constraint the change carries: every press that is not the overlay's
+		//goes to the core exactly as it did before, so game input is untouched.
+		Check(KeyMonitorRouting::For(false, false, false, true) == Route::FeedTheCore,
+			"BlocoU: an ordinary key is still published to the core");
+		Check(KeyMonitorRouting::For(false, true, true, true) == Route::LeaveItToTheUi,
+			"BlocoU: a Command chord is the app's even when it carries the overlay's key");
+
+		//A press the table cannot name is not a key at all (#902): it is not the
+		//overlay's, and the core's path is what has always answered it (by dropping
+		//it in AliasedKeyState).
+		Check(!IsTheOverlaysPress(0, KeyMonitorRouting::NoModifier),
+			"BlocoU: an unmapped host code names no key, so it is not the overlay's press");
+	}
+
+	void TestTheOverlayRuleIsTheBindings()
+	{
+		//The twin of UI.Tests/Play/OverlayKeyPressTests, case for case: the window
+		//answers presses with OverlayKeyPress.IsThePress, and the monitor routes
+		//with this one. A row that drifted would hand the UI a press the window
+		//does not answer (both sides drop the key) or swallow one it does (#1080
+		//back again).
+		Check(IsTheOverlaysPress(13, KeyMonitorRouting::NoModifier),
+			"BlocoU: the default Esc binding is the Esc press");
+		Check(IsTheOverlaysPress(90, KeyMonitorRouting::NoModifier, OverlayCombo(90)),
+			"BlocoU: the overlay rebound to F1 is the F1 press");
+		Check(!IsTheOverlaysPress(13, KeyMonitorRouting::NoModifier, OverlayCombo(90)),
+			"BlocoU: with the overlay on F1, Esc is nobody's here");
+
+		//Modifiers are part of the press: Ctrl+Esc is a different key, and it has to
+		//reach the core's own path exactly as it did before.
+		Check(!IsTheOverlaysPress(13, KeyMonitorRouting::ControlModifier),
+			"BlocoU: Ctrl+Esc is not the press of a bare Esc binding");
+		Check(!IsTheOverlaysPress(90, KeyMonitorRouting::ShiftModifier, OverlayCombo(90)),
+			"BlocoU: Shift+F1 is not the press of a bare F1 binding");
+
+		//A binding that *names* a modifier is answered by that modifier, either hand,
+		//and only with it.
+		Check(IsTheOverlaysPress(13, KeyMonitorRouting::ControlModifier, OverlayCombo(118, 13)),
+			"BlocoU: a binding that names Left Ctrl is the Ctrl+Esc press");
+		Check(IsTheOverlaysPress(13, KeyMonitorRouting::ControlModifier, OverlayCombo(119, 13)),
+			"BlocoU: the right hand answers the same family");
+		Check(!IsTheOverlaysPress(13, KeyMonitorRouting::NoModifier, OverlayCombo(118, 13)),
+			"BlocoU: and only with the modifier it names");
+		Check(!IsTheOverlaysPress(13, KeyMonitorRouting::ControlModifier | KeyMonitorRouting::ShiftModifier, OverlayCombo(118, 13)),
+			"BlocoU: an unnamed modifier makes it a different press");
+
+		//An overlay with no keyboard binding owns no key (its chord may be a pad's),
+		//and the second key set is a binding of its own.
+		Check(!IsTheOverlaysPress(13, KeyMonitorRouting::NoModifier, KeyCombination(), KeyCombination()),
+			"BlocoU: an empty binding takes no key");
+		Check(IsTheOverlaysPress(13, KeyMonitorRouting::NoModifier, KeyCombination(), OverlayCombo(13)),
+			"BlocoU: either of the two key sets is the overlay's binding");
+
+		//The refusals the C# rule makes, which keep a press from being read as a
+		//chord it is not: the same key twice, and a key the press cannot carry - a
+		//pad code, which no host keyboard event maps to.
+		Check(!IsTheOverlaysPress(13, KeyMonitorRouting::NoModifier, OverlayCombo(13, 13)),
+			"BlocoU: the same key twice is not a binding a press can be");
+		Check(!IsTheOverlaysPress(13, KeyMonitorRouting::NoModifier, OverlayCombo(1, 13)),
+			"BlocoU: a pad code in the combination is not a key a press can carry");
+	}
+}
+
 int main()
 {
 	TestTheForcedPatchOverrideFollowsTheSettingUntilTheRomIsSuppressed();
@@ -17335,6 +17756,7 @@ TestW6TheFiltersAcceptTheExtendedFrame();
 	TestKeyboardBlockSparesNonKeyboardInputs();
 	TestSupersetStillShadowsTheExemptShortcut();
 	TestTheNoKeySentinelIsNeverAKey();
+	TestAPadLightIsANoOpUnlessTheBackendHasOne();
 	TestPadChordFiresOnWhicheverPadIsInHand();
 	TestTheWholePadFamilyAnswersTheChord();
 	TestPadChordIsNotAnsweredAcrossPadFamilies();
@@ -17347,6 +17769,7 @@ TestW6TheFiltersAcceptTheExtendedFrame();
 	TestThePadsButtonOrderIsPerBackend();
 	TestAHostCodeTheTableCannotNamePublishesNoKey();
 	TestASharedCodeStaysDownUntilItsLastHostCodeIsReleased();
+	TestResetKeepsTheHostCodeTable();
 	TestPadRuleLeavesTheKeyboardAndMouseExact();
 
 	TestSheetStableScreensCollapseRepeats();
@@ -17649,6 +18072,18 @@ TestW6TheFiltersAcceptTheExtendedFrame();
 	TestToastColoursFadeThroughTheHudsInvertedAlpha();
 	TestToastTextIsMappedOntoTheBitmapFont();
 	TestToastTextWrapsAtWords();
+
+	TestTheReadHitCounterRegistersForReadsOfItsOneAddressOnly();
+	TestACpuReadCountsAHitAndPassesTheRawByteThrough();
+	TestDebuggerProbeAndRawRamReadsNeverCount();
+	TestAHitIsAReadWhoseRawByteMeetsTheCompareValue();
+	TestTheBusRoutesCpuReadsToReadRamAndDebugReadsToPeekRam();
+
+	TestTheOverlayKeyIsNotSwallowedWhileTheAppIsForeground();
+	TestTheOverlayPressIsTheUisOnlyWhileTheMainWindowHasTheKeyboard();
+	TestAKeyUpFollowsTheRouteOfItsOwnDown();
+	TestEveryOtherPressIsStillTheCores();
+	TestTheOverlayRuleIsTheBindings();
 
 	printf("\n%d/%d cases passed\n", gCases - gFailures, gCases);
 	return gFailures == 0 ? 0 : 1;

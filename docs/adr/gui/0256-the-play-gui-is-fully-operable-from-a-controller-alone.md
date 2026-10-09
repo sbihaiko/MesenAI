@@ -57,13 +57,28 @@
   picker and gains exactly one folder to set: the games folder it already lists.
   What that changes is set out under Decision 9, which also says which of the
   proxy's quoted clauses it narrows.
+  **Decision 9's folder navigation is SUPERSEDED BY ADR-0264 (2026-10-07)**, at
+  the owner's request on issue #1031: the *Open a game* sheet opens as a flat
+  library of every openable ROM under the library folders, and the folder walk
+  Decision 9 decided survives only behind *Browse a file…*. The sheet itself,
+  its roots and its *Make this my games folder* action row live on inside that
+  entry point, and Decision 9's first-row focus guard **lives on** with them:
+  the guard is kept inside *Browse a file…*, where it still protects the *Make
+  this my games folder* action row, which also stays where it is. What is
+  retired is the folder walk as the sheet's opening shape. Decision 9's text
+  above stands unchanged as the record of what was decided on 2026-10-05.
 - Date: 2026-10-04
 - Related: ADR-0241 (Play's home and the W-P4 pause overlay), ADR-0249 (the
   rendered wireframes as the visual spec), ADR-0250 (every menu entry has one
   place per door; Classic is a fourth), ADR-0251 (the pad's way *into* W-P4),
   ADR-0255 (the Controller sheet, one of the surfaces this has to drive),
   ADR-0123 (host-free rules).
-- Supersedes / amends: none.
+- Supersedes / amends: none. **Superseded by: ADR-0264** (2026-10-07) —
+  Decision 9's folder navigation as the *Open a game* sheet's opening shape.
+  The rest of Decision 9, and every other Decision here, stand. Decision 9's
+  first-row focus guard is **not** superseded: it lives on inside *Browse a
+  file…*, protecting the *Make this my games folder* action row, which stays
+  where it is.
 
 ## Context
 
@@ -258,7 +273,7 @@ heading are answered by them and by the section after.**
      (`InitializeEmu` registers it only when the window *and* the viewer handles
      are present, `InteropDLL/EmuApiWrapper.cpp`). A pad in the wizard would mean
      either a second, platform-specific reading of the pad - against this ADR's
-     one-place rule - or initialising the core to read a device on the screen
+     one-place rule - or initializing the core to read a device on the screen
      whose job is to say where the core's files go, the wrong order, creating
      files before the player chose where they live.
 
@@ -273,7 +288,7 @@ pad press is reduced to one navigation intent in a single place next to
 **How it moves the focus is decided with the user, 2026-10-04**: not the wording
 this ADR first carried. Translating pad events into synthetic keyboard events
 was rejected on measurement: no code in the app has ever set a
-`NavigationMethod`, and there is no evidence a synthesised `KeyEventArgs` drives
+`NavigationMethod`, and there is no evidence a synthesized `KeyEventArgs` drives
 Avalonia 12's focus navigation — a mechanism that cannot be proven from a
 headless test is the wrong foundation for the one path a keyboard-less cabinet
 depends on. The bridge calls the focus engine directly

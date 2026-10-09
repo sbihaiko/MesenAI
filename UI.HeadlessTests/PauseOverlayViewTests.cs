@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
@@ -185,55 +185,19 @@ public class PauseOverlayViewTests : IDisposable
 		Click(window, "OverlaySaveStatesButton");
 		Assert.True(window.FindNamed<Border>("PlayerSaveStatesSheet").IsOnScreen());
 		Assert.False(window.FindNamed<Border>("PlayerOverlay").IsOnScreen());
-		Assert.True(window.FindNamed<Button>("SaveStatesSaveButton").IsFocused);
+		//#909: the sheet is a grid of slots; with no game there is no row to land
+		//on, so the sheet's own first control takes the focus (the same fallback
+		//every other surface uses).
+		Assert.True(window.FindNamed<Button>("SaveStatesReplaysButton").IsFocused);
 
 		Click(window, "SaveStatesBackButton");
 		Assert.False(window.FindNamed<Border>("PlayerSaveStatesSheet").IsOnScreen());
 		Assert.True(window.FindNamed<Border>("PlayerOverlay").IsOnScreen());
 	}
 
-	//#692 (G.2): the slot grid's own X, opened from W-P4 › Save states,
-	//closes back to W-P4 like Esc does - the overlay paused the game, so the
-	//grid has nothing to resume and used to leave a paused game with no overlay.
-	[AvaloniaFact]
-	public void Slot_grid_close_button_returns_to_the_overlay()
-	{
-		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
-		(MainWindow window, MainWindowViewModel model) = ShowPlay();
-
-		string folder = Path.Combine(Path.GetTempPath(), "mesen-692-" + Guid.NewGuid().ToString("N"));
-		Directory.CreateDirectory(folder);
-		string rom = Path.Combine(folder, "synthetic-nrom.nes");
-		File.WriteAllBytes(rom, SyntheticNrom.Build());
-		try {
-			Assert.True(EmuApi.LoadRom(rom, string.Empty), $"the core refused to load {rom}");
-			WaitFor(() => EmuApi.IsRunning() && model.RomInfo.Format != RomFormat.Unknown, "the ROM never reported as loaded");
-			EmuApi.Resume();
-			WaitFor(() => !EmuApi.IsPaused() && !model.IsGamePaused && !model.RecentGames.Visible, "the game never ran unpaused");
-
-			model.TogglePlayerOverlay();
-			WaitFor(() => model.IsGamePaused, "the overlay did not pause the game");
-			Click(window, "OverlaySaveStatesButton");
-			Click(window, "SaveStatesSaveButton");
-			Assert.True(model.RecentGames.Visible);
-
-			Click(window, "StateGridCloseButton");
-			Assert.False(model.RecentGames.Visible);
-			Assert.True(window.FindNamed<Border>("PlayerOverlay").IsOnScreen());
-			Assert.True(EmuApi.IsPaused());
-
-			//...and the next Esc resumes from the overlay, not reopens it.
-			model.TogglePlayerOverlay();
-			WaitFor(() => !EmuApi.IsPaused(), "Esc on the overlay did not resume");
-		} finally {
-			EmuApi.Stop();
-			Dispatcher.UIThread.RunJobs();
-			try {
-				Directory.Delete(folder, true);
-			} catch(IOException) {
-			}
-		}
-	}
+	//#692's subject is gone with #909: the grid is no longer opened from W-P4
+	//(the Save states sheet is its own grid), so a grid has no overlay to close
+	//back to - the quick save/load shortcuts' own grids are the classic path.
 
 	//The stop rule's Esc order against a running game: game → W-P4 → resume;
 	//every sheet from W-P4 (Save states and its slot grid, Enhancements,
@@ -282,16 +246,17 @@ public class PauseOverlayViewTests : IDisposable
 				WaitFor(() => !EmuApi.IsPaused(), "Esc on the overlay did not resume");
 			}
 
-			//Save states › Save to a slot: today's slot grid; Esc returns to W-P4.
+			//#909: the Save states sheet is one grid; its own *Save here* writes the
+			//slot over the real core, and Esc returns to W-P4.
 			model.TogglePlayerOverlay();
 			WaitFor(() => model.IsGamePaused, "the overlay did not pause the game");
 			Click(window, "OverlaySaveStatesButton");
-			Click(window, "SaveStatesSaveButton");
-			Assert.True(model.RecentGames.Visible);
-			Assert.Equal(GameScreenMode.SaveState, model.RecentGames.Mode);
+			Assert.True(window.FindNamed<Border>("PlayerSaveStatesSheet").IsOnScreen());
+			Click(window, "SlotSaveButton");
+			WaitFor(() => model.SaveStateSlot(1)?.HasState == true, "Save here did not write slot 1");
 			model.TogglePlayerOverlay();
 			Dispatcher.UIThread.RunJobs();
-			Assert.False(model.RecentGames.Visible);
+			Assert.False(window.FindNamed<Border>("PlayerSaveStatesSheet").IsOnScreen());
 			Assert.True(overlay.IsOnScreen());
 
 			//Quit game: the game powers off, the window stays, the home shows.

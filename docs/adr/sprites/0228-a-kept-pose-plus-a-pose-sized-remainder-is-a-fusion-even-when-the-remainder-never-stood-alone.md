@@ -30,7 +30,7 @@ A kept pose `B` is a **fusion** when some kept pose `A` fits inside it at a tran
 
 ### 2. The two-part split still wins
 
-ADR-0177 §2's search runs first and unchanged: if any candidate `A` leaves a remainder that is a kept pose `C`, `B` is labelled `[A, C]`; only when none does is `B` labelled with the first candidate (file order) that fits with a pose-sized remainder, so every pack with a two-part label keeps it.
+ADR-0177 §2's search runs first and unchanged: if any candidate `A` leaves a remainder that is a kept pose `C`, `B` is labeled `[A, C]`; only when none does is `B` labeled with the first candidate (file order) that fits with a pose-sized remainder, so every pack with a two-part label keeps it.
 
 ### 3. `FusionOf` holds one position
 
@@ -53,7 +53,7 @@ The variant pass skips fused entries, so no entry carries both labels; a pose co
 
 ### 5. Tests (`scripts/core_unit_tests.cpp`, Bloco P)
 
-A kept pose plus an 8-tile remainder that never stands alone is a one-part fusion, not a variant, serialised `"fusionOf": ["pose000"]`; the boundary (`kPoseMinTiles` tiles) too; a 3-tile remainder is still a variant; ADR-0177's two-part cases keep their labels. `scripts/test_artist_kit.py` checks a one-part fusion is kept out of every grid and `dropped[]` cites this ADR, not ADR-0177's "both halves are laid out".
+A kept pose plus an 8-tile remainder that never stands alone is a one-part fusion, not a variant, serialized `"fusionOf": ["pose000"]`; the boundary (`kPoseMinTiles` tiles) too; a 3-tile remainder is still a variant; ADR-0177's two-part cases keep their labels. `scripts/test_artist_kit.py` checks a one-part fusion is kept out of every grid and `dropped[]` cites this ADR, not ADR-0177's "both halves are laid out".
 
 ### 6. A part the screen edge cut is not a part (issue #504)
 
@@ -70,7 +70,7 @@ Tests (`BlocoP`): `TestAPoseWhosePartIsOnlyEverSeenClippedByTheScreenEdgeIsNotAF
 - On the Contra stage-1 re-record fusions go from 2 to 6 (`pose018`, `pose020`, `pose025`, `pose026` join `pose021`, `pose022`); `poses.json` is otherwise unchanged (same 27 poses, tiles, `next`, cycles, ids); the kit's rest sheet `usr003` drops from 10 figures to 6, all Bill alone; the sprite, background and CHR `--verify` stay 0 lost / 0 added.
 - The remainder's tiles stay paintable, but not through `unsorted` (ADR-0209 Q4): `sprites.png` claims every sprite shape, so the 21 tumble tiles stay on `sprites.png` and on `spr003`/`spr004`/`spr006`, and on the CHR pages in the kit; they lose their place in the whole-figure grids.
 - `PosesForCells` (ADR-0177 §6) skips one-part fusions, so on Contra `spr003`, `spr004` and `spr006` cite no pose, and `spr002`/`spr022`/`spr023`/`spr024` stop citing the composites.
-- `compose_engine.pose_for_anchor` still falls back to a fused pose when every pose holding an anchor is fused (ADR-0177 §5), so the tumble tiles stay reachable from the composition editor, labelled.
+- `compose_engine.pose_for_anchor` still falls back to a fused pose when every pose holding an anchor is fused (ADR-0177 §5), so the tumble tiles stay reachable from the composition editor, labeled.
 - The false-positive class ADR-0177 accepted widens: a kept figure plus a big attachment never seen alone (a rider on a mount never drawn riderless). The trade is ADR-0177's; the label costs one suggestion and the entry stays reachable by id.
 - §6 buys `pose004` back at the price of a real fusion it can no longer see (an actor flush against an edge); it costs Castlevania nothing (99 of 211) and `poses.json`'s schema does not move.
 

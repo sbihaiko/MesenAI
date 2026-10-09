@@ -90,6 +90,10 @@ EXTRA_ENTRY_POINTS = {
         "G.7 (PRD Part B W-R7): the GUI's Compose a Scene… starts it in its own "
         "window on the project's newest recording"
     ),
+    "cheat_web_lookup": (
+        "P.12 (PRD Part B W-P11, #924): the Cheats sheet's Look Online runs it "
+        "on the loaded copy; its closure brings cheat_decoder and step_emu"
+    ),
 }
 
 # The only third-party packages the closure is allowed to reach. Anything else

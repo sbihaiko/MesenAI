@@ -4,11 +4,14 @@ namespace Mesen.Logic;
 
 //ADR-0253 §4 (slice W.5): the Enhancements sheet's Widescreen switch is the
 //only control for the automatic mode. It is shown disabled, with a one-line
-//reason, when the loaded game cannot use any widescreen mode at all - a console
-//with no side map, or a game the core measured with nothing beside the picture
-//(NesWidescreenSupport::Probe) and whose pack ships no widescreen art (W.3's
-//`widescreen` section, §1's Pack-art mode). While that measurement is still
-//running the switch stays enabled. The app keeps the per-ROM answer
+//reason, when the loaded game cannot use any widescreen mode at all - a game the
+//core measured with nothing beside the picture (NesWidescreenSupport::Probe)
+//and whose pack ships no widescreen art (W.3's `widescreen` section, §1's
+//Pack-art mode). While that measurement is still running the switch stays
+//enabled, and since ADR-0267 stage 1 (option B) so does a console with no side
+//map: it has no Reveal to offer, so its switch applies the plain 16:9 fill and
+//its reason says so (ADR-0253 §4's "disabled at once" is what B amends; §2's
+//scope is not touched). The app keeps the per-ROM answer
 //(PlayerEnhancementsConfig.RomWidescreenSupport); this class is the host-free
 //rule between the core's verdict and the switch's state.
 //
@@ -25,9 +28,11 @@ public enum WidescreenSupport
 }
 
 //The switch's realized state: whether it can be turned on, and the resource id
-//of the one-line reason a disabled switch shows ("" when it is enabled). The
-//owning ViewModel resolves the id with ResourceHelper, the way it does for the
-//Overclock reason.
+//of the one-line reason shown under it ("" when there is nothing to say). A
+//disabled switch always carries one, and since ADR-0267 stage 1 so does the one
+//enabled state that does not reveal anything - a console with no side map,
+//whose reason names the fill instead. The owning ViewModel resolves the id with
+//ResourceHelper, the way it does for the Overclock reason.
 public sealed record WidescreenSwitchState(bool Enabled, string ReasonKey);
 
 public static class WidescreenSupportRule
@@ -59,7 +64,17 @@ public static class WidescreenSupportRule
 		if(hasWidescreenPackArt) {
 			return Enabled;
 		}
-		if(measured == WidescreenSupport.Unsupported || !consoleHasSideMap) {
+		if(!consoleHasSideMap) {
+			//ADR-0267 stage 1 (option B): a console with no side map has nothing
+			//to reveal, but that is not the same as having no widescreen mode -
+			//the switch stays usable and applying it fills the picture at 16:9
+			//(the pre-ADR-0253 behaviour, already implemented in
+			//AspectRatioMath), with the reworded reason naming that fill. This is
+			//what amends ADR-0253 §4's "disabled at once"; §2's Reveal scope is
+			//untouched, because a fill is not a Reveal and adds no fallback source.
+			return Fill;
+		}
+		if(measured == WidescreenSupport.Unsupported) {
 			return new WidescreenSwitchState(false, UnavailableReasonKey);
 		}
 		return Enabled;
@@ -92,7 +107,8 @@ public static class WidescreenSupportRule
 	//cannot use it is off whatever the saved preference says, but the
 	//preference itself is never written off - §1's "the switch keeps its saved
 	//value, so the next game that supports it gets it back" (which is why this
-	//is not the Overclock treatment, whose setting is per console).
+	//is not the Overclock treatment, whose setting is per console). The fill
+	//state (ADR-0267 stage 1) is a mode, so it is on whenever the preference is.
 	public static bool EffectiveWidescreen(bool savedOn, WidescreenSwitchState state)
 	{
 		return savedOn && state.Enabled;
@@ -114,8 +130,16 @@ public static class WidescreenSupportRule
 			&& romSha1 != alreadyAnnouncedFor;
 	}
 
-	//"EnhancementsWidescreenUnavailable" (resources.en.xml).
+	//"EnhancementsWidescreenUnavailable" (resources.en.xml). One id for both
+	//states that say something - the disabled switch (ADR-0253 §4) and the
+	//enabled fill (ADR-0267 stage 1) - so the sheet and §4's toast can never
+	//drift apart.
 	public const string UnavailableReasonKey = "EnhancementsWidescreenUnavailable";
 
 	private static readonly WidescreenSwitchState Enabled = new(true, "");
+
+	//ADR-0267 stage 1 (option B): usable, and it says what it does. The sentence
+	//under it is the same resource the disabled switch shows, worded onto the
+	//fill - there is nothing to reveal, so widescreen only stretches.
+	private static readonly WidescreenSwitchState Fill = new(true, UnavailableReasonKey);
 }

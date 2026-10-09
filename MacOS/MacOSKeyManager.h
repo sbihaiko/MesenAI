@@ -4,6 +4,7 @@
 #include "Shared/Interfaces/IKeyManager.h"
 #include "Shared/KeyDefinitions.h"
 #include "Shared/AliasedKeyState.h"
+#include "Shared/KeyMonitorRouting.h"
 
 class MacOSGameController;
 class Emulator;
@@ -22,6 +23,10 @@ private:
 	//partial and many-to-one, so the events are translated there rather than
 	//written into _keyState directly (#902, #904).
 	AliasedKeyState _hostKeyState;
+	//#1080: which raw host codes' key-downs were handed to the UI, so their
+	//key-up goes the same way whatever modifiers it is released with
+	//(KeyMonitorRouting::DownRoutes).
+	KeyMonitorRouting::DownRoutes _downRoutes;
 	std::unordered_map<uint16_t, string> _keyNames;
 	std::unordered_map<string, uint16_t> _keyCodes;
 
@@ -77,4 +82,5 @@ public:
 	bool GetGamepadInfo(uint32_t index, GamepadInfo& info) override;
 	bool GetGamepadState(uint32_t index, GamepadState& state) override;
 	void TestForceFeedback(uint32_t index, uint16_t magnitudeRight, uint16_t magnitudeLeft) override;
+	bool SetGamepadLight(uint32_t index, uint8_t r, uint8_t g, uint8_t b) override;
 };

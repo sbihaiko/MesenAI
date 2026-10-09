@@ -288,7 +288,7 @@ instead, the rebuild carries 341 of its keys and adds 7 the recording never
 drew. That is B1, not the kit.
 
 **#447 (known, not fixed).** The rebuilt layer draws the sheets'
-nearest-neighbour crops over `auto/`'s xBRZ pages for the same key. So even
+nearest-neighbor crops over `auto/`'s xBRZ pages for the same key. So even
 the unpainted control does not render like the recording. Not measured here.
 
 **Whole-figure paint.** The Contra re-run painted a whole figure. The same
@@ -323,7 +323,7 @@ This is B3.
 - Every leftover comes from **one retained OAM frame**, index 297 of the
   stream (emulated frame 658). That is the cut from the intro gate screen to
   stage 1: screenshots at frames 657 and 659 show the gate, and 661 is black.
-- That frame holds 23 entries, where its neighbours hold 46 and 42. Every
+- That frame holds 23 entries, where its neighbors hold 46 and 42. Every
   entry is a single 8×8 half, as if `LargeSprites` were off.
 
 **Likely cause.**
@@ -390,11 +390,11 @@ gives 0 errors, 0 lost, 10 added and 8 875/8 875 cells byte-identical.
 
 - At pixel precision (ADR-0225) each blank member's 8×8 rect overlaps 2–4 of
   Simon's body tiles: 960 opaque px inside the first one.
-- The import slices every member rect independently, so the neighbours' ink
+- The import slices every member rect independently, so the neighbors' ink
   becomes paint on the blank key. It is a different picture per figure, hence
   the conflict.
 
-**Expected.** A member whose recorded tile is all colour 0 is not painted
+**Expected.** A member whose recorded tile is all color 0 is not painted
 from pixels that belong to another member. Even if the build accepted it, a
 painted blank sprite tile would draw opaque art where the NES draws nothing.
 
@@ -411,6 +411,6 @@ painted blank sprite tile would draw opaque art where the NES draws nothing.
 - **No probe.** The cycle timings are from a stage run with no `driver`
   attribution.
 - The round trip proves one cell in one frame. The 176 non-magenta changed
-  pixels in the proof box were not analysed.
+  pixels in the proof box were not analyzed.
 - The ADR-0230 figures are the F14.4 method on a second recording. No option
   was prototyped here.

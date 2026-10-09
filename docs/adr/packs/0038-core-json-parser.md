@@ -29,6 +29,6 @@ surrogate pairs) are decoded to UTF-8.
 
 ## Alternatives
 - nlohmann/json (~25k lines header-only): far more than the use case needs,
-  slows every TU that includes it, and adds a licence/upgrade surface.
+  slows every TU that includes it, and adds a license/upgrade surface.
 - Hand-rolled ad-hoc scanning inside MepPack: brittle and not reusable;
   MEI (docs/specs/MEI-v1.md) is also JSON and will want the same reader.

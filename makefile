@@ -535,6 +535,12 @@ doc-checks-2:
 	#most-voted-first) and the wiring of the workflow that commits
 	#docs/community-replays.json through a PR.
 	python3 scripts/test_generate_community_replay_catalog.py
+	#Issue #1038: the SHA1 -> No-Intro name table the flat library looks a ROM
+	#up in. The generator's format is pinned on a fixture DAT (no network) and
+	#the committed scripts/no_intro_sha1.tsv.gz is checked for shape and floor,
+	#so a truncated regeneration fails here instead of shipping a table that
+	#never matches a ROM.
+	python3 scripts/test_generate_no_intro_sha1_table.py
 	python3 scripts/test_mep_compare_render_dispatch.py
 	python3 scripts/test_mep_content_id.py
 	python3 scripts/test_mep_identity_check.py

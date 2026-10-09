@@ -1,3 +1,4 @@
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Input;
@@ -71,7 +72,10 @@ namespace Mesen.Windows
 			//test's Avalonia session setup. Stopping it here rather than in a
 			//caller keeps the two together wherever Attach is used, and stops the
 			//window the player closes from leaving a timer behind too.
-			window.Closed += (_, _) => timer.Stop();
+			window.Closed += (_, _) => {
+				timer.Stop();
+				bridge.RomPickerParked = null;
+			};
 			timer.Start();
 			return timer;
 		}
@@ -95,6 +99,50 @@ namespace Mesen.Windows
 			if(Installed.TryGetValue(window, out Bridge? bridge)) {
 				bridge.Tick(pressed, delta, keyName, keyCode);
 			}
+		}
+
+		//#994 review 3: where the keyboard panel is drawn; a headless case swaps
+		//it to stand in for a field with no overlay layer. Null puts it back.
+		private static Func<Visual, OverlayLayer?> _overlayOf = OverlayLayer.GetOverlayLayer;
+
+		public static void SetOverlayLookupForTest(Func<Visual, OverlayLayer?>? lookup)
+		{
+			_overlayOf = lookup ?? OverlayLayer.GetOverlayLayer;
+		}
+
+		//ADR-0262: the keyboard the pad has open, or null - so a headless case can
+		//walk its keys the way a player does instead of guessing the layout.
+		public static PadKeyboard? KeyboardForTest(MainWindow window)
+		{
+			return Installed.TryGetValue(window, out Bridge? bridge) ? bridge.Keyboard : null;
+		}
+
+		//The field the open keyboard types into, or null - #1062: the claim that
+		//keeps the ring on the search box asks for a keyboard bound to THAT box.
+		//#1064: this is the shipping reader, and it is private on purpose. The
+		//claim in RomPickerFocusTarget is not test code, so it may not reach a
+		//*ForTest door - a seam production leans on is load-bearing and can no
+		//longer be moved by the refactor it exists to allow. The public
+		//KeyboardFieldForTest below delegates here, which is what keeps the
+		//headless suite's door open onto the same answer.
+		private static TextBox? KeyboardField(MainWindow window)
+		{
+			return Installed.TryGetValue(window, out Bridge? bridge) ? bridge.KeyboardField : null;
+		}
+
+		//The headless suite's door onto the same answer. It adds nothing of its
+		//own: whatever a case reads here is what the ring's claim read (#1064).
+		public static TextBox? KeyboardFieldForTest(MainWindow window)
+		{
+			return KeyboardField(window);
+		}
+
+		//The header control the sheet parked this window's ring on while a restore
+		//waits, or null - so a headless case can tell one window's parking from
+		//another's.
+		public static Control? RomPickerParkedForTest(MainWindow window)
+		{
+			return Installed.TryGetValue(window, out Bridge? bridge) ? bridge.RomPickerParked : null;
 		}
 
 		//ADR-0256 Decision 3: ONE path decides who holds the focus when a Play
@@ -149,10 +197,20 @@ namespace Mesen.Windows
 			//so it is claimed before the sheet that holds it: with the tab
 			//showing, the pad lands on the storage choice; on any other tab this
 			//claim is closed and the one below puts it on the strip, as before.
+			//#932: and it names the sheet as its root, as the Settings claim does
+			//(#910). Inferred from the storage choice, the root was the tab's page,
+			//which holds neither the strip nor the footer (Done), so the D-pad
+			//could not leave the four choices.
 			focus.When(model, [nameof(MainWindowViewModel.IsPlayerSystemTabVisible)],
-				() => model.IsPlayerSystemTabVisible, () => Named(window, "SystemStorageUserFolder"));
+				() => model.IsPlayerSystemTabVisible, () => Named(window, "SystemStorageUserFolder"),
+				() => Named(window, "PlayerSettingsSheet"));
+			//#910: the sheet names its own root. Inferred from the strip's tab,
+			//the root was the TabControl, which holds neither the page's rows
+			//nor the footer (Exit full screen, Done), so the D-pad could not
+			//leave the strip.
 			focus.When(model, [nameof(MainWindowViewModel.IsPlayerSettingsVisible)],
-				() => model.IsPlayerSettingsVisible, () => Named(window, "tabPlayerWindow"));
+				() => model.IsPlayerSettingsVisible, () => Named(window, "tabPlayerWindow"),
+				() => Named(window, "PlayerSettingsSheet"));
 			//ADR-0255's Controller sheet, which CurrentPlaySheet() reads right
 			//after Settings (one of the two is current at a time; the sheet
 			//replaces the Settings sheet's Controls landing), so the arbiter's
@@ -180,15 +238,21 @@ namespace Mesen.Windows
 				() => model.IsEnhancementsPanelVisible, () => Named(window, "EnhancementsModernCheckBox"));
 			focus.When(model, [nameof(MainWindowViewModel.IsPackDetailVisible)],
 				() => model.IsPackDetailVisible,
-				() => Named(window, model.PackDetailCanChange ? "PackDetailChangeButton" : "PackDetailDoneButton"));
+				() => Named(window, PackDetailPendingFile.FirstControl(model.PackDepSheet.HasPending, model.PackDetailCanChange)));
 			focus.When(model.CheatsSheet, [nameof(PlayerCheatsSheetViewModel.IsVisible)],
 				() => model.CheatsSheet.IsVisible,
 				() => Named(window, model.CheatsSheet.IsSearchEnabled ? "CheatsSearchBox" : "CheatsDoneButton"));
 			focus.When(model.ReplaysSheet, [nameof(PlayerReplaysSheetViewModel.IsVisible)],
 				() => model.ReplaysSheet.IsVisible,
 				() => EnabledNamed(window, "ReplaysWatchButton") ?? Named(window, "ReplaysDoneButton"));
+			//#909: the Save states sheet is a grid of rows (#848's reason applies
+			//here too: its first control is a row of its own list), so it names its
+			//own search root and its target is the row's own *Save here* - the slot
+			//the sheet opens on, which the rule answers (newest state, else the
+			//first slot).
 			focus.When(model, [nameof(MainWindowViewModel.IsSaveStatesSheetVisible)],
-				() => model.IsSaveStatesSheetVisible, () => Named(window, "SaveStatesSaveButton"));
+				() => model.IsSaveStatesSheetVisible, () => SaveStatesFocusTarget(window, model),
+				() => Named(window, "PlayerSaveStatesSheet"));
 			//W-P4 itself, under every sheet opened from it and over the game.
 			focus.When(model, [nameof(MainWindowViewModel.IsPlayerOverlayVisible)],
 				() => model.IsPlayerOverlayVisible, () => Named(window, "OverlayResumeButton"));
@@ -217,10 +281,23 @@ namespace Mesen.Windows
 			//lands). A replaced row takes its container - and the ring on it - with
 			//it, and without this the pad would be left with nothing focused to
 			//press Confirm on.
+			//
+			//#1032 (ADR-0264): the sheet has TWO surfaces now - the library and,
+			//inside it, the folder browser *Browse a file…* opens - so the claim
+			//watches the mode and the grid's own revision beside the browser's,
+			//and the target is whichever surface's first control the mode names.
+			//Without the mode in the list, the press that steps into the browser
+			//would leave the ring on a tile the player can no longer see.
+			//#1036 (ADR-0264 Decision 8): *Library folders…* is a third surface of
+			//the same sheet, and FoldersRevision is watched beside the other two
+			//revisions for exactly their reason - its rows are rebuilt on an open,
+			//an add and a remove, and the container the ring was on went with the old
+			//ones. Without it a pad that removed a row would be left holding nothing.
 			focus.When(model.RomPicker,
 				[nameof(PlayerRomPickerViewModel.IsVisible), nameof(PlayerRomPickerViewModel.PathText),
-				 nameof(PlayerRomPickerViewModel.SuggestionRevision)],
-				() => model.RomPicker.IsVisible, () => RomPickerFirstRow(window) ?? Named(window, "RomPickerBack"),
+				 nameof(PlayerRomPickerViewModel.SuggestionRevision), nameof(PlayerRomPickerViewModel.Mode),
+				 nameof(PlayerRomPickerViewModel.TilesRevision), nameof(PlayerRomPickerViewModel.FoldersRevision)],
+				() => model.RomPicker.IsVisible, () => RomPickerFocusTarget(window, model),
 				() => Named(window, "PlayerRomPickerSheet"));
 
 			//The content area under all of them: the home's primary action, the
@@ -270,11 +347,188 @@ namespace Mesen.Windows
 		//silently repoint the games folder. So the first non-Action row wins; a
 		//folder with no content rows at all answers null, which the caller turns
 		//into the Back button rather than the action row.
+		//#1032 (ADR-0264): which surface's first control the ring lands on. The
+		//library's way in is its first TILE (Decision 3: A plays the focused
+		//game, so the sheet must open with a game focused); the browser's is its
+		//first row, as it always was. Both fall back to Back, so a state with
+		//nothing to pick still has something to press - the ring is never left
+		//with nothing at all.
+		//
+		//#1060: a library with no tile at all - no library folder yet, or folders
+		//the scan answered nothing for - lands on *Browse a file…* instead, because
+		//that is the control the empty sentence names as the next step, and Back
+		//leaves the sheet instead of taking it. Back stays the last resort: it is
+		//the one control the sheet always has.
+		private static Control? RomPickerFocusTarget(MainWindow window, MainWindowViewModel model)
+		{
+			//#1036 (ADR-0264 Decision 8): the folders sheet's own way in is its
+			//*Add a folder…* - the sheet's primary action, and the one press that is
+			//not the removal of a folder the player already has. The rows below it
+			//are reached by moving up, which is what the engine's traversal is for.
+			if(model.RomPicker.IsFoldersSheetVisible) {
+				return Named(window, "RomPickerAddFolder") ?? Named(window, "RomPickerBack");
+			}
+			if(model.RomPicker.Mode == RomPickerMode.Library) {
+				//#1033: a scan landing bumps TilesRevision, which is a claim for the
+				//first tile - and the player who pressed Y (or is typing) before a
+				//slow scan answered is in the box, with the pad keyboard possibly open
+				//over it. The claim keeps the ring where it is rather than taking the
+				//query away mid-word.
+				Control? search = Named(window, "RomPickerSearch");
+				if(search is not null && (search.IsFocused || ReferenceEquals(KeyboardField(window), search))) {
+					return search;
+				}
+				//#1037: the end of a scan whose restore never landed, and the
+				//remembered game landing, are the sheet's own claims, not a claim
+				//over the ring - a player who walked it to Back or the search box
+				//while the scan ran keeps it there.
+				//The ring is the player's when it is on a header control other than
+				//the one the sheet parked it on, whichever control that is.
+				Control? focused = window.FocusManager?.GetFocusedElement() as Control;
+				//The header control the sheet itself parked THIS window's ring on while
+				//a restore waits - per window, so a second window's sheet never reads it.
+				Installed.TryGetValue(window, out Bridge? bridge);
+				Control? parkedBefore = bridge?.RomPickerParked;
+				if((model.RomPicker.IsFinishFallback || model.RomPicker.IsRestoreLanding)
+					&& focused is not null && focused.DataContext is not PlayerLibraryTile
+					&& focused.Name?.StartsWith("RomPicker") == true && !ReferenceEquals(focused, parkedBefore)) {
+					return focused;
+				}
+				//A restore still waiting on its game parks the ring on Back, never on
+				//*Browse a file…*: pressing that one would leave the library the
+				//player is waiting on.
+				Control? parked = model.RomPicker.IsRestorePending ? Named(window, "RomPickerBack") : null;
+				if(bridge is not null) {
+					bridge.RomPickerParked = parked;
+				}
+				if(parked is not null && RomPickerTile(window, model.RomPicker.LastFocusedTilePath, true) is null) {
+					return parked;
+				}
+				//#1037 picks the tile; the CALLER named the game, because the
+				//path lives on the view-model and this walks the tree. The
+				//fallback chain is #1060's: a grid with no tile at all - no
+				//library folder yet, or folders the scan answered nothing for -
+				//lands on the control its empty sentence names, and Back stays
+				//the last resort, being the one control the sheet always has.
+				return RomPickerTile(window, model.RomPicker.LastFocusedTilePath, model.RomPicker.IsRestorePending)
+					?? Named(window, "RomPickerLibraryFolders") ?? Named(window, "RomPickerBrowseFile") ?? Named(window, "RomPickerBack");
+			}
+			return RomPickerFirstRow(window) ?? Named(window, "RomPickerBack");
+		}
+
+		//The tile the ring lands on. The items are found by their own data
+		//context - the same way the rows are - so a rebuild that reorders the
+		//grid moves the ring to whatever leads it now.
+		//
+		//#1037 (ADR-0264 Decision 1): the game the player was on leads, so the
+		//sheet REOPENS on it rather than on whatever the scan happened to list
+		//first. A path the grid no longer holds - the file was moved, the folder
+		//left the library - falls back to the first tile, which is also where a
+		//sheet that has never been opened lands; while the scan is still bringing
+		//that path the ring waits on the sheet's Back instead (see below).
+		//`restorePending` says the scan is still bringing the game the player left
+		//on and the grid does not hold it yet. The first-tile fallback is what the
+		//ring lands on in every other case - a sheet that has never been opened, a
+		//file that was moved - but mid-restore it is exactly the wrong answer: the
+		//tile that takes the ring reports "the player is on it" (Decision 1), and
+		//that report would overwrite the path the scan is still looking for. The
+		//sheet's Back is where the ring waits instead, which the caller's fallback
+		//supplies, so the sheet is never left with nothing to press.
+		private static Control? RomPickerTile(MainWindow window, string? path = null, bool restorePending = false)
+		{
+			IEnumerable<Button> tiles = (Named(window, "RomPickerGrid") as ItemsControl)?.GetVisualDescendants().OfType<Button>()
+				?? Enumerable.Empty<Button>();
+			Control? remembered = tiles.FirstOrDefault(b => b.DataContext is PlayerLibraryTile tile && tile.Path.Length > 0 && tile.Path == path);
+			if(remembered is not null || restorePending) {
+				return remembered;
+			}
+			return tiles.FirstOrDefault(b => b.DataContext is PlayerLibraryTile);
+		}
+
 		private static Control? RomPickerFirstRow(MainWindow window)
 		{
 			IEnumerable<Button> rows = (Named(window, "RomPickerList") as ItemsControl)?.GetVisualDescendants().OfType<Button>()
 				?? Enumerable.Empty<Button>();
 			return rows.FirstOrDefault(b => b.DataContext is not PlayerRomPickerRow row || row.Kind != RomPickerRowKind.Action);
+		}
+
+		//#1032 (ADR-0264 Decision 3, as AMENDED on #1040): the library grid is not
+		//a trap. Up from the grid's TOP row steps into the sheet's header
+		//controls, and Down steps back to the tile it left. Those header controls
+		//are otherwise unreachable from a pad - the grid's own XY navigation holds
+		//the ring inside itself - and ADR-0256's rule that the whole Play GUI
+		//works from a controller alone is not a clause ADR-0264 supersedes: a
+		//pad-only player still has to reach *Browse a file…*, and therefore *Make
+		//this my games folder* inside it.
+		//
+		//The search field and *Library folders…* the amendment also names are
+		//later slices (#1034, #1035); this answers for the header the sheet has
+		//today and keeps answering as they arrive, because it asks the sheet for
+		//its controls by name rather than counting them.
+		//
+		//Nothing outside this sheet is touched in either direction: every other
+		//surface keeps the engine's own traversal, and this closes only the one
+		//case the engine cannot - a grid whose XY scope has nothing above it.
+		//Review finding 4 on #1032: the library grid stays in the tree while the
+		//browser is up - the sheet hides it with IsLibraryMode, it does not remove
+		//it - so a step that only asked whether the grid EXISTS answered with a
+		//tile the player cannot see, and Enter cannot focus what is hidden: the
+		//press was spent, the ring stayed on Back and the pad's Down did nothing
+		//on that surface. The step reads the surface that is UP, and answers for
+		//that one: the grid's tile on the library, the list's first row in the
+		//browser. Never a control the player cannot see.
+		private static Control? RomPickerHeaderStep(MainWindow window, MainWindowViewModel model, Control focused, Control? lastTile, PadNavAction action)
+		{
+			if(Named(window, "RomPickerGrid") is not ItemsControl grid) {
+				return null;
+			}
+			bool libraryIsUp = model.RomPicker.IsVisible && model.RomPicker.Mode == RomPickerMode.Library && grid.IsEffectivelyVisible;
+			if(action == PadNavAction.Up && focused.DataContext is PlayerLibraryTile && IsInFirstGridRow(grid, focused)) {
+				return Named(window, "RomPickerBrowseFile") ?? Named(window, "RomPickerBack");
+			}
+			//#1033: the search box is a header control too, so Down out of it comes
+			//back to the grid exactly as Down out of the buttons does - one step
+			//out, one step back, whichever control the ring was on.
+			//#1036 (ADR-0264 Decision 8) adds the third one the same way - the
+			//folders button that stands beside *Browse a file…* - by name and not by
+			//counting them, so every header control keeps answering as they arrive.
+			if(action == PadNavAction.Down && focused.Name is "RomPickerBrowseFile" or "RomPickerBack" or "RomPickerSearch" or "RomPickerLibraryFolders") {
+				//#1050 review finding 4: the grid is only a place to come back to
+				//while it is the surface that is UP. In the browser the sheet hides
+				//the grid rather than removing it, and Enter cannot focus what is
+				//hidden - so Down on Back there lands on the browser's own first row.
+				if(!libraryIsUp) {
+					return RomPickerFirstRow(window) ?? Named(window, "RomPickerBack");
+				}
+				//The tile the player left, not the first one: Down undoes Up - and
+				//only while that tile is one the grid still draws (a rebuild
+				//replaced its container, and the old one is attached no longer).
+				//#1037: the fallback is the tile the sheet would reopen on, which
+				//is the first tile when the player has focused nothing yet.
+				return (lastTile is { IsEffectivelyVisible: true } ? lastTile : null)
+					?? RomPickerTile(window) ?? Named(window, "RomPickerBack");
+			}
+			return null;
+		}
+
+		//The grid's first visual row. The WrapPanel owns the layout, so the row is
+		//read off the positions rather than counted: the tiles that share the
+		//smallest Y are the ones with nothing above them, whatever the tile width
+		//or the sheet's width happens to be.
+		private static bool IsInFirstGridRow(ItemsControl grid, Control focused)
+		{
+			double top = double.MaxValue;
+			double? mine = null;
+			foreach(Button tile in grid.GetVisualDescendants().OfType<Button>()) {
+				if(tile.DataContext is not PlayerLibraryTile || tile.TranslatePoint(new Point(0, 0), grid) is not Point point) {
+					continue;
+				}
+				top = Math.Min(top, point.Y);
+				if(ReferenceEquals(tile, focused)) {
+					mine = point.Y;
+				}
+			}
+			return mine is not null && mine.Value <= top + 1;
 		}
 
 		//W-P5: the stored choice, else the first row.
@@ -287,6 +541,25 @@ namespace Mesen.Windows
 		//The window's own name scope only sees MainWindow.axaml; the sheets are
 		//UserControls with their own, so a surface's first control is found by
 		//walking the visual tree (MainWindow.FindNamedDescendant's rule).
+		//#909: the row W-P4's Save states grid opens on (SaveStateSheet.FocusSlot
+		//answers which), and its own *Save here* - the first control of the row, so
+		//the Load beside it is one Right away. A row whose *Save here* does not
+		//exist - the auto-save, which offers Load alone - hands over that button.
+		//The list answers in its own order, so the row is found by its index.
+		private static Control? SaveStatesFocusTarget(MainWindow window, MainWindowViewModel model)
+		{
+			SaveStateSlotViewModel? focus = model.FocusSaveStateSlot();
+			if(focus != null && Named(window, "SaveStatesGrid") is ItemsControl grid
+				&& grid.ContainerFromIndex(model.SaveStateSlots.IndexOf(focus)) is Control container) {
+				return container.GetVisualDescendants().OfType<Button>()
+					.FirstOrDefault(b => b.Name == "SlotSaveButton" && b.IsEffectivelyVisible)
+					?? container.GetVisualDescendants().OfType<Button>().FirstOrDefault(b => b.Name == "SlotLoadButton");
+			}
+			//No rows (the sheet is not over a game, which the app never does): the
+			//sheet's own first control, the way every other surface answers.
+			return FirstFocusable(window, "PlayerSaveStatesSheet");
+		}
+
 		private static Control? Named(MainWindow window, string name)
 		{
 			return window.GetVisualDescendants().OfType<Control>().FirstOrDefault(c => c.Name == name);
@@ -324,6 +597,26 @@ namespace Mesen.Windows
 			private readonly Stopwatch _clock = Stopwatch.StartNew();
 			private HashSet<ushort> _previous = new();
 			private TimeSpan _lastTick;
+			//#964: the drop-down the pad opened and the row it is on (committed
+			//only by Confirm), and the hold button Confirm is holding down.
+			private ComboBox? _openPopup;
+			//#1032 (ADR-0264 Decision 3, as amended): the library tile the ring
+			//last sat on, so Down out of the header comes back to it.
+			private Control? _libraryTile;
+			private int _walk = -1;
+			private Button? _holding;
+			//ADR-0262: the one on-screen keyboard, the field it fills and the
+			//panel it is drawn in (the window's overlay layer, below the field).
+			private PadKeyboard? _keyboard;
+			private TextBox? _keyboardField;
+			private Border? _keyboardPanel;
+
+			//The sheet's header control this window's ring was parked on while a
+			//restore waits; it dies with the window (see Attach).
+			public Control? RomPickerParked { get; set; }
+
+			public PadKeyboard? Keyboard => _keyboard;
+			public TextBox? KeyboardField => _keyboardField;
 
 			public Bridge(MainWindow window, MainWindowViewModel model)
 			{
@@ -389,10 +682,67 @@ namespace Mesen.Windows
 					action = PadNavAction.Back;
 				}
 
+				//#1033 (ADR-0264 Decision 3): the library sheet's own control, Y.
+				//It opens search, which means it puts the ring on the sheet's search
+				//box - the one control the sheet has that a pad would otherwise
+				//reach only by walking the header - and Confirm on that box then
+				//opens the shared on-screen keyboard ADR-0262 owns, so the query is
+				//typed with the pad. It is read off the pressed sets rather than off
+				//Next's answer because Y is not one of the six the pad navigates
+				//with (PadNavControls.SheetControls, and the reason it is a second
+				//table is there). Gated on this sheet so every other Play surface
+				//keeps the button the player may have bound to a console's own.
+				if(authority && InPlayDoor && LibrarySheetIsUp
+					&& PlayPadNavigation.IsSheetEdge(PadNavControls.SheetCode(pad?.Family, pad?.Device ?? -1, PadSheetControl.Search, keyCode), pressed, _previous)) {
+					FocusLibrarySearch();
+				}
+
+				//#1034 (ADR-0264 Decision 3): LB/RB cycle the library's console
+				//filter. A shoulder is not one of the six the nav mapping resolves
+				//- Decision 3 gives the D-pad, A, B and Y their own meanings and
+				//the shoulders this one - so it is read off the pad in hand the
+				//same way those are, and it is applied only while the library's own
+				//surface is up: the folder browser inside the sheet has no console
+				//row to cycle, and every other Play surface has no row at all.
+				//
+				//The edge is taken from the same `_previous` the action above was,
+				//before it is recorded below, so a held shoulder cycles once.
+				if(authority && InPlayDoor && LibrarySheetIsUp) {
+					int shoulder = ShoulderStep(pressed, _previous, pad, keyCode);
+					if(shoulder != 0) {
+						_model.RomPicker.CycleConsole(shoulder);
+					}
+				}
+
+				//#964: a hold ends on Confirm's release, which is not an action the
+				//edge rule produces - so it is read off the pressed set here, every
+				//tick and authority or not, or compare would outlive the press.
+				if(PlayPadValueRules.EndsHold(_holding is not null, pressed, mapping)) {
+					SetHold(_holding!, false);
+					_holding = null;
+				}
+
 				//Recorded on EVERY tick, authority or not: a button held across
 				//the moment the overlay opens would otherwise look like a new
 				//press and step the menu the instant it appeared.
 				_previous = new HashSet<ushort>(pressed);
+
+				//ADR-0262 Decision 4: a field that went away under its keyboard
+				//(the sheet closed by something else) or the focus leaving it (a
+				//mouse click) closes the keyboard as a cancel; the pad losing
+				//authority closes it keeping the draft. Either way the pad never
+				//comes back editing a field it no longer holds, and the focus is
+				//left where it went.
+				if(_keyboardField is TextBox keyboardField && _keyboard is not null) {
+					PadKeyboardLeave? leave = !keyboardField.IsEffectivelyVisible ? PadKeyboardLeave.FieldGone
+						: !authority ? PadKeyboardLeave.AuthorityLost
+						: !ReferenceEquals(_window.FocusManager?.GetFocusedElement(), keyboardField) ? PadKeyboardLeave.FocusMoved
+						: null;
+					if(leave is PadKeyboardLeave why) {
+						keyboardField.Text = _keyboard.TextOnLeave(why);
+						CloseKeyboard(cancel: false, refocus: false);
+					}
+				}
 
 				if(action != PadNavAction.None) {
 					Apply(action);
@@ -433,6 +783,27 @@ namespace Mesen.Windows
 			//two must never answer differently.
 			private bool InPlayDoor => PlayPadNavigation.InPlayDoor(_model.IsPlayerMode, _model.IsPlayWorkspace);
 
+		//#1033 (ADR-0264 Decision 3): the sheet that owns the pad's Y. Asked of the
+		//view-model's own surface state - the same expressions the sheet renders
+		//from - so the button means search exactly while the library is what the
+		//player is looking at, and the folder browser inside it keeps the button
+		//the player may have bound to a console's own.
+		private bool LibrarySheetIsUp => _model.RomPicker.IsVisible && _model.RomPicker.Mode == RomPickerMode.Library;
+
+		//Y's whole effect: the ring goes to the search box, and the shared
+		//on-screen keyboard ADR-0262 owns opens with it - one press, and the player
+		//is typing, which is what "Y opens search" has to mean on a cabinet with no
+		//keyboard behind the pad. PlayFocusOnOpen.Enter is the one focus entry point
+		//(ADR-0256 Decision 3), so the ring is drawn; a keyboard already open is
+		//left alone rather than drawn twice, and Confirm over the box still opens
+		//it for a player who reached the field by walking the header.
+		private void FocusLibrarySearch()
+		{
+			if(Named(_window, "RomPickerSearch") is TextBox field && PlayFocusOnOpen.Enter(field) && _keyboard is null) {
+				OpenKeyboard(field);
+			}
+		}
+
 			//A slot grid the pad can leave: the classic grid the Save/Load screens
 			//and Advanced use, which draws a close box. The Play home's row of tiles
 			//is a StateGrid too (ShowClose false) and has nothing to leave, so Back
@@ -448,6 +819,12 @@ namespace Mesen.Windows
 			//the pad; Confirm activates what the focus is on; Back is Esc.
 			private void Apply(PadNavAction action)
 			{
+				if(ApplyKeyboard(action)) {
+					return;
+				}
+				if(ApplyValue(action)) {
+					return;
+				}
 				if(action == PadNavAction.Back) {
 					//The grid's Back closes the grid through the grid's own path,
 					//never the Esc router: for a grid opened from W-P4 the two agree
@@ -470,6 +847,13 @@ namespace Mesen.Windows
 					return;
 				}
 				if(_window.FocusManager?.GetFocusedElement() is not Control focused) {
+					return;
+				}
+				if(focused.DataContext is PlayerLibraryTile) {
+					_libraryTile = focused;
+				}
+				if(RomPickerHeaderStep(_window, _model, focused, _libraryTile, action) is Control header) {
+					PlayFocusOnOpen.Enter(header);
 					return;
 				}
 
@@ -508,6 +892,20 @@ namespace Mesen.Windows
 					return;
 				}
 
+				if(action == PadNavAction.Confirm && focused is TextBox field && field.IsEffectivelyEnabled && !field.IsReadOnly && OpenKeyboard(field)) {
+					return;
+				}
+				//#1036 (ADR-0264 Decision 8): *Add a folder…* has two doors and the
+				//press decides which one. The pointer's is the view's own handler (the
+				//native folder dialog, which is what a player at a desk expects); the
+				//pad's is the sheet's own folder browser, answered here BEFORE the
+				//activation because a native dialog owns the screen - the focus engine
+				//cannot draw a ring in it, so a cabinet with a pad and nothing else
+				//could not add a folder at all.
+				if(action == PadNavAction.Confirm && focused.Name == "RomPickerAddFolder") {
+					_model.RomPicker.AddFolderFromPad();
+					return;
+				}
 				if(action == PadNavAction.Confirm) {
 					Activate(focused);
 					return;
@@ -533,6 +931,180 @@ namespace Mesen.Windows
 						PlayFocusOnOpen.Enter(next);
 					}
 				}
+			}
+
+			//#964: the focused control's own value semantics first (a slider's
+			//step, a drop-down's open/walk/commit/cancel, Hold to Compare's hold),
+			//as PlayPadValueRules answers them; false hands the press on to focus
+			//movement and Activate, as before. An open drop-down is asked even when
+			//the focus sits on one of its rows, because Avalonia focuses the rows
+			//when the popup opens.
+			private bool ApplyValue(PadNavAction action)
+			{
+				if(_openPopup is not null && !_openPopup.IsDropDownOpen) {
+					//Closed by something else (a pointer, the sheet going away:
+					//#983, a ComboBox closes itself once hidden or detached).
+					_openPopup = null;
+				}
+				Control? target = _openPopup ?? _window.FocusManager?.GetFocusedElement() as Control;
+				if(target is null) {
+					return false;
+				}
+				PadValueAnswer answer = PlayPadValueRules.Next(KindOf(target), _openPopup is not null, action);
+				switch(answer.Verb) {
+					case PadValueVerb.None:
+						return false;
+					case PadValueVerb.Step when target is Slider slider:
+						slider.Value = PlayPadValueRules.Step(slider.Value, slider.SmallChange, slider.Minimum, slider.Maximum, answer.Delta);
+						break;
+					case PadValueVerb.Open when target is ComboBox combo:
+						_walk = combo.SelectedIndex;
+						_openPopup = combo;
+						combo.IsDropDownOpen = true;
+						break;
+					case PadValueVerb.Walk when target is ComboBox combo:
+						//The row is only highlighted (focused, so the ring shows it);
+						//the value is written by the commit alone, so Back can leave it.
+						//#983: a virtualized list realizes only the rows in view, so
+						//the next row is scrolled in first and the walk lands on it
+						//only if it is then shown.
+						int next = PlayPadValueRules.Walk(_walk, combo.ItemCount, answer.Delta);
+						if(next >= 0) {
+							combo.ScrollIntoView(next);
+						}
+						Control? row = next >= 0 ? combo.ContainerFromIndex(next) as Control : null;
+						_walk = PlayPadValueRules.Land(_walk, next, row is not null && row.IsEffectivelyVisible);
+						if(_walk == next) {
+							row?.Focus(NavigationMethod.Directional);
+						}
+						break;
+					case PadValueVerb.Commit when target is ComboBox combo:
+						if(_walk >= 0) {
+							combo.SelectedIndex = _walk;
+						}
+						ClosePopup(combo);
+						break;
+					case PadValueVerb.Cancel when target is ComboBox combo:
+						ClosePopup(combo);
+						break;
+					case PadValueVerb.HoldStart when target is Button button:
+						_holding = button;
+						SetHold(button, true);
+						break;
+				}
+				return true;
+			}
+
+			//What the focused control is to the value rule. Hold to Compare is the
+			//one hold button in Play, and it is named here because nothing else
+			//marks a hold: its view listens only to the pointer and Space.
+			private static PadValueKind KindOf(Control focused)
+			{
+				return focused switch {
+					Slider => PadValueKind.Slider,
+					ComboBox => PadValueKind.Popup,
+					Button { Name: "btnLookHoldToCompare", DataContext: LookConfigViewModel } => PadValueKind.Hold,
+					_ => PadValueKind.None
+				};
+			}
+
+			private void ClosePopup(ComboBox combo)
+			{
+				//The focus comes back BEFORE the popup closes: Avalonia's ComboBox
+				//refocuses itself on close without a navigation method, and a focus
+				//it already holds is not re-entered - so the ring would be lost.
+				//Directly, not PlayFocusOnOpen.Enter: the focus is on a row of the
+				//popup, which Enter's other-top-level guard would refuse.
+				_openPopup = null;
+				_walk = -1;
+				combo.Focus(NavigationMethod.Directional);
+				combo.IsDropDownOpen = false;
+			}
+
+			//ADR-0262: while the keyboard is open every press is the keyboard's -
+			//the D-pad walks its keys, A presses one, B cancels - so the focus
+			//cannot walk off the field it is filling and Back cannot close the
+			//sheet under it. What a press means is PadKeyboard's; this writes the
+			//draft into the field as it changes, so a search filters while typed.
+			private bool ApplyKeyboard(PadNavAction action)
+			{
+				if(_keyboard is null || _keyboardField is null) {
+					return false;
+				}
+				switch(_keyboard.Press(action)) {
+					case PadKeyboardOutcome.Edited:
+						_keyboardField.Text = _keyboard.Draft;
+						_keyboardField.CaretIndex = _keyboard.Draft.Length;
+						PaintKeyboard();
+						break;
+					case PadKeyboardOutcome.Moved:
+						PaintKeyboard();
+						break;
+					case PadKeyboardOutcome.Committed:
+						CloseKeyboard(cancel: false);
+						break;
+					case PadKeyboardOutcome.Cancelled:
+						CloseKeyboard(cancel: true);
+						break;
+				}
+				return true;
+			}
+
+			//The field declares its own shape (ADR-0262 Decision 2): its mask, or
+			//the padCode style class a code-shaped box carries in its view.
+			//#994 review 3: no overlay layer means nowhere to draw the keyboard,
+			//and an invisible keyboard would swallow every press, Back included -
+			//so it does not open, and the press falls through as before.
+			private bool OpenKeyboard(TextBox field)
+			{
+				if(_overlayOf(field) is not OverlayLayer layer) {
+					return false;
+				}
+				PadKeyboardShape shape = PadKeyboard.ShapeOf(field.PasswordChar != default(char), field.Classes.Contains(PadCodeClass));
+				_keyboard = new PadKeyboard(shape, field.Text ?? "", field.MaxLength);
+				_keyboardField = field;
+				_keyboardPanel = PadKeyboardPanel.Build(_keyboard);
+				layer.Children.Add(_keyboardPanel);
+				PaintKeyboard();
+				PadKeyboardPanel.Place(field, layer, _keyboardPanel);
+				return true;
+			}
+
+			//Cancel gives the field back its original value. Closed by the pad
+			//(OK, B), the focus comes back to the field, ring drawn; closed because
+			//the focus or the pad went elsewhere, the focus is left where it is.
+			private void CloseKeyboard(bool cancel, bool refocus = true)
+			{
+				TextBox? field = _keyboardField;
+				if(cancel && field is not null && _keyboard is not null) {
+					field.Text = _keyboard.Original;
+				}
+				if(_keyboardPanel?.Parent is OverlayLayer layer) {
+					layer.Children.Remove(_keyboardPanel);
+				}
+				_keyboard = null;
+				_keyboardField = null;
+				_keyboardPanel = null;
+				if(refocus && field is not null && field.IsEffectivelyVisible) {
+					field.Focus(NavigationMethod.Directional);
+				}
+			}
+
+			private const string PadCodeClass = "padCode";
+
+			private void PaintKeyboard()
+			{
+				if(_keyboard is not null && _keyboardPanel is not null) {
+					PadKeyboardPanel.Paint(_keyboardPanel, _keyboard);
+				}
+			}
+
+			//The view model's own SetCompare, the call the view's pointer and Space
+			//handlers make - not a synthetic Space, which MainWindow's tunnel key
+			//handler would hand to the console as a key press.
+			private static void SetHold(Button button, bool on)
+			{
+				(button.DataContext as LookConfigViewModel)?.SetCompare(on);
 			}
 
 			//The grid itself, or a control inside one (nothing puts one there today,
@@ -565,6 +1137,47 @@ namespace Mesen.Windows
 				return action == PadNavAction.Up && GridOf(focused) is StateGrid grid && !grid.MovesWithUpFromPad;
 			}
 
+			//#1034 (ADR-0264 Decision 3): which shoulder went down this tick - LB
+			//as -1, RB as +1, neither as 0. Resolved off the pad in the player's
+			//hand and the host's own name table, exactly the way PadNavControls
+			//resolves the six: the family's own spelling first ("Pad1 L1", the
+			//XInput-shaped table) and the other family's second ("Joy1 But5", the
+			//DirectInput one), because which spelling a host defines is the
+			//backend's business and a name it does not define answers 0.
+			//KeyPresets binds the console's own L/R to the same four names, so a
+			//code that is not a shoulder on this pad cannot be read as one - and
+			//the mapping itself is not extended: Decision 4's six stay the six,
+			//and a shoulder is one press on one sheet rather than a seventh
+			//navigation control every surface would have to answer for.
+			//
+			//LB is asked first, so two shoulders in one tick resolve the same way
+			//whatever order the host enumerated its pressed set in - the reason
+			//PlayPadNavigation.Next breaks its own two presses in a fixed order.
+			private static readonly (int Step, string Xbox, string Ps4)[] Shoulders = {
+				(-1, "L1", "But5"),
+				(1, "R1", "But6")
+			};
+
+			private static int ShoulderStep(IReadOnlyCollection<ushort> pressed, IReadOnlyCollection<ushort> previous, PadId? pad, Func<string, ushort> keyCode)
+			{
+				if(pad is not PadId known) {
+					return 0;
+				}
+				string padPrefix = "Pad" + (known.Device + 1).ToString() + " ";
+				string joyPrefix = "Joy" + (known.Device + 1).ToString() + " ";
+				foreach((int step, string xbox, string ps4) in Shoulders) {
+					string own = known.Family == PadFamily.Xbox ? padPrefix + xbox : joyPrefix + ps4;
+					string other = known.Family == PadFamily.Xbox ? joyPrefix + ps4 : padPrefix + xbox;
+					foreach(string name in new[] { own, other }) {
+						ushort code = keyCode(name);
+						if(code != 0 && pressed.Contains(code) && !previous.Contains(code)) {
+							return step;
+						}
+					}
+				}
+				return 0;
+			}
+
 			private static NavigationDirection Direction(PadNavAction action)
 			{
 				return action switch {
@@ -582,10 +1195,10 @@ namespace Mesen.Windows
 			//listen to, and the state is what a surface binds to, so a surface
 			//that uses either one works.
 			//
-			//A TextBox falls through to the raise, which its surface may ignore:
-			//a pad cannot type, and the Play sheets that lead with a search box
-			//are the ones an arcade cabinet has no keyboard for. That is a real
-			//limit, not a TODO silently swallowed here.
+			//A TextBox reaches here only when the on-screen keyboard could not
+			//open (no overlay layer, #994 review 3): Apply opens it instead
+			//(ADR-0262), because a pad cannot type and an arcade cabinet has no
+			//keyboard.
 			private static void Activate(Control focused)
 			{
 				switch(focused) {

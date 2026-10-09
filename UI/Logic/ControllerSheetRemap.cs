@@ -83,6 +83,26 @@ public static class ControllerSheetRemap
 		return null;
 	}
 
+	//The code a row reads as bound, which both lights and the row's name read
+	//(#965): the field of the slot the selected pad holds (`padSlot`, the same
+	//answer TargetSlot joins), so on a port with a keyboard in slot 0 and the pad
+	//in slot 1 a pad press lights the port side too - the first non-zero field
+	//was the keyboard's key, never held by the pad, and the light and the write
+	//disagreed on which slot is the pad's. The first non-zero field across the
+	//slots is the answer only for a pad the port holds in no slot.
+	public static ushort BoundCode(IReadOnlyList<ushort> controlPerSlot, int? padSlot)
+	{
+		if(padSlot is int own && own >= 0 && own < controlPerSlot.Count) {
+			return controlPerSlot[own];
+		}
+		foreach(ushort code in controlPerSlot) {
+			if(code != 0) {
+				return code;
+			}
+		}
+		return 0;
+	}
+
 	//The other half of a rebind (#941): the pad button just bound to `control`
 	//comes off every other control of the same port that had it, in any of the
 	//port's four slots - they are alternatives for one player, so the same button

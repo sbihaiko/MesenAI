@@ -50,6 +50,19 @@ namespace Mesen.ViewModels
 			set { if(value) { Keyboard = FirstRunKeyboard.Wasd; } }
 		}
 
+		//#1039 (ADR-0265 section 8): the box-art master switch, the third question
+		//this sheet asks. It is not a preference like the other two - it is the
+		//player's answer to the app talking to a server at all (the library's
+		//covers come from libretro-thumbnails through raw.githubusercontent.com),
+		//so it is one global choice, on by default, and off means no request is
+		//ever made - not a smaller one, none.
+		//
+		//It is written here rather than bound straight to the config object for the
+		//same reason the other two are: an explicit press is what saves, and the
+		//virtual writer is the seam the headless cases drive instead of the real
+		//settings file.
+		[ObservableProperty] public partial bool DownloadBoxArt { get; set; }
+
 		//The relaunch is owed: the settings file is written in the chosen folder
 		//and the one being left cannot win the next launch, but the core reads
 		//its folders once, so nothing moves until the process starts again.
@@ -78,7 +91,25 @@ namespace Mesen.ViewModels
 				mappings.HasFlag(DefaultKeyMappingType.ArrowKeys)
 			);
 			StoreInUserProfile = PlayFirstRun.InUserFolder(homeFolder(), portableFolder());
+			DownloadBoxArt = ConfigManager.Config.Preferences.DownloadBoxArt;
 			_loading = false;
+		}
+
+		partial void OnDownloadBoxArtChanged(bool value)
+		{
+			if(!_loading) {
+				WriteDownloadBoxArt(value);
+			}
+		}
+
+		//The switch is the app's own preference and nothing else reads it: the
+		//library asks the cache, and the cache is built with what this row writes
+		//(MainWindowViewModel.BoxArt). Virtual for the same reason as the two
+		//writers above - a headless case must not save into the real settings file.
+		protected virtual void WriteDownloadBoxArt(bool value)
+		{
+			ConfigManager.Config.Preferences.DownloadBoxArt = value;
+			ConfigManager.Config.Save();
 		}
 
 		partial void OnStoreInUserProfileChanged(bool value)

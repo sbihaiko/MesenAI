@@ -71,12 +71,10 @@ namespace Mesen.ViewModels
 		public Func<ConsoleType> CurrentConsole { get; set; } = () => EmuApi.GetRomInfo().ConsoleType;
 		public Func<ushort, string> KeyName { get; set; } = InputApi.GetKeyName;
 
-		private static readonly IBrush[] _playerBrushes = {
-			new SolidColorBrush(Color.FromRgb(0x00, 0x7A, 0xFF)), //play blue
-			new SolidColorBrush(Color.FromRgb(0xFF, 0x3B, 0x30)), //red
-			new SolidColorBrush(Color.FromRgb(0xFF, 0x9F, 0x0A)), //orange
-			new SolidColorBrush(Color.FromRgb(0x34, 0xC7, 0x59))  //share green
-		};
+		//The palette lives in PadLights (UI/Logic) so the pad's own light (#925)
+		//and the port label paint the same colour.
+		private static readonly IBrush[] _playerBrushes = PadLights.PlayerColors
+			.Select(c => (IBrush)new SolidColorBrush(Color.FromRgb(c.R, c.G, c.B))).ToArray();
 
 		internal static IBrush PlayerBrush(int colorIndex) => _playerBrushes[Math.Clamp(colorIndex, 0, _playerBrushes.Length - 1)];
 
@@ -101,9 +99,12 @@ namespace Mesen.ViewModels
 		//The ports of the loaded console, read from ConfigManager as the sheet's
 		//own plain data. Nothing about "who is P1" is stored: the row's device is
 		//the device of the keys the port already holds.
-		private IReadOnlyList<SheetPort> BuildPorts()
+		private IReadOnlyList<SheetPort> BuildPorts() => ReadPorts(CurrentConsole());
+
+		//The same reading for a caller with no sheet open - the window's pad-light
+		//poll (#925) - so the light and the PLAYERS rows read one port table.
+		internal static IReadOnlyList<SheetPort> ReadPorts(ConsoleType console)
 		{
-			ConsoleType console = CurrentConsole();
 			List<SheetPort> ports = new();
 			foreach((string key, int player) in ControllerSheetPorts.For(console)) {
 				if(PortConfig(console, key) is not ControllerConfig config) {

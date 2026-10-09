@@ -21,7 +21,7 @@ recorded format and does not contradict an ADR.
   on line 0, and every later sprite fetch happens with rendering off, so the
   frame drew no sprite at all.
 - The frame-end decode then read the game's 8x16 OAM with PPUCTRL in 8x8 mode.
-  The result was 23 single 8x8 halves, against 46 and 42 in the neighbouring
+  The result was 23 single 8x8 halves, against 46 and 42 in the neighboring
   frames. 7 of their (tile, palette) keys carry no `<tile>` line.
 
 ## Fix

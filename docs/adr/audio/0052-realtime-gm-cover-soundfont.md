@@ -18,7 +18,7 @@ Make live re-synthesis the **default audio layer** (level 2) and grow it into an
 5. **Timbres**: TinySoundFont (header-only, MIT) renders General MIDI programs from a SoundFont; role + expression → GM program table.
 6. Human override stays optional in the pack's `synth/preset.cfg` (ESP): role and program per channel for a given game.
 
-SoundFont sourcing: ship a small GM SoundFont (a few MB, permissive licence) so the level works offline out of the box; if `EnhancedAudio.SoundFontPath` points to a bigger `.sf2` (e.g. MuseScore General, already used by `mep_render_audio.py`) use it; if neither loads, fall back to the current DSP voices. A SoundFont is data, not a heavy tool — within the PRD's no-heavy-pipelines rule.
+SoundFont sourcing: ship a small GM SoundFont (a few MB, permissive license) so the level works offline out of the box; if `EnhancedAudio.SoundFontPath` points to a bigger `.sf2` (e.g. MuseScore General, already used by `mep_render_audio.py`) use it; if neither loads, fall back to the current DSP voices. A SoundFont is data, not a heavy tool — within the PRD's no-heavy-pipelines rule.
 
 Track identification (3a) and human OGGs (3b) sit **on top**: 3a never changes the sound by itself, 3b overrides level 2 only for the tracks that exist.
 
@@ -28,11 +28,11 @@ Track identification (3a) and human OGGs (3b) sit **on top**: 3a never changes t
 - TinySoundFont lives in `Utilities/Audio/tsf.h`; the engine renders the three music voices and percussion through it when a `.sf2` is loaded (`EnhancedAudio.SoundFontPath`, else `<home>/EnhancedAudio.sf2`), otherwise the DSP voices play. GM programs are preset fields (`GmLeadProgram`…`GmDrums`), so ESP/user files already override them.
 - Settings: `EnhancedAudioAutoRoles`, `EnhancedAudioSfxSeparation`, `EnhancedAudioSoundFontPath` (Audio options, applied on the next reset).
 - Validation: `scripts/roles_probe` (make roles-probe). SMB1 18/18 jumps as SFX, Castlevania whip 3/3, Zelda title 1 false positive of 0.08 s in 30 s, Mega Man role swap at title -> stage select; WAV renders without clipping.
-- No SoundFont bundled yet: GeneralUser GS (31 MB, permissive licence, sample provenance caveat) vs MuseScore General (206 MB, MIT) is the open decision; the user's machine has GeneralUser GS as `<home>/EnhancedAudio.sf2`.
+- No SoundFont bundled yet: GeneralUser GS (31 MB, permissive license, sample provenance caveat) vs MuseScore General (206 MB, MIT) is the open decision; the user's machine has GeneralUser GS as `<home>/EnhancedAudio.sf2`.
 
 ## Consequences
 - `+` Every ROM sounds "remastered" on first load with intact SFX; ROM hacks too.
 - `+` The SFX classifier fixes the F5.3 defect where whole channels are muted during OGG playback.
 - `−` Heuristics can misjudge a role for a second — mitigated by hysteresis and crossfades; a wrong SFX call plays a short note with the wrong patch.
-- `−` One more audio dependency (TinySoundFont) and a bundled SoundFont in the repo/installer (size and licence to confirm before accepting).
+- `−` One more audio dependency (TinySoundFont) and a bundled SoundFont in the repo/installer (size and license to confirm before accepting).
 - Validation: headless harness comparing the MIDI captured before/after the new mapping on Zelda, Mega Man and SMB3, plus listening in the GUI.

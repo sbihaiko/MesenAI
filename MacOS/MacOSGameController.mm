@@ -258,6 +258,18 @@ bool MacOSGameController::HasRumble()
 	return _haptics != nil;
 }
 
+bool MacOSGameController::SetLight(uint8_t r, uint8_t g, uint8_t b)
+{
+	GCDeviceLight* light = [_controller light];
+	if(light == nil) {
+		return false;
+	}
+	GCColor* color = [[GCColor alloc] initWithRed:IKeyManager::LightChannel(r) green:IKeyManager::LightChannel(g) blue:IKeyManager::LightChannel(b)];
+	[light setColor:color];
+	[color release];
+	return true;
+}
+
 void MacOSGameController::SetForceFeedback(uint16_t magnitudeRight, uint16_t magnitudeLeft)
 {
 	NSError* error = nil;

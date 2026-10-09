@@ -56,7 +56,7 @@ and bug entry 1.
 
 ## TDD: red → green
 
-The tests were written first against skeletons that kept today's behaviour:
+The tests were written first against skeletons that kept today's behavior:
 
 - the header trusted the trace;
 - `Resolve` ignored the status;

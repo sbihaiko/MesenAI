@@ -27,7 +27,7 @@ item 9) planned to replace `SetReplacementMute(bool)` with a per-channel
 `SetReplacementMuteMask` driven by the classifier and claimed no new ADR was
 needed. ADR-0094 and ADR-0097 dispute that: changing a core audio API in the
 mixer hot path deserves a recorded contract (mask semantics, fate of the boolean
-setter, ownership of the split, behaviour when classification is unavailable).
+setter, ownership of the split, behavior when classification is unavailable).
 The run never executed — `git log -S SetReplacementMuteMask` hits only the ADR
 commit — so the decision is still open.
 
@@ -40,7 +40,7 @@ Proposed contract for Block C item 9:
    DMC); a set bit means "silence this channel while a replacement plays".
    `GetChannelOutput` tests `mask & (1 << (int)channel)` instead of the
    `<= Noise` range check. Expansion channels (FDS, MMC5, VRC6, VRC7, Namco163,
-   Sunsoft5B) are never masked, matching today's behaviour.
+   Sunsoft5B) are never masked, matching today's behavior.
 2. **Boolean setter kept as a thin shim, then removed.** `SetReplacementMute(true)`
    becomes `SetReplacementMuteMask(0x0F)` (the four channels muted today) and
    `SetReplacementMute(false)` becomes `SetReplacementMuteMask(0)`, so
@@ -48,13 +48,13 @@ Proposed contract for Block C item 9:
    Callers migrate in the same block; the bool is deleted before Block C closes —
    no deprecated API survives into a release.
 3. **Ownership.** The mixer owns nothing but the mask and makes no music/SFX
-   judgement. `NesAudioReplacer` owns the policy: each frame it computes the
+   judgment. `NesAudioReplacer` owns the policy: each frame it computes the
    mask from the `ChannelRoleClassifier` output (SFX-flagged channels get their
    bit cleared so they pass through dry; music channels stay muted while the OGG
    plays) and pushes it to the mixer only when it changes.
 4. **Degraded modes.** When classification is unavailable (`EnhancedAudioSfxSeparation`
    off, classifier not warmed up, or role mid-hysteresis) the mask falls back to
-   the full `0x0F`, i.e. exactly today's behaviour — never to "unmute all",
+   the full `0x0F`, i.e. exactly today's behavior — never to "unmute all",
    which would double the music. A channel is unmasked only on a stable SFX
    flag; hysteresis is the classifier's (ADR-0052 item 1), not the mixer's.
 5. **Reset.** Any stop path (`StopReplacementBgm`, pack audio disabled, ROM
@@ -90,7 +90,7 @@ Proposed contract for Block C item 9:
 
 ## Alternatives
 
-- **Keep the boolean, do the split elsewhere** (e.g. re-synthesise SFX from the
+- **Keep the boolean, do the split elsewhere** (e.g. re-synthesize SFX from the
   Enhanced Audio engine while the APU stays fully muted) — rejected: the raw
   APU SFX are the correct sound; ADR-0052 item 2 routes SFX "dry (or raw APU)".
 - **Mixer consults the classifier directly** — rejected: couples

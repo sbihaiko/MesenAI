@@ -1,11 +1,11 @@
 using System;
-using System.Diagnostics;
 using System.IO;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
 using Mesen.Localization;
 using Mesen.Logic;
+using Mesen.Utilities;
 using Mesen.ViewModels;
 
 namespace Mesen.Views
@@ -19,6 +19,9 @@ namespace Mesen.Views
 		public event EventHandler? RestoreRequested;
 		//#736: Use Community Pack - the window turns on, chooses or installs it.
 		public event EventHandler? UseCommunityPackRequested;
+		//#953: the Show Pack in Finder hand-off. A seam so a test can see the
+		//folder handed over without launching anything; the default is the real call.
+		public Action<string> FolderLauncher { get; set; } = ApplicationHelper.OpenFolder;
 
 		public PlayerPackDetailSheetView()
 		{
@@ -44,11 +47,7 @@ namespace Mesen.Views
 			if(folder.Length == 0 || !Directory.Exists(folder)) {
 				return;
 			}
-			Process.Start(new ProcessStartInfo() {
-				FileName = folder + Path.DirectorySeparatorChar,
-				UseShellExecute = true,
-				Verb = "open"
-			});
+			FolderLauncher(folder);
 		}
 
 		//First press asks in place; the confirm button's press runs it.
@@ -61,5 +60,6 @@ namespace Mesen.Views
 
 		private void OnKeep(object? sender, RoutedEventArgs e) => Model?.CancelRestore();
 		private void OnDone(object? sender, RoutedEventArgs e) => Model?.ClosePackDetail();
+		private void OnAddFile(object? sender, RoutedEventArgs e) => Model?.AddPendingFileFromDetail();
 	}
 }

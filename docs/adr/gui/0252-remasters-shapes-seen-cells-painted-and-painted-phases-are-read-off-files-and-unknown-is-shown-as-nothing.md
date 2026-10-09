@@ -11,8 +11,9 @@
   line, the screens cap), with the wiring in
   `UI.HeadlessTests/RemasterThemeRenderTests.cs`,
   `RemasterTileBrowserTests.cs`, `RemasterRecentProjectsRenderTests.cs` and
-  `RemasterWorkspaceTests.cs`. One surface is not wired: the shell status
-  line (Consequences).
+  `RemasterWorkspaceTests.cs`. The shell status line is wired too
+  (Consequences): `WorkspaceShellViewModel.FollowPaintedCells` follows the
+  count and `ShellStatusLine.ComposeRemaster` composes the line.
 - Date: 2026-10-03
 - Related: PRD Part B §13.5.3 (W-R0b, W-R1, W-R2, W-R5), ADR-0241 (the
   Remaster workspace), ADR-0243 (the project and its `auto/rec-NNN`),

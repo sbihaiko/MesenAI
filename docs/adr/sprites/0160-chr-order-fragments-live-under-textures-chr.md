@@ -29,7 +29,7 @@ textures/
 
 ### 2. Nothing in the loader changes, because `<img>` was always a path
 
-`HdPackLoader::LoadFile` resolves an `<img>`/`<background>`/`<patch>` target against the pack root, for a folder pack (`FolderUtilities::CombinePath`) and a zip pack (`ZipReader`) alike, and normalises backslashes before any tag is parsed. `backgrounds/screenNNN.png` has loaded through that path since ADR-0050. A subfolder in `<img>` is not new capability and needs no version bump: the manifest is self-describing. That makes the shape a **per-pack** property with no fallback rule.
+`HdPackLoader::LoadFile` resolves an `<img>`/`<background>`/`<patch>` target against the pack root, for a folder pack (`FolderUtilities::CombinePath`) and a zip pack (`ZipReader`) alike, and normalizes backslashes before any tag is parsed. `backgrounds/screenNNN.png` has loaded through that path since ADR-0050. A subfolder in `<img>` is not new capability and needs no version bump: the manifest is self-describing. That makes the shape a **per-pack** property with no fallback rule.
 
 ### 3. Existing packs are not migrated; a pack being *re-recorded* is
 

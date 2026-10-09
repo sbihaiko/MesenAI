@@ -24,9 +24,10 @@ namespace Mesen.HeadlessTests;
 [Collection(NativeCoreCollection.Name)]
 public class PadPortLampsRenderTests : IDisposable
 {
-	//The PNG the coordinator asked to look at: a scratchpad outside the repo, so
-	//the file is evidence to read, not a build artifact to commit.
-	private const string EvidencePath = "/private/tmp/claude-503/-Users-bihaiko-VSCodeProjects-MesenCE/b37bbfac-925a-47f5-a113-0146191cb6b2/scratchpad/lamps.png";
+	//The PNG to look at: under the host's temp folder (Path.GetTempPath, so the
+	//same case runs on the Linux render-gate runner), so the file is evidence to
+	//read, not a build artifact to commit.
+	private static readonly string EvidencePath = Path.Combine(Path.GetTempPath(), "mesence-pad-port-lamps", "lamps.png");
 
 	//PlayerTintShareBrush (the status dot's own live tint) and PlayerText3Brush
 	//(its dim one): the strip reuses the status line's palette, it does not
@@ -159,5 +160,33 @@ public class PadPortLampsRenderTests : IDisposable
 
 		Assert.True(window.FindNamed<StackPanel>("ShellPadStrip").IsOnScreen());
 		Assert.Equal(2, Lamps(window).Count(l => PlayerRender.SolidColor(l.Background) == Lit));
+	}
+
+	//#925: the same poll that lights the strip sends each pad's light in its
+	//port's colour. The rule (which port, which colour, when to re-send) is
+	//host-free (UI.Tests/Shell/PadLightsTests); this pins the wiring - the poll
+	//reads the ports and the pads and hands the plan to the core's light call,
+	//once, not on every tick.
+	[AvaloniaFact]
+	public void The_poll_sends_each_pad_its_port_colour_once()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model) = Show();
+
+		ushort[] none = Array.Empty<ushort>();
+		SheetPort p1 = new("Port1", "P1", 0, new[] { none, none, none, none }, new[] { none, none, none, none });
+		SheetPort p2 = new("Port2", "P2", 1, new[] { new ushort[] { 0x1001 }, none, none, none }, new[] { none, none, none, none });
+		System.Collections.Generic.List<PadLight> sent = new();
+		model.ConnectedGamepadCount = () => 1;
+		model.GamepadBlock = index => 0x1000 + (int)index * 0x100;
+		model.PadLightPorts = () => new[] { p1, p2 };
+		model.SendPadLight = sent.Add;
+
+		model.RefreshPadLamps();
+		model.RefreshPadLamps();
+		Dispatcher.UIThread.RunJobs();
+
+		Assert.Equal(new[] { new PadLight(0, 0x1000, new PlayerColor(0xFF, 0x3B, 0x30)) }, sent);
+		Assert.Equal(1, Lamps(window).Count(l => PlayerRender.SolidColor(l.Background) == Lit));
 	}
 }

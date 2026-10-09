@@ -34,6 +34,11 @@ public class PlayRomPickerTests : IDisposable
 	private readonly UiMode _uiMode = ConfigManager.Config.Preferences.UiMode;
 	private readonly Workspace _workspace = ConfigManager.Config.Preferences.Workspace;
 	private readonly bool _confirm = ConfigManager.Config.Preferences.ConfirmExitResetPower;
+	//#1036: these cases drive the picker through GameFolder, so a LibraryFolders
+	//list left in the real config by anyone who used the feature would win over it
+	//and the library cases would fail on that machine only. Held here and put back
+	//in Dispose, exactly as PlayerLibraryFoldersTests does.
+	private readonly List<string>? _libraryFolders = ConfigManager.Config.Preferences.LibraryFolders;
 
 	private readonly List<MainWindow> _windows = new();
 
@@ -83,6 +88,9 @@ public class PlayRomPickerTests : IDisposable
 			WaitUntilStopped();
 		}
 		Directory.CreateDirectory(_folder);
+		//First run for every case: the library these cases build comes from their
+		//own GameFolder, never from a list a previous run left in the config.
+		ConfigManager.Config.Preferences.LibraryFolders = null;
 	}
 
 	private static void WaitUntilStopped()
@@ -108,6 +116,7 @@ public class PlayRomPickerTests : IDisposable
 		prefs.UiMode = _uiMode;
 		prefs.Workspace = _workspace;
 		prefs.ConfirmExitResetPower = _confirm;
+		prefs.LibraryFolders = _libraryFolders;
 		ConfigManager.Config.Save();
 
 		try {
@@ -241,6 +250,7 @@ public class PlayRomPickerTests : IDisposable
 				"the first-run home did not put the focus on its one action");
 
 			Press(window, PadNavAction.Confirm);
+			EnterBrowser(model);
 			WaitFor(() => FocusedRow(window) == "Your games",
 				$"the picker did not open on its roots ({Focused(window)})");
 
@@ -279,6 +289,7 @@ public class PlayRomPickerTests : IDisposable
 				"the first-run home did not put the focus on its one action");
 
 			Press(window, PadNavAction.Confirm);
+			EnterBrowser(model);
 			WaitFor(() => FocusedRow(window) == "Your games", "the picker did not open on its roots");
 			Press(window, PadNavAction.Confirm);
 			WaitFor(() => FocusedRow(window) == "nes", "Confirm did not descend into the configured folder");
@@ -288,8 +299,19 @@ public class PlayRomPickerTests : IDisposable
 				$"Back did not ascend out of the folder ({Focused(window)})");
 			Assert.True(model.RomPicker.IsVisible, "Back closed the picker a level early");
 
+			//#1032 (ADR-0264 Decision 11): the browser is INSIDE the sheet now, so
+			//walking out of its roots lands back on the library rather than
+			//closing the sheet - the escape hatch leads back, not away. The case
+			//was migrated rather than deleted: what it proves - that B is a step
+			//and not a dismiss, and that nothing is loaded on the way out - is
+			//unchanged, and the dismiss is one press further.
 			Press(window, PadNavAction.Back);
-			WaitFor(() => !model.RomPicker.IsVisible, "Back on the roots did not dismiss the picker");
+			WaitFor(() => model.RomPicker.Mode == RomPickerMode.Library,
+				"Back on the browser's roots did not return to the library");
+			Assert.True(model.RomPicker.IsVisible, "Back out of the browser closed the whole sheet");
+
+			Press(window, PadNavAction.Back);
+			WaitFor(() => !model.RomPicker.IsVisible, "Back on the library did not dismiss the sheet");
 			Assert.False(EmuApi.IsRunning());
 			Assert.False(model.IsPlayerOverlayVisible);
 		} finally {
@@ -313,8 +335,7 @@ public class PlayRomPickerTests : IDisposable
 	{
 		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
 		(MainWindow window, MainWindowViewModel model) = ShowFirstRunHome();
-		model.OpenRomPicker();
-		Pump();
+		EnterBrowser(model);
 		Assert.True(model.RomPicker.IsVisible, "the picker did not open, so this case would prove nothing");
 
 		//The heading is a bound TextBlock, so this is what the player reads.
@@ -348,11 +369,12 @@ public class PlayRomPickerTests : IDisposable
 		ConfigManager.Config.Preferences.GameFolder = root;
 		ConfigManager.Config.Preferences.OverrideGameFolder = true;
 		try {
-			(MainWindow window, _) = ShowFirstRunHome();
+			(MainWindow window, MainWindowViewModel model) = ShowFirstRunHome();
 			WaitFor(() => FocusedName(window) == "PlayHomeOpenRomPrimary",
 				"the first-run home did not put the focus on its one action");
 
 			Press(window, PadNavAction.Confirm);
+			EnterBrowser(model);
 			WaitFor(() => FocusedRow(window) == "Your games",
 				$"the picker did not open on its roots ({Focused(window)})");
 
@@ -381,6 +403,21 @@ public class PlayRomPickerTests : IDisposable
 			ConfigManager.Config.Preferences.GameFolder = "";
 			ConfigManager.Config.Preferences.OverrideGameFolder = false;
 		}
+	}
+
+	//#1032 (ADR-0264 Decision 11): the sheet opens on the LIBRARY now, and every
+	//case in this file is about the folder browser that survives inside it behind
+	//*Browse a file…*. One step in, so each case still tests the browser rather
+	//than the grid; the grid has its own cases (PlayerLibraryTests).
+	private static void EnterBrowser(MainWindowViewModel model)
+	{
+		if(!model.RomPicker.IsVisible) {
+			model.OpenRomPicker();
+		}
+		model.RomPicker.BrowseFile();
+		Pump();
+		Assert.True(model.RomPicker.PathText.Length == 0,
+			$"Browse a file... did not land on the browser's roots (path='{model.RomPicker.PathText}' rows=[{string.Join("; ", model.RomPicker.Rows.Select(r => r.Kind + "/" + r.Label))}])");
 	}
 
 	//The label of the row the pad's ring is on. The rows are the picker's own
@@ -423,6 +460,7 @@ public class PlayRomPickerTests : IDisposable
 				"the first-run home did not put the focus on its one action");
 
 			Press(window, PadNavAction.Confirm);
+			EnterBrowser(model);
 			WaitFor(() => FocusedRow(window) == "Your games", $"the picker did not open on its roots ({Focused(window)})");
 			Press(window, PadNavAction.Confirm);
 			WaitFor(() => FocusedRow(window) == "nes", $"Confirm did not descend into the configured folder ({Focused(window)})");
@@ -473,6 +511,7 @@ public class PlayRomPickerTests : IDisposable
 				"the first-run home did not put the focus on its one action");
 
 			Press(window, PadNavAction.Confirm);
+			EnterBrowser(model);
 			WaitFor(() => FocusedRow(window) == "Your games", $"the picker did not open on its roots ({Focused(window)})");
 			Press(window, PadNavAction.Confirm);
 			WaitFor(() => FocusedRow(window) == "empty", $"Confirm did not descend into the configured folder ({Focused(window)})");
@@ -510,13 +549,14 @@ public class PlayRomPickerTests : IDisposable
 			"the first-run home did not put the focus on its one action");
 
 		Press(window, PadNavAction.Confirm);
+		EnterBrowser(model);
 		WaitFor(() => FocusedRow(window) == "MesenAI's games folder",
 			$"the picker did not open on its roots ({Focused(window)})");
 		WaitFor(() => model.RomPicker.Suggestions.Count == 1,
 			"the scan's suggestion never landed on the roots");
 
 		//It is a row below the known roots, a place the pad can walk into.
-		PlayerRomPickerRow suggestion = Assert.Single(model.RomPicker.Rows.Where(r => r.Path == lib));
+		PlayerRomPickerRow suggestion = Assert.Single(model.RomPicker.Rows, r => r.Path == lib);
 		Assert.Equal(RomPickerRowKind.Folder, suggestion.Kind);
 		int index = model.RomPicker.Rows.IndexOf(suggestion);
 		for(int i = 0; i < index; i++) {
@@ -544,6 +584,7 @@ public class PlayRomPickerTests : IDisposable
 			"the first-run home did not put the focus on its one action");
 
 		Press(window, PadNavAction.Confirm);
+		EnterBrowser(model);
 		WaitFor(() => FocusedRow(window) == "MesenAI's games folder",
 			$"the picker did not open on its roots ({Focused(window)})");
 
@@ -571,10 +612,11 @@ public class PlayRomPickerTests : IDisposable
 			"the first-run home did not put the focus on its one action");
 
 		Press(window, PadNavAction.Confirm);
+		EnterBrowser(model);
 		WaitFor(() => FocusedRow(window) == "MesenAI's games folder",
 			$"the picker did not open on its roots ({Focused(window)})");
 
-		PlayerRomPickerRow row = Assert.Single(model.RomPicker.Rows.Where(r => r.Path == lib));
+		PlayerRomPickerRow row = Assert.Single(model.RomPicker.Rows, r => r.Path == lib);
 		Assert.Equal(RomPickerRowKind.Folder, row.Kind);
 		//Below the known roots, never above them.
 		Assert.Equal(model.RomPicker.Rows[^1], row);
@@ -621,6 +663,7 @@ public class PlayRomPickerTests : IDisposable
 				"the first-run home did not put the focus on its one action");
 
 			Press(window, PadNavAction.Confirm);
+			EnterBrowser(model);
 			WaitFor(() => FocusedRow(window) == "MesenAI's games folder",
 				$"the picker did not open on its roots ({Focused(window)})");
 
@@ -668,6 +711,7 @@ public class PlayRomPickerTests : IDisposable
 			"the first-run home did not put the focus on its one action");
 
 		Press(window, PadNavAction.Confirm);
+		EnterBrowser(model);
 		WaitFor(() => FocusedRow(window) == "MesenAI's games folder",
 			$"the picker did not open on its roots ({Focused(window)})");
 
@@ -696,6 +740,7 @@ public class PlayRomPickerTests : IDisposable
 			"the first-run home did not put the focus on its one action");
 
 		Press(window, PadNavAction.Confirm);
+		EnterBrowser(model);
 		WaitFor(() => FocusedRow(window) == "MesenAI's games folder",
 			$"the picker did not open on its roots ({Focused(window)})");
 
@@ -740,8 +785,7 @@ public class PlayRomPickerTests : IDisposable
 		WaitFor(() => FocusedName(window) == "PlayHomeOpenRomPrimary",
 			"the first-run home did not put the focus on its one action");
 
-		model.OpenRomPicker();
-		Pump();
+		EnterBrowser(model);
 		Assert.True(model.RomPicker.IsVisible, "the picker did not open, so this case would prove nothing");
 		Assert.Contains(model.RomPicker.Rows, r => r.Path == lib);
 		Assert.Equal(1, shallow);
@@ -749,11 +793,16 @@ public class PlayRomPickerTests : IDisposable
 
 		//Dismiss and open again: the sheet is on the roots with the rows it already
 		//had, and the disk is not walked a second time.
+		//#1032: out of the browser's roots lands on the library, and the sheet is
+		//still up - the browser is a surface of the sheet, not the sheet.
 		model.RomPicker.Back();
 		Pump();
-		Assert.False(model.RomPicker.IsVisible, "Back on the roots did not dismiss the picker");
-		model.OpenRomPicker();
+		Assert.Equal(RomPickerMode.Library, model.RomPicker.Mode);
+		Assert.True(model.RomPicker.IsVisible, "Back out of the browser closed the whole sheet");
+		model.RomPicker.Back();
 		Pump();
+		Assert.False(model.RomPicker.IsVisible, "Back on the library did not dismiss the sheet");
+		EnterBrowser(model);
 
 		Assert.True(model.RomPicker.IsVisible, "the picker did not open a second time");
 		Assert.Contains(model.RomPicker.Rows, r => r.Path == lib);
@@ -770,11 +819,10 @@ public class PlayRomPickerTests : IDisposable
 	{
 		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
 		(MainWindow window, MainWindowViewModel model) = ShowFirstRunHome();
-		model.OpenRomPicker();
-		Pump();
+		EnterBrowser(model);
 		Assert.True(model.RomPicker.IsVisible, "the picker did not open, so this case would prove nothing");
 
-		PlayerRomPickerRow root = Assert.Single(model.RomPicker.Rows.Where(r => r.Path == "/"));
+		PlayerRomPickerRow root = Assert.Single(model.RomPicker.Rows, r => r.Path == "/");
 		Assert.Equal("This computer", root.Label);
 		//Still the last of the fixed roots: the discovered ones follow it.
 		Assert.Equal(model.RomPicker.Rows[^1], root);
@@ -799,20 +847,19 @@ public class PlayRomPickerTests : IDisposable
 		ConfigManager.Config.Preferences.OverrideGameFolder = true;
 		try {
 			(MainWindow window, MainWindowViewModel model) = ShowFirstRunHome();
-			model.OpenRomPicker();
-			Pump();
+			EnterBrowser(model);
 			model.RomPicker.Choose(model.RomPicker.Rows.First(r => r.Label == "Your games"));
 			Pump();
 			model.RomPicker.Choose(model.RomPicker.Rows.First(r => r.Label == "nes"));
 			Pump();
 
-			PlayerRomPickerRow action = Assert.Single(model.RomPicker.Rows.Where(r => r.Kind == RomPickerRowKind.Action));
+			PlayerRomPickerRow action = Assert.Single(model.RomPicker.Rows, r => r.Kind == RomPickerRowKind.Action);
 			Button button = window.FindNamed<ItemsControl>("RomPickerList")
 				.GetVisualDescendants().OfType<Button>()
 				.Single(b => ReferenceEquals(b.DataContext, action));
 
 			PathIcon[] icons = button.GetVisualDescendants().OfType<PathIcon>().ToArray();
-			PathIcon drawn = Assert.Single(icons.Where(i => i.IsEffectivelyVisible));
+			PathIcon drawn = Assert.Single(icons, i => i.IsEffectivelyVisible);
 			//By identity, not by ToString: both resources parse to a StreamGeometry
 			//whose ToString is the same word for every geometry in the app, so a
 			//string comparison here passes whatever is drawn.

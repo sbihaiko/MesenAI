@@ -108,9 +108,26 @@ namespace Mesen.Windows
 		private bool _focusInMenu;
 		private bool _needRendererReset;
 
+		//#1080: the keys the window answered at its own keyboard and has not seen
+		//released yet. The OS repeats a held key, and every repeat arrives as
+		//another KeyDown of the same key, so this is what tells a press from the
+		//press still being held.
+		private readonly HashSet<UInt16> _keysAnsweredInTheUi = new();
+
+		//#1080: the overlay keys this window handed back to the core and the core
+		//has not seen released. On macOS the native monitor is what publishes a key
+		//to the emulator, and it hands the overlay's own press to this window
+		//instead, so a press this window does not answer has to go back the way it
+		//came - and its release with it, or the core would hold the key down.
+		private readonly HashSet<UInt16> _overlayKeysHandedBackToTheCore = new();
+
 		//ADR-0254: the focus pause opened W-P4, so the automatic resume waits for
 		//the player's Esc instead of firing the moment the window comes forward.
 		private bool _focusPausedWithOverlay;
+
+		//#967: where the focus poll reads "is the app active"; a headless test
+		//swaps it to lose and regain focus.
+		public IAppFocus AppFocus { get; set; } = Mesen.Windows.AppFocus.Desktop;
 
 		public Control Renderer => _usesSoftwareRenderer ? _softwareRenderer : _renderer;
 
@@ -311,14 +328,16 @@ namespace Mesen.Windows
 
 		private void OnDrop(object? sender, DragEventArgs e)
 		{
+			//#953: what the drop opens is DropRoute's (UI/Logic, pinned in UI.Tests).
+			//#986: a pack archive or folder (told by its manifest) is installed.
 			string? filename = e.DataTransfer.TryGetFiles()?.FirstOrDefault()?.Path.LocalPath;
-			if(filename != null) {
-				if(File.Exists(filename)) {
-					LoadRomHelper.LoadFile(filename);
-					Activate();
-				} else {
-					DisplayMessageHelper.DisplayMessage("Error", ResourceHelper.GetMessage("FileNotFound", filename));
-				}
+			DropAction action = LoadRomHelper.Route(filename);
+			if(action == DropAction.Ignore) {
+				return;
+			}
+			LoadRomHelper.Run(action, filename!);
+			if(action != DropAction.FileNotFound) {
+				Activate();
 			}
 		}
 
@@ -334,19 +353,38 @@ namespace Mesen.Windows
 		}
 
 		private void OnOverlaySaveStates(object? sender, RoutedEventArgs e) => _model.OpenSaveStatesSheet();
-		private void OnSaveStatesSave(object? sender, RoutedEventArgs e) => OpenSlotGrid(GameScreenMode.SaveState);
-		private void OnSaveStatesLoad(object? sender, RoutedEventArgs e) => OpenSlotGrid(GameScreenMode.LoadState);
 		private void OnSaveStatesBack(object? sender, RoutedEventArgs e) => _model.CloseSaveStatesSheet();
 		private void OnSaveStatesReplays(object? sender, RoutedEventArgs e) => _model.OpenReplaysSheet();
 
-		//Same path the former Save slot / Load slot items took (and the
-		//SaveStateDialog/LoadStateDialog shortcuts use).
-		private void OpenSlotGrid(GameScreenMode mode)
+		//#909 (W-P4): the grid's own per-slot actions. The row is the button's own
+		//DataContext - a DataTemplate's named controls live in its own name scope,
+		//so there is nothing to look up by name.
+		private void OnSlotSaveHere(object? sender, RoutedEventArgs e)
 		{
-			if(WindowState == WindowState.FullScreen && ConfigManager.Config.Video.UseExclusiveFullscreen) {
-				ToggleFullscreen();
+			if((sender as Control)?.DataContext is SaveStateSlotViewModel row) {
+				_model.SaveSaveStateSlot(row);
 			}
-			_model.OpenSlotGrid(mode);
+		}
+
+		private void OnSlotLoad(object? sender, RoutedEventArgs e)
+		{
+			if((sender as Control)?.DataContext is SaveStateSlotViewModel row) {
+				_model.LoadSaveStateSlot(row);
+			}
+		}
+
+		//The grid scrolls (eleven rows do not fit the sheet), and the pad's
+		//directional search only answers a row that is on screen: with just the
+		//focused row scrolled into view, Down off the last visible row found no row
+		//below it and left the grid for Shared replays, so slots 7 … 10 and the
+		//auto-save were out of the pad's reach. Keeping one row either side of the
+		//focused one in view is what lets every Down / Up land on the next row.
+		private void OnSlotGotFocus(object? sender, FocusChangedEventArgs e)
+		{
+			if((sender as Control)?.Parent is Control row && row.Bounds.Height > 0) {
+				double h = row.Bounds.Height;
+				row.BringIntoView(new Rect(0, -h, row.Bounds.Width, h * 3));
+			}
 		}
 
 		private void OnOverlayEnhancements(object? sender, RoutedEventArgs e)
@@ -1104,6 +1142,42 @@ namespace Mesen.Windows
 			return true;
 		}
 
+		//#1007, W-S2: the Fullscreen row prints ⌃⌘F (Ctrl+F off macOS), so those keys
+		//toggle it - WorkspaceMenu.IsFullscreenShortcut is the rule behind both.
+		//This stays a hard-coded key (not a secondary ToggleFullscreen binding in
+		//PreferencesConfig) because that path cannot carry it: AddShortcut only seeds
+		//a default for an action that has no entry yet, so every existing
+		//settings.json would never get it; the second slot is user-editable, so it
+		//is not a non-removable default; and the bindings are evaluated by the Core
+		//from raw key state, where the ⌘ half of ⌃⌘F has no portable key name.
+		//So it yields to what the configurable system owns: the focused menu, a
+		//focused text input, and a Ctrl+F the user bound to another shortcut.
+		private bool ProcessFullscreenShortcut(KeyEventArgs e)
+		{
+			if(!WorkspaceMenu.IsFullscreenShortcut(e.Key.ToString(), (ShortcutModifiers)(int)e.KeyModifiers, OperatingSystem.IsMacOS())) {
+				return false;
+			}
+			if(TheKeyboardIsSomewhereElse() || IsCtrlFBoundElsewhere()) {
+				return false;
+			}
+			ToggleFullscreen();
+			e.Handled = true;
+			return true;
+		}
+
+		private static bool IsCtrlFBoundElsewhere()
+		{
+			UInt16 f = InputApi.GetKeyCode("F");
+			UInt16[] ctrls = { InputApi.GetKeyCode("Left Ctrl"), InputApi.GetKeyCode("Right Ctrl") };
+			return ConfigManager.Config.Preferences.ShortcutKeys.Any(info => info.Shortcut != EmulatorShortcut.ToggleFullscreen && (IsCtrlF(info.KeyCombination, f, ctrls) || IsCtrlF(info.KeyCombination2, f, ctrls)));
+		}
+
+		private static bool IsCtrlF(KeyCombination combo, UInt16 f, UInt16[] ctrls)
+		{
+			UInt16[] keys = { combo.Key1, combo.Key2, combo.Key3 };
+			return keys.Count(k => k != 0) == 2 && keys.Contains(f) && keys.Any(k => ctrls.Contains(k));
+		}
+
 		private void OnPreviewKeyDown(object? sender, KeyEventArgs e)
 		{
 			if(_testModeEnabled && e.KeyModifiers == KeyModifiers.Alt && ProcessTestModeShortcuts(e.Key)) {
@@ -1114,12 +1188,37 @@ namespace Mesen.Windows
 				return;
 			}
 
+			if(ProcessFullscreenShortcut(e)) {
+				return;
+			}
+
 			if(HandleEscInTheUi(e)) {
 				return;
 			}
 
 			if(OperatingSystem.IsMacOS()) {
-				//Keyhandler handles key internally on macOS
+				//Keyhandler handles key internally on macOS - except the overlay's own
+				//press, which the monitor hands to this window instead
+				//(MacOSKeyManager + KeyMonitorRouting, #1080), because on macOS that
+				//monitor is the only path a host key has into the emulator and this
+				//arm is the one that answers it.
+				//
+				//A press this window did not answer is not the core's yet either: the
+				//Remaster, Share and Classic arms are still the core's shortcut
+				//handler's, and it is the only path that ever answered them - so the
+				//press goes back the way it came. Not while the keyboard is in a menu
+				//or a text box, though: there the key is that control's, and the core
+				//must not act on the press the control is keeping (the same rule
+				//HandleEscInTheUi applies, and the reason TheKeyboardIsSomewhereElse
+				//is asked once for both).
+				//
+				//Only the overlay's own press can be handed back. Every other key on
+				//macOS is published by the monitor before this handler sees it, and
+				//Command chords are the app's, so the game's input path is untouched.
+				if(IsTheOverlayKey(e) && !TheKeyboardIsSomewhereElse()) {
+					_overlayKeysHandedBackToTheCore.Add(e.GetKeyCode());
+					InputApi.SetKeyState(e.GetKeyCode(), true);
+				}
 				return;
 			}
 
@@ -1127,7 +1226,14 @@ namespace Mesen.Windows
 				return;
 			}
 
-			if(e.Key != Key.None) {
+			//#1095: this block is the whole of the core's keyboard path on Windows and
+			//Linux, so the one press the window must not feed it is withheld here: the
+			//overlay's key while the keyboard is a control's. HandleEscInTheUi declines
+			//it in that state (the Esc belongs to the box), and feeding it anyway let the
+			//core's shortcut handler open the pause sheet over the box keeping the key -
+			//which is what a player typing in the barcode field saw. The rule is
+			//OverlayKeyPress's, and the macOS arm above applies it too.
+			if(e.Key != Key.None && OverlayKeyPress.TheCoreIsFedThePress(IsTheOverlayKey(e), TheKeyboardIsSomewhereElse())) {
 				UInt16 keyCode = e.GetKeyCode();
 				_keyPressedStamp[keyCode] = _stopWatch.ElapsedTicks;
 
@@ -1146,22 +1252,66 @@ namespace Mesen.Windows
 			}
 		}
 
-		//#1080: Esc is answered here, at the window's own keyboard, for the two
-		//contexts UiEsc gives the UI (Player mode's overlay and its Settings sheet).
-		//The press used to be left to the core's shortcut handler alone, and that
-		//path is not one the player can rely on: on macOS it runs on the native key
-		//monitor, and in Player mode an Esc that reached the core left the game
-		//running with no overlay until the window was re-focused. Answering it here
-		//is what makes the key work from the focus state the game view is left in.
+		//#1080: the six keyboard keys a combination can name as a modifier, as the
+		//shared key table numbers them (Core/Shared/KeyDefinitions.h: 116-121) - the
+		//Avalonia Key enum, which is the key space this window already feeds the core
+		//with (InputApi.SetKeyState, below) and the space the config stores. Read off
+		//the enum rather than through InputApi.GetKeyCode so the rule does not depend
+		//on a keyboard backend being registered (a headless run has none, and the
+		//lookup answers 0 for every name there).
+		private static readonly ModifierKeyCodes _modifierKeys = new(
+			(UInt16)Key.LeftShift, (UInt16)Key.RightShift,
+			(UInt16)Key.LeftCtrl, (UInt16)Key.RightCtrl,
+			(UInt16)Key.LeftAlt, (UInt16)Key.RightAlt);
+
+		//#1080: the key this handler answers is the one ToggleOverlay is *bound* to,
+		//read off the same config every other shortcut comes from - it is not Esc by
+		//name. A player who moves the overlay to F1 or to a controller must not be
+		//left with an Esc that opens the pause sheet anyway, and Esc is then free for
+		//whatever else it is bound to, which the core's own path (below) answers.
+		//
+		//Both of the shortcut's key combinations are bindings of their own
+		//(ToggleOverlay ships with Esc and a controller chord); the pad slot is not
+		//one of them, this being the keyboard's handler. An empty combination answers
+		//nothing (OverlayKeyPress), so an overlay bound to a pad alone - or one whose
+		//codes a run could not build - leaves the whole keyboard to the core.
+		private bool IsTheOverlayKey(KeyEventArgs e)
+		{
+			ShortcutKeyInfo? overlay = _model?.Config.Preferences.ShortcutKeys.Find(sk => sk.Shortcut == EmulatorShortcut.ToggleOverlay);
+			if(overlay == null) {
+				return false;
+			}
+
+			UInt16 pressed = e.GetKeyCode();
+			ShortcutModifiers modifiers = (ShortcutModifiers)(int)e.KeyModifiers;
+			return IsBoundTo(overlay.KeyCombination, pressed, modifiers)
+				|| IsBoundTo(overlay.KeyCombination2, pressed, modifiers);
+		}
+
+		private static bool IsBoundTo(KeyCombination combination, UInt16 pressed, ShortcutModifiers modifiers)
+		{
+			return OverlayKeyPress.IsThePress(combination.Key1, combination.Key2, combination.Key3, pressed, modifiers, _modifierKeys);
+		}
+
+		//#1080: the key the overlay is bound to is answered here, at the window's own
+		//keyboard, for the two contexts UiEsc gives the UI (Player mode's overlay and
+		//its Settings sheet). The press used to be left to the core's shortcut handler
+		//alone, and that path is not one the player can rely on: on macOS it runs on
+		//the native key monitor, and in Player mode an Esc that reached the core left
+		//the game running with no overlay until the window was re-focused. Answering
+		//it here is what makes the key work from the focus state the game view is left
+		//in.
 		//
 		//The press stops here on purpose. Both paths end in the same router
-		//(ShortcutHandler.ApplyUiEsc), so letting the core see this Esc as well would
-		//open the overlay and close it again in the same press - and this handler
-		//returns before InputApi.SetKeyState, which is the only way a keyboard press
-		//reaches the core on Windows and Linux, so nothing is fed twice there either.
+		//(ShortcutHandler.ApplyUiEsc), so letting the core see this press as well
+		//would open the overlay and close it again in the same press - and this
+		//handler returns before InputApi.SetKeyState, which is the only way a keyboard
+		//press reaches the core on Windows and Linux, so nothing is fed twice there
+		//either. Every other key, and this one when the binding is not what the press
+		//carries, walks past into that path untouched.
 		private bool HandleEscInTheUi(KeyEventArgs e)
 		{
-			if(e.Key != Key.Escape || _model == null) {
+			if(_model == null || !IsTheOverlayKey(e) || TheKeyboardIsSomewhereElse()) {
 				return false;
 			}
 
@@ -1179,15 +1329,63 @@ namespace Mesen.Windows
 				return false;
 			}
 
+			//A Held Key Is One Press (#1080). The OS repeats it as more KeyDowns
+			//with no KeyUp in between, and neither this arm nor TogglePlayerOverlay
+			//has a repeat guard: acting on each repeat toggles the overlay at the
+			//repeat rate - a held Esc opens W-P4 and closes it again, and a held Esc
+			//in Settings closes the sheet and then opens the overlay. The repeat is
+			//still this window's key and is consumed rather than passed on, because
+			//the core's own path below would fire the very same shortcut.
 			e.Handled = true;
+			if(!_keysAnsweredInTheUi.Add(e.GetKeyCode())) {
+				return true;
+			}
+
 			_shortcutHandler.ApplyUiEsc(action);
 			return true;
 		}
 
+		//#1080: the press is not this window's while the keyboard is somewhere
+		//else, and the one predicate answers for both hard-coded keys this class
+		//owns (the fullscreen stroke and the overlay's). A focused menu and a
+		//focused text input own their keys; the window's Esc arm used to skip the
+		//check the fullscreen one makes and swallowed them, marking the press
+		//handled before the menu could see the Esc it closes on.
+		//
+		//_focusInMenu is the window's own poll of the menus
+		//(TimerUpdateBackgroundFlag), which is the state the rest of this class
+		//reads.
+		private bool TheKeyboardIsSomewhereElse()
+		{
+			//The menus are asked live as well as through the poll's field: the poll
+			//answers every 100 ms, and the press that opens a menu can arrive
+			//before its next tick.
+			return _focusInMenu
+				|| MenuHelper.IsFocusInMenu(_mainMenu.MainMenu)
+				|| MenuHelper.IsFocusInMenu(_shellBar.ToolsMenu)
+				|| TopLevel.GetTopLevel(this)?.FocusManager?.GetFocusedElement() is TextBox;
+		}
+
 		private void OnPreviewKeyUp(object? sender, KeyEventArgs e)
 		{
+			//#1080: releasing the key ends its repeats, so the next down is a new
+			//press. Before the macOS return below: this is where the window's own
+			//count of held keys is kept, and the platform's key path is the other
+			//branch of the same handler.
+			if(e.Key != Key.None) {
+				_keysAnsweredInTheUi.Remove(e.GetKeyCode());
+			}
+
 			if(OperatingSystem.IsMacOS()) {
 				//Keyhandler handles key internally on macOS
+				//
+				//#1080: except the release of an overlay key this window handed back
+				//to the core - the monitor handed the press over, so nothing else
+				//ends it there, and a key left down would answer its next press as
+				//the same one.
+				if(e.Key != Key.None && _overlayKeysHandedBackToTheCore.Remove(e.GetKeyCode())) {
+					InputApi.SetKeyState(e.GetKeyCode(), false);
+				}
 				return;
 			}
 
@@ -1224,7 +1422,22 @@ namespace Mesen.Windows
 				//Check across all of the app's windows instead - "in background"
 				//should mean none of them has focus.
 				ConfigApi.SetEmulationFlag(EmulationFlags.InBackground, ApplicationHelper.GetActiveWindow() == null);
+				//#1080: and this window's own activation, which the flag above
+				//cannot answer - it is false whenever *any* window of the app is
+				//active, and the macOS key monitor asks who has the keyboard before
+				//it hands the overlay's press to the UI (KeyMonitorRouting,
+				//MacOSKeyManager). This window's own property is the exact answer:
+				//it changes on every transition between the app's windows, and
+				//"the first *other* window that reads active" is not asked at all.
+				ConfigApi.SetEmulationFlag(EmulationFlags.MainWindowIsKey, IsActive);
 				InputApi.ResetKeyState();
+				//#1080: a key released while another window had the keyboard sends
+				//no KeyUp here, and a key left in the set would answer its next
+				//press as a repeat. The window is not holding anything it answered.
+				_keysAnsweredInTheUi.Clear();
+				//...and the core is not holding anything this window handed it:
+				//ResetKeyState above dropped every key it had.
+				_overlayKeysHandedBackToTheCore.Clear();
 			}
 		}
 
@@ -1246,7 +1459,7 @@ namespace Mesen.Windows
 
 		private void UpdateAutoPause()
 		{
-			Window? activeWindow = ApplicationHelper.GetActiveWindow();
+			Window? activeWindow = AppFocus.GetActiveWindow();
 			PreferencesConfig cfg = ConfigManager.Config.Preferences;
 
 			//ADR-0254: the focus half is resolved on its own, because it is the one

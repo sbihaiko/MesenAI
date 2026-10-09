@@ -181,6 +181,14 @@ public class ShortcutKeySetTests
 	{
 		EmuApi.InitDll();
 		EmuApi.InitializeEmu(ConfigManager.HomeFolder, FakeWindow, FakeRenderer, true, true, true, false);
+		//#1023: the engine is process-global and ShortcutKeyHandler::ProcessKeys
+		//returns at once while EmulationFlags.InBackground is set (IsInputEnabled).
+		//MainWindow.OnActiveChanged sets that flag whenever none of the app's
+		//windows is active - always the case for a headless window that a class
+		//ran before this one - and nothing clears it when the window closes. A
+		//fresh process starts with it clear, so this states what the case needs
+		//instead of inheriting it.
+		ConfigApi.SetEmulationFlag(EmulationFlags.InBackground, false);
 		try {
 			body();
 		} finally {

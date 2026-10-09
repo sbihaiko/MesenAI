@@ -1,0 +1,25 @@
+Golden Sun (2001) (Nintendo).gba
+: loaded=TrueGolden Sun (2001) (Nintendo).gba
+: console=GbaGolden Sun (2001) (Nintendo).gba
+: wide=True size=284x160 sidePixelsLit=0/7040 picturePixelsLit=0Golden Sun (2001) (Nintendo).gba
+: wide=False size=240x160 sidePixelsLit=0/0 picturePixelsLit=0Super Mario Advance 4 - Super Mario Bros. 3 (2003) (Nintendo).gba
+: loaded=TrueSuper Mario Advance 4 - Super Mario Bros. 3 (2003) (Nintendo).gba
+: console=GbaSuper Mario Advance 4 - Super Mario Bros. 3 (2003) (Nintendo).gba
+: wide=True size=284x160 sidePixelsLit=7040/7040 picturePixelsLit=38400Super Mario Advance 4 - Super Mario Bros. 3 (2003) (Nintendo).gba
+: wide=False size=240x160 sidePixelsLit=0/0 picturePixelsLit=38400Castlevania - Aria of Sorrow (2003) (Konami).gba
+: loaded=TrueCastlevania - Aria of Sorrow (2003) (Konami).gba
+: console=GbaCastlevania - Aria of Sorrow (2003) (Konami).gba
+: wide=True size=284x160 sidePixelsLit=7040/7040 picturePixelsLit=38400Castlevania - Aria of Sorrow (2003) (Konami).gba
+: wide=False size=240x160 sidePixelsLit=0/0 picturePixelsLit=38400Super Mario Advance 4 - Super Mario Bros. 3 (2003) (Nintendo).gba
+: loaded=TrueSuper Mario Advance 4 - Super Mario Bros. 3 (2003) (Nintendo).gba
+: console=GbaSuper Mario Advance 4 - Super Mario Bros. 3 (2003) (Nintendo).gba
+: wide=True size=284x160 sidePixelsLit=7040/7040 picturePixelsLit=38400Super Mario Advance 4 - Super Mario Bros. 3 (2003) (Nintendo).gba
+: wide=False size=240x160 sidePixelsLit=0/0 picturePixelsLit=38400Castlevania - Aria of Sorrow (2003) (Konami).gba
+: loaded=TrueCastlevania - Aria of Sorrow (2003) (Konami).gba
+: console=GbaCastlevania - Aria of Sorrow (2003) (Konami).gba
+: wide=True size=284x160 sidePixelsLit=7040/7040 picturePixelsLit=38400Castlevania - Aria of Sorrow (2003) (Konami).gba
+: wide=False size=240x160 sidePixelsLit=0/0 picturePixelsLit=38400Super Mario Advance 4 - Super Mario Bros. 3 (2003) (Nintendo).gba
+: loaded=TrueSuper Mario Advance 4 - Super Mario Bros. 3 (2003) (Nintendo).gba
+: console=GbaSuper Mario Advance 4 - Super Mario Bros. 3 (2003) (Nintendo).gba
+: wide=True size=284x160 sidePixelsLit=7040/7040 picturePixelsLit=38400Super Mario Advance 4 - Super Mario Bros. 3 (2003) (Nintendo).gba
+: wide=False size=240x160 sidePixelsLit=0/0 picturePixelsLit=38400

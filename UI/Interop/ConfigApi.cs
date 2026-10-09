@@ -113,7 +113,12 @@ namespace Mesen.Interop
 		InBackground = 0x08,
 		ConsoleMode = 0x10,
 		TestMode = 0x20,
-		OutputToStdout = 0x40
+		OutputToStdout = 0x40,
+		//#1080: mirrors SettingTypes.h. The app's main window is the one holding
+		//the keyboard - InBackground above only says that *no* window of the app
+		//is, which the macOS key monitor cannot use to decide whether the window
+		//that answers the overlay key is there to answer it.
+		MainWindowIsKey = 0x80
 	}
 
 	public enum DebuggerFlags : UInt32

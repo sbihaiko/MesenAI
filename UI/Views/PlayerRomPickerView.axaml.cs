@@ -1,7 +1,16 @@
+using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.Layout;
 using Avalonia.Markup.Xaml;
+using Avalonia.Threading;
+using Avalonia.VisualTree;
+using Mesen.Logic;
 using Mesen.ViewModels;
+using System;
+using System.Collections.Generic;
+using System.Collections.Specialized;
 
 namespace Mesen.Views
 {
@@ -22,6 +31,22 @@ namespace Mesen.Views
 
 		private PlayerRomPickerViewModel? Model => DataContext as PlayerRomPickerViewModel;
 
+		//#1078 (ADR-0264 Decision 12): the sheet's width is W-P19's 1100 px when
+		//the window has room and the window's own width when it does not. Fixed at
+		//1000, a non-maximized window narrower than the sheet drew it wider than
+		//itself - centred, so the window cut both edges and
+		//the header, the console filter, the first grid column and *Browse a file…*
+		//were all partly outside it. The arithmetic is LibrarySheetFit's (host-free,
+		//UI.Tests asserts it); this is the crossing, and the backdrop is where the
+		//window's own size arrives - it is the sheet's container and nothing in the
+		//sheet can change it, so this never re-enters itself.
+		private void OnBackdropSized(object? sender, SizeChangedEventArgs e)
+		{
+			if(this.FindControl<Border>("PlayerRomPickerSheet") is { } sheet) {
+				sheet.Width = LibrarySheetFit.SheetWidth(e.NewSize.Width);
+			}
+		}
+
 		private void OnChoose(object? sender, RoutedEventArgs e)
 		{
 			if(sender is Control { DataContext: PlayerRomPickerRow row }) {
@@ -29,6 +54,186 @@ namespace Mesen.Views
 			}
 		}
 
+		//#1032 (ADR-0264 Decision 3): A plays the focused game. The tile IS the
+		//choice, so this is the whole of the press.
+		private void OnPlayTile(object? sender, RoutedEventArgs e)
+		{
+			if(sender is Control { DataContext: PlayerLibraryTile tile }) {
+				Model?.Play(tile);
+			}
+		}
+
+		//#1039 (ADR-0265 section 4): the covers are asked for lazily and only for the
+		//tiles the sheet is showing. WHO those are is a question about layout, so it is
+		//answered here rather than guessed at in the view-model: every container the
+		//WrapPanel has realized is measured against the ScrollViewer's viewport, and
+		//the tiles that intersect it are handed over. This fires on the layout that
+		//fills the grid and again on every scroll, so a tile below the fold is asked
+		//about the moment it comes into view.
+		//
+		//The ring is the second way in: the pad moves the real focus (ADR-0256 Decision
+		//3), and OnTileFocus below asks about whatever it reaches, in case a tile is
+		//reached before its layout has settled.
+		private void OnGridShowing(object? sender, EffectiveViewportChangedEventArgs e) => AskShowing();
+
+		//The viewport event stays silent when the grid itself changes under an
+		//unchanged ScrollViewer (the scan landing after the sheet laid out empty, a
+		//search rebuilding the tiles), so a change of the tiles asks again, posted
+		//at Render priority so the containers exist and are measured by then.
+		private PlayerRomPickerViewModel? _watched;
+		private bool _askPosted;
+
+		protected override void OnDataContextChanged(EventArgs e)
+		{
+			base.OnDataContextChanged(e);
+			if(_watched != null) {
+				_watched.Tiles.CollectionChanged -= OnTilesChanged;
+			}
+			_watched = Model;
+			if(_watched != null) {
+				_watched.Tiles.CollectionChanged += OnTilesChanged;
+			}
+		}
+
+		private void OnTilesChanged(object? sender, NotifyCollectionChangedEventArgs e) => PostAskShowing();
+
+		private void OnGridLayoutUpdated(object? sender, EventArgs e) => PostAskShowing();
+
+		private void PostAskShowing()
+		{
+			if(_askPosted) {
+				return;
+			}
+			_askPosted = true;
+			Dispatcher.UIThread.Post(() => {
+				_askPosted = false;
+				AskShowing();
+			}, DispatcherPriority.Render);
+		}
+
+		//#1067: the walk below is the sheet's own cost - one ContainerFromIndex per
+		//tile in the library, up to twenty thousand - and it is the one part of it
+		//that leaves no trace on screen, because the tiles it collects are handed to
+		//AskVisible, which drops them when the library is not what the sheet is
+		//showing. So the walk is counted where it is paid, one per tile walked past,
+		//which is what lets the cases in PlayRomPickerAskTests say that a closed
+		//sheet's pass costs nothing rather than that it happened to ask for nothing.
+		public int TilesExamined { get; private set; }
+
+		private void AskShowing()
+		{
+			//#1067: a sheet that is closed, or is showing the folder browser instead,
+			//is showing no tile of the library - and asking is the one thing that must
+			//not be paid for anyway, because the walk below is one grid lookup per tile
+			//in the scan and the grid is a live collection whatever the sheet is doing:
+			//a scan landing or a search under a closed sheet still fires these events
+			//(OnTilesChanged, OnGridLayoutUpdated). The view-model drops what it is
+			//handed when the library is not what is up (AskVisible), so the tiles were
+			//never the cost - the walk over them was, up to twenty thousand of them per
+			//pass. The guard is the same question, answered before the walk.
+			if(Model is not { } model || !RomPickerAskRule.ShouldWalkGrid(model.IsVisible, model.Mode == RomPickerMode.Library)) {
+				return;
+			}
+			if(this.FindControl<ItemsControl>("RomPickerGrid") is not { } grid) {
+				return;
+			}
+			if(grid.FindAncestorOfType<ScrollViewer>() is not { } sheet) {
+				return;
+			}
+
+			//The viewport is a rectangle in the content's own coordinates, which is
+			//what a container's Bounds are measured in - the WrapPanel sits at the
+			//content's origin and the containers sit in the panel.
+			Rect viewport = new(sheet.Offset.X, sheet.Offset.Y, sheet.Viewport.Width, sheet.Viewport.Height);
+			List<PlayerLibraryTile> showing = new();
+			for(int i = 0; i < model.Tiles.Count; i++) {
+				TilesExamined++;
+				if(grid.ContainerFromIndex(i) is Control { } container && container.Bounds.Intersects(viewport)) {
+					showing.Add(model.Tiles[i]);
+				}
+			}
+			model.AskVisible(showing);
+		}
+
+		//#1039 (ADR-0265 section 4): the ring is the other half of "the tiles that are
+		//actually visible" - a tile the pad has reached is being looked at whatever the
+		//layout says, so it is asked about here too, and nothing else in the library
+		//ever is.
+		//
+		//#1037 (ADR-0264 Decision 1): the same event is also the game the player is
+		//on, so the sheet can reopen on it. The event, not the click: the arbiter
+		//putting the ring on a tile is the player being on it too, and the tile the
+		//ring left when the sheet closed is exactly the one this has to remember.
+		//One GotFocus attribute binds one handler, so both reactions live here.
+		private void OnTileFocused(object? sender, FocusChangedEventArgs e)
+		{
+			if(sender is Control { DataContext: PlayerLibraryTile tile }) {
+				Model?.TileReached(tile);
+				Model?.RememberFocus(tile);
+			}
+		}
+
+		//#1065: the ring LEFT the grid, which the view-model has to know and only
+		//the view can answer - it is the difference between a player walking the
+		//grid and one parked on *Browse a file…*, and the sheet's live re-sort
+		//turns on exactly that difference (it may move a tile the player is on; it
+		//must never claim a ring that is not in the grid at all).
+		//
+		//A step from one tile to the next is a move INSIDE the grid and not a
+		//leave, and the order of the two events one focus change raises is the
+		//engine's rather than this handler's - so the DESTINATION is read, and the
+		//answer is the same whichever of them lands first.
+		private void OnTileBlurred(object? sender, FocusChangedEventArgs e)
+		{
+			if(e.NewFocusedElement is Control { DataContext: PlayerLibraryTile }) {
+				return;
+			}
+			Model?.ForgetTileFocus();
+		}
+
+		//#1032 (ADR-0264 Decision 11): *Browse a file…* steps into the folder
+		//browser ADR-0256 Decision 9 built, which is the same sheet's second
+		//surface rather than a second sheet.
+		private void OnBrowseFile(object? sender, RoutedEventArgs e) => Model?.BrowseFile();
+
+		//#1033 (ADR-0264 Decision 4): the empty result's way out - the box empties
+		//and the whole library comes back. The press that clears it also parks the
+		//ring (ADR-0256 Decision 3): Clear hides ITSELF the moment the query empties,
+		//so a pad player who pressed A on it was left with no focus at all - the next
+		//D-pad press had nowhere to move from and the ring was simply gone. The
+		//search box is still on screen and is where the player who just undid a
+		//search is, so the ring goes there through the one focus entry point.
+		private void OnClearSearch(object? sender, RoutedEventArgs e)
+		{
+			Model?.ClearSearch();
+			if(this.FindControl<TextBox>("RomPickerSearch") is TextBox field) {
+				Utilities.PlayFocusOnOpen.Enter(field);
+			}
+		}
+
 		private void OnBack(object? sender, RoutedEventArgs e) => Model?.Back();
+
+		//#1036 (ADR-0264 Decision 8): *Library folders…*, and the two presses inside
+		//the sheet it opens. Add is the MOUSE door - the native folder dialog, which
+		//is what a player at a desk expects. The pad's Confirm never lands here: the
+		//bridge answers it with the sheet's own folder browser instead, because a
+		//native dialog owns the screen once it is up (PlayPadNavigationWiring).
+		private void OnLibraryFolders(object? sender, RoutedEventArgs e) => Model?.OpenFoldersSheet();
+
+		private async void OnAddFolder(object? sender, RoutedEventArgs e)
+		{
+			if(Model is PlayerRomPickerViewModel model) {
+				await model.AddFolderFromMouse();
+			}
+		}
+
+		//The row's own Remove. It edits the list and nothing else: no file call is
+		//made on this path, on purpose.
+		private void OnRemoveFolder(object? sender, RoutedEventArgs e)
+		{
+			if(sender is Control { DataContext: PlayerLibraryFolderRow row }) {
+				Model?.RemoveLibraryFolder(row);
+			}
+		}
 	}
 }

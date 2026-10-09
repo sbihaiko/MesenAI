@@ -13,6 +13,7 @@ using Avalonia.Media.Imaging;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using Mesen.Config;
+using Mesen.Debugger.Utilities;
 using Mesen.Interop;
 using Mesen.Logic;
 using Mesen.Utilities;
@@ -500,7 +501,19 @@ public class ShareThemeRenderTests : IDisposable
 		MenuItem tools = window.FindNamed<MenuItem>("ToolsMenuButton");
 		tools.IsSubMenuOpen = true;
 		Dispatcher.UIThread.RunJobs();
-		MenuItem[] items = tools.GetRealizedContainers().OfType<MenuItem>().Where(m => m.FindAll<TextBlock>().Any(t => !string.IsNullOrEmpty(t.Text) && t.Text != "-")).ToArray();
+		MenuItem[] all = tools.GetRealizedContainers().OfType<MenuItem>().Where(m => m.FindAll<TextBlock>().Any(t => !string.IsNullOrEmpty(t.Text) && t.Text != "-")).ToArray();
+		//Ruling (a) on #1007: the disabled, Play-only footer hint below the tail
+		//(W-S2: grey 11.5 px note, wrapped, no highlight) - not an action row.
+		MenuItem hint = all.Last();
+		Assert.Equal(ContextMenuHint.Sentinel, hint.Header);
+		Assert.False(hint.IsEffectivelyEnabled, "the hint row is enabled");
+		TextBlock hintText = hint.FindNamed<Border>("PlayerHintRow").FindAll<TextBlock>().Single();
+		Assert.Equal("Disk, coin and tape items appear when the game uses them.", hintText.Text);
+		Assert.True(hintText.IsOnScreen(), "the hint row is not drawn");
+		Assert.Equal(Color.Parse("#A1A1A6"), PlayerRender.SolidColor(hintText.Foreground));
+		Assert.Equal(11.5, hintText.FontSize);
+		Assert.False(hint.FindNamed<Border>("PART_LayoutRoot").IsOnScreen(), "the hint row also draws an action row");
+		MenuItem[] items = all.Where(m => m != hint).ToArray();
 		MenuItem fullscreen = items.Single(m => LabelOf(m).Text == "Fullscreen");
 		fullscreen.IsSelected = true;
 		Dispatcher.UIThread.RunJobs();
@@ -510,6 +523,16 @@ public class ShareThemeRenderTests : IDisposable
 		Assert.Equal(new CornerRadius(10), panel.CornerRadius);
 		string[] tail = OperatingSystem.IsMacOS() ? new[] { "Help" } : new[] { "Settings…", "Help", "About MesenAI", "Quit MesenAI" };
 		Assert.Equal(new[] { "Reset", "Power Cycle", "Screenshot", "Fullscreen" }.Concat(tail).ToArray(), items.Select(i => LabelOf(i).Text!.Replace("_", "")).ToArray());
+		//#1007: with no game loaded, Reset, Power Cycle and Screenshot are there
+		//but greyed (the render's TEXT3 ink); Fullscreen prints its shortcut.
+		foreach(string name in new[] { "Reset", "Power Cycle", "Screenshot" }) {
+			MenuItem row = items.Single(m => LabelOf(m).Text!.Replace("_", "") == name);
+			Assert.False(row.IsEffectivelyEnabled, name + " is enabled with no game loaded");
+			Assert.Equal(Color.Parse("#A1A1A6"), PlayerRender.SolidColor(LabelOf(row).Foreground));
+		}
+		TextBlock shortcut = fullscreen.FindNamed<TextBlock>("PlayerShortcut");
+		Assert.True(shortcut.IsOnScreen(), "Fullscreen shows no shortcut");
+		Assert.Equal(OperatingSystem.IsMacOS() ? "⌃⌘F" : "Ctrl+F", shortcut.Text);
 		foreach(MenuItem item in items) {
 			Assert.Equal(26, item.Bounds.Height, 0.5);
 			TextBlock label = LabelOf(item);

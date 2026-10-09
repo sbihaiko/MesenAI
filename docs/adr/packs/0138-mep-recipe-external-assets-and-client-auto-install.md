@@ -27,7 +27,7 @@ by a fixed op set (no scripting, no conditionals, no network beyond the sources)
 ```
 
 - `ops` allowed in v1: `copy`, `glob`, `rename`, `rewrite-paths`; anything else is
-  a validation error. `from` = `<source-id>:<path>`; paths normalised and MUST
+  a validation error. `from` = `<source-id>:<path>`; paths normalized and MUST
   stay inside the output directory (zip-slip rule of §6).
 - `pack` is the `pack.json` the client writes (MEP-v1 §3); `targets[]`/`patches[]`
   follow ADR-0044.
@@ -79,7 +79,7 @@ the ROM by No-Intro sha1 (MEP-v1 §4, ADR-0039); per matching accepted entry:
 (1) download `source.url` (same host allow-list as CI; the recipe's
 `sources.primary.url`/`sources.primary.sha256`), verify sha256; (2) per dep reuse
 a local file with the declared sha256 (per-ROM pack folder or downloads cache),
-else prompt with `hints` + licence (never scrapes Drive/MEGA), install with
+else prompt with `hints` + license (never scrapes Drive/MEGA), install with
 `policy.apply_patch_only_if_complete`; (3) run the `ops`, write `pack.json`, store
 `.mep-install.json` (`catalog_version`, `source.sha256`, dep hashes, `recipe_hash`,
 `installed_at`).
@@ -174,7 +174,7 @@ escapes the pack directory."
     nested `recipe` object requiring `ops`, `deps`, `pack`. Assembly consumes
     `jq -r '.recipe // {}'`; `apply-verdict` exposes `verdict`/`labels`.
 21. Lines are the spine: `sources.deps` one per `external_assets` line
-    (synthesized `extN` ids when no hint URL matches, trailing-slash-normalised);
+    (synthesized `extN` ids when no hint URL matches, trailing-slash-normalized);
     classify's `deps[]` decorates id/hints/license; `user_supplied` forced `true`.
     Lines parsed before the fragment → hash-less/malformed = `refused` even without
     classify content; `absent` = no lines or well-formed lines but no classify
@@ -300,7 +300,7 @@ escapes the pack directory."
     `JsonSerializerIsReflectionEnabledByDefault=false` and `IsAotCompatible=true`
     like `UI.csproj`, so reflection JSON fails `dotnet test`.
 45. `recipe` travels opaque: `CommunityPackCatalogEntry.Recipe` is `JsonElement?`;
-    the service serialises it (`GetRawText()`) and hands it to `InstallMepRecipe`
+    the service serializes it (`GetRawText()`) and hands it to `InstallMepRecipe`
     unchanged; the UI never interprets it.
 46. Downloads cache = `<EnhancementPackFolder>/.cache/downloads/` (ADR-0040 scratch,
     safe to delete); primaries and user deps looked up there by sha256.

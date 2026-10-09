@@ -498,6 +498,64 @@
 	<Style Selector=".player Button.secondary:pressed /template/ Border#PART_Background, .player Button.plain:pressed /template/ Border#PART_Background">
 		<Setter Property="Background" Value="{StaticResource PlayerPressedFillBrush}" />
 	</Style>
+	<!--#1089: the two things the framework draws that keep the ring below from
+	     reaching the screen, off in one place, for every control the theme paints
+	     PlayerFocusRing on - the whole Button family, a field, a drop-down and a
+	     segment. FocusAdorner: Fluent's AdornerLayer carries a
+	     DefaultFocusAdorner, a 2 px black frame over a 1 px white hairline,
+	     and Control.cs falls back to it for any focused control that leaves
+	     FocusAdorner unset. Setting an empty template makes the property "set",
+	     it builds nothing and the default is never reached (the pattern
+	     DataBoxStyles.xaml uses); the ring is the focus look in Play instead.
+	     ClipToBounds: Avalonia 12 turns it on for every TemplatedControl, and
+	     PlayerFocusRing is drawn *outside* the border - that is the bloom the
+	     wireframes draw (scripts/render_gui_wireframes.py, library_tile: an
+	     outline 4 px outside the tile). With the clip left on the control ate
+	     its own ring, which is why the only thing left on screen was the
+	     framework's black frame. Rows are unaffected: Border.group still clips
+	     them, and their glow is inset on purpose.-->
+	<Style Selector=".player Button, .player TextBox, .player ComboBox.popup, .player c|EnumComboBox.popup, .player c|EnumComboBox.popup ComboBox#Dropdown, .player TabControl.segmented > TabItem">
+		<Setter Property="FocusAdorner">
+			<FocusAdornerTemplate />
+		</Setter>
+	</Style>
+	<!--#1089: the clip comes off with the ring and only while the ring is up.
+	     Clearing it for good (the first cut of this rule did) is a layout
+	     regression, not a focus fix: a press, a field or a drop-down whose
+	     content is bigger than its box then draws that content outside the box
+	     - the W-P2 Continue press grew a second line of text the clip used to
+	     hide ("lines 2/1" in render-gate), and a long value in a field or a
+	     long popup label would spill past the rounded border the same way.
+	     Keyed on the same pseudo-class each ring is set on, the clip is off
+	     exactly when the ring is on screen. That is :focus-visible for every
+	     carrier but the field: the field's ring is on plain :focus (its own
+	     rule further down, #1089 review 4), so its clip is keyed on :focus
+	     too. Keying the field's clip on :focus-visible left it eating the
+	     ring on the one path that reaches the field without a pad - a click,
+	     or a host's Focus(), takes :focus with :focus-visible off.
+	     The `.popup` drop-down in Play is two controls on top of each other -
+	     a <ComboBox Classes="popup"> and the one a <c:EnumComboBox
+	     Classes="popup"> wraps - and both of them clip, the same bounds twice
+	     over. Naming the wrapper and its ComboBox#Dropdown keeps the Aspect
+	     Ratio field from keeping the framework's frame and a clip that eats
+	     the ring while every other popup in the sheet is themed. The wrapper
+	     takes focus into its drop-down rather than on itself, so it answers
+	     :focus-within; the drop-down answers :focus-visible directly.-->
+	<Style Selector=".player Button:focus-visible, .player TextBox:focus, .player ComboBox.popup:focus-visible, .player c|EnumComboBox.popup:focus-within, .player c|EnumComboBox.popup ComboBox#Dropdown:focus-visible, .player TabControl.segmented > TabItem:focus-visible">
+		<Setter Property="ClipToBounds" Value="False" />
+	</Style>
+	<!--#1089 (review 4): the field's own clip is not the only one over its ring.
+	     The ring is set on the field template's Border#PART_BorderElement, and
+	     two wrappers of that same template sit between the field and the border,
+	     each of them a TemplatedControl and each of them carrying the clip
+	     Avalonia 12 gives one - the validation pair, both the same bounds as the
+	     field. Lifting the field's clip leaves the ring inside them, which is
+	     what the render case reads: with the field focused and the clip lifted
+	     above, the band around it was still the window's colour. Keyed on the
+	     field's own ring pseudo-class, like the rule above. -->
+	<Style Selector=".player TextBox:focus /template/ DataValidationErrors, .player TextBox:focus /template/ DataValidationErrors /template/ ContentControl#InlineDataValidationContentControl">
+		<Setter Property="ClipToBounds" Value="False" />
+	</Style>
 	<!--Every button in Play, not a list of the five classes that happened to have
 	     one: a pad navigates by focus and nothing else, so a button that answers the
 	     d-pad with no visible focus is a dead end the player cannot see they are in.
@@ -711,8 +769,23 @@
 		<Setter Property="BoxShadow" Value="{StaticResource PlayerShadowTile}" />
 		<Setter Property="ClipToBounds" Value="True" />
 	</Style>
+	<!--#1089: the tile rule above clips the picture to the 10 px radius, and a
+	     clip belongs to the control that sets it - the press's takes the
+	     PlayerFocusRing off its own background skin, the skin's takes the ring
+	     off itself, and one is enough to leave the tile a pad lands on
+	     answering with nothing. The focused tile lifts both; an unfocused tile
+	     keeps them. The cost is that the focused tile's own picture is no
+	     longer rounded to the radius while the ring is up (the background is
+	     Black either way, so the corners are the only place it shows), which is
+	     the trade the ring needs: a focus look a pad user cannot see is a dead
+	     end, and PlayerFocusRing is drawn outside the bounds the clip is set
+	     to.-->
+	<Style Selector=".player c|StateGridEntry.tiles Button#TileButton:focus-visible">
+		<Setter Property="ClipToBounds" Value="False" />
+	</Style>
 	<Style Selector=".player c|StateGridEntry.tiles Button#TileButton:focus-visible /template/ Border#PART_Background">
 		<Setter Property="BoxShadow" Value="{StaticResource PlayerFocusRing}" />
+		<Setter Property="ClipToBounds" Value="False" />
 	</Style>
 	<Style Selector=".player c|StateGridEntry.tiles Button#TileButton:pointerover">
 		<Setter Property="Opacity" Value="0.9" />
@@ -1515,6 +1588,19 @@
 	</Style>
 	<Style Selector=".player c|StateGridEntry.tiles.slot Button#TileButton.activeEntry /template/ Border#PART_Background">
 		<Setter Property="BoxShadow" Value="{StaticResource PlayerFocusRing}" />
+	</Style>
+	<!--#1089 (review 4): this ring is a class look, not a focus look - the slot
+	     grid binds the tile's `activeEntry` class to its IsActiveEntry - so the
+	     tile's :focus-visible lift above never fires for the slot the player is
+	     already on, and the tile's own clip (the .tiles rule) ate the ring the
+	     same way it ate the focused one. Same trade as the focused tile: the
+	     picture is not rounded to the radius while the active slot shows the
+	     ring, and the background is Black either way. -->
+	<Style Selector=".player c|StateGridEntry.tiles.slot Button#TileButton.activeEntry">
+		<Setter Property="ClipToBounds" Value="False" />
+	</Style>
+	<Style Selector=".player c|StateGridEntry.tiles.slot Button#TileButton.activeEntry /template/ Border#PART_Background">
+		<Setter Property="ClipToBounds" Value="False" />
 	</Style>
 	<Style Selector=".player c|StateGridEntry.tiles.slot TextBlock.title">
 		<Setter Property="Margin" Value="0 6 0 0" />

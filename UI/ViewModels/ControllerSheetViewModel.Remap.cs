@@ -85,17 +85,17 @@ namespace Mesen.ViewModels
 			return ports.Count > 0 ? 0 : -1;
 		}
 
-		//The code the port's slots bind for this control: the first non-zero field
-		//across the four slots (which is also the slot the rebind replaces).
-		private static ushort BoundCode(ControllerConfig config, SetupButton button)
+		//The code the port binds for this control, as the row reads it: the field of
+		//the slot the selected pad holds (`padSlot`, FirstSlotHolding - the slot the
+		//rebind joins), else the first non-zero field across the four slots (#965,
+		//ControllerSheetRemap.BoundCode).
+		private static ushort BoundCode(ControllerConfig config, SetupButton button, int? padSlot)
 		{
+			ushort[] controlPerSlot = new ushort[4];
 			for(int slot = 0; slot < 4; slot++) {
-				ushort code = ControllerSheetSlotWrite.Field(ControllerSheetSlotWrite.Slot(config, slot), button);
-				if(code != 0) {
-					return code;
-				}
+				controlPerSlot[slot] = ControllerSheetSlotWrite.Field(ControllerSheetSlotWrite.Slot(config, slot), button);
 			}
-			return 0;
+			return ControllerSheetRemap.BoundCode(controlPerSlot, padSlot);
 		}
 
 		//ADR-0256 Decision 4 for the capture: a control the pad navigates with may
@@ -178,16 +178,16 @@ namespace Mesen.ViewModels
 						break;
 				}
 			}
-			ApplyRemapRows(config!, pad!, pressed);
+			ApplyRemapRows(config!, pad!, pressed, FirstSlotHolding(ports[portIndex]));
 		}
 
 		//The rows' two lights, from the two real sources: the pad's own buttons
 		//(GamepadTestItem.Buttons, the per-backend order slice 1 reads) and the
 		//console's own view (the port's bound code, held) - never a third table.
-		private void ApplyRemapRows(ControllerConfig config, GamepadTestItem pad, IReadOnlyList<ushort> pressed)
+		private void ApplyRemapRows(ControllerConfig config, GamepadTestItem pad, IReadOnlyList<ushort> pressed, int? padSlot)
 		{
 			foreach(ControllerSheetRemapRow row in _remapRows) {
-				ushort bound = BoundCode(config, row.Button);
+				ushort bound = BoundCode(config, row.Button, padSlot);
 				int? bit = bound != 0 ? ControllerSheetRemap.ButtonBitOfCodeName(KeyName(bound), pad.Backend) : null;
 				bool padHeld = bit is int index && index < pad.Buttons.Count && pad.Buttons[index].IsPressed;
 				RemapLights lights = ControllerSheetRemap.Lights(bound, bit, padHeld, bound != 0 && pressed.Contains(bound));

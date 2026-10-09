@@ -20,8 +20,8 @@
 			<Control ID="btnOverlaySettings">Settings</Control>
 			<Control ID="btnOverlayQuitGame">Quit Game</Control>
 			<Control ID="lblSaveStatesSheetTitle">Save States</Control>
-			<Control ID="btnSaveStatesSave">Save to a slot…</Control>
-			<Control ID="btnSaveStatesLoad">Load a slot…</Control>
+			<Control ID="btnSaveStatesSaveHere">Save here</Control>
+			<Control ID="btnSaveStatesLoadSlot">Load</Control>
 			<Control ID="btnSaveStatesReplays">Shared replays…</Control>
 			<Control ID="btnSaveStatesBack">Back</Control>
 		</Form>
@@ -33,6 +33,21 @@
 		<Form ID="PlayerRomPickerView">
 			<Control ID="lblRomPickerHint">Pick a folder, then a game.</Control>
 			<Control ID="btnRomPickerBack">Back</Control>
+			<!--#1032 (ADR-0264 Decision 11): the library sheet's second entry point,
+			    the one that opens the folder browser the sheet no longer starts on.-->
+			<Control ID="btnRomPickerBrowseFile">Browse a file…</Control>
+			<!--#1033 (ADR-0264 Decision 4): the library's search box, its placeholder
+			    and the Clear action that is the way out of an empty result. The
+			    placeholder is the wireframe's own words (W-P19).-->
+			<Control ID="lblRomPickerSearchPlaceholder">Search games</Control>
+			<Control ID="btnRomPickerSearchClear">Clear</Control>
+			<!--#1036 (ADR-0264 Decision 8): *Library folders…* and the sheet it opens -
+			    the list, the press that adds a folder, and the press that takes one out
+			    of the list without touching the disk.-->
+			<Control ID="btnRomPickerLibraryFolders">Library folders…</Control>
+			<Control ID="lblRomPickerFoldersHint">Your library shows every game in these folders.</Control>
+			<Control ID="btnRomPickerFoldersAdd">Add a folder…</Control>
+			<Control ID="btnRomPickerFolderRemove">Remove</Control>
 		</Form>
 		<Form ID="PlayerPackPickerSheetView">
 			<Control ID="lblPackPickerRemembered">Remembered for this game. Change it any time from the pause menu.</Control>
@@ -46,6 +61,8 @@
 			<Control ID="lblPackDetailLayersHint">The switches apply to this game only.</Control>
 			<Control ID="lblPackDetailLayersWait">Applying…</Control>
 			<Control ID="lblPackDetailMissingMusicTitle">Some music is missing</Control>
+			<Control ID="lblPackDetailPendingFileBody">The pack's author could not share this file. If you have it, add it and the pack completes.</Control>
+			<Control ID="btnPackDetailAddFile">Add the File…</Control>
 			<Control ID="lblPackDetailOfferTitle">A community pack is available</Control>
 			<Control ID="btnPackDetailUseCommunity">Use Community Pack</Control>
 			<Control ID="btnPackDetailChange">Change Pack…</Control>
@@ -67,7 +84,7 @@
 			<Control ID="chkEnhancementsWideScrn">Widescreen</Control>
 			<Control ID="chkEnhancementsOverclock">Overclock</Control>
 			<Control ID="lblEnhancementsAppliesOnReload">Applies on reload</Control>
-			<Control ID="lblEnhancementsLookHint">How the picture looks: Settings › Video</Control>
+			<Control ID="lblEnhancementsLookHint">How the picture looks: Settings › Look</Control>
 		</Form>
 		<Form ID="PlayHomeView">
 			<Control ID="lblPlayHomeDropTitle">Drop a game here</Control>
@@ -153,6 +170,7 @@
 			<Control ID="lblZonePaint">PAINT</Control>
 			<Control ID="lblZoneSeeIt">SEE IT</Control>
 			<Control ID="btnRecordWhileIPlay">Record While I Play</Control>
+			<Control ID="btnOpenRightGame">Open the Right Game…</Control>
 			<Control ID="btnRecordFromTas">Record from a TAS Movie…</Control>
 			<Control ID="btnLetTheAiPlay">Let the AI Play…</Control>
 			<Control ID="btnPrepareFigures">Prepare Figures</Control>
@@ -1022,18 +1040,22 @@
 			<Control ID="cboSystemArrows">Arrow keys + S / A</Control>
 			<Control ID="cboSystemWasd">WASD + K / J</Control>
 			<Control ID="lblSystemGamepads">Xbox and PlayStation controllers work as soon as you plug them in. Another controller asks to be set up the first time you press a button.</Control>
+			<Control ID="lblSystemBoxArtRow">Box art</Control>
+			<Control ID="chkDownloadBoxArt">Download box art</Control>
+			<Control ID="lblSystemBoxArtDetail">Covers come from libretro-thumbnails, one request per game you can see, once. A cover already downloaded is kept either way.</Control>
 			<Control ID="btnSystemRestart">Restart now</Control>
 		</Form>
 		<Form ID="PlayerSettingsSheetView">
 			<Control ID="lblPlayerSettingsTitle">Settings</Control>
-			<Control ID="tabDisplay">Window</Control>
-			<Control ID="tabLook">Video</Control>
+			<Control ID="tabDisplay">Display</Control>
+			<Control ID="tabLook">Look</Control>
 			<Control ID="tabAudio">Audio</Control>
 			<Control ID="tabPlayerControls">Controls</Control>
 			<Control ID="tabSystem">System</Control>
 			<Control ID="btnPlayerSettingsMoreInOptions">More in Options…</Control>
 			<Control ID="lblPlayerSettingsEverythingElse">Everything else: Classic › Settings</Control>
 			<Control ID="btnPlayerSettingsDone">Done</Control>
+			<Control ID="btnPlayerSettingsExitFullscreen">Exit full screen</Control>
 		</Form>
 		<Form ID="ConfigWindow">
 			<Control ID="wndTitle">Settings</Control>
@@ -2210,6 +2232,17 @@
 		<Message ID="PlayHomeLastPlayedOn">Last played {0}</Message>
 		<Message ID="PlayHomePackBadgeInstalled">Enhancement pack installed</Message>
 		<Message ID="PlayHomePackBadgeCommunity">Community pack available — installs when you play</Message>
+		<!--#1036 (ADR-0264 Decision 8): the Library sheet's header. The sentence is
+		here rather than in LibraryFolders because it is player-facing text and that
+		module is host-free (ADR-0123) and owns no resource; the module owns the
+		plural RULE and answers with one of these four ids
+		(LibraryFolders.HeaderResourceId). All four format with the SAME two
+		arguments, (games, folders), so a caller that has the two counts passes both
+		whatever form it gets and the unused one is ignored.-->
+		<Message ID="LibraryHeaderGamesInFolders">Your library · {0} games in {1} folders</Message>
+		<Message ID="LibraryHeaderOneGameInFolders">Your library · 1 game in {1} folders</Message>
+		<Message ID="LibraryHeaderGamesInOneFolder">Your library · {0} games in 1 folder</Message>
+		<Message ID="LibraryHeaderOneGameInOneFolder">Your library · 1 game in 1 folder</Message>
 		<Message ID="OverlayRowNone">none</Message>
 		<Message ID="OverlayPackCommunityAvailable">Community pack available</Message>
 		<Message ID="OverlayRowCountOn">{0} on</Message>
@@ -2235,6 +2268,7 @@
 		<Message ID="PlayerToolSheetTitleVideoRecord">Record Video</Message>
 		<Message ID="PlayerToolSheetTitleBarcode">Insert Barcode</Message>
 		<Message ID="DoorMenuPowerCycle">Power Cycle</Message>
+		<Message ID="DoorMenuToolsHint">Disk, coin and tape items appear when the game uses them.</Message>
 		<Message ID="DoorMenuScreenshot">Screenshot</Message>
 		<Message ID="DoorMenuReloadPackImages">Reload Pack Images</Message>
 		<Message ID="DoorMenuEnhancementPacks">Enhancement Packs</Message>
@@ -2539,6 +2573,7 @@ E
 
 		<Message ID="InstallMepPackInvalidPack">The selected file is not a valid enhancement pack (no pack.json at the root of the zip, or unsafe paths).</Message>
 			<Message ID="InstallMepPackInvalidZipFile">The selected file is not a valid ZIP file or could not be copied.</Message>
+			<Message ID="DropPackInstalled">Enhancement pack installed: {0}. It loads with the next game it matches.</Message>
 			<Message ID="InstallMepPackConfirmReset">The enhancement pack has been installed. Do you want to power cycle the console to apply it now?</Message>
 			<Message ID="EnhancementPacksConfirmReset">Enhancement pack settings apply on the next power cycle. Power cycle now?</Message>
 
@@ -2596,10 +2631,29 @@ E
 		<Message ID="PackDetailAutoMadeWith">Made on this computer from what you played ({0})</Message>
 		<Message ID="PackDetailIds">pack id: {0} · content id: {1} · container: {2}</Message>
 		<Message ID="EnhancementsOverclockUnavailable">not available on {0}</Message>
-		<!--ADR-0253 §4 (W.5): the Widescreen switch's one-line reason when the
-		game has nothing to show beside the picture (or a console with no side
-		map: SMS/SG-1000 without widescreen pack art).-->
-		<Message ID="EnhancementsWidescreenUnavailable">This game has nothing to show beside the picture</Message>
+		<!--#1081: the console the row above names. The IDs are `ConsoleType` +
+		the ConsoleType member (UI/Interop/InteropEnums.cs), paired by
+		ConsoleTypeNames.MessageId - the one table that knows both sides, so a
+		console renamed in the enum and left behind here is caught by
+		UI.Tests/Play/ConsoleTypeNamesTests. The words are the ones the rest of
+		the UI already uses for each machine (lblNes/lblSnes/lblPce/
+		lblWonderSwan), not the core's own spelling. SMS is the one that spells
+		the maker's name out: the bug's report asked for `Sega Master System`
+		over the shorter `Master System` the picker's RomConsoleMasterSystem row
+		carries, and the sentence reads `not available on Sega Master System`. -->
+		<Message ID="ConsoleTypeSnes">SNES</Message>
+		<Message ID="ConsoleTypeGameboy">Game Boy</Message>
+		<Message ID="ConsoleTypeNes">NES</Message>
+		<Message ID="ConsoleTypePcEngine">PC Engine</Message>
+		<Message ID="ConsoleTypeSms">Sega Master System</Message>
+		<Message ID="ConsoleTypeGba">Game Boy Advance</Message>
+		<Message ID="ConsoleTypeWs">WonderSwan</Message>
+		<!--ADR-0253 §4 (W.5), reworded by ADR-0267 stage 1 (option B): the
+		Widescreen switch's one-line reason when a game has nothing to reveal
+		beside the picture. It says what widescreen does there - a fill, not a
+		Reveal - because it is shown under a usable switch too (a console with no
+		side map: SMS/SG-1000 without widescreen pack art).-->
+		<Message ID="EnhancementsWidescreenUnavailable">Nothing to reveal beside the picture; widescreen will only stretch it</Message>
 		<Message ID="EnhancementsApply">Apply</Message>
 		<Message ID="EnhancementsApplyReload">Apply &amp; Reload</Message>
 		<Message ID="EnhancementsApplyRestart">Apply &amp; Restart</Message>
@@ -2632,6 +2686,37 @@ E
 		<Message ID="BiosShortNameOther">the BIOS file</Message>
 		<Message ID="BiosNeededStatus">{0} needs {1}</Message>
 		<Message ID="RomPickerTitle">Open a ROM</Message>
+		<!-- #1032 (ADR-0264): the Play sheet's own surface is the flat library,
+		     so it has its own header, its own count and its own empty state. The
+		     browser's strings below are unchanged: the browser is unchanged. -->
+		<Message ID="RomPickerLibraryTitle">Your library</Message>
+		<!-- The header's count (Decision 8), assembled from counted words rather
+		     than from a plural form: "1 games" and "11 games in 1 folders" are
+		     both what a single template gets wrong, and a player reads this line
+		     on every visit. {0} = the games, {1} = the folders that answered. -->
+		<!-- Decision 9: a scan that hit LibraryScan.MaxEntries says so rather than
+		     silently dropping games. {0} = the cap. -->
+		<Message ID="RomPickerLibraryTruncated">Showing the first {0} games — the scan stopped at its limit.</Message>
+		<!-- Decision 8: the named empty state, and it names the NEXT STEP - the two
+		     steps that now exist, named as the player reads them on screen: the
+		     header's own *Library folders…* control, then that sheet's *Add a
+		     folder…*. The browser's *Make this my games folder* is NOT one of them
+		     any more: it changes the single games folder, not the folder list, so
+		     pointing there left a player who followed it with an empty library. -->
+		<Message ID="RomPickerLibraryNoFolders">No library folder yet. Open Library folders…, then choose Add a folder….</Message>
+		<!-- #1060 (ADR-0264 Decision 8): the OTHER empty state - a library folder the
+		     scan answered nothing for (a library still being copied, a folder of
+		     notes, games on a stick that is not plugged in). It is a different fact
+		     from the one above, and it names the same next step in the same words:
+		     once the list is stored, *Make this my games folder* no longer changes
+		     the library, so only Library folders… -> Add a folder… does. -->
+		<Message ID="RomPickerLibraryEmpty">No games found in your library folders. Open Library folders…, then choose Add a folder….</Message>
+		<!-- Decision 4 (#1033): the named empty RESULT - the other empty state again,
+		     and a different fact from the one above: the library answered, and the
+		     QUERY kept nothing. A query that finds nothing says so with the query in
+		     it, beside the box that holds it and the Clear action that undoes it -
+		     never an empty grid. {0} = what the player typed. -->
+		<Message ID="RomPickerLibraryNoMatch">No games match “{0}”.</Message>
 		<Message ID="RomPickerEmpty">No games in this folder.</Message>
 		<Message ID="RomPickerThisComputer">This computer</Message>
 		<Message ID="RomPickerSearching">Looking for your games…</Message>
@@ -2644,6 +2729,16 @@ E
 		     folder answers something too - so "will keep opening where you last
 		     played" was false here in both cases. -->
 		<Message ID="RomPickerGamesFolderEmpty">Saved. There are no games in that folder yet, so MesenAI is not using it for now.</Message>
+		<!-- #1036 (ADR-0264 Decision 8): the folders sheet's own heading, the answers an
+		     add can give, and the action row the folder browser shows while the sheet
+		     is picking a folder. The answers that did NOT change the list say why,
+		     rather than leaving a press that appears to do nothing. {0} = the folder. -->
+		<Message ID="RomPickerFoldersTitle">Library folders</Message>
+		<Message ID="RomPickerFolderAdded">{0} is now in your library.</Message>
+		<Message ID="RomPickerFolderAlreadyListed">{0} is already in your library.</Message>
+		<Message ID="RomPickerFolderInvalid">MesenAI cannot use that folder.</Message>
+		<Message ID="RomPickerFolderRemoved">Removed {0} from your library. Nothing was deleted from your disk.</Message>
+		<Message ID="RomPickerAddThisFolder">Add this folder to your library</Message>
 		<!-- The console a discovered library holds, shown first on its row in the
 		     picker's suggestion list. The IDs are `RomConsole` + the RomConsole
 		     member (UI/Logic/RomConsoleKinds.cs), so the enum and this file must
@@ -2655,6 +2750,11 @@ E
 		<Message ID="RomConsoleMasterSystem">Master System</Message>
 		<Message ID="RomConsoleSg1000">SG-1000</Message>
 		<Message ID="RomConsoleGameGear">Game Gear</Message>
+		<!-- #1034 (ADR-0264 Decision 5): the library sheet's console filter, whose
+		     first segment is the narrowing's absence. It is deliberately not a
+		     RomConsole* id - `All` is not a console, and a console name here would
+		     make the segment that shows everything read as one of the machines. -->
+		<Message ID="RomPickerConsoleAll">All</Message>
 		<Message ID="LoadFailedTitleNotAGame">“{0}” is not a game MesenAI can open.</Message>
 		<Message ID="LoadFailedBodyNotAGame">MesenAI opens NES, Game Boy, Game Boy Color, Master System and Game Boy Advance games, or a zip holding one.</Message>
 		<Message ID="LoadFailedTitleZipWithoutGame">“{0}” has no game in it.</Message>
@@ -2677,6 +2777,7 @@ E
 		<Message ID="PackDepPill">{0} waits for one file. Press Esc to add it.</Message>
 		<Message ID="ControllerSetupTitle">Set up “{0}”</Message>
 		<Message ID="ControllerSetupUnnamed">your controller</Message>
+		<Message ID="ControllerSetupPillNamed">New controller “{0}”. Press Start on it to set it up.</Message>
 		<Message ID="ControllerSetupPrompt">Press the button you want as {0}</Message>
 		<Message ID="ControllerSetupStep">Step {0} of {1} · {2}</Message>
 		<Message ID="ControllerSetupSaved">{0} is set up.</Message>
@@ -3543,12 +3644,12 @@ E
 			<Value ID="Unspecified">Unspecified</Value>
 			<Value ID="StandardControllers">Standard Controllers</Value>
 			<Value ID="FourScore">Four Score (NES)</Value>
-			<Value ID="FourPlayerAdapter">Four Player Adapter (Famicom)</Value>
+			<Value ID="FourPlayerAdapter">Simple Four Player Adapter (Famicom)</Value>
 			<Value ID="VsSystem">VS System</Value>
 			<Value ID="VsSystemSwapped">VS System - Swap P1/P2</Value>
-			<Value ID="VsSystemSwapAB">VS System - Swap A/B buttons</Value>
+			<Value ID="EightPlayers">Four Score (NES)+Hori Four Player Adapter (Famicom)</Value>
 			<Value ID="VsZapper">VS Zapper</Value>
-			<Value ID="Zapper">Zapper</Value>
+			<Value ID="Zapper1">Zapper ($4017)</Value>
 			<Value ID="TwoZappers">2 Zappers</Value>
 			<Value ID="BandaiHypershot">Bandai Hypershot</Value>
 			<Value ID="PowerPadSideA">Power Pad Side A</Value>
@@ -3581,7 +3682,7 @@ E
 			<Value ID="SuborKeyboard">Subor Keyboard</Value>
 			<Value ID="SuborKeyboardMouse1">Subor Keyboard+Macro Winners Mouse</Value>
 			<Value ID="SuborKeyboardMouse2">Subor Keyboard+Subor Mouse ($4016)</Value>
-			<Value ID="SnesMouse">SNES Mouse</Value>
+			<Value ID="SnesMouse1">SNES Mouse ($4016)</Value>
 			<Value ID="GenericMulticart">Generic Multicart</Value>
 			<Value ID="SnesControllers">SNES Controllers</Value>
 			<Value ID="RacerMateBicycle">RacerMate Bicycle</Value>
@@ -3600,6 +3701,27 @@ E
 			<Value ID="VenomTVDance">Venom TV Dance Mat</Value>
 			<Value ID="LgTvRemote">LG TV Remote</Value>
 			<Value ID="FcnsController">FCNS Controller</Value>
+			<Value ID="KingFishingController">King Fishing Controller</Value>
+			<Value ID="CroakyKaraokeController">Croaky Karaoke Controller</Value>
+			<Value ID="KingwonKeyboard">Kingwon Keyboard</Value>
+			<Value ID="ZechengKeyboard">Zecheng Keyboard</Value>
+			<Value ID="SuborKeyboardMouse4">Subor Keyboard+L90-rotated PS/2 Mouse ($4017)</Value>
+			<Value ID="Ps2KeyboardMouse">UM6578 PS/2 Keyboard+PS/2 Mouse ($4017)</Value>
+			<Value ID="Ps2Mouse">UM6578 PS/2 Mouse</Value>
+			<Value ID="YuxingMouse">Yuxing Mouse ($4016)</Value>
+			<Value ID="SuborKeyboardMouse5">Subor Keyboard+Yuxing Mouse ($4016)</Value>
+			<Value ID="GiggleTvPump">Giggle TV Pump</Value>
+			<Value ID="BbkKeyboardMouse">BBK Keyboard+R90-rotated PS/2 Mouse ($4017)</Value>
+			<Value ID="MagicalCooking">Magical Cooking</Value>
+			<Value ID="SnesMouse2">SNES Mouse ($4017)</Value>
+			<Value ID="Zapper2">Zapper ($4016)</Value>
+			<Value ID="ArkanoidControllerPrototype">Arkanoid Controller (Prototype)</Value>
+			<Value ID="TvMahjongGame">TV Mahjong Game Controller</Value>
+			<Value ID="MahjongGekitouDensetsu">Mahjong Gekitou Densetsu Controller</Value>
+			<Value ID="SuborKeyboardMouse6">Subor Keyboard+X-inverted PS/2 Mouse ($4017)</Value>
+			<Value ID="IbmKeyboard">IBM PC/XT Keyboard</Value>
+			<Value ID="SuborKeyboardMouse7">Subor Keyboard+Mega Book Mouse</Value>
+			<Value ID="HoriTrack">Hori Track</Value>
 		</Enum>
 
 		<Enum ID="FirmwareType">

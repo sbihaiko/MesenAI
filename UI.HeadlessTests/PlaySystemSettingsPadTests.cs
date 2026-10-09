@@ -7,6 +7,7 @@ using System.Threading;
 using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using Mesen.Config;
 using Mesen.Interop;
 using Mesen.Logic;
@@ -319,19 +320,62 @@ public class PlaySystemSettingsPadTests : IDisposable
 		PressAndLand(window, PadNavAction.Down, "SystemKeyboardArrows");
 		PressAndLand(window, PadNavAction.Down, "SystemKeyboardWasd");
 
-		//Nothing of the surface's own is below its last row (the restart button is
-		//not offered yet), so the press is spent on the surface's own edge instead
-		//of stepping onto the card behind it.
+		//Below the last row is the sheet's own footer (#932: Done is reachable),
+		//never the card behind it: the press stays on the sheet's surface.
 		Press(window, PadNavAction.Down);
-		Assert.True(FocusedName(window) == "SystemKeyboardWasd", $"the pad walked off the sheet onto the surface under it ({Focused(window)})");
+		Border sheet = window.FindNamed<Border>("PlayerSettingsSheet");
+		Control? focused = window.FocusManager?.GetFocusedElement() as Control;
+		Assert.True(focused is not null && focused.GetVisualAncestors().Contains(sheet),
+			$"the pad walked off the sheet onto the surface under it ({Focused(window)})");
+		Assert.NotEqual("OverlayResumeButton", FocusedName(window));
+	}
 
-		//The ring is the cursor, so the point is not only where the focus is: the
-		//card behind is dim, and the surface under it must stay inactive. (Confirm
-		//on the card's Resume would have dismissed the sheet back to a running
-		//game.)
-		Press(window, PadNavAction.Confirm);
-		Pump();
-		Assert.True(window.FindNamed<Border>("PlayerSettingsSheet").IsOnScreen(), "Confirm left the sheet, so it acted on the card behind it");
+	//#932, ADR-0256: every control on the sheet is reachable from the pad, and
+	//the System tab is where the pad lands first. Measured before the claim named
+	//the sheet as its search root: the root was inferred from the target (the
+	//tab's page), so the trail was UserFolder -> Portable -> KeyboardArrows ->
+	//KeyboardWasd and stopped there - Done, the only pad way back to W-P4 other
+	//than Back, could not be reached.
+	[AvaloniaFact]
+	public void The_pad_walks_down_from_the_System_choices_to_Done()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, _) = ShowSystemTab(new RecordingSystem());
+		WaitForStorageChoice(window);
+
+		List<string?> trail = Walk(window, PadNavAction.Down, "btnPlayerSettingsDone");
+		Assert.True(FocusedName(window) == "btnPlayerSettingsDone",
+			$"the pad's Down never reached Done (trail: {string.Join(" -> ", trail)})");
+	}
+
+	//The same root, the other way: Up from the storage choice reaches the tab
+	//strip, so the pad can change tab from the System tab as it can from the others.
+	[AvaloniaFact]
+	public void The_pad_walks_up_from_the_System_choices_to_the_tab_strip()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, _) = ShowSystemTab(new RecordingSystem());
+		WaitForStorageChoice(window);
+
+		Press(window, PadNavAction.Up);
+		Control? focused = window.FocusManager?.GetFocusedElement() as Control;
+		Assert.True(focused is TabItem && focused.GetVisualAncestors().Contains(window.FindNamed<TabControl>("PlayerSettingsTabs")),
+			$"the pad's Up from the storage choice did not reach the tab strip ({Focused(window)})");
+	}
+
+	//Presses one direction until the focus lands on the named control or stops
+	//moving, and returns where it went - the failure names the whole trail.
+	private List<string?> Walk(MainWindow window, PadNavAction action, string until)
+	{
+		List<string?> trail = new() { FocusedName(window) };
+		for(int i = 0; i < 8 && FocusedName(window) != until; i++) {
+			Press(window, action);
+			if(FocusedName(window) == trail[^1]) {
+				break;
+			}
+			trail.Add(FocusedName(window));
+		}
+		return trail;
 	}
 
 	//Decision 8, the storage row from the pad: walk to the other folder, press

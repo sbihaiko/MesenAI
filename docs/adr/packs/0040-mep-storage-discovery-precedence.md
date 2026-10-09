@@ -29,7 +29,7 @@ section. The loaders differ: NES `HdPackLoader::LoadHdNesPack(string)` and
    or mtime in `.cache/<name>/.mep-source` differs (ADR-0120 §2, `PrepareZip`).
    A zip pack and a directory pack are then the *same* thing for every
    consumer — one code path; the NES/GB/SMS texture loaders keep directory-only
-   signatures. Entries are validated before extraction (spec §6): a normalised
+   signatures. Entries are validated before extraction (spec §6): a normalized
    path containing `..`, starting with `/` or `\`, or carrying a drive prefix
    aborts the whole pack ("zip-slip"); directory entries are created,
    everything else written verbatim.

@@ -39,6 +39,7 @@ public class PlayRomPickerRenderTests : IDisposable
 	private readonly Workspace _workspace = ConfigManager.Config.Preferences.Workspace;
 	private readonly string? _gameFolder = ConfigManager.Config.Preferences.GameFolder;
 	private readonly bool _overrideGameFolder = ConfigManager.Config.Preferences.OverrideGameFolder;
+	private readonly List<string>? _libraryFolders = ConfigManager.Config.Preferences.LibraryFolders;
 
 	private readonly List<MainWindow> _windows = new();
 	private readonly string _folder = Path.Combine(Path.GetTempPath(), "mesen-rom-picker-renders-" + Guid.NewGuid().ToString("N"));
@@ -65,6 +66,7 @@ public class PlayRomPickerRenderTests : IDisposable
 		prefs.Workspace = _workspace;
 		prefs.GameFolder = _gameFolder ?? "";
 		prefs.OverrideGameFolder = _overrideGameFolder;
+		prefs.LibraryFolders = _libraryFolders;
 		ConfigManager.Config.Save();
 
 		try {
@@ -80,15 +82,21 @@ public class PlayRomPickerRenderTests : IDisposable
 		prefs.UiMode = UiMode.Player;
 		prefs.Workspace = Workspace.Play;
 
+		//#999: the stale recents go BEFORE the window starts. The window's own
+		//startup Init reads them, and a second Init in the same mode with entries
+		//on screen returns early (the anti-flicker guard), so deleting them
+		//afterwards left the recents home up whenever an earlier class had left
+		//an .rgd behind.
+		foreach(string stale in Directory.GetFiles(ConfigManager.RecentGamesFolder, "*.rgd")) {
+			File.Delete(stale);
+		}
+
 		MainWindow window = new() { Width = 1100, Height = 740 };
 		window.ShowStarted();
 		_windows.Add(window);
 		MainWindowViewModel model = Assert.IsType<MainWindowViewModel>(window.DataContext);
 		WaitFor(() => model.MainMenu.HelpMenuItems.Count > 0, "MainWindow never finished building its menus.");
 
-		foreach(string stale in Directory.GetFiles(ConfigManager.RecentGamesFolder, "*.rgd")) {
-			File.Delete(stale);
-		}
 		model.RecentGames.Init(GameScreenMode.RecentGames);
 		Pump();
 		Assert.True(model.RecentGames.ShowFirstRunHome, "the home is not the first-run one, so the render would be of the wrong surface");
@@ -105,6 +113,7 @@ public class PlayRomPickerRenderTests : IDisposable
 		File.WriteAllBytes(Path.Combine(sub, "Contra.nes"), SyntheticNrom.Build());
 		ConfigManager.Config.Preferences.GameFolder = root;
 		ConfigManager.Config.Preferences.OverrideGameFolder = true;
+		ConfigManager.Config.Preferences.LibraryFolders = null;
 		return root;
 	}
 
@@ -152,10 +161,13 @@ public class PlayRomPickerRenderTests : IDisposable
 		model.RomPicker.SuggestionSource = _ => new[] { new RomPickerHit(lib, 30) };
 		model.RomPicker.RunScanInline = true;
 		model.OpenRomPicker();
+		//#1032 (ADR-0264 Decision 11): these renders are of the BROWSER, which
+		//now lives inside the library sheet behind *Browse a file…*.
+		model.RomPicker.BrowseFile();
 		Pump();
 
 		AssertSheetIsUp(window, model);
-		PlayerRomPickerRow suggestion = Assert.Single(model.RomPicker.Rows.Where(r => r.Path == lib));
+		PlayerRomPickerRow suggestion = Assert.Single(model.RomPicker.Rows, r => r.Path == lib);
 		Assert.Equal(RomPickerRowKind.Folder, suggestion.Kind);
 		Assert.Equal(model.RomPicker.Rows[^1], suggestion);
 		//The line is gone: the scan is done, and the state on screen is the answer.
@@ -180,6 +192,9 @@ public class PlayRomPickerRenderTests : IDisposable
 		};
 		try {
 			model.OpenRomPicker();
+		//#1032 (ADR-0264 Decision 11): these renders are of the BROWSER, which
+		//now lives inside the library sheet behind *Browse a file…*.
+		model.RomPicker.BrowseFile();
 			Pump();
 
 			WaitFor(() => model.RomPicker.SearchingText.Length > 0, "the scan never announced itself");
@@ -210,6 +225,9 @@ public class PlayRomPickerRenderTests : IDisposable
 		model.RomPicker.SuggestionSource = _ => Array.Empty<RomPickerHit>();
 		model.RomPicker.RunScanInline = true;
 		model.OpenRomPicker();
+		//#1032 (ADR-0264 Decision 11): these renders are of the BROWSER, which
+		//now lives inside the library sheet behind *Browse a file…*.
+		model.RomPicker.BrowseFile();
 		Pump();
 		model.RomPicker.Choose(model.RomPicker.Rows.First(r => r.Label == "Your games"));
 		Pump();
@@ -217,7 +235,7 @@ public class PlayRomPickerRenderTests : IDisposable
 		Pump();
 
 		AssertSheetIsUp(window, model);
-		PlayerRomPickerRow action = Assert.Single(model.RomPicker.Rows.Where(r => r.Kind == RomPickerRowKind.Action));
+		PlayerRomPickerRow action = Assert.Single(model.RomPicker.Rows, r => r.Kind == RomPickerRowKind.Action);
 		Assert.Equal(model.RomPicker.Rows[0], action);
 		Assert.Contains("nes", model.RomPicker.PathText);
 		Assert.False(window.FindNamed<TextBlock>("RomPickerEmpty").IsOnScreen());
@@ -238,12 +256,15 @@ public class PlayRomPickerRenderTests : IDisposable
 		model.RomPicker.SuggestionSource = _ => Array.Empty<RomPickerHit>();
 		model.RomPicker.RunScanInline = true;
 		model.OpenRomPicker();
+		//#1032 (ADR-0264 Decision 11): these renders are of the BROWSER, which
+		//now lives inside the library sheet behind *Browse a file…*.
+		model.RomPicker.BrowseFile();
 		Pump();
 		model.RomPicker.Choose(model.RomPicker.Rows.First(r => r.Label == "Your games"));
 		Pump();
 		model.RomPicker.Choose(model.RomPicker.Rows.First(r => r.Label == "nes"));
 		Pump();
-		model.RomPicker.Choose(Assert.Single(model.RomPicker.Rows.Where(r => r.Kind == RomPickerRowKind.Action)));
+		model.RomPicker.Choose(Assert.Single(model.RomPicker.Rows, r => r.Kind == RomPickerRowKind.Action));
 		Pump();
 
 		AssertSheetIsUp(window, model);
@@ -267,11 +288,15 @@ public class PlayRomPickerRenderTests : IDisposable
 		Directory.CreateDirectory(Path.Combine(root, "empty"));
 		ConfigManager.Config.Preferences.GameFolder = root;
 		ConfigManager.Config.Preferences.OverrideGameFolder = true;
+		ConfigManager.Config.Preferences.LibraryFolders = null;
 
 		(MainWindow window, MainWindowViewModel model) = Show();
 		model.RomPicker.SuggestionSource = _ => Array.Empty<RomPickerHit>();
 		model.RomPicker.RunScanInline = true;
 		model.OpenRomPicker();
+		//#1032 (ADR-0264 Decision 11): these renders are of the BROWSER, which
+		//now lives inside the library sheet behind *Browse a file…*.
+		model.RomPicker.BrowseFile();
 		Pump();
 		model.RomPicker.Choose(model.RomPicker.Rows.First(r => r.Label == "Your games"));
 		Pump();
@@ -281,7 +306,7 @@ public class PlayRomPickerRenderTests : IDisposable
 		AssertSheetIsUp(window, model);
 		WaitFor(() => (window.FocusManager?.GetFocusedElement() as Control)?.Name == "RomPickerBack",
 			"an empty folder did not send the ring to Back");
-		Assert.Single(model.RomPicker.Rows.Where(r => r.Kind == RomPickerRowKind.Action));
+		Assert.Single(model.RomPicker.Rows, r => r.Kind == RomPickerRowKind.Action);
 		Assert.True(model.RomPicker.EmptyText.Length > 0, "the empty folder says nothing");
 		//Nothing openable, so the action row is the whole list.
 		Assert.DoesNotContain(model.RomPicker.Rows, r => r.Kind != RomPickerRowKind.Action);

@@ -135,15 +135,15 @@ scan runs only when a sheet has a painted cell.
 
 ## Limits
 
-- **A flat key matches by pixels, not by identity.** A single-colour tile
-  (Pac-Man's blank backdrop) matches every capture cell of that colour, and
+- **A flat key matches by pixels, not by identity.** A single-color tile
+  (Pac-Man's blank backdrop) matches every capture cell of that color, and
   such a cell may belong to a different key with identical pixels. On
   Pac-Man, all 26 captures are listed. The capture that covers the frame is
   still among them.
-- **Colours assume the recorder's palette.** The scan draws tiles with the
+- **Colors assume the recorder's palette.** The scan draws tiles with the
   2C02 palette, which `headless_record` seeds and a default GUI recording
   uses. A capture recorded under a custom palette finds nothing, which is
-  the pre-fix behaviour (silence).
+  the pre-fix behavior (silence).
 - **No frame is named.** `build` cannot know the reader's frame, so it lists
   every capture that draws the key. The runtime log still names the one
   drawn on a given frame.

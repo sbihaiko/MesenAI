@@ -1,4 +1,4 @@
-# ADR-0177: A pose whose tiles split into two poses the file already carries is labelled a fusion of them, and the composition editor stops offering it as a figure
+# ADR-0177: A pose whose tiles split into two poses the file already carries is labeled a fusion of them, and the composition editor stops offering it as a figure
 
 - Status: accepted (2026-09-12, after the measurement below; implemented the same day in
   `Core/NES/HdPacks/SpriteGrouping.cpp`, the `poses.json` serializer and
@@ -21,7 +21,7 @@ tiles are one figure*. Any time one actor walks over or into another the two fus
 pack gains an entry holding both.
 
 On the Contra golden pack (85 entries), 22 pairs stand in strict containment (one entry's
-placement set, normalised to its own top-left, is inside another's). Rendered, the larger
+placement set, normalized to its own top-left, is inside another's). Rendered, the larger
 is the smaller plus a stranger: `pose028` is `pose000` (a running soldier, seen in 1411
 frames) with `pose014` (a prone soldier, seen in 140 frames on its own) beside it. An
 artist scanning the pose list meets the same figure several times, each copy with a
@@ -57,7 +57,7 @@ ADR-0173 set for `floors[]`.
 
 1. A kept pose `B` is a **fusion** when there exist kept poses `A` and `C` and a
    translation `t` such that `translate(A, t)` is a subset of `B`'s tiles and the
-   remainder `B \ translate(A, t)`, re-normalised, is exactly `C`'s tile set. `A` and `C`
+   remainder `B \ translate(A, t)`, re-normalized, is exactly `C`'s tile set. `A` and `C`
    may be the same pose. Both parts are kept poses by construction, so both cleared
    `kPoseMinFrames` on their own. No threshold: the classification is a property of the
    tile sets alone.
@@ -85,7 +85,7 @@ ADR-0173 set for `floors[]`.
    *choose a figure* act on it: `pose_band_members` excludes a fused pose, so `pose_rank`
    and the suggestion list stop offering an entry that is two figures; `pose_for_anchor`
    prefers non-fused candidates, falling back to the full list only when every pose holding
-   the anchor is labelled. `Poses.by_id` and `Poses.containing` keep returning them
+   the anchor is labeled. `Poses.by_id` and `Poses.containing` keep returning them
    unfiltered.
 
 6. `PosesForCells` (ADR-0174's `poses[]`) skips fusions — that list says which poses a
@@ -95,11 +95,11 @@ ADR-0173 set for `floors[]`.
 ## Consequences
 
 - On the kit, 44 of 223 Mega Man 3 poses, 39 of 84 Zelda 1, 21 of 85 Contra and 12 of 77
-  Excitebike are labelled fusions and drop from the editor's suggestion list. Zelda's 46 %
+  Excitebike are labeled fusions and drop from the editor's suggestion list. Zelda's 46 %
   is honest: that capture is full of identical enemies walking into each other.
 - **Known false-positive class: a single figure whose two halves are also drawn
   separately.** A boss whose head and body appear apart elsewhere, a vehicle whose rider
-  dismounts — the whole is labelled a fusion of its parts, reachable only through the
+  dismounts — the whole is labeled a fusion of its parts, reachable only through the
   vocabulary sheet or by id. The trade is deliberate: a fused entry heading the list costs
   the artist the belief that a pose is a figure. The parts stay individually offerable.
 - Nothing about the file's identity, ordering or counts changes, so a pack rebuilt with
@@ -109,5 +109,5 @@ ADR-0173 set for `floors[]`.
   run).
 - The classification is O(poses × poses). It is bounded by indexing candidates on their
   top-left tile's node; `kMaxPoses` (4096) is the ceiling and no real kit pack exceeds 223.
-- A three-figure pile is labelled a fusion of a figure and a fusion; the chain is left as
+- A three-figure pile is labeled a fusion of a figure and a fusion; the chain is left as
   it is — each link is true.

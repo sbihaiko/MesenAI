@@ -254,3 +254,8 @@ UI/Dependencies/librashader.dylib
 
 #Python tooling cache (ruff)
 .ruff_cache/
+
+# per-user dotnet/NuGet caches created when HOME points at the checkout
+/.dotnet/
+/.local/
+/.nuget/

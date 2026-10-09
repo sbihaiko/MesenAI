@@ -126,6 +126,52 @@ namespace Mesen.Tests.Play
 			Assert.False(wait.IsActive);
 		}
 
+		//ADR-0254: a pause before the first picture leaves the game with no
+		//picture until it draws one; a wait that reached its picture, or a new
+		//open, says nothing was cut short.
+		[Fact]
+		public void A_pause_before_the_first_picture_cuts_it_short_until_the_game_draws_it()
+		{
+			PlayLoadWait wait = new();
+			Assert.False(wait.PictureCutShort);
+			wait.Begin("Contra", 7);
+			wait.OnGameLoaded(false);
+			Assert.False(wait.OnFrameDone());
+			Assert.False(wait.PictureCutShort);
+
+			Assert.True(wait.EndPictureWait());
+			Assert.True(wait.PictureCutShort);
+
+			//Resumed: the frames still count toward the picture, and the
+			//third one since GameLoaded puts it out.
+			for(int i = 2; i < PlayLoadWait.FramesUntilShown; i++) {
+				Assert.False(wait.OnFrameDone());
+				Assert.True(wait.PictureCutShort);
+			}
+			Assert.False(wait.OnFrameDone());
+			Assert.False(wait.PictureCutShort);
+			Assert.False(wait.IsActive);
+
+			wait.Begin("Contra", 8);
+			wait.OnGameLoaded(false);
+			Assert.True(wait.EndPictureWait());
+			wait.Begin("Castlevania", 9);
+			Assert.False(wait.PictureCutShort);
+		}
+
+		[Fact]
+		public void A_wait_that_reached_its_picture_was_not_cut_short()
+		{
+			PlayLoadWait wait = new();
+			wait.Begin("Contra", 7);
+			wait.OnGameLoaded(false);
+			for(int i = 0; i < PlayLoadWait.FramesUntilShown; i++) {
+				wait.OnFrameDone();
+			}
+			Assert.False(wait.EndPictureWait());
+			Assert.False(wait.PictureCutShort);
+		}
+
 		[Fact]
 		public void The_timeout_outlasts_a_stalled_audio_device()
 		{
@@ -148,6 +194,43 @@ namespace Mesen.Tests.Play
 			});
 			Assert.Equal(1, ended);
 			Assert.False(wait.IsActive);
+		}
+
+		//ADR-0254: frames racing a new open while a cut-short wait counts them
+		//never reach the new wait early - it still needs its own
+		//FramesUntilShown frames after GameLoaded, and ends exactly once.
+		[Fact]
+		public void Frames_racing_a_new_open_do_not_count_toward_it()
+		{
+			for(int round = 0; round < 200; round++) {
+				PlayLoadWait wait = new();
+				wait.Begin("Contra", 1);
+				wait.OnGameLoaded(false);
+				Assert.True(wait.EndPictureWait());
+
+				using var go = new System.Threading.Barrier(2);
+				bool shown = false;
+				var frames = new System.Threading.Thread(() => {
+					go.SignalAndWait();
+					for(int i = 0; i < PlayLoadWait.FramesUntilShown; i++) {
+						shown |= wait.OnFrameDone();
+					}
+				});
+				frames.Start();
+				go.SignalAndWait();
+				wait.Begin("Castlevania", 2);
+				frames.Join();
+
+				Assert.False(shown);
+
+				Assert.False(wait.PictureCutShort);
+				wait.OnGameLoaded(false);
+				for(int i = 1; i < PlayLoadWait.FramesUntilShown; i++) {
+					Assert.False(wait.OnFrameDone());
+				}
+				Assert.True(wait.OnFrameDone());
+				Assert.False(wait.IsActive);
+			}
 		}
 	}
 }

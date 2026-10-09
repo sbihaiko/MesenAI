@@ -60,9 +60,14 @@
 				keyed on Header threw while the ⋯ items were attached.-->
 				<Border Name="PlayerSeparatorLine" Height="1" Margin="6 4" VerticalAlignment="Center" Background="{StaticResource PlayerSeparatorBrush}"
 					IsVisible="{TemplateBinding Header, Converter={x:Static ObjectConverters.Equal}, ConverterParameter=-}" />
-				<Border Name="PART_LayoutRoot" Height="26" Background="{TemplateBinding Background}" CornerRadius="{StaticResource PlayerRadiusSmall}" Padding="{TemplateBinding Padding}"
-					IsVisible="{TemplateBinding Header, Converter={x:Static ObjectConverters.NotEqual}, ConverterParameter=-}">
-					<Grid ColumnDefinitions="Auto,*,Auto">
+				<Border Name="PART_LayoutRoot" Height="26" Background="{TemplateBinding Background}" CornerRadius="{StaticResource PlayerRadiusSmall}" Padding="{TemplateBinding Padding}">
+					<Border.IsVisible>
+						<MultiBinding Converter="{x:Static BoolConverters.And}">
+							<Binding Path="Header" RelativeSource="{RelativeSource TemplatedParent}" Converter="{x:Static ObjectConverters.NotEqual}" ConverterParameter="-" />
+							<Binding Path="Header" RelativeSource="{RelativeSource TemplatedParent}" Converter="{x:Static ObjectConverters.NotEqual}" ConverterParameter="~hint" />
+						</MultiBinding>
+					</Border.IsVisible>
+					<Grid ColumnDefinitions="Auto,*,Auto,Auto">
 						<PathIcon Name="PlayerCheck" Data="{StaticResource PlayerIconCheck}" Width="11" Height="11" Margin="2 0 5 0" Foreground="{TemplateBinding Foreground}" VerticalAlignment="Center" />
 						<ContentPresenter Name="PlayerHeader" Grid.Column="1" Content="{TemplateBinding Header}" Foreground="{TemplateBinding Foreground}" VerticalAlignment="Center">
 							<ContentPresenter.DataTemplates>
@@ -71,8 +76,18 @@
 								</DataTemplate>
 							</ContentPresenter.DataTemplates>
 						</ContentPresenter>
-						<PathIcon Name="PlayerChevron" Grid.Column="2" Classes="chevron" Data="{StaticResource PlayerIconChevronRight}" Width="11" Height="11" Foreground="{TemplateBinding Foreground}" VerticalAlignment="Center" />
+						<!--#1007: the row's shortcut (BaseMenuAction.ShortcutText via Tag), right-aligned and grey as in W-S2.-->
+						<TextBlock Name="PlayerShortcut" Grid.Column="2" Text="{TemplateBinding Tag}" FontSize="12.5" FontWeight="Normal" Margin="12 0 0 0" VerticalAlignment="Center"
+							IsVisible="{Binding $self.Text, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+						<PathIcon Name="PlayerChevron" Grid.Column="3" Classes="chevron" Data="{StaticResource PlayerIconChevronRight}" Width="11" Height="11" Foreground="{TemplateBinding Foreground}" VerticalAlignment="Center" />
 					</Grid>
+				</Border>
+				<!--#1007 (W-S2): the disabled footer hint - Header is the "~hint" sentinel
+				(ContextMenuHint), the text rides in Tag.
+				After PART_LayoutRoot so LabelOf-style lookups meet the real label first.-->
+				<Border Name="PlayerHintRow" Margin="12 4" VerticalAlignment="Center"
+					IsVisible="{TemplateBinding Header, Converter={x:Static ObjectConverters.Equal}, ConverterParameter=~hint}">
+					<TextBlock Text="{TemplateBinding Tag}" TextWrapping="Wrap" />
 				</Border>
 				<Popup Name="PART_Popup" WindowManagerAddShadowHint="False" Placement="RightEdgeAlignedTop" HorizontalOffset="{DynamicResource MenuFlyoutSubItemPopupHorizontalOffset}" IsLightDismissEnabled="False" IsOpen="{TemplateBinding IsSubMenuOpen, Mode=TwoWay}">
 					<Border Background="{DynamicResource MenuFlyoutPresenterBackground}"
@@ -219,6 +234,21 @@
 		</Style>
 		<Style Selector=":is(UserControl).player MenuItem#ToolsMenuButton > MenuItem:selected /template/ Border#PART_LayoutRoot, :is(UserControl).player MenuItem#ToolsMenuButton > MenuItem:open /template/ Border#PART_LayoutRoot, :is(UserControl).player MenuItem#ToolsMenuButton > MenuItem:pointerover /template/ Border#PART_LayoutRoot">
 			<Setter Property="Background" Value="{Binding $parent[MenuItem].(c:PlayerTheme.Tint)}" />
+		</Style>
+		<!--#1007: an entry that needs a game (Reset, Power Cycle, Screenshot) stays in place, greyed.-->
+		<Style Selector=":is(UserControl).player MenuItem#ToolsMenuButton > MenuItem:disabled">
+			<Setter Property="Foreground" Value="{StaticResource PlayerText3Brush}" />
+		</Style>
+		<Style Selector=":is(UserControl).player MenuItem#ToolsMenuButton > MenuItem /template/ Border#PlayerHintRow > TextBlock">
+			<Setter Property="FontSize" Value="{StaticResource PlayerFontFootnote}" />
+			<Setter Property="FontWeight" Value="Normal" />
+			<Setter Property="Foreground" Value="{StaticResource PlayerText3Brush}" />
+		</Style>
+		<Style Selector=":is(UserControl).player MenuItem#ToolsMenuButton > MenuItem /template/ TextBlock#PlayerShortcut">
+			<Setter Property="Foreground" Value="{StaticResource PlayerText3Brush}" />
+		</Style>
+		<Style Selector=":is(UserControl).player MenuItem#ToolsMenuButton > MenuItem:selected /template/ TextBlock#PlayerShortcut, :is(UserControl).player MenuItem#ToolsMenuButton > MenuItem:pointerover /template/ TextBlock#PlayerShortcut">
+			<Setter Property="Foreground" Value="{StaticResource PlayerCardBrush}" />
 		</Style>
 		<Style Selector=":is(UserControl).player MenuItem#ToolsMenuButton > MenuItem:empty /template/ PathIcon#PlayerChevron">
 			<Setter Property="IsVisible" Value="False" />

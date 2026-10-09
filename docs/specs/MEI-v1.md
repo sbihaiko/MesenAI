@@ -146,12 +146,12 @@ split part of their content into third-party artifacts:
   is self-healing (ADR-0145 health signal) and IPS/patches stay hash-gated
   (ADR-0044): they apply only on an exact hash match.
 - `deps` (when present) is a list of objects, each SHOULD carry `license`
-  (SPDX id or a short declared-licence string, mirroring MEP-recipe-v1 §3.3)
+  (SPDX id or a short declared-license string, mirroring MEP-recipe-v1 §3.3)
   and SHOULD carry `url`/`sha256`/`size` identifying the third-party
   artifact. Clients MUST show each dep's `license` — or that none was
   declared — before downloading or installing it (mirrors MEI §3's trust
   obligations). Index producers copy `deps[]` from the recipe's
-  `sources.deps` (the licence-bearing shape), never from a stripped summary.
+  `sources.deps` (the license-bearing shape), never from a stripped summary.
 - An index producer MUST omit an entry it cannot make conformant to this
   section (missing `url`/`sha256`, unresolvable `kind`) rather than emit an
   incomplete one; it SHOULD log the omission naming the source item. A

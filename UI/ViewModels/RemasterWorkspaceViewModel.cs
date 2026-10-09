@@ -421,11 +421,14 @@ namespace Mesen.ViewModels
 			Recordings = (_project?.Recordings ?? Array.Empty<RemasterRecording>()).Reverse().Select(RemasterRecordingRow.From).ToList();
 			RefreshShapesSeen();
 
-			Record = Control(s.Record);
-			RecordFromTas = Control(s.RecordFromTas);
-			LetTheAiPlay = Control(s.LetTheAiPlay);
-			PrepareFigures = Control(s.PrepareFigures);
-			BuildAndShow = Control(s.BuildAndShow);
+			//#992: the rule is pinned host-free in UI.Tests/Remaster/RemasterControlsTests.
+			RemasterControls controls = RemasterControls.From(s, Reason);
+			RefreshWrongGame(controls.IsWrongGame);
+			Record = controls.Record;
+			RecordFromTas = controls.RecordFromTas;
+			LetTheAiPlay = controls.LetTheAiPlay;
+			PrepareFigures = controls.PrepareFigures;
+			BuildAndShow = controls.BuildAndShow;
 			PaintText = ResourceHelper.GetMessage(_project?.HasKit == true ? "RemasterKitReady" : "RemasterKitNotYet");
 
 			RefreshTiles();
@@ -503,8 +506,6 @@ namespace Mesen.ViewModels
 				: latest == null ? "" : ResourceHelper.GetMessage("RemasterRecordingsLatest", latest.Detail.Length > 0 ? latest.Title + " · " + latest.Detail : latest.Title);
 		}
 
-		private static RemasterControlViewModel Control(RemasterControl c) => new(c.Enabled, c.Enabled ? "" : Reason(c.Reason));
-
 		private static string Reason(RemasterReason reason) => reason == RemasterReason.None ? "" : ResourceHelper.GetMessage("RemasterReason" + reason);
 
 		//The other profiles' status line while Remaster works (W-X3).
@@ -524,12 +525,6 @@ namespace Mesen.ViewModels
 				throw new InvalidOperationException("designer");
 			}
 		}
-	}
-
-	public sealed record RemasterControlViewModel(bool IsEnabled, string Reason)
-	{
-		public bool HasReason => Reason.Length > 0;
-		public static RemasterControlViewModel Hidden { get; } = new(false, "");
 	}
 
 	//One row of W-R1's recordings list, newest first.

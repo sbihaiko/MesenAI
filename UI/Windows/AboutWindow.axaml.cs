@@ -127,6 +127,10 @@ namespace Mesen.Windows
 				new("ymfm", "", "BSD 3-clause", "https://github.com/aaronsgiles/ymfm"),
 				new("GBA Multiply Algo (zaydlang)", "", "zlib", "https://github.com/zaydlang/multiplication-algorithm/"),
 				new("librashader", "", "MPL-2.0", "https://github.com/SnowflakePowered/librashader/"),
+				//The embedded SHA1 -> No-Intro name table is derived from these
+				//DATs, so the attribution the licence requires shows up here too
+				//(ADR-0266; scripts/no_intro_sha1.NOTICE.md).
+				new("No-Intro DATs via libretro-database", "No-Intro", "CC BY-SA 4.0", "https://github.com/libretro/libretro-database"),
 			};
 
 			list.Sort((a, b) => a.Name.CompareTo(b.Name));
