@@ -39,6 +39,12 @@ internal sealed class PlayFocusOnOpen
 	private Func<Control?>? _content;
 	private Func<IReadOnlyList<PlayBarEntry>>? _contentActions;
 
+	//The give-up watch a decision keeps once its turns are spent (#1129), and the
+	//wall-clock mark it is dropped at. Both belong to the decision in flight, so
+	//Refresh clears them before posting the next one.
+	private EventHandler? _onLayoutPass;
+	private long _layoutWatchUntil;
+
 	private sealed record Claim(Func<bool> IsOpen, Func<Control?> Target, Func<Control?>? Root = null, Func<IReadOnlyList<PlayBarEntry>>? Actions = null);
 
 	public PlayFocusOnOpen(Window window)
@@ -96,6 +102,20 @@ internal sealed class PlayFocusOnOpen
 	//only bounds how long a surface that never becomes focusable is waited for.
 	private const int Attempts = 5;
 
+	//#1129: the turns above are a guess at *when* the surface becomes focusable,
+	//and under a loaded dispatcher the guess can run out before the answer
+	//arrives - measured, all five are spent inside a single drain of the queue,
+	//and a surface that was found, focusable and enabled and not yet *effectively
+	//visible* (the #824 reading) is then left with no focus at all, because a
+	//surface that is simply opening changes no watched property and so nothing
+	//re-arms the decision. The window's own LayoutUpdated is the event that says
+	//the pass which makes it visible has happened, so that is the second chance.
+	//Bounded, not open-ended: the watch is dropped the moment the decision lands,
+	//the moment the focus moves off `held` (the same abandonment rule every
+	//attempt has) and at this deadline, so a surface that never becomes
+	//focusable is still given up on.
+	private static readonly TimeSpan LayoutWatch = TimeSpan.FromSeconds(2);
+
 	//Re-arbitrate: the topmost open surface takes the focus, else the content
 	//area, else the renderer (the game's own surface, which is what has the
 	//focus while a game runs with nothing over it). Posted, because a control
@@ -109,6 +129,9 @@ internal sealed class PlayFocusOnOpen
 		//a retry that would take the focus from someone who moved it on purpose
 		//in the meantime is not a retry, it is a fight (see Apply).
 		object? held = _window.FocusManager?.GetFocusedElement();
+		//A new decision supersedes the previous one's give-up watch (#1129): the
+		//deadline below is measured from the give-up that armed it.
+		UnwatchLayoutPass();
 		Dispatcher.UIThread.Post(() => Apply(0, held), DispatcherPriority.Loaded);
 	}
 
@@ -159,10 +182,43 @@ internal sealed class PlayFocusOnOpen
 
 	private void Retry(int attempt, object? held)
 	{
-		if(attempt + 1 >= Attempts) {
+		if(attempt + 1 < Attempts) {
+			Dispatcher.UIThread.Post(() => Apply(attempt + 1, held), DispatcherPriority.Background);
 			return;
 		}
-		Dispatcher.UIThread.Post(() => Apply(attempt + 1, held), DispatcherPriority.Background);
+		WatchLayoutPass(held);
+	}
+
+	//The turns are spent and the surface still has not taken the focus (#1129).
+	//Every later attempt hangs off the window's own LayoutUpdated instead of off
+	//another guess at how many turns away the pass is: one attempt per pass, and
+	//it is the attempt number PAST the turn bound that keeps it to one - a failure
+	//inside it falls through to Retry, which re-arms nothing that is already armed
+	//and posts no further turn. Armed once per decision (Refresh drops any watch
+	//left over from the previous one), so the deadline below is a real bound and
+	//not a mark a later pass can push back.
+	private void WatchLayoutPass(object? held)
+	{
+		if(_onLayoutPass is not null) {
+			return;
+		}
+		_layoutWatchUntil = Environment.TickCount64 + (long)LayoutWatch.TotalMilliseconds;
+		_onLayoutPass = (_, _) => {
+			Apply(Attempts, held);
+			if(!ReferenceEquals(_window.FocusManager?.GetFocusedElement(), held)
+				|| Environment.TickCount64 > _layoutWatchUntil) {
+				UnwatchLayoutPass();
+			}
+		};
+		_window.LayoutUpdated += _onLayoutPass;
+	}
+
+	private void UnwatchLayoutPass()
+	{
+		if(_onLayoutPass is not null) {
+			_window.LayoutUpdated -= _onLayoutPass;
+			_onLayoutPass = null;
+		}
 	}
 
 	//True while a Play surface is up over the content area. A screen that asks

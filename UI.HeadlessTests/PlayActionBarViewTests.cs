@@ -118,36 +118,34 @@ public class PlayActionBarViewTests : IDisposable
 		return (window, model);
 	}
 
-	//The overlay's own button holding the focus, waited for with the decision
-	//re-asked (#1129) - the one wait every W-P4 case here opens with. PlayFocusOnOpen
-	//gives up after a bounded number of turns (its Attempts) when the control it
-	//chose is focusable and enabled and still not yet *effectively visible*: its own
-	//comment records measuring exactly that under a full headless suite. Nothing
-	//re-arms the decision on its own - only a watched property changing does, and
-	//every watched property these cases touch is already in the state the bar reads.
-	//So a loaded dispatcher, which is what a combined run is (every earlier case's
-	//window still draining its 50 ms and 100 ms timers), can spend all five turns
-	//and leave the case waiting on something no later turn brings back: an
-	//order-dependent failure of the *wait*, with nothing wrong with the surface the
-	//case exists to check. Asking again is what any of those property changes would
-	//do, so what a case asserts is that the pause overlay can hold the focus, not
-	//that it won the race inside five dispatcher turns.
+	//The overlay's own button holding the focus (#1129) - the one wait every W-P4
+	//case here opens with, and the rule it has to keep: the wait may not be what
+	//puts the focus there.
+	//
+	//Opening a Play surface is the arbiter's decision to make (PlayFocusOnOpen,
+	//ADR-0256 Decision 3), and the arbiter bounds its own decision: five turns,
+	//then a watch on the window's next layout pass for two more seconds. Nothing
+	//here re-asks any of that. A helper that did would turn "the pause overlay
+	//takes the focus when it opens" into "the test can put the focus on the pause
+	//overlay", and an open path that never asked the arbiter at all would pass -
+	//which is what the review of the first version of this change found. So the
+	//window waited out below is the arbiter's, not the case's, and the case fails
+	//at the end of it if the surface never took the focus.
+	//
+	//The bound is the arbiter's own two-second layout watch plus slack for the
+	//turns and the pump between them; the case's dispatcher, not the case, is
+	//what spends them.
 	private static void WaitForOverlayFocus(MainWindow window)
 	{
-		WaitFor(() => {
-			if(Focused(window) == "OverlayResumeButton") {
-				return true;
-			}
-			PlayPadNavigationWiring.RefreshSurfaceFocusForTest(window);
-			return false;
-		}, "the pause overlay did not take the focus");
+		WaitFor(() => Focused(window) == "OverlayResumeButton",
+			"the pause overlay did not take the focus from its own open path", 3000);
 	}
 
-	private static void WaitFor(Func<bool> condition, string failure)
+	private static void WaitFor(Func<bool> condition, string failure, int timeoutMilliseconds = 30000)
 	{
 		Stopwatch clock = Stopwatch.StartNew();
 		while(!condition()) {
-			if(clock.ElapsedMilliseconds > 30000) {
+			if(clock.ElapsedMilliseconds > timeoutMilliseconds) {
 				throw new XunitException(failure);
 			}
 			Pump();
@@ -391,6 +389,55 @@ public class PlayActionBarViewTests : IDisposable
 		//another pad pressing: the PlayStation one takes over from the Xbox one.
 		PressNamed(window, "Joy1 Cross");
 		Assert.Equal("Cross Select     Circle Resume", Bar(window));
+	}
+
+	//The other half of #1129, and the reason the wait above may not re-ask: the
+	//arbiter's turn bound runs out on a surface that is still coming up, and the
+	//decision has to re-arm itself when the pass that shows the control lands.
+	//Reproduced deterministically by holding the overlay's own button out of the
+	//tree while the overlay opens - the state the arbiter's #824 comment records
+	//measuring, "found, focusable and enabled and still not yet *effectively
+	//visible*" - then putting it back. Instrumented on the unfixed tree, the
+	//whole decision reads:
+	//
+	//  attempt=0 target=OverlayResumeButton vis=False focusable=True enabled=True enter=False
+	//  attempt=1 ... attempt=2 ... attempt=3 ... attempt=4 (the last one it has)
+	//
+	//and the layout pass that makes the button visible again brings no focus back
+	//for as long as the case pumps: the surface a player opened is left with no
+	//ring and no pad target until some watched property changes, which for a
+	//surface that is simply opening is never. With the watch in PlayFocusOnOpen,
+	//the pass itself is the re-ask and the ring lands.
+	[AvaloniaFact]
+	public void The_pause_overlay_takes_the_focus_when_the_pass_that_shows_it_comes_after_the_turn_bound()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model) = ShowPauseOverlay();
+		model.OpenPauseOverlay();
+		WaitForOverlayFocus(window);
+		Button resume = window.FindNamed<Button>("OverlayResumeButton");
+
+		//Close it: the ring has to leave, or "landed" below cannot be told apart
+		//from "never left".
+		model.IsPlayerOverlayVisible = false;
+		Pump();
+		Assert.NotEqual("OverlayResumeButton", Focused(window));
+
+		//Re-open with the button not in the tree: the turns are spent and the
+		//decision gives up, exactly as measured under a loaded dispatcher.
+		resume.IsVisible = false;
+		model.IsPlayerOverlayVisible = true;
+		for(int i = 0; i < 4; i++) {
+			Pump();
+		}
+		Assert.NotEqual("OverlayResumeButton", Focused(window));
+
+		//The control comes back, and the layout pass that shows it is the only
+		//thing that changes: no watched property moves, and the case never asks
+		//the arbiter anything.
+		resume.IsVisible = true;
+		WaitFor(() => Focused(window) == "OverlayResumeButton",
+			"the pause overlay kept no focus after the pass that made its button visible");
 	}
 
 	[AvaloniaFact]
