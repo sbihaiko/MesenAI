@@ -3,6 +3,8 @@
 - Status: accepted (2026-10-09), by the autonomy panel (Opus 5.5 as the human
   proxy, issue #1103 comment) with edits, pick quoted verbatim: **"Accept ADR-0268, ADR-0269 and the ADR-0254 amendment with the listed edits; PR #1119 waits until ADR-0269 is accepted with Decisions 3 and 6 matching its code."**
   The decision comes from the spec on issue #1102 (slice 5, "Interface size").
+  Amended 2026-10-09 (Decisions 2 and 6) by the same panel after the #1119
+  circuit breaker, pick quoted verbatim: **"Narrow PR #1119 on 1024x640: the settings-sheet and four-layer mechanism ship, the minimum-width cap and the pill scale are follow-ups #1123 and #1124."**
   Nothing is implemented by this ADR; PR #1119 implements it and must match
   Decisions 3 and 6.
 - Date: 2026-10-09
@@ -26,6 +28,9 @@ Nothing in Play is sized for a TV three meters away. Settings › Display has a
    library sheet, W-P4, the settings sheet, the action bar and toasts). It never
    scales the emulated picture (that is *Scale*), and Remaster and Share do not
    read it.
+   The pack-install pill is a separate top-level Popup
+   (ShouldUseOverlayLayer=False) outside the four layers, so it stays at 1.0 for
+   now; scaling it is deferred to #1124 and does not block the first delivery.
 3. **The scale is applied once per Play chrome layer, never per control.** There
    is one layout transform on each of four layers: the Play chrome root, the
    settings sheet layer, the load-wait host and the BIOS/ROM/tool sheet layer.
@@ -43,8 +48,10 @@ Nothing in Play is sized for a TV three meters away. Settings › Display has a
 6. **A surface that no longer fits at 1.5 scrolls**; nothing is clipped. The
    ScrollViewer sits around the page rows of the surface; the Done row (and Back)
    stays pinned outside it, so it is always reachable. A headless test pins this
-   at factor 1.5 with the minimum window size: the rows scroll and the Done row
-   is on screen and reachable.
+   at factor 1.5 with the window at the PRD's smallest drawn size, ~1024x640 (spec
+   #1102; PRD Part B wireframes): the rows scroll and the Done row is fully on
+   screen and reachable. Smaller windows (down to the 160x144 floor) are not
+   guaranteed; see #1123.
 
 ## Consequences
 
