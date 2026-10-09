@@ -12,29 +12,38 @@
 	<!--G.4 (W-P8): Settings › Audio - three rows in Display's pattern: the
 	Sound switch, Volume, the Output device popup; Menu sounds (#1105) is a fourth only while the host can play it. A device set in Options
 	that is not enumerated now stays the current item. Equalizer, reverb,
-	crossfeed, latency and sample rate are "More in Options…".-->
+	crossfeed, latency and sample rate are "More in Options…".
+	#1123 (ADR-0269 Decision 6): a row is a Grid whose first column is Auto and
+	whose last is the star, not a DockPanel with a right-docked control and the
+	label left to eat what is left: at 1.5 in 512x505 the page gives a row about
+	220 px, and a 200 px popup (or a 150 px slider beside its 34 px readout)
+	docked right left the label 20 px to draw 91 px of text in. An Auto column
+	holds the label at the width its text needs, and the star gives the control
+	the rest - its drawn width wherever there is room for it, less when there is
+	not, by the same cap the sheet itself takes. The readout keeps its own Auto
+	column, so the slider shrinks first.-->
 	<Border Name="AudioSettingsGroup" Classes="group inset" VerticalAlignment="Top">
 		<StackPanel XYFocus.NavigationModes="Enabled">
-			<DockPanel Classes="setting-row">
-				<ToggleSwitch DockPanel.Dock="Right" Name="chkAudioEnabled" IsChecked="{Binding Config.EnableAudio}" VerticalAlignment="Center" />
-				<TextBlock Classes="callout" Text="{l:Translate lblAudioSound}" VerticalAlignment="Center" />
-			</DockPanel>
+			<Grid Classes="setting-row" ColumnDefinitions="Auto,*">
+				<TextBlock Grid.Column="0" Classes="callout" Text="{l:Translate lblAudioSound}" VerticalAlignment="Center" />
+				<ToggleSwitch Grid.Column="1" Name="chkAudioEnabled" IsChecked="{Binding Config.EnableAudio}" HorizontalAlignment="Right" VerticalAlignment="Center" />
+			</Grid>
 			<Separator Classes="row-hairline" />
-			<DockPanel Classes="setting-row">
-				<TextBlock DockPanel.Dock="Right" Name="txtAudioVolume" Classes="callout" Width="34" TextAlignment="Right" Text="{Binding Volume, StringFormat={}{0:0}}" VerticalAlignment="Center" />
-				<Slider DockPanel.Dock="Right" Name="sldAudioVolume" Width="150" Minimum="0" Maximum="100" Value="{Binding Volume}" VerticalAlignment="Center" />
-				<TextBlock Classes="callout" Text="{l:Translate lblAudioVolume}" VerticalAlignment="Center" />
-			</DockPanel>
+			<Grid Classes="setting-row" ColumnDefinitions="Auto,*,Auto">
+				<TextBlock Grid.Column="0" Classes="callout" Text="{l:Translate lblAudioVolume}" VerticalAlignment="Center" />
+				<Slider Grid.Column="1" Name="sldAudioVolume" Width="150" Minimum="0" Maximum="100" Value="{Binding Volume}" HorizontalAlignment="Right" VerticalAlignment="Center" />
+				<TextBlock Grid.Column="2" Name="txtAudioVolume" Classes="callout" Width="34" TextAlignment="Right" Text="{Binding Volume, StringFormat={}{0:0}}" VerticalAlignment="Center" />
+			</Grid>
 			<Separator Classes="row-hairline" />
-			<DockPanel Classes="setting-row">
-				<ComboBox DockPanel.Dock="Right" Name="cboAudioDevice" Classes="popup" Width="200" ItemsSource="{Binding Devices}" SelectedItem="{Binding SelectedDevice}" VerticalAlignment="Center" />
-				<TextBlock Classes="callout" Text="{l:Translate lblAudioOutput}" VerticalAlignment="Center" />
-			</DockPanel>
+			<Grid Classes="setting-row" ColumnDefinitions="Auto,*">
+				<TextBlock Grid.Column="0" Classes="callout" Text="{l:Translate lblAudioOutput}" VerticalAlignment="Center" />
+				<ComboBox Grid.Column="1" Name="cboAudioDevice" Classes="popup" Width="200" ItemsSource="{Binding Devices}" SelectedItem="{Binding SelectedDevice}" HorizontalAlignment="Right" VerticalAlignment="Center" />
+			</Grid>
 			<Separator Classes="row-hairline" IsVisible="{Binding MenuSoundsAvailable}" />
-			<DockPanel Classes="setting-row" IsVisible="{Binding MenuSoundsAvailable}">
-				<ToggleSwitch DockPanel.Dock="Right" Name="chkAudioMenuSounds" IsChecked="{Binding Config.MenuSounds}" VerticalAlignment="Center" />
-				<TextBlock Classes="callout" Text="{l:Translate lblAudioMenuSounds}" VerticalAlignment="Center" />
-			</DockPanel>
+			<Grid Classes="setting-row" ColumnDefinitions="Auto,*" IsVisible="{Binding MenuSoundsAvailable}">
+				<TextBlock Grid.Column="0" Classes="callout" Text="{l:Translate lblAudioMenuSounds}" VerticalAlignment="Center" />
+				<ToggleSwitch Grid.Column="1" Name="chkAudioMenuSounds" IsChecked="{Binding Config.MenuSounds}" HorizontalAlignment="Right" VerticalAlignment="Center" />
+			</Grid>
 		</StackPanel>
 	</Border>
 </UserControl>

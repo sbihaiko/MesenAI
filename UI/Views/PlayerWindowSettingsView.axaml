@@ -12,29 +12,32 @@
 >
 	<!--G.4 (W-P8): Settings › Display - three rows. The aspect ratio and the
 	scale keep a value set elsewhere as their current item. ADR-0249: one
-	inset group of 46 px rows, the toggle and the two popups on the right.-->
+	inset group of 46 px rows, the toggle and the two popups on the right.
+	#1123 (ADR-0269 Decision 6): the rows are the Auto/star Grid Display and
+	Audio share - see PlayerAudioSettingsView for why a right-docked
+	fixed-width control cannot share a 220 px row with its label.-->
 	<Border Name="DisplaySettingsGroup" Classes="group inset" VerticalAlignment="Top">
 		<StackPanel XYFocus.NavigationModes="Enabled">
-			<DockPanel Classes="setting-row">
-				<ToggleSwitch DockPanel.Dock="Right" Name="chkDisplayFullscreen" IsChecked="{Binding IsFullscreen}" VerticalAlignment="Center" />
-				<TextBlock Name="lblDisplayFullscreenRow" Classes="callout" Text="{l:Translate lblDisplayFullscreen}" VerticalAlignment="Center" />
-			</DockPanel>
+			<Grid Classes="setting-row" ColumnDefinitions="Auto,*">
+				<TextBlock Grid.Column="0" Name="lblDisplayFullscreenRow" Classes="callout" Text="{l:Translate lblDisplayFullscreen}" VerticalAlignment="Center" />
+				<ToggleSwitch Grid.Column="1" Name="chkDisplayFullscreen" IsChecked="{Binding IsFullscreen}" HorizontalAlignment="Right" VerticalAlignment="Center" />
+			</Grid>
 			<Separator Classes="row-hairline" />
-			<DockPanel Classes="setting-row">
-				<c:EnumComboBox DockPanel.Dock="Right" Name="cboDisplayAspectRatio" Classes="popup" Width="120" AvailableValues="{Binding AspectRatios}" SelectedItem="{Binding Config.AspectRatio}" VerticalAlignment="Center" />
-				<TextBlock Classes="callout" Text="{l:Translate lblDisplayAspectRatio}" VerticalAlignment="Center" />
-			</DockPanel>
+			<Grid Classes="setting-row" ColumnDefinitions="Auto,*">
+				<TextBlock Grid.Column="0" Classes="callout" Text="{l:Translate lblDisplayAspectRatio}" VerticalAlignment="Center" />
+				<c:EnumComboBox Grid.Column="1" Name="cboDisplayAspectRatio" Classes="popup" Width="120" AvailableValues="{Binding AspectRatios}" SelectedItem="{Binding Config.AspectRatio}" HorizontalAlignment="Right" VerticalAlignment="Center" />
+			</Grid>
 			<Separator Classes="row-hairline" />
-			<DockPanel Classes="setting-row">
-				<ComboBox DockPanel.Dock="Right" Name="cboDisplayScale" Classes="popup" Width="120" ItemsSource="{Binding Scales}" SelectedItem="{Binding SelectedScale}" VerticalAlignment="Center" />
-				<TextBlock Classes="callout" Text="{l:Translate lblDisplayScale}" VerticalAlignment="Center" />
-			</DockPanel>
+			<Grid Classes="setting-row" ColumnDefinitions="Auto,*">
+				<TextBlock Grid.Column="0" Classes="callout" Text="{l:Translate lblDisplayScale}" VerticalAlignment="Center" />
+				<ComboBox Grid.Column="1" Name="cboDisplayScale" Classes="popup" Width="120" ItemsSource="{Binding Scales}" SelectedItem="{Binding SelectedScale}" HorizontalAlignment="Right" VerticalAlignment="Center" />
+			</Grid>
 			<Separator Classes="row-hairline" />
 			<!--#1111: scales Play's chrome, never the picture; Left / Right steps it in place.-->
-			<DockPanel Classes="setting-row">
-				<ComboBox DockPanel.Dock="Right" Name="cboDisplayInterfaceSize" Classes="popup" Width="120" ItemsSource="{Binding InterfaceSizes}" SelectedItem="{Binding SelectedInterfaceSizeChoice}" VerticalAlignment="Center" />
-				<TextBlock Classes="callout" Text="{l:Translate lblDisplayInterfaceSize}" VerticalAlignment="Center" />
-			</DockPanel>
+			<Grid Classes="setting-row" ColumnDefinitions="Auto,*">
+				<TextBlock Grid.Column="0" Classes="callout" Text="{l:Translate lblDisplayInterfaceSize}" VerticalAlignment="Center" />
+				<ComboBox Grid.Column="1" Name="cboDisplayInterfaceSize" Classes="popup" Width="120" ItemsSource="{Binding InterfaceSizes}" SelectedItem="{Binding SelectedInterfaceSizeChoice}" HorizontalAlignment="Right" VerticalAlignment="Center" />
+			</Grid>
 		</StackPanel>
 	</Border>
 </UserControl>

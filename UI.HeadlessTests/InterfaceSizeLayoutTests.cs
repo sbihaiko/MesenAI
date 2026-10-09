@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
@@ -175,13 +177,78 @@ public class InterfaceSizeLayoutTests : IDisposable
 		if(width >= 1024) {
 			Assert.Equal(720, sheet.Width, 0);
 		}
-		//A narrower sheet clips nothing: the page rows still fit across it, the
-		//page's own scroller being vertical only. (The strip narrows its
-		//segments by PlayerSettingsEssentials.SegmentWidth, a rule UI.Tests
-		//pins host-free; here it only has to leave every tab on screen.)
-		ScrollViewer page = window.FindNamed<TabControl>("PlayerSettingsTabs").FindAll<ScrollViewer>().First(s => s.Classes.Contains("pageScroll") && s.IsOnScreen());
-		Assert.True(page.Extent.Width <= page.Viewport.Width + 0.5, $"The page is {page.Extent.Width} wide in a {page.Viewport.Width} viewport: its rows are clipped");
+		//The strip narrows its segments by PlayerSettingsEssentials.SegmentWidth,
+		//a rule UI.Tests pins host-free; here it only has to leave every tab on
+		//screen. Whether the rows themselves fit across the narrower sheet is
+		//what No_row_label_is_trimmed_in_the_small_window_at_the_largest_size
+		//proves - the page's own scroller is vertical only
+		//(HorizontalScrollBarVisibility="Disabled"), so its Extent.Width is its
+		//Viewport.Width by construction and cannot witness a clipped row.
 		Assert.All(window.FindNamed<TabControl>("PlayerSettingsTabs").FindAll<TabItem>(), t => Assert.True(t.IsOnScreen() && t.Bounds.Width > 0, $"{t.Name} has no room in the strip"));
+		model.ClosePlayerSettings();
+	}
+
+	//What a label's text needs to be drawn in one line, independent of how much
+	//room the layout gave it: the same font the TextBlock carries, laid out with
+	//no constraint. A label whose Bounds are narrower than this is drawing part
+	//of itself, which is what "clipped" means here.
+	private static double TextWidth(TextBlock label)
+	{
+		Typeface typeface = new(label.FontFamily, label.FontStyle, label.FontWeight, label.FontStretch);
+		FormattedText text = new(label.Text ?? "", CultureInfo.CurrentCulture, FlowDirection.LeftToRight, typeface, label.FontSize, null);
+		return text.Width;
+	}
+
+	//#1123 (ADR-0269 Decision 6, "nothing is clipped"): capping the sheet's width
+	//only helps if the rows inside the narrower sheet still have their room. At
+	//1.5 in 512x505 the page viewport is about 254 px, and a row whose
+	//right-docked control carries a fixed 200 px - or a 150 px slider beside a
+	//34 px readout - leaves the label a sliver: the text is drawn mid-word. The
+	//cap has to reach the rows, on every tab, not only the default one.
+	[AvaloniaTheory]
+	[InlineData(ConfigWindowTab.Display)]
+	[InlineData(ConfigWindowTab.Look)]
+	[InlineData(ConfigWindowTab.Audio)]
+	[InlineData(ConfigWindowTab.Input)]
+	[InlineData(ConfigWindowTab.System)]
+	public void No_row_label_is_trimmed_in_the_small_window_at_the_largest_size(ConfigWindowTab tab)
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model) = Show(Workspace.Play, InterfaceSize.ExtraLarge, 512, 505);
+		window.OpenPlayerSettingsSheet();
+		Settle(window);
+		int index = PlayerSettingsEssentials.IndexOf(tab);
+		Assert.True(index >= 0, $"{tab} is not a tab of the Play settings strip");
+		window.FindNamed<TabControl>("PlayerSettingsTabs").SelectedIndex = index;
+		Settle(window);
+
+		ScrollViewer page = window.FindNamed<TabControl>("PlayerSettingsTabs").FindAll<ScrollViewer>().First(s => s.Classes.Contains("pageScroll") && s.IsOnScreen());
+		List<string> trimmed = [];
+		foreach(TextBlock label in page.GetVisualDescendants().OfType<TextBlock>()) {
+			if(!label.IsEffectivelyVisible || string.IsNullOrEmpty(label.Text)) {
+				continue;
+			}
+			//Only the row's own labels: a TextBlock a control generated for itself
+			//(a popup's closed value) is the control's business, not the row's.
+			if(label.Parent is not Panel) {
+				continue;
+			}
+			//A label that asks to be ellipsized (a folder path, #1013) is not one
+			//this rule covers: it says so itself, and shows the ellipsis.
+			if(label.TextTrimming != TextTrimming.None) {
+				continue;
+			}
+			//Neither is one that asks to wrap: it is not drawn past its room, it
+			//uses another line.
+			if(label.TextWrapping != TextWrapping.NoWrap) {
+				continue;
+			}
+			double needed = TextWidth(label);
+			if(needed > label.Bounds.Width + 1) {
+				trimmed.Add($"{(string.IsNullOrEmpty(label.Name) ? "unnamed" : label.Name)} \"{label.Text}\" needs {needed:0.#} px in {label.Bounds.Width:0.#}");
+			}
+		}
+		Assert.True(trimmed.Count == 0, $"On {tab} the rows draw their labels past their own room: {string.Join("; ", trimmed)}");
 		model.ClosePlayerSettings();
 	}
 
