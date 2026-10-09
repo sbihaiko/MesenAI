@@ -62,8 +62,10 @@ public class PlayPadWalkTests : IDisposable
 
 	//Registered claims whose opener needs state this harness does not build yet
 	//(a loaded pack, a cheat database, a failed load...). Named so the list
-	//cannot grow silently: RegisteredClaimCount below fails when a claim is
-	//added without a row in WalkedSurfaces or here.
+	//cannot grow silently: Every_surface_is_walked_or_named_as_a_gap and
+	//The_wiring_registers_the_claims_the_walk_accounts_for fail when a claim is
+	//added without a row in WalkedSurfaces or here. The Settings tab bug that
+	//keeps SettingsDisplay out of the walk is #1133.
 	public static readonly string[] NotWalkedYet = {
 		"QuitGameConfirm", "SelectRomSheet", "ShaderSheet", "BiosSheet", "ControllerSetup", "SettingsSystemTab",
 		"ControllerSheet", "PackDepSheet", "PackPicker", "PackDetail", "Cheats", "Replays",
