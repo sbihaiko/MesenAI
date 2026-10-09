@@ -145,15 +145,20 @@ public:
 	virtual bool SetGamepadLight(uint32_t index, uint8_t r, uint8_t g, uint8_t b) { return false; }
 
 	//#1106 (spec #1102): a short haptic tick on ONE connected pad, for menu focus
-	//feedback. Only macOS GameController pads that report haptics are aimable.
-	//Windows (XInput, DirectInput) and Linux (evdev) report every pad as not
-	//aimable and run no tick code; each gets its own follow-up (#1121, #1122).
-	//`index` is the one GetGamepadInfo takes. The shared rule lives here so every
-	//backend answers it the same way; a backend only supplies PlayGamepadTick.
+	//feedback. Aimable = the pad reports the capability AND its backend has a
+	//per-slot tick to use it with: macOS GameController (#1106), Windows XInput
+	//(#1121) and Linux evdev (#1122, the device side of the same rule).
+	//DirectInput is never aimable: it implements no force feedback on Windows, so a
+	//joystick that claimed rumble could not be addressed on its own anyway. The
+	//rule is shared rather than re-derived per backend so all of them answer the
+	//same way about the same pad; a backend supplies only PlayGamepadTick. `index`
+	//is the one GetGamepadInfo takes.
 	static bool IsAimable(const GamepadInfo& info)
 	{
 		switch(info.Backend) {
 			case GamepadBackend::GameController:
+			case GamepadBackend::XInput:
+			case GamepadBackend::Evdev:
 				return info.HasRumble;
 			default:
 				return false;

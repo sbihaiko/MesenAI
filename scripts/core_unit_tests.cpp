@@ -69,6 +69,7 @@
 #include "Shared/MovieSyncGate.h"
 #include "Shared/Movies/ShareRecordingSettings.h"
 #include "Shared/ShortcutKeyRules.h"
+#include "Shared/HapticTickChain.h"
 #include "Shared/KeyMonitorRouting.h"
 #include "Shared/GamepadButtonOrder.h"
 #include "Shared/AliasedKeyState.h"
@@ -6412,6 +6413,81 @@ namespace
 		Check(macDtor.find("[_tickPlayer stopAtTime") != string::npos
 			&& macDtor.find("[_tickPlayer release]") != string::npos,
 			"#1106: macOS destructor stops and releases the tick player");
+	}
+
+	//#1121: the per-slot policy of a short menu tick on a backend whose rumble is a
+	//level (XInput) and so needs a timer to end the tick. The decisions are
+	//HapticTickChain's; the Windows timer is only the clock.
+	void TestAHapticTickAlwaysEndsAndNeverSilencesTheGame()
+	{
+		HapticTickChain chain;
+		chain.RecordApplied(0, 40000, 20000);
+
+		//One tick ends with what the slot held before it, not with silence: a menu
+		//tick over a rumbling game must not stop the game's rumble.
+		uint32_t first = chain.BeginTick(0);
+		Check(first != 0 && chain.IsTicking(0),
+			"#1121: a started tick is ticking on its own slot");
+		optional<HapticTickChain::Magnitudes> ended = chain.EndTick(0, first);
+		Check(ended && ended->Right == 40000 && ended->Left == 20000,
+			"#1121: a tick ends by putting the slot's own rumble back, never by zeroing it");
+		Check(!chain.IsTicking(0), "#1121: an ended tick leaves its slot idle");
+
+		//The acceptance case: two ticks in a row on one slot both stop. A one-shot
+		//timer that was armed and re-armed after it expired does not fire again,
+		//which leaves the pad buzzing.
+		uint32_t older = chain.BeginTick(1);
+		uint32_t newer = chain.BeginTick(1);
+		Check(older != newer, "#1121: every tick on a slot gets a handle of its own");
+		Check(!chain.EndTick(1, older),
+			"#1121: a superseded tick does not stop the pad under the newer tick's feet");
+		optional<HapticTickChain::Magnitudes> last = chain.EndTick(1, newer);
+		Check(last && !chain.IsTicking(1),
+			"#1121: the second tick in a row ends too - two ticks on one slot both stop");
+		Check(!chain.EndTick(1, newer),
+			"#1121: an end with nothing ticking stops nothing a second time");
+
+		//Per slot, not per manager: a tick on one pad leaves the other alone.
+		chain.RecordApplied(2, 100, 200);
+		uint32_t other = chain.BeginTick(2);
+		Check(chain.EndTick(1, newer) == std::nullopt && chain.IsTicking(2),
+			"#1121: ending a tick on one slot leaves another slot's tick running");
+		optional<HapticTickChain::Magnitudes> otherEnd = chain.EndTick(2, other);
+		Check(otherEnd && otherEnd->Right == 100 && otherEnd->Left == 200,
+			"#1121: each slot restores its own magnitudes, not the last one recorded");
+
+		Check(chain.BeginTick(HapticTickChain::SlotCount) == 0
+			&& !chain.IsTicking(HapticTickChain::SlotCount),
+			"#1121: a slot the chain does not have is not a tick");
+	}
+
+	//#1121: the Windows backend is not linked into this suite (it needs XInput and
+	//a Windows timer queue), so its wiring is pinned by reading it - same shape as
+	//the macOS tick above. What matters is that every tick arms a timer of its own
+	//(the trap named in #1121 is re-arming an expired one-shot, which never fires
+	//again) and that the tick reaches one XInput slot.
+	void TestTheWindowsHapticTickArmsItsOwnTimer()
+	{
+		string win = ReadBackendSource("Windows/XInputManager.cpp");
+		Check(!win.empty(), "#1121: the Windows XInput backend source is readable");
+		Check(win.find("CreateTimerQueueTimer(") != string::npos,
+			"#1121: a tick arms a timer to end itself");
+		Check(win.find("ChangeTimerQueueTimer(") == string::npos,
+			"#1121: ...a fresh one, never a re-armed expired one-shot, which never re-fires");
+		string playTick = HapticBackendBody(win, "bool XInputManager::PlayTick(uint8_t gamepadPort)");
+		Check(playTick.find("_tickChain.BeginTick(") != string::npos,
+			"#1121: the tick's ownership is the shared chain's, and the tick starts one");
+		Check(playTick.find("ApplyVibration(gamepadPort") != string::npos
+			&& playTick.find("XInputSetState(") == string::npos,
+			"#1121: the tick writes one slot through the same call the rest of the class uses");
+
+		string keyManager = ReadBackendSource("Windows/WindowsKeyManager.cpp");
+		Check(keyManager.find("bool WindowsKeyManager::PlayGamepadTick(uint32_t index)") != string::npos,
+			"#1121: Windows answers the shared per-pad tick hook");
+		string routing = HapticBackendBody(keyManager, "bool WindowsKeyManager::PlayGamepadTick(uint32_t index)");
+		Check(routing.find("_xInput->PlayTick(") != string::npos
+			&& routing.find("_directInput") == string::npos,
+			"#1121: the tick goes to the XInput slot, and a DirectInput joystick is never ticked");
 	}
 
 	void TestPadChordFiresOnWhicheverPadIsInHand()
@@ -17885,6 +17961,8 @@ TestW6TheFiltersAcceptTheExtendedFrame();
 	TestAPadLightIsANoOpUnlessTheBackendHasOne();
 	TestAPadIsAimableOnlyWhereTheHostCanAddressItsHaptics();
 	TestTheMacHapticTickKeepsItsStateSound();
+	TestAHapticTickAlwaysEndsAndNeverSilencesTheGame();
+	TestTheWindowsHapticTickArmsItsOwnTimer();
 	TestPadChordFiresOnWhicheverPadIsInHand();
 	TestTheWholePadFamilyAnswersTheChord();
 	TestPadChordIsNotAnsweredAcrossPadFamilies();
