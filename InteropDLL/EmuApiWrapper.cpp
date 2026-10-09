@@ -145,9 +145,10 @@ unique_ptr<IMenuSoundSink> CreateMenuSoundSink(const MenuSoundHost::Arming& armi
 {
 #ifdef _WIN32
 	//DirectSound has no menu sink, so a player on it hears no menu sound rather
-	//than a blip through a different audio API.
+	//than a blip through a different audio API. Both returns name the same type,
+	//since a deduced return type cannot mix nullptr with a unique_ptr.
 	if(arming.Backend == (int)AudioBackendType::DirectSound) {
-		return nullptr;
+		return unique_ptr<IMenuSoundSink>();
 	}
 	return unique_ptr<IMenuSoundSink>(new WasapiMenuSoundSink(_emu.get()));
 #else
