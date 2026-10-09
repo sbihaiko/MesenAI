@@ -128,26 +128,15 @@ public class PlayPadWalkTests : IDisposable
 	//this list (the test fails on a stale entry as well as on a new one).
 	public static readonly string[] KnownBarGaps = { };
 
-	//Controls a surface shows that the pad cannot land on, by label, per surface.
-	//The walk runs to the pad's reachability closure before this is read (Walk), so
-	//what is left here is the pad's reach and not the walk's coverage: with the page
-	//each control belongs to put back before every press, all four directions from
-	//every control the pad reached land on everything else the sheet shows.
-	//
-	//chkAudioEnabled was here too, and the closure reaches it now - that one was the
-	//walk's coverage (#1146 review finding 1). What is left is the footer's "More in
-	//Options…", which the sheet shows only while Audio or Controls is the selected
-	//tab: it is left-aligned directly above a right-aligned Done with nothing
-	//focusable to its left, so no direction from any control the pad can reach lands
-	//on it. Moving or re-anchoring it is a Player-layout change, not a test change,
-	//so it is named here and tracked as #1152. Asserted both ways: a listed control
-	//the walk starts reaching has to leave this list, and a name here that the
-	//surface stops showing fails too.
-	public static readonly Dictionary<string, string[]> KnownUnreachable = new() {
-		["SettingsDisplay"] = new[] { "btnPlayerSettingsMoreInOptions" },
-		["SettingsSystemTab"] = new[] { "btnPlayerSettingsMoreInOptions" },
-	};
-
+	//There is no list of controls a surface shows and the walk cannot reach, and
+	//there will not be one: the last entry this file ever had - the Settings sheet's
+	//footer button, "More in Options…" - was the pad's reach and not its own, so it
+	//is reached now. The engine never answered a direction with it (it is left-aligned
+	//directly above a right-aligned Done, so their projections never overlap), and the
+	//wiring sends Up from Done to that line and Up from the line back into the page
+	//(PlayPadNavigationWiring.FooterControl). A control that goes back to being
+	//unreachable fails the walk below, which is where it belongs (#1146 review finding
+	//1): the walk's own coverage is fixed in Walk, the pad's reach in the wiring.
 	//Surfaces whose console chips (RomPickerConsoleFilter) the pad cannot land on:
 	//LB/RB cycle the selection but the focus never enters the chip ListBox (#1107
 	//review finding 2). Named so the gap shows, and asserted both ways: when the
@@ -270,24 +259,19 @@ public class PlayPadWalkTests : IDisposable
 		HashSet<string> known = KnownFocusLeaks.TryGetValue((surface, scale), out string[]? listed) ? listed.ToHashSet() : new HashSet<string>();
 		Assert.True(leaks.SetEquals(known),
 			$"{surface} at {scale}: focus left the surface onto [{string.Join(", ", leaks.OrderBy(l => l))}] but KnownFocusLeaks lists [{string.Join(", ", known.OrderBy(l => l))}] (#1137)");
-		//Every control the surface shows is judged, and the only ones taken out are
-		//the named gaps above - asserted both ways here, so the list cannot outlive a
-		//gap that closes and cannot grow quietly (#1146 review finding 1).
+		//Every control the surface shows has to be reached: there is no list of
+		//excused ones (#1146 review finding 1). The closure in Walk proves the pad's
+		//reach over every page the surface can show, so a control it lists and does
+		//not land on is a gap in the pad, and it fails here.
 		//
-		//The unreachable rule is asked by LABEL rather than by instance, because the
-		//strip rebuilds its page on every tab change: most of the instances the walk
-		//listed without landing on are second copies of a control it did land on, and
-		//an identity judgement would report the rebuild as a pad gap. What a surface
-		//shows is a set of control kinds - the names a player would point at - and the
-		//closure in Walk proves exactly that set is the pad's reach, so a control the
-		//surface shows and the pad cannot land on is its own row here.
-		HashSet<string> gaps = KnownUnreachable.TryGetValue(surface, out string[]? named) ? named.ToHashSet() : new HashSet<string>();
+		//The rule is asked by LABEL rather than by instance, because the strip rebuilds
+		//its page on every tab change: most of the instances the walk listed without
+		//landing on are second copies of a control it did land on, and an identity
+		//judgement would report the rebuild as a pad gap. What a surface shows is a set
+		//of control kinds - the names a player would point at.
 		HashSet<string> shownLabels = observation.Interactive.Select(c => c.Label).ToHashSet();
 		HashSet<string> landedLabels = observation.Reached.Select(c => c.Label).ToHashSet();
-		Assert.True(shownLabels.IsSupersetOf(gaps),
-			$"{surface}: KnownUnreachable names [{string.Join(", ", gaps.Except(shownLabels))}] but the surface does not show them");
-		Assert.Empty(gaps.Intersect(landedLabels));
-		List<string> unreached = shownLabels.Except(landedLabels).Except(gaps).OrderBy(l => l).ToList();
+		List<string> unreached = shownLabels.Except(landedLabels).OrderBy(l => l).ToList();
 		Assert.True(unreached.Count == 0,
 			$"{surface}: the pad reaches no control named [{string.Join(", ", unreached)}] (#1146 review finding 1)");
 		//The judge still answers the other three rules, over the live observation:
