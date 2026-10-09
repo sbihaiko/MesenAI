@@ -26,53 +26,13 @@ namespace Mesen.HeadlessTests;
 //  - B does not leave a surface that declares (or owes) a Back;
 //  - the shared action bar (#1104) names an action the surface does not have.
 //
-//The judgement is PadWalk.Judge, pure, over what the walk observed; the live
-//cases below produce the observation from a real MainWindow and the negative
-//cases hand it a doctored one, so the three failures are proven to fail
-//without needing a broken build. The negative cases need no core and run in CI;
-//the live walks self-skip there like every MainWindow test, so the evidence of
-//a pass is the filtered class run with MESEN_CORE_LIB set.
+//The judgement is PadWalk.Judge (UI/Logic, pure; its negative cases live in
+//UI.Tests/Play/PadWalkJudgeTests). The live cases below only produce the
+//observation from a real MainWindow, so they self-skip without the core and
+//the evidence of a pass is the filtered class run with MESEN_CORE_LIB set.
 //
 //Scale: every live case is parameterized by the interface size (1.0 = Standard,
 //1.5 = Extra large, #1111), so a size can never strand the pad.
-public sealed record PadWalkObservation(
-	string Surface,
-	bool IsRoot,
-	IReadOnlyCollection<string> Interactive,
-	IReadOnlyCollection<string> Reached,
-	bool? BackLeft,
-	IReadOnlyList<(string Focus, IReadOnlyList<PlayBarEntry>? Declared)> BarByFocus,
-	IReadOnlySet<PlayAction> Available);
-
-public static class PadWalk
-{
-	//The three failures, as sentences that name the surface and the culprit.
-	//An off-bar surface (Declared null) is not a failure here: it is a known gap
-	//that PlayPadWalkTests.KnownBarGaps lists by name.
-	public static List<string> Judge(PadWalkObservation o)
-	{
-		List<string> problems = new();
-		foreach(string name in o.Interactive.Except(o.Reached)) {
-			problems.Add($"{o.Surface}: {name} is not reachable from the pad (reached: {string.Join(", ", o.Reached)})");
-		}
-		bool declaresBack = o.BarByFocus.Any(b => b.Declared?.Any(e => e.Action == PlayAction.Back) == true);
-		if(!o.IsRoot && o.BackLeft != true) {
-			problems.Add($"{o.Surface}: Back does not leave the surface");
-		}
-		if(declaresBack && o.BackLeft != true) {
-			problems.Add($"{o.Surface}: the action bar names Back but B does not leave");
-		}
-		foreach((string focus, IReadOnlyList<PlayBarEntry>? declared) in o.BarByFocus) {
-			foreach(PlayBarEntry entry in declared ?? Array.Empty<PlayBarEntry>()) {
-				if(entry.Action != PlayAction.Back && !o.Available.Contains(entry.Action)) {
-					problems.Add($"{o.Surface}: with {focus} focused the bar names {entry.Action} ({entry.LabelKey}) but the surface has no such action");
-				}
-			}
-		}
-		return problems;
-	}
-}
-
 [Collection(NativeCoreCollection.Name)]
 public class PlayPadWalkTests : IDisposable
 {
@@ -128,67 +88,6 @@ public class PlayPadWalkTests : IDisposable
 		prefs.ConfirmExitResetPower = _confirm;
 		prefs.InterfaceSize = _size;
 		ConfigManager.Config.Save();
-	}
-
-	//---- the judge, host-free: each failure mode fails, and a clean walk passes
-
-	private static PadWalkObservation Clean() => new(
-		"Surface", false, new[] { "A", "B" }, new[] { "A", "B" }, true,
-		new[] { ("A", (IReadOnlyList<PlayBarEntry>?)PlayBarDeclarations.PauseOverlay) },
-		new HashSet<PlayAction> { PlayAction.Confirm, PlayAction.Back });
-
-	[Fact]
-	public void A_clean_observation_has_no_problems()
-	{
-		Assert.Empty(PadWalk.Judge(Clean()));
-	}
-
-	[Fact]
-	public void An_unreachable_control_fails_the_walk()
-	{
-		PadWalkObservation o = Clean() with { Interactive = new[] { "A", "B", "Orphan" } };
-		Assert.Contains(PadWalk.Judge(o), p => p.StartsWith("Surface: Orphan is not reachable from the pad"));
-	}
-
-	[Fact]
-	public void A_back_that_does_not_leave_fails_the_walk()
-	{
-		PadWalkObservation o = Clean() with { BackLeft = false };
-		List<string> problems = PadWalk.Judge(o);
-		Assert.Contains("Surface: Back does not leave the surface", problems);
-		Assert.Contains("Surface: the action bar names Back but B does not leave", problems);
-	}
-
-	[Fact]
-	public void A_root_surface_without_a_back_may_keep_B_inert()
-	{
-		PadWalkObservation o = Clean() with {
-			IsRoot = true, BackLeft = false,
-			BarByFocus = new[] { ("Continue", (IReadOnlyList<PlayBarEntry>?)PlayBarDeclarations.Home) },
-		};
-		Assert.Empty(PadWalk.Judge(o));
-	}
-
-	[Fact]
-	public void A_bar_entry_the_surface_does_not_have_fails_the_walk()
-	{
-		//Library's bar names Search and the console row; this surface has neither.
-		PadWalkObservation o = Clean() with {
-			BarByFocus = new[] { ("A", (IReadOnlyList<PlayBarEntry>?)PlayBarDeclarations.Library) },
-		};
-		List<string> problems = PadWalk.Judge(o);
-		Assert.Contains(problems, p => p.Contains("names Search") && p.Contains("no such action"));
-		Assert.Contains(problems, p => p.Contains("names ConsoleFilter") && p.Contains("no such action"));
-		Assert.DoesNotContain(problems, p => p.Contains("names Confirm"));
-	}
-
-	[Fact]
-	public void A_favorite_entry_fails_until_a_surface_has_the_action()
-	{
-		PadWalkObservation o = Clean() with {
-			BarByFocus = new[] { ("A", (IReadOnlyList<PlayBarEntry>?)new[] { new PlayBarEntry(PlayAction.Favorite, "BarFavorite") }) },
-		};
-		Assert.Contains(PadWalk.Judge(o), p => p.Contains("names Favorite"));
 	}
 
 	[Fact]
