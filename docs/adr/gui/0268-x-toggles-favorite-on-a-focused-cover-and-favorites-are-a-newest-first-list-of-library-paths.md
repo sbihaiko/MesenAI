@@ -9,8 +9,10 @@
   to the library), ADR-0256 (pad-only Play), ADR-0262 (Y and the on-screen
   keyboard), ADR-0264 (the flat library and its pad map), wireframe W-P20,
   issues #1102 and #1103.
-- Supersedes / amends: nothing. ADR-0264 Decision 3 gave Y to search and left X
-  unassigned; this ADR assigns X and moves nothing else.
+- Supersedes / amends: amends ADR-0264 Decision 3 and its *Not decided here*
+  list (see ADR-0264's 2026-10-09 Amendment). ADR-0264 Decision 3 gave Y to
+  search and left X unassigned; this ADR assigns X, takes favorites out of that
+  list, and moves nothing else.
 
 ## Context
 
@@ -24,7 +26,7 @@ Every console dashboard answers this with a shelf the player curates.
    surface control, not a navigation control: it acts only where a cover has the
    focus (a Home tile, *Continue*, a library tile) and does nothing elsewhere. A
    player who binds X to a console button keeps that binding (ADR-0256 Decision
-   4), as with Y today. The action bar's X entry reads *Favorite* on an
+   1), as with Y today; X is not a navigation control (ADR-0256 Decision 4). The action bar's X entry reads *Favorite* on an
    unfavorited cover and *Unfavorite* on a favorited one. Y is unchanged
    (ADR-0264 Decision 3); while the on-screen keyboard is open every press is
    the keyboard's (ADR-0262).
@@ -47,8 +49,8 @@ Every console dashboard answers this with a shelf the player curates.
 ## Consequences
 
 - The list lives in the player's own settings, next to the existing recents; it
-  holds paths only, no resident or personal data beyond the file paths the app
-  already stores.
+  holds paths only, no data beyond the file paths the app already stores in its
+  recents.
 - A list that keeps vanished entries can grow without bound; it is capped only by
   the player's own favoriting, which is acceptable at the sizes a human curates.
 - Tests this implies: a host-free model test (toggle, newest-first, hidden when

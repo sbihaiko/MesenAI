@@ -726,7 +726,7 @@ def w_p20():
     c.button(hero[0] + 228, hero[1] + 74, "Continue", "primary", TINT["play"], h=36, size=14, icon="play")
     tw, th = 150, 112
 
-    def shelf(y, label, titles, stars, seed0):
+    def shelf(y, label, titles, stars, seed0, focus_first=False):
         c.text(x0 + 40, y, label, 15, 650)
         for i, t in enumerate(titles):
             tx = x0 + 40 + i * (tw + 20)
@@ -735,12 +735,14 @@ def w_p20():
             c.d.rounded_rectangle(scb((tx, ty, tx + tw, ty + th)), radius=sc(10), fill=(0, 0, 0))
             c.scene((tx, ty, tx + tw, ty + th), seed0 + i)
             c.text(tx, ty + th + 14, t, 13, 590)
+            if focus_first and i == 0:
+                c.rrect((tx - 4, ty - 4, tx + tw + 4, ty + th + 4), 13, outline=TINT["play"], width=3)
             if stars:
                 c.rrect((tx + tw - 30, ty + 8, tx + tw - 8, ty + 30), 6, fill=(255, 255, 255))
                 c.icon("sparkle", tx + tw - 19, ty + 19, 13, ORANGE)
         c.text(x1 - 40, y + 18 + th / 2, "\u25b8", 16, 500, TEXT3, "rm")
 
-    shelf(y0 + 232, "Favorites", ["Castlevania", "The Legend of Zelda", "Metroid", "Mega Man 2"], True, 1)
+    shelf(y0 + 232, "Favorites", ["Castlevania", "The Legend of Zelda", "Metroid", "Mega Man 2"], True, 1, focus_first=True)
     shelf(y0 + 414, "Recent", ["Contra", "Punch-Out!!", "Kirby's Adventure", "Excitebike", "Tetris"], False, 5)
     c.line([(x0, y1 - 44), (x1, y1 - 44)], (226, 226, 230))
     c.text(x0 + 24, y1 - 22, "A  Play      X  Unfavorite      B  \u2014", 12, 500, TEXT2, "lm")
@@ -1018,7 +1020,7 @@ def w_p8d():
     pause_panel(c)
     b = settings_sheet(c, 0, 386)
     inset_rows(c, b, [("Full screen", "switch", True), ("Aspect ratio", "popup", "Auto"),
-                      ("Scale", "popup", "3\u00d7"), ("Interface size", "popup", "Large")],
+                      ("Scale", "popup", "3\u00d7"), ("Interface size", "popup", "Standard")],
                "Scale sizes the picture; Interface size sizes the menus")
     c.caption("W-P8d", "Play \u2014 settings \u203a Display with Interface size (chrome only, never the picture)", 6)
     return c

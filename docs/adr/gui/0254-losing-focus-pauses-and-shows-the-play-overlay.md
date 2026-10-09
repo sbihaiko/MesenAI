@@ -7,7 +7,7 @@
   is what ADR-0137's same-turn rule requires alongside the unit tests below.
 - Date: 2026-10-04
 - Related: ADR-0241, ADR-0249, ADR-0251, `docs/roadmap/PRD-mesence-enhancement-ecosystem.md` Part B §8.
-- Supersedes / amends: none. Amended 2026-10-09 (#1103): the reason line has a
+- Supersedes / amends: none. Amended 2026-10-09 (#1103, proposed): the reason line has a
   second wording, *Paused — controller disconnected* (see "Amendment").
 
 ## Context
@@ -48,6 +48,7 @@ Evidence: `UI.Tests/Play/FocusPauseTests` (8 cases over both rules — the door/
 
 ## Amendment (2026-10-09, #1103): the reason line has a second wording
 
+Status: **proposed** (no owner pick yet; it stays proposed until a human accepts it).
 Recorded by the agent under owner-away autonomy as the wording of spec #1102
 slice 3 (pause when a controller disappears); not an owner pick, and the owner
 may revert it. Nothing is implemented by this amendment.
