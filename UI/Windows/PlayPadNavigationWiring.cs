@@ -146,6 +146,19 @@ namespace Mesen.Windows
 			return Installed.TryGetValue(window, out Bridge? bridge) ? bridge.RomPickerParked : null;
 		}
 
+		//The headless suite's door onto the arbiter's own re-ask (#1129): the same
+		//call every watched surface property makes when it changes, asked on demand.
+		//A case that waits for a surface to take the focus needs it because the
+		//decision is bounded (PlayFocusOnOpen.Attempts) and nothing re-arms it on
+		//its own: a loaded dispatcher can spend all the turns it has before the
+		//control is effectively visible, and the surface the case is about is left
+		//waiting for a focus no later turn brings back. It changes no decision -
+		//Refresh is the arbiter's public entry, asked again rather than taken over.
+		public static void RefreshSurfaceFocusForTest(MainWindow window)
+		{
+			PlayFocusOnOpen.Of(window)?.Refresh();
+		}
+
 		//ADR-0256 Decision 3: ONE path decides who holds the focus when a Play
 		//surface opens or closes. The surfaces are registered in the order the Esc
 		//router itself walks them - TogglePlayerOverlay's QuitGameConfirm first,

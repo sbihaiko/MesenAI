@@ -118,6 +118,31 @@ public class PlayActionBarViewTests : IDisposable
 		return (window, model);
 	}
 
+	//The overlay's own button holding the focus, waited for with the decision
+	//re-asked (#1129) - the one wait every W-P4 case here opens with. PlayFocusOnOpen
+	//gives up after a bounded number of turns (its Attempts) when the control it
+	//chose is focusable and enabled and still not yet *effectively visible*: its own
+	//comment records measuring exactly that under a full headless suite. Nothing
+	//re-arms the decision on its own - only a watched property changing does, and
+	//every watched property these cases touch is already in the state the bar reads.
+	//So a loaded dispatcher, which is what a combined run is (every earlier case's
+	//window still draining its 50 ms and 100 ms timers), can spend all five turns
+	//and leave the case waiting on something no later turn brings back: an
+	//order-dependent failure of the *wait*, with nothing wrong with the surface the
+	//case exists to check. Asking again is what any of those property changes would
+	//do, so what a case asserts is that the pause overlay can hold the focus, not
+	//that it won the race inside five dispatcher turns.
+	private static void WaitForOverlayFocus(MainWindow window)
+	{
+		WaitFor(() => {
+			if(Focused(window) == "OverlayResumeButton") {
+				return true;
+			}
+			PlayPadNavigationWiring.RefreshSurfaceFocusForTest(window);
+			return false;
+		}, "the pause overlay did not take the focus");
+	}
+
 	private static void WaitFor(Func<bool> condition, string failure)
 	{
 		Stopwatch clock = Stopwatch.StartNew();
@@ -286,24 +311,21 @@ public class PlayActionBarViewTests : IDisposable
 		//A pad press puts a pad in hand; the overlay then names its buttons.
 		Press(window, "Select");
 		model.OpenPauseOverlay();
-		WaitFor(() => Focused(window) == "OverlayResumeButton", "the pause overlay did not take the focus");
+		WaitForOverlayFocus(window);
 		Assert.Equal("A Select     B Resume", Bar(window));
 	}
 
 	//The connected-count half of the overlay check. The count -> text rule is
-	//unit-tested (PlayActionBarTests); this realized-surface follow-up is flaky
-	//and parked on #1129.
+	//unit-tested (PlayActionBarTests); this is the realized surface's own.
 	[AvaloniaFact]
-	[Trait("Flaky", "#1129")]
 	public void The_pause_overlay_bar_follows_the_connected_count()
 	{
-		Assert.SkipWhen(true, "Flaky on the realized surface; tracked in #1129. The rule itself is covered by PlayActionBarTests.");
 		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
 		(MainWindow window, MainWindowViewModel model) = ShowPauseOverlay();
 
 		Press(window, "Select");
 		model.OpenPauseOverlay();
-		WaitFor(() => Focused(window) == "OverlayResumeButton", "the pause overlay did not take the focus");
+		WaitForOverlayFocus(window);
 		Assert.Equal("A Select     B Resume", Bar(window));
 
 		//The pad goes away: the same overlay now names the keyboard's keys, and
@@ -337,7 +359,7 @@ public class PlayActionBarViewTests : IDisposable
 
 		PressNamed(window, "Joy1 Cross");
 		model.OpenPauseOverlay();
-		WaitFor(() => Focused(window) == "OverlayResumeButton", "the pause overlay did not take the focus");
+		WaitForOverlayFocus(window);
 		Assert.Equal("Cross Select     Circle Resume", Bar(window));
 	}
 
@@ -349,7 +371,7 @@ public class PlayActionBarViewTests : IDisposable
 
 		//A pad is connected but nothing it sent has been pressed yet.
 		model.OpenPauseOverlay();
-		WaitFor(() => Focused(window) == "OverlayResumeButton", "the pause overlay did not take the focus");
+		WaitForOverlayFocus(window);
 		Assert.Equal("Select     Resume", Bar(window));
 	}
 
@@ -361,7 +383,7 @@ public class PlayActionBarViewTests : IDisposable
 
 		Press(window, "Select");
 		model.OpenPauseOverlay();
-		WaitFor(() => Focused(window) == "OverlayResumeButton", "the pause overlay did not take the focus");
+		WaitForOverlayFocus(window);
 		Assert.Equal("A Select     B Resume", Bar(window));
 
 		//A press the backend names outside both families is not a pad and leaves
