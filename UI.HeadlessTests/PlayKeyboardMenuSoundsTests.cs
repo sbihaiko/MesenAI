@@ -303,6 +303,68 @@ public class PlayKeyboardMenuSoundsTests : IDisposable
 		Assert.Empty(_played);
 	}
 
+	//#1160: authority, not only the door. The pad sounds where its bridge
+	//resolved an action, and the bridge resolves one only where
+	//PlayPadNavigation.HasAuthority says the pad is the GUI's - the door, the
+	//capture, and the load card / pause / surface state together. The keyboard
+	//arm was gated on the door alone, so a press the pad refuses outright still
+	//blipped: a game paused with nothing of Play drawn over it (the Pause
+	//shortcut's result, a debugger break) is the console's, the pad is silent
+	//there, and every arrow key sounded Move.
+	//
+	//The pad is the reference here rather than a restatement of the rule: the
+	//same move is made through both paths, in one state, and both must answer
+	//alike - ADR-0270 D10 binds the two to the same ANSWER, not to the same call.
+	[AvaloniaFact]
+	public void A_paused_game_with_no_play_surface_is_silent_on_both_paths()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		ConfigManager.Config.Audio.MenuSounds = true;
+		MainWindow window = ShowPlayHome(out MainWindowViewModel model);
+		LoadGame(model);
+
+		//What the Pause shortcut leaves: a paused console with no Play surface
+		//over it, which is the one state the pad has no authority in.
+		EmuApi.Pause();
+		WaitFor(() => EmuApi.IsPaused(), "the game never paused");
+		Assert.False(model.IsPlaySurfaceOverGame, "a Play surface is up over the paused game");
+		Pump();
+		_played.Clear();
+
+		PressPad(window, PadNavAction.Down);
+		Assert.Empty(_played);
+
+		PressKey(window, PhysicalKey.ArrowDown);
+		Assert.Empty(_played);
+	}
+
+	//#1160, the Esc half of the same defect. Esc over a running game opens W-P4
+	//and pauses it, but the press is made while the console still holds the pad:
+	//no authority over a game that runs unpaused means the pad never produces
+	//this Back at all. The keyboard sounded one, because the arm read the door
+	//and let the overlay's own pause answer for it.
+	//
+	//The authority that decides is the one in force BEFORE the press - what the
+	//pad's own tick reads - so opening the overlay cannot talk the press into a
+	//blip it did not earn.
+	[AvaloniaFact]
+	public void Escape_over_a_running_game_opens_the_overlay_and_sounds_nothing()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		ConfigManager.Config.Audio.MenuSounds = true;
+		MainWindow window = ShowPlayHome(out MainWindowViewModel model);
+		LoadGame(model);
+		_played.Clear();
+
+		PressKey(window, PhysicalKey.Escape);
+
+		//The press still does its job: the overlay opens and the game pauses.
+		WaitFor(() => model.IsPlayerOverlayVisible && model.IsGamePaused, "Esc did not open W-P4 over the running game");
+		WaitFor(() => EmuApi.IsPaused(), "the overlay did not pause the game");
+		Pump();
+		Assert.Empty(_played);
+	}
+
 	//A held key is one press for Confirm (#1080's rule, the one the Esc arm
 	//above already applies): the OS repeats it as more KeyDowns with no KeyUp
 	//between, and the pad's own Confirm does not repeat either

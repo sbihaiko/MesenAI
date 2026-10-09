@@ -624,6 +624,42 @@ namespace Mesen.Windows
 				.FirstOrDefault(c => c.Focusable && c.IsEffectivelyEnabled && c.IsEffectivelyVisible);
 		}
 
+		//ADR-0256 Decisions 1 and 2, through the rule. `IsPlaySurfaceOverGame`
+		//answers "is something drawn over the game", which is a weaker question
+		//than "did that something take the console away from the pad": it counts
+		//the barcode tool sheet, Settings reached from a task door, the archive's
+		//ROM list and the load card - none of which pause. So the rule is handed
+		//the pause state beside it (a surface qualifies only when the game is
+		//paused under it), plus the two non-pausing surfaces that ARE the pad's
+		//and are named rather than folded in: the load card, which is refused
+		//because it has no focusable control of its own, and the on-load pack
+		//picker, which is granted because it has to be answered before play.
+		//
+		//The Player-mode/Play-workspace gate is ShortcutHandler's own
+		//(ToggleOverlay's): the pad drives the *Play* GUI, which is the door an
+		//arcade cabinet boots into, not the classic menus. Named InPlayDoor so
+		//the authority path and the grid's Back edge ask the same door.
+		//
+		//#1160: this is the host half of the authority rule, and it is asked by
+		//more than the bridge now. The keyboard navigates the same Play surfaces
+		//(ADR-0270 D10), and D10 binds the two paths to the same ANSWER - so the
+		//keyboard asks this predicate rather than the door alone, which is what
+		//let a press the pad refuses outright still blip: a game paused with no
+		//Play surface over it is the console's, and the arrows are game input.
+		//One predicate, asked by both, or the two drift apart again.
+		public static bool HasAuthority(MainWindowViewModel model)
+		{
+			//ADR-0255 slice 3 adds one clause, and it is the same predicate:
+			//while the Controller sheet is capturing "press a control", the pad
+			//is the capture's, so authority is refused and the capture consumes
+			//the press. Not a second rule - the capture is a state of "the pad
+			//is not the GUI's", which is exactly what this predicate answers,
+			//and the capture reads the same pressed set this bridge does.
+			return PlayPadNavigation.InPlayDoor(model.IsPlayerMode, model.IsPlayWorkspace)
+				&& !model.IsControllerCapturing
+				&& PlayPadNavigation.HasAuthority(model.IsPlaySurfaceOverGame, EmuApi.IsRunning(), EmuApi.IsPaused(), model.IsLoadCardVisible, model.IsOnLoadPackPickerVisible);
+		}
+
 		//The pad, once per tick. It reads the host's pressed set, asks the rules
 		//what the press means, and applies it to the focus - the same three steps
 		//in the same order every tick, so there is no path where a press is
@@ -850,32 +886,9 @@ namespace Mesen.Windows
 				}
 			}
 
-			//ADR-0256 Decisions 1 and 2, through the rule. `IsPlaySurfaceOverGame`
-			//answers "is something drawn over the game", which is a weaker question
-			//than "did that something take the console away from the pad": it counts
-			//the barcode tool sheet, Settings reached from a task door, the archive's
-			//ROM list and the load card - none of which pause. So the rule is handed
-			//the pause state beside it (a surface qualifies only when the game is
-			//paused under it), plus the two non-pausing surfaces that ARE the pad's
-			//and are named rather than folded in: the load card, which is refused
-			//because it has no focusable control of its own, and the on-load pack
-			//picker, which is granted because it has to be answered before play.
-			//
-			//The Player-mode/Play-workspace gate is ShortcutHandler's own
-			//(ToggleOverlay's): the pad drives the *Play* GUI, which is the door an
-			//arcade cabinet boots into, not the classic menus. Named InPlayDoor so
-			//the authority path and the grid's Back edge ask the same door.
-			private bool HasAuthority()
-			{
-				//ADR-0255 slice 3 adds one clause, and it is the same predicate:
-				//while the Controller sheet is capturing "press a control", the pad
-				//is the capture's, so authority is refused and the capture consumes
-				//the press. Not a second rule - the capture is a state of "the pad
-				//is not the GUI's", which is exactly what this predicate answers,
-				//and the capture reads the same pressed set this bridge does.
-				return InPlayDoor && !_model.IsControllerCapturing
-					&& PlayPadNavigation.HasAuthority(_model.IsPlaySurfaceOverGame, EmuApi.IsRunning(), EmuApi.IsPaused(), _model.IsLoadCardVisible, _model.IsOnLoadPackPickerVisible);
-			}
+			//The authority rule's host half, asked of the one predicate rather than
+			//restated here (#1160): the window's keyboard arms ask the same one.
+			private bool HasAuthority() => PlayPadNavigationWiring.HasAuthority(_model);
 
 			//The door the bridge is for: Player UI mode in a game-screen workspace
 			//(the switcher's Play door, or Classic under the same UI mode). The rule
