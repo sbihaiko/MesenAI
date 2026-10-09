@@ -1359,9 +1359,9 @@ namespace Mesen.Windows
 			//it sounds like the pad's Back does - through the same hook, judged on the
 			//state the press left (a sheet that resumes the game leaves it running
 			//unpaused, and the blip must not mix into it). Scoped to the Play door like
-			//the navigation arm below: the pad's Back does not reach the Settings sheet
-			//opened from Remaster's or Share's Tools either, and this arm answers for
-			//both of them here.
+			//the navigation arm in OnPreviewKeyDown: this arm also answers the Settings
+			//sheet opened from Remaster's or Share's Tools, and the pad's Back does not
+			//reach that one either.
 			if(InPlayDoor) {
 				PlayMenuSound.For(PadNavAction.Back);
 			}
