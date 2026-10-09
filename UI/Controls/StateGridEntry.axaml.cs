@@ -134,6 +134,32 @@ namespace Mesen.Controls
 			PackBadgeText = state.Visible ? ResourceHelper.GetMessage(state.TextKey) : "";
 		}
 
+		//#1110 (W-P20): a Favorites tile is a library path. Its cover is the
+		//screenshot the Recent list holds for that ROM, when there is one; a pack
+		//badge is a recent-game fact and is not drawn here.
+		private void InitFavorite(RecentGameInfo game)
+		{
+			ApplyPackBadge(RecentPackBadge.Decide(new RecentPackFacts("", NamedHdPack: false, PackDisabled: false)));
+			SubTitle = "";
+			Enabled = game.IsEnabled();
+			Image = StateGridEntry.EmptyImage;
+			Interlocked.Increment(ref _thumbnailsInFlight);
+			Task.Run(() => {
+				Bitmap? img = null;
+				try {
+					byte[]? png = RecentCoverIndex.Open(ConfigManager.RecentGamesFolder).FindCover(game.RomPath);
+					if(png != null) {
+						using MemoryStream ms = new MemoryStream(png);
+						img = new Bitmap(ms);
+					}
+				} catch { }
+				Dispatcher.UIThread.Post(() => {
+					Image = img ?? StateGridEntry.EmptyImage;
+				});
+				Interlocked.Decrement(ref _thumbnailsInFlight);
+			});
+		}
+
 		public void Init()
 		{
 			RecentGameInfo game = Entry;
@@ -142,6 +168,10 @@ namespace Mesen.Controls
 			}
 
 			Title = game.Name;
+			if(game.RomPath.Length > 0) {
+				InitFavorite(game);
+				return;
+			}
 			//W-P2: a pack found by name shows at once; one found by the entry's
 			//remembered hash (installed or in the community catalog) is looked
 			//up with the preview, off the UI thread, and may appear a moment later.

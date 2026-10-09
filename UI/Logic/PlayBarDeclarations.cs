@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace Mesen.Logic;
 
@@ -78,4 +79,16 @@ public static class PlayBarDeclarations
 		new PlayBarEntry(PlayAction.Confirm, "BarSelect"),
 		new PlayBarEntry(PlayAction.Back, "BarResume"),
 	};
+
+	//#1110 (ADR-0268 Decision 1): X is a surface control that acts only where a
+	//cover has the focus, so a surface's declaration gains it only while one does,
+	//reading Favorite on an unfavorited cover and Unfavorite on a favorited one.
+	//The surface's own list is never edited: an entry it already carries for X is
+	//replaced, so the bar names X once.
+	public static IReadOnlyList<PlayBarEntry> WithFavorite(IReadOnlyList<PlayBarEntry> declared, bool favorited)
+	{
+		return declared.Where(e => e.Action != PlayAction.Favorite)
+			.Append(new PlayBarEntry(PlayAction.Favorite, favorited ? "BarUnfavorite" : "BarFavorite"))
+			.ToList();
+	}
 }

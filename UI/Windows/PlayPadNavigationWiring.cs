@@ -301,7 +301,7 @@ namespace Mesen.Windows
 				 nameof(PlayerRomPickerViewModel.TilesRevision), nameof(PlayerRomPickerViewModel.FoldersRevision)],
 				() => model.RomPicker.IsVisible, () => RomPickerFocusTarget(window, model),
 				() => Named(window, "PlayerRomPickerSheet"),
-				() => model.RomPicker.IsLibrarySurfaceVisible ? LibraryDeclaration(window) : PlayBarDeclarations.Browser);
+				() => model.RomPicker.IsLibrarySurfaceVisible ? LibraryDeclaration(window, model) : PlayBarDeclarations.Browser);
 
 			//The content area under all of them: the home's primary action, the
 			//Continue button, the slot grid over a game. It is not a claim (it is
@@ -314,33 +314,35 @@ namespace Mesen.Windows
 				() => ContentFocus(window, model),
 				() => model.IsPlayWorkspace && model.RecentGames.Visible
 					? model.RecentGames.ShowFirstRunHome ? PlayBarDeclarations.HomeFirstRun
-					: model.RecentGames.ShowRecentsHome ? HomeDeclaration(window)
+					: model.RecentGames.ShowRecentsHome ? HomeDeclaration(window, model)
 					: PlayBarDeclarations.None
 					: PlayBarDeclarations.None);
 		}
 
 		//The library's A is the focused control's, as the home's is: a tile plays,
 		//but the header actions open what they name.
-		private static IReadOnlyList<PlayBarEntry> LibraryDeclaration(MainWindow window)
+		private static IReadOnlyList<PlayBarEntry> LibraryDeclaration(MainWindow window, MainWindowViewModel model)
 		{
 			Control? focused = TopLevel.GetTopLevel(window)?.FocusManager?.GetFocusedElement() as Control;
-			return focused?.Name switch {
+			return PlayFavoriteCover.Declare(focused?.Name switch {
 				"RomPickerLibraryFolders" => PlayBarDeclarations.LibraryFolders,
 				"RomPickerBrowseFile" => PlayBarDeclarations.BrowseFile,
 				"RomPickerSearch" => PlayBarDeclarations.SearchField,
 				"RomPickerBack" => PlayBarDeclarations.BackButton,
 				"RomPickerSearchClear" => PlayBarDeclarations.SearchClear,
 				_ => PlayBarDeclarations.Library
-			};
+			}, model, focused);
 		}
 
 		//The recents home's A is the focused control's, not the surface's: Continue
 		//plays, but Open a game… (the secondary button) opens the sheet.
-		private static IReadOnlyList<PlayBarEntry> HomeDeclaration(MainWindow window)
+		//#1110: X names Favorite/Unfavorite only while a cover (Continue or a tile) has the focus.
+		private static IReadOnlyList<PlayBarEntry> HomeDeclaration(MainWindow window, MainWindowViewModel model)
 		{
-			return TopLevel.GetTopLevel(window)?.FocusManager?.GetFocusedElement() is Control focused
-				&& focused == Named(window, "PlayHomeOpenRomSecondary")
-				? PlayBarDeclarations.HomeFirstRun : PlayBarDeclarations.Home;
+			Control? focused = TopLevel.GetTopLevel(window)?.FocusManager?.GetFocusedElement() as Control;
+			return focused is not null && focused == Named(window, "PlayHomeOpenRomSecondary")
+				? PlayBarDeclarations.HomeFirstRun
+				: PlayFavoriteCover.Declare(PlayBarDeclarations.Home, model, focused);
 		}
 
 		//W-P1/W-P2: the home's primary action, or W-P3's Continue, or the slot
@@ -757,6 +759,15 @@ namespace Mesen.Windows
 				if(authority && InPlayDoor && LibrarySheetIsUp
 					&& PlayPadNavigation.IsSheetEdge(PadNavControls.SheetCode(pad?.Family, pad?.Device ?? -1, PadSheetControl.Search, keyCode), pressed, _previous)) {
 					FocusLibrarySearch();
+				}
+
+				//#1110 (ADR-0268 Decision 1): X toggles Favorite on the cover the ring is
+				//on - a library tile, a Home tile or Continue. A second sheet control,
+				//read off the pressed sets like Y; PlayFavoriteCover answers null (and
+				//the press does nothing) wherever no cover has the focus.
+				if(authority && InPlayDoor && _keyboard is null
+					&& PlayPadNavigation.IsSheetEdge(PadNavControls.SheetCode(pad?.Family, pad?.Device ?? -1, PadSheetControl.Favorite, keyCode), pressed, _previous)) {
+					PlayFavoriteCover.Toggle(_model, _window.FocusManager?.GetFocusedElement() as Control);
 				}
 
 				//#1034 (ADR-0264 Decision 3): LB/RB cycle the library's console

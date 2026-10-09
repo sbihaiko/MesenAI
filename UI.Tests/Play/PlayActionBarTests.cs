@@ -118,5 +118,32 @@ namespace Mesen.Tests.Play
 			Assert.Equal("A BarClearSearch     Y BarSearch     LB / RB BarConsole     B BarBack",
 				PlayActionBar.Text(PlayBarDeclarations.SearchClear, PlayInputDevice.Controller, PadFamily.Xbox, false, key => key));
 		}
+
+		//#1110 (ADR-0268 Decision 1): the X entry exists only where a cover has the
+		//focus, and reads Favorite or Unfavorite for that cover.
+		[Fact]
+		public void A_focused_cover_adds_Favorite_or_Unfavorite_to_the_surfaces_bar()
+		{
+			string Bar(bool favorited) => PlayActionBar.Text(PlayBarDeclarations.WithFavorite(PlayBarDeclarations.Home, favorited),
+				PlayInputDevice.Controller, PadFamily.Xbox, false, key => key);
+			Assert.Equal("A BarPlay     X BarFavorite", Bar(false));
+			Assert.Equal("A BarPlay     X BarUnfavorite", Bar(true));
+		}
+
+		[Fact]
+		public void Without_a_focused_cover_the_declared_bar_has_no_X_entry()
+		{
+			string text = PlayActionBar.Text(PlayBarDeclarations.HomeFirstRun, PlayInputDevice.Controller, PadFamily.Xbox, false, key => key);
+			Assert.DoesNotContain("X ", text);
+		}
+
+		[Fact]
+		public void Favorite_replaces_an_X_entry_the_bar_already_has()
+		{
+			IReadOnlyList<PlayBarEntry> once = PlayBarDeclarations.WithFavorite(PlayBarDeclarations.Library, false);
+			IReadOnlyList<PlayBarEntry> twice = PlayBarDeclarations.WithFavorite(once, true);
+			Assert.Single(twice, e => e.Action == PlayAction.Favorite);
+			Assert.Equal("BarUnfavorite", Assert.Single(twice, e => e.Action == PlayAction.Favorite).LabelKey);
+		}
 	}
 }

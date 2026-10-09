@@ -55,6 +55,10 @@ public class PlayerThemeRenderTests : IDisposable
 		foreach(string stale in Directory.GetFiles(ConfigManager.RecentGamesFolder, "*.rgd")) {
 			File.Delete(stale);
 		}
+		ConfigManager.Config.PlayerEnhancements.Favorites.Paths = _favorites;
+		if(_favoritesFolder != null && Directory.Exists(_favoritesFolder)) {
+			Directory.Delete(_favoritesFolder, true);
+		}
 		//Only a folder this test created is removed; a real pack is never touched.
 		if(_seededPack != null && Directory.Exists(_seededPack)) {
 			Directory.Delete(_seededPack, true);
@@ -62,6 +66,8 @@ public class PlayerThemeRenderTests : IDisposable
 	}
 
 	private string? _seededPack;
+	private string? _favoritesFolder;
+	private readonly List<string> _favorites = ConfigManager.Config.PlayerEnhancements.Favorites.Paths.ToList();
 
 	//A recent-game file as the Core writes it: a zip holding the screenshot.
 	private static void WriteRecentWithScreenshot(string game, Color color)
@@ -290,6 +296,43 @@ public class PlayerThemeRenderTests : IDisposable
 		//wireframe draws five and a subtitle without the wireframe's pack name.
 		//The status line ends in the P1-P4 port chips.
 		AssertWireframeRegions(frame, "W-P2");
+	}
+
+	//W-P20 (ADR-0268): Home with a Favorites shelf between Continue and Recent.
+	//The shelf is a row of W-P2 tiles under its own header; the Continue card
+	//keeps its place above it and the Recent row moves down.
+	[AvaloniaFact]
+	public void Home_with_favorites_renders_the_shelf_between_Continue_and_Recent()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		string folder = Path.Combine(Path.GetTempPath(), "mesen-1110-render-" + Guid.NewGuid().ToString("N"));
+		Directory.CreateDirectory(folder);
+		_favoritesFolder = folder;
+		string[] favorites = { "Castlevania", "The Legend of Zelda", "Metroid", "Mega Man 2" };
+		(MainWindow window, MainWindowViewModel model) = Show(UiMode.Player, () => {
+			WriteRecentWithScreenshot("Super Mario Bros. 3", Color.Parse("#C83228"));
+			foreach(string game in favorites) {
+				File.WriteAllText(Path.Combine(folder, game + ".nes"), "rom");
+			}
+			ConfigManager.Config.PlayerEnhancements.Favorites.Paths = favorites.Select(g => Path.Combine(folder, g + ".nes")).ToList();
+		}, new[] { "Super Mario Bros. 3", "Contra", "Punch-Out!!", "Kirby's Adventure", "Excitebike" });
+
+		WaitFor(() => model.RecentGames.ContinuePreview != null && !StateGridEntry.ThumbnailsInFlight, "the Continue preview never loaded");
+		Control header = window.FindNamed<TextBlock>("PlayHomeFavoritesHeader");
+		Panel shelf = window.FindNamed<Panel>("PlayHomeFavoritesGrid");
+		Panel recent = window.FindNamed<Panel>("PlayHomeRecentGrid");
+		Border card = window.FindNamed<Border>("PlayHomeContinueCard");
+		Assert.True(header.IsOnScreen());
+		Assert.True(shelf.IsOnScreen());
+		Assert.True(recent.IsOnScreen());
+		double Top(Control c) => c.TranslatePoint(new Point(0, 0), window)!.Value.Y;
+		Assert.True(Top(card) < Top(header) && Top(header) < Top(shelf) && Top(shelf) < Top(recent), "the shelf is not between Continue and Recent");
+		Assert.Equal(favorites, shelf.FindAll<StateGridEntry>().Where(t => t.IsOnScreen()).Select(t => t.Title));
+		Assert.Equal(Text, PlayerRender.SolidColor(((TextBlock)header).Foreground));
+
+		Bitmap frame = PlayerRender.Capture(window);
+		PlayerRender.Save(frame, "W-P20");
+		PlayerRender.AssertPixel(WindowBackground, frame, 12, 300);
 	}
 
 	//W-P4: the light overlay card (radius 18) with the 44 px tinted Resume,

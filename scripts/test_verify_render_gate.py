@@ -223,6 +223,17 @@ def main() -> int:
         failures += 1
     else:
         print("ok   [W-P19b is not in WIREFRAMES_AWAITING_RENDER_CASE (#1033)]")
+    # #1110 (ADR-0268): the Favorites shelf landed with its W-P20 render case.
+    if "W-P20" not in pinned:
+        print("FAIL [W-P20 promoted]: W-P20 is drawn in docs/media/gui-redesign but is not in EXPECTED_WIREFRAME_RENDERS")
+        failures += 1
+    else:
+        print("ok   [W-P20 is in EXPECTED_WIREFRAME_RENDERS (#1110)]")
+    if "W-P20" in awaiting:
+        print("FAIL [W-P20 promoted]: W-P20 still waits in WIREFRAMES_AWAITING_RENDER_CASE while #1110 landed its render case")
+        failures += 1
+    else:
+        print("ok   [W-P20 is not in WIREFRAMES_AWAITING_RENDER_CASE (#1110)]")
     got = run_case(check, PASSED, FRESH_PAIR, pinned)
     if not any("W-P2.png was not rendered" in line for line in got):
         print(f"FAIL [default expected set]: a run with only W-P1 must miss W-P2, got {got}")
