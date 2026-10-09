@@ -207,16 +207,29 @@
 				the keyboard.-->
 				<Popup Name="PackInstallPillPopup" IsOpen="{Binding IsPackInstallPillShown}" IsLightDismissEnabled="False" WindowManagerAddShadowHint="False" ShouldUseOverlayLayer="False" TakesFocusFromNativeControl="False"
 					Placement="AnchorAndGravity" PlacementAnchor="TopRight" PlacementGravity="BottomLeft" HorizontalOffset="-4" VerticalOffset="4">
-					<Border Name="PackInstallPill" Classes="hud" Classes.compact="{Binding IsPackInstallPillFailed}" Padding="16 14" Margin="12 12 12 20" MaxWidth="440" IsHitTestVisible="False">
-							<DockPanel>
-								<Border Classes="badge medium" DockPanel.Dock="Left" Margin="0 0 14 0" Background="{StaticResource PlayerTintShareBrush}" IsVisible="{Binding IsPackInstallPillInstalling}"><PathIcon Data="{StaticResource PlayerIconPack}" /></Border>
-								<PathIcon DockPanel.Dock="Left" Data="{StaticResource PlayerIconWarning}" Foreground="{StaticResource PlayerOrangeBrush}" IsVisible="{Binding IsPackInstallPillFailed}" />
-								<StackPanel VerticalAlignment="Center" Spacing="9">
-									<TextBlock Name="PackInstallPillText" Classes="headline" Text="{Binding PackInstallPillText}" TextTrimming="CharacterEllipsis" />
-									<ProgressBar Name="PackInstallPillBar" Width="300" Minimum="0" Maximum="100" IsVisible="{Binding IsPackInstallPillInstalling}" IsIndeterminate="{Binding IsPackInstallPillIndeterminate}" Value="{Binding PackInstallPillPercent}" />
-								</StackPanel>
-							</DockPanel>
-					</Border>
+					<!--#1124 (ADR-0269 Decisions 2 and 3): the pill is a top-level Popup
+					outside the four chrome layers, so its content carries the layout
+					transform that reads Interface size, through the same Play-only
+					converter - Remaster and Share keep 1.0. Only the content scales:
+					the popup keeps its placement, its host, its hit test and its focus.-->
+					<LayoutTransformControl Name="PackInstallPillScale">
+						<LayoutTransformControl.LayoutTransform>
+							<MultiBinding Converter="{x:Static c:PlayInterfaceSizeTransformConverter.Instance}">
+								<Binding Path="Config.Preferences.InterfaceSize" />
+								<Binding Path="Shell.Active" />
+							</MultiBinding>
+						</LayoutTransformControl.LayoutTransform>
+						<Border Name="PackInstallPill" Classes="hud" Classes.compact="{Binding IsPackInstallPillFailed}" Padding="16 14" Margin="12 12 12 20" MaxWidth="440" IsHitTestVisible="False">
+								<DockPanel>
+									<Border Classes="badge medium" DockPanel.Dock="Left" Margin="0 0 14 0" Background="{StaticResource PlayerTintShareBrush}" IsVisible="{Binding IsPackInstallPillInstalling}"><PathIcon Data="{StaticResource PlayerIconPack}" /></Border>
+									<PathIcon DockPanel.Dock="Left" Data="{StaticResource PlayerIconWarning}" Foreground="{StaticResource PlayerOrangeBrush}" IsVisible="{Binding IsPackInstallPillFailed}" />
+									<StackPanel VerticalAlignment="Center" Spacing="9">
+										<TextBlock Name="PackInstallPillText" Classes="headline" Text="{Binding PackInstallPillText}" TextTrimming="CharacterEllipsis" />
+										<ProgressBar Name="PackInstallPillBar" Width="300" Minimum="0" Maximum="100" IsVisible="{Binding IsPackInstallPillInstalling}" IsIndeterminate="{Binding IsPackInstallPillIndeterminate}" Value="{Binding PackInstallPillPercent}" />
+									</StackPanel>
+								</DockPanel>
+						</Border>
+					</LayoutTransformControl>
 				</Popup>
 
 				<!--#1111 (spec #1102): Interface size. Everything of Play's chrome - the
