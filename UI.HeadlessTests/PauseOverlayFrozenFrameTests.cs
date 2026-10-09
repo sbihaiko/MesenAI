@@ -96,6 +96,26 @@ public class PauseOverlayFrozenFrameTests : IDisposable
 		Dispatcher.UIThread.RunJobs();
 	}
 
+	//#1158: where 'element' sits in the depth-first pre-order walk of 'layer',
+	//which is the order Avalonia draws its visuals in - a lower position is
+	//drawn first and ends up underneath. Panel.Children.IndexOf cannot answer
+	//this once an element sits under a wrapper: #1111 put all of Play's chrome
+	//(the scrim, the pause card) inside LayoutTransformControl
+	//'PlayChromeRoot', so for anything nested there it returns -1 and the
+	//comparison collapsed to -1 < -1. Missing elements throw instead of
+	//answering -1, so a broken tree can never read as a correct order.
+	private static int VisualOrder(Panel layer, Visual element)
+	{
+		int order = 0;
+		foreach(Visual visual in layer.GetVisualDescendants()) {
+			if(visual == element) {
+				return order;
+			}
+			order++;
+		}
+		throw new XunitException($"'{layer.Name}' never draws '{(element as Control)?.Name ?? element.GetType().Name}'");
+	}
+
 	private static void Click(MainWindow window, string button)
 	{
 		window.FindNamed<Button>(button).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
@@ -122,7 +142,9 @@ public class PauseOverlayFrozenFrameTests : IDisposable
 		Assert.Equal(Stretch.Fill, frame.Stretch);
 		//Under the scrim, in the same Play layer.
 		Panel workspace = window.FindNamed<Panel>("PlayWorkspace");
-		Assert.True(workspace.Children.IndexOf(frame) < workspace.Children.IndexOf(window.FindNamed<Border>("PlayerOverlayScrim")));
+		int frameOrder = VisualOrder(workspace, frame);
+		int scrimOrder = VisualOrder(workspace, window.FindNamed<Border>("PlayerOverlayScrim"));
+		Assert.True(frameOrder < scrimOrder, $"the frozen frame draws at {frameOrder} and the scrim at {scrimOrder}: the frame is not under the scrim");
 
 		model.TogglePlayerOverlay();
 		WaitFor(() => !EmuApi.IsPaused(), "Esc on the overlay did not resume");
@@ -152,7 +174,9 @@ public class PauseOverlayFrozenFrameTests : IDisposable
 			Assert.False(card.IsHitTestVisible, $"the card behind {row}'s sheet still takes the pointer");
 			Assert.True(dim.IsOnScreen(), $"the card behind {row}'s sheet is not dimmed");
 			Panel workspace = window.FindNamed<Panel>("PlayWorkspace");
-			Assert.True(workspace.Children.IndexOf(card) < workspace.Children.IndexOf(dim));
+			int cardOrder = VisualOrder(workspace, card);
+			int dimOrder = VisualOrder(workspace, dim);
+			Assert.True(cardOrder < dimOrder, $"the card draws at {cardOrder} and its dim layer at {dimOrder}: the card is not behind the sheet's dim");
 			Color color = Assert.IsAssignableFrom<ISolidColorBrush>(dim.Background).Color;
 			Assert.Equal((Colors.Black.R, Colors.Black.G, Colors.Black.B, PauseCard.DimAlpha), (color.R, color.G, color.B, color.A));
 
