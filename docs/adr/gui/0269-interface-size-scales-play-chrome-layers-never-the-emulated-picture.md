@@ -19,9 +19,11 @@
   tab's rows asserting that no child is drawn outside its row or over a sibling
   — the label-width theory that came with the rows cannot see it, because a
   label in an Auto column is always as wide as its own text; the one spot that
-  does not meet the guarantee is named in Decision 6 and is #1149. The same
-  review found the cap answering "+Infinity" - no cap - on the first measure
-  pass, when the host reports a room of 0: the fallback is now the room itself,
+  did not meet it was named in Decision 6, and #1149 has since closed it: the
+  Look footer's note wraps where it is drawn, in the row and on its own line
+  alike, so it is no longer a sliver of the row and no longer drawn short.
+  The same review found the cap answering "+Infinity" - no cap - on the first
+  measure pass, when the host reports a room of 0: the fallback is now the room itself,
   so the sheet does not lay out at 480 and flash at 720 for a frame. A second
   review round found the same cap still on the control: a control clamped by
   its own `MaxWidth` inside a column wider than that cap is *centred* there
@@ -37,6 +39,18 @@
   Nothing is implemented by this ADR; PR #1119 implements it and must match
   Decisions 3 and 6. The width cap, the Auto/star rows and the 512x505 guarantee
   for the settings sheet (Decision 6) are in PR #1145 (#1123).
+  Amended 2026-10-09 (Decision 6, #1149), decider: owner via panel pick,
+  2026-10-09. Where Done's row leaves the Hold to Compare note less than the
+  width its text needs (at 1.5 in 512x505 the note gets 33 px against 198 px
+  for the hint and 129 px for the reason), the note moves to its own line
+  above the row and wraps there, whole. Hold to Compare and Done keep the row.
+  Where the row has room (1024x640) the note shares it as W-P10 draws. Keeping
+  the note on the row at any size by making the footer taller is ruled out: at
+  512x505 that footer is taller than the 134 px tab and leaves the groups'
+  scroller 0 px tall. The Look footer now meets "nothing is clipped" like
+  every other row on the sheet, and a headless test pins the note whole in
+  both layouts. W-P10's element count is unchanged (7; the note is not
+  interactive).
 - Date: 2026-10-09
 - Related: ADR-0249 (tokens come from the renderer; the drift test), ADR-0241,
   ADR-0256, wireframe W-P8d, issues #1102 and #1103.
@@ -121,10 +135,23 @@ Nothing in Play is sized for a TV three meters away. Settings › Display has a
    the cap has to act on. A control that cannot show a value as long as its box
    is the control's own business and not this guarantee: where the value is host
    data of any length it wraps or is ellipsized as the view says.
-   **One spot on this sheet does not meet it**: the Look footer's Hold to Compare
-   note, which shares Done's row (W-P10) and is left about 13 px of the 254 px
-   page there. It stays on one line and is ellipsized — bounded, not whole — and
-   reflowing that footer is a W-P10 decision, filed as #1149.
+   **The Look footer's Hold to Compare note (W-P10) was the one spot on this
+   sheet that did not meet it**, and #1149 has closed it: the note shared
+   Done's row and was left about 14 px of the 271 px page at 1.5 in 512x505,
+   drawn on one line and ellipsized — bounded, not whole. The note now wraps
+   wherever it is drawn, so its reason is whole: it keeps the row wherever the
+   row has room for it, as W-P10 draws it, taking as many lines as that room
+   needs — which is one line more than main's single ellipsized line at the
+   ~1024x640 the wireframe is drawn at, so the page there is the footer's line
+   taller, not unchanged; where the row has no room (less than
+   LookFooter.MinNoteWidth, which the guaranteed size is far below and the drawn
+   size far above) it takes the line above the row, on the page's own width.
+   The row keeps the button on the left, Done on its line to the right of it,
+   either way. The note's line is kept at the taller of the two
+   lines the tab can carry — the hold-to-compare hint while Pixels or Screen has
+   something to compare, the reason while neither has — so toggling either does
+   not move the footer or the rows in the page scroller above it, and nothing is
+   kept where the tab has neither line to draw.
    The other Play sheets (Cheats, Replays, PackPicker, PackDetail, Tool,
    Controller, Enhancements, Shader) and the pause card are not covered by this
    guarantee yet: they are still guaranteed only at about 1024x640, because the
