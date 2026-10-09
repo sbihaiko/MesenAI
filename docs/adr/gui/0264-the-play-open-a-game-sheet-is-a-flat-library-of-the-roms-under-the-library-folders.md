@@ -5,12 +5,25 @@
   `ready-for-agent`. The issue states the decision itself: the sheet becomes a
   flat library, the folder browser survives only as *Browse a file…*, the pad
   map and the cover priority are fixed, and ADR-0256 Decision 9's folder
-  navigation is superseded. **Nothing implements it yet** — this ADR and the
-  wireframes are the target picture; the code arrives in the sibling tickets
-  #1032–#1039, which Part B §8 now lists one row each. The id is 0264 and not
+  navigation is superseded. **Implemented**: the code this line once deferred to
+  arrived with the sibling tickets #1032–#1039, one row each in Part B §8, and
+  #1108 (PR #1168) lands the 2026-10-09 amendment below.
+  **Amended 2026-10-09 (#1108)**: on the library sheet LB / RB cycle the console
+  filter **and land the ring on the chip row** — owner decision via panel pick,
+  2026-10-09, option A, quoted verbatim:
+  **"Sheets keep their current pad behavior, except the library sheet, where the ring now reaches the console-filter chip (AC2)."**
+  The id is 0264 and not
   the 0262 the issue text assumed: 0262 and 0263 landed on `origin/main` after
   that text was written, and ids are never reused (ADR-0035).
 - Date: 2026-10-07
+- Amended by: **its own 2026-10-09 amendment for #1108** (see the section at the
+  end of this file): on the library sheet LB / RB cycle the console filter
+  **and land the ring on the chip row**, which supersedes the *#1034 review
+  finding 1* rule "the ring lands on a tile of the narrowed grid". Owner
+  decision, verbatim: **"OWNER DECISION via panel pick 2026-10-09: option A.
+  #1108 AC3 now reads "Sheets keep their current pad behavior, except the
+  library sheet, where the ring now reaches the console-filter chip (AC2).""**
+  Implemented by #1108 (PR #1168).
 - Related: ADR-0256 (the Play GUI is fully operable from a controller alone —
   Decision 9 is the folder browser this replaces, and its stop rule is what the
   pad map below has to satisfy), ADR-0262 (the shared on-screen pad keyboard
@@ -278,3 +291,60 @@ Nothing is implemented by this amendment.
 - **Not decided here** no longer lists favorites as out of scope: ADR-0268 decides
   them (a newest-first list of library paths). Collections, play-time statistics,
   custom covers and scraping stay out of scope.
+
+## Amendment (2026-10-09, #1108): the shoulder press lands the ring on the chip row
+
+Accepted 2026-10-09 by the owner through the autonomy panel's pick, decision
+quoted verbatim: **"OWNER DECISION via panel pick 2026-10-09: option A. #1108 AC3 now reads "Sheets keep their current pad behavior, except the library sheet, where the ring now reaches the console-filter chip (AC2).""**
+Implemented by #1108 (PR #1168), with the cases named below.
+
+**The rule.** On the library sheet, **LB / RB cycle the console filter AND land
+the ring on the chip row** — on the segment the press selected. Decision 3's
+"LB / RB cycle the console filter" is what the press *changes*; this is where
+the press *puts the ring*, and it is Decision 3's own "focus is drawn on the
+control the pad is acting on" (ADR-0256 Decision 3) read for the row. The row is
+**one element** (PRD Part B §13.3 rule 2 counts a segmented row as one), so with
+the ring on it:
+
+- its **Left / Right** are the filter's own two directions — the same cycle the
+  shoulders make, one step at a time — so the row and the grid can never
+  disagree about which console is up (Decision 5);
+- its **Up** leaves it for the sheet's header, and its **Down** returns to the
+  grid it is filtering — the one-step-out answer every other control on the
+  sheet has (RomPickerHeaderStep), which is what ADR-0256's stop rule requires:
+  a place the pad can enter and not leave is not reversible;
+- the footer names the shoulders and no Play (ADR-0256 Decision 6): A changes
+  nothing on the row, so no Play is promised.
+
+**What outranks the row.** The landing is skipped while the sheet's own claim
+over the ring is standing: a restore in flight (`IsRestorePending` /
+`IsRestoreLanding`) parks or lands the ring on the remembered game, so a player
+who presses RB while a scan still owes them their last game gets the cycle, and
+the game — not the segment — is where the ring lands. The **search box** keeps
+the ring as it always did (#1034 review finding 2), and the landing does not
+depend on a control being focused when the press arrives (a rebuild can take the
+focused container out from under the ring).
+
+**Supersedes, explicitly.** The **#1034 review finding 1** rule *"the ring lands
+on a tile of the narrowed grid"* is **superseded**: after the cycle the ring
+lands on the segment the press selected, which is the control the press was
+about. The case that carried the old rule
+(`PlayerLibraryConsoleFilterTests.Cycling_the_filter_from_the_grid_lands_the_ring_on_the_segment_it_selected`)
+is its successor, and it still asserts the half of the old rule that survives —
+the grid under the row is the narrowed one (Decision 5). Decision 5 itself is
+untouched: this amendment says nothing about *which* consoles the filter lists.
+
+**Decision 3's "focus is drawn on exactly one tile at a time"** is read with this
+amendment: while the ring is on the filter row, the drawn focus is the row's
+selected segment, and the row is one control — never a tile and a segment at
+once.
+
+**Evidence.** `UI.HeadlessTests/PlayerLibraryConsoleFilterTests` —
+`Cycling_the_filter_from_the_grid_lands_the_ring_on_the_segment_it_selected`,
+`The_ring_on_the_filter_row_cycles_it_and_steps_out_of_it`,
+`A_shoulder_press_while_a_restore_waits_leaves_the_landing_to_the_restore`,
+`A_shoulder_press_with_no_control_focused_still_lands_on_the_row`,
+`The_footer_names_the_shoulders_while_the_ring_is_on_the_filter_row` — plus the
+host-free declarations in `UI.Tests/Play/PlayBarSheetDeclarationsTests` and the
+walk in `UI.HeadlessTests/PlayPadWalkTests`, whose `KnownChipGaps` ledger is
+empty because the Library surface's chips are reached now.

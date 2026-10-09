@@ -32,5 +32,25 @@ namespace Mesen.Tests.Play
 		{
 			Assert.Equal("A BarSelect     B BarBack", Text(PlayBarDeclarations.Sheet));
 		}
+
+		//#1108 AC2 (ADR-0256 Decision 6): the library's console filter row is a
+		//place the ring can be, and it has no Play to promise - A changes nothing
+		//there (the row IS the filter), so the line must not name one. PRD L.3's
+		//own stop rule is the other half: the hints name LB/RB as the control in
+		//the player's hand.
+		[Fact]
+		public void The_console_filter_row_names_the_shoulders_and_no_Play()
+		{
+			Assert.Equal("Y BarSearch     LB / RB BarConsole     B BarBack", Text(PlayBarDeclarations.FilterRow));
+		}
+
+		[Fact]
+		public void The_console_filter_row_keeps_the_three_controls_the_row_still_has()
+		{
+			Assert.DoesNotContain(PlayBarDeclarations.FilterRow, entry => entry.Action == PlayAction.Confirm);
+			Assert.Contains(PlayBarDeclarations.FilterRow, entry => entry.Action == PlayAction.ConsoleFilter);
+			Assert.Contains(PlayBarDeclarations.FilterRow, entry => entry.Action == PlayAction.Search);
+			Assert.Contains(PlayBarDeclarations.FilterRow, entry => entry.Action == PlayAction.Back);
+		}
 	}
 }
