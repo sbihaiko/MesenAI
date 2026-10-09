@@ -18,8 +18,9 @@
   WideScrn row, which today is defined as a 16:9 stretch.
 - Amended by: ADR-0267 (accepted 2026-10-08, stage 1 = its option B, implemented by a separate PR,
   not by the branch that accepted it) — **§1** ("The stretch to 16:9 is dropped: it is the
-  distortion this ADR exists to remove."), **§3** ("border and black are per-frame fill-ins that
-  never on their own make a game supported") and **§4** ("SMS/SG-1000 without pack art are known
+  distortion this ADR exists to remove."), **§3** ("The border and black are per-frame fill-ins for
+  a game that does support a mode. On their own they never make a game *"supported"*, so they never
+  keep the switch enabled.") and **§4** ("SMS/SG-1000 without pack art are known
   unsupported before the game runs, so the switch is disabled at once") are amended: a console with
   no side map keeps the Widescreen switch enabled, and turning it on applies
   `VideoAspectRatio.Widescreen` — a fill, not a Reveal. **§2 is untouched by that amendment**, and
