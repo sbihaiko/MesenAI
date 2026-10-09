@@ -136,6 +136,9 @@ public class InterfaceSizeLayoutTests : IDisposable
 		Assert.False(done.GetVisualAncestors().Contains(page), "Done sits inside the scrolling page");
 		Assert.True(done.Focusable && done.IsEffectivelyEnabled && done.IsHitTestVisible);
 		Assert.True(done.Focus());
+		Rect doneBox = new(done.TranslatePoint(new Point(0, 0), window)!.Value, done.Bounds.Size);
+		Assert.True(doneBox.Right <= window.Bounds.Width, $"Done's right edge {doneBox.Right} is past the {window.Bounds.Width} window");
+		Assert.True(doneBox.Bottom <= window.Bounds.Height, $"Done's bottom edge {doneBox.Bottom} is past the {window.Bounds.Height} window");
 		model.ClosePlayerSettings();
 	}
 
@@ -152,6 +155,25 @@ public class InterfaceSizeLayoutTests : IDisposable
 		Assert.Equal(1.5, ScaleOf(window, "PlayChromeRoot"));
 		Assert.Contains(window.FindNamed<LayoutTransformControl>("PlayChromeRoot"), home.GetVisualAncestors());
 		Assert.Equal(1.5, home.TransformToVisual(window)!.Value.M11);
+	}
+
+	//Home now sits above the frozen frame in PlayWorkspace's z-order (it moved
+	//from MainWindow.axaml:181 to :230, on purpose, to sit under PlayChromeRoot):
+	//the two are never visible together, whether or not a sheet is open.
+	[AvaloniaFact]
+	public void Home_and_the_frozen_frame_are_never_visible_together()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model) = Show(Workspace.Play, InterfaceSize.ExtraLarge);
+		Settle(window);
+		Control home = window.FindNamed<Control>("PlayHomeHost");
+		Control frame = window.FindNamed<Control>("PausedGameFrame");
+		Assert.False(home.IsVisible && frame.IsVisible, "Home and the frozen frame are both visible at rest");
+
+		window.OpenPlayerSettingsSheet();
+		Settle(window);
+		Assert.False(home.IsVisible && frame.IsVisible, "Home and the frozen frame are both visible under a sheet");
+		model.ClosePlayerSettings();
 	}
 
 	//W-P10: Look's Hold to Compare shares Done's row, left of it - the page's

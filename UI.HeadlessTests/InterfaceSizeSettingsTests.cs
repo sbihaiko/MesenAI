@@ -11,7 +11,8 @@ namespace Mesen.HeadlessTests;
 //#1111 (spec #1102): the Interface size preference and the Display row's
 //scope. The factor and step rules are host-free (UI.Tests/Play/InterfaceSizeTests);
 //these need PreferencesConfig and the settings view model, which UI.Tests cannot
-//compile, but they open no window and touch no native code, so no collection.
+//compile. SetVideoConfig reaches the native core, so the class runs in its serial collection.
+[Collection(NativeCoreCollection.Name)]
 public class InterfaceSizeSettingsTests
 {
 	[Fact]
