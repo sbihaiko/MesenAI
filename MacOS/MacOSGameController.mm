@@ -145,6 +145,7 @@ MacOSGameController::MacOSGameController(Emulator* emu, GCController* controller
 
 	_haptics = nil;
 	_player = nil;
+	_tickPlayer = nil;
 	if([_controller haptics] != nil) {
 		_haptics = [[_controller haptics] createEngineWithLocality:GCHapticsLocalityDefault];
 		NSError* error = nil;
@@ -165,6 +166,12 @@ MacOSGameController::~MacOSGameController()
 			NSError* error = nil;
 			[_player stopAtTime:0.0 error:&error];
 			[_player release];
+		}
+		if(_tickPlayer) {
+			NSError* error = nil;
+			[_tickPlayer stopAtTime:0.0 error:&error];
+			[_tickPlayer release];
+			_tickPlayer = nil;
 		}
 		[_haptics stopWithCompletionHandler:^ void (NSError* error) {}];
 		[_haptics release];

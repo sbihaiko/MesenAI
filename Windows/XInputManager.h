@@ -16,6 +16,9 @@ private:
 	//#1106: when a menu tick's motors must be switched off again, 0 = no tick
 	//running. XInput has no timed effect, so RefreshState ends the pulse.
 	ULONGLONG _tickStopAt[XUSER_MAX_COUNT] = {};
+	//The rumble the game or the tester last asked for, per slot; a tick ends by
+	//restoring it, not by silencing the pad.
+	struct { uint16_t Right; uint16_t Left; } _desiredRumble[XUSER_MAX_COUNT] = {};
 
 public:
 	XInputManager(Emulator* emu);

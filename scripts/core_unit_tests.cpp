@@ -6379,6 +6379,66 @@ namespace
 			"#1106: a pad that is not aimable answers false and the backend is never called");
 	}
 
+	//#1106 review fixes. The backends are platform code that the suite does not
+	//link, so these read the source and pin the shape of each fix: what the
+	//hardware-free part of each finding can be checked against.
+	string ReadBackendSource(const char* path)
+	{
+		std::ifstream in(path, std::ios::in | std::ios::binary);
+		std::stringstream ss;
+		ss << in.rdbuf();
+		return ss.str();
+	}
+
+	string HapticBackendBody(const string& src, const string& signature)
+	{
+		size_t at = src.find(signature);
+		if(at == string::npos) {
+			return "";
+		}
+		size_t open = src.find('{', at);
+		size_t end = src.find("\n}", open);
+		return open == string::npos || end == string::npos ? "" : src.substr(open, end - open);
+	}
+
+	void TestTheHapticTickBackendsKeepTheirStateSound()
+	{
+		string mac = ReadBackendSource("MacOS/MacOSGameController.mm");
+		string linux = ReadBackendSource("Linux/LinuxGameController.cpp");
+		string win = ReadBackendSource("Windows/XInputManager.cpp");
+		Check(!mac.empty() && !linux.empty() && !win.empty(), "#1106: backend sources are readable");
+
+		//1. macOS: _tickPlayer is nil before its first release and freed with the pad.
+		Check(mac.find("\t_tickPlayer = nil;") != string::npos,
+			"#1106: macOS _tickPlayer starts as nil, so the first tick releases nothing");
+		string macDtor = HapticBackendBody(mac, "MacOSGameController::~MacOSGameController()");
+		Check(macDtor.find("[_tickPlayer stopAtTime") != string::npos
+			&& macDtor.find("[_tickPlayer release]") != string::npos,
+			"#1106: macOS destructor stops and releases the tick player");
+
+		//2. Linux: capability is the rumble effect's setup, not a button having been pressed.
+		string hasRumble = HapticBackendBody(linux, "bool LinuxGameController::HasRumble()");
+		Check(!hasRumble.empty() && hasRumble.find("_enableForceFeedback") == string::npos
+			&& hasRumble.find("_rumbleEffect") != string::npos,
+			"#1106: Linux HasRumble reports the effect setup, true on an idle pad");
+		string linuxTick = HapticBackendBody(linux, "bool LinuxGameController::PlayTick()");
+		Check(!linuxTick.empty() && linuxTick.find("_enableForceFeedback") == string::npos,
+			"#1106: Linux PlayTick does not wait for a button press");
+
+		//4. Linux: the tick has an effect of its own; the gameplay one is never reprogrammed.
+		Check(linuxTick.find("_rumbleEffect") == string::npos && linuxTick.find("_tickEffect") != string::npos,
+			"#1106: Linux PlayTick plays its own effect and leaves the gameplay effect alone");
+
+		//3. Windows: the tick ends by restoring the requested rumble, not by zeroing it.
+		string winRefresh = HapticBackendBody(win, "void XInputManager::RefreshState()");
+		Check(winRefresh.find("SetForceFeedback((uint8_t)i, 0, 0)") == string::npos
+			&& winRefresh.find("_desiredRumble") != string::npos,
+			"#1106: Windows tick expiry restores the desired rumble instead of silencing the pad");
+		string winSet = HapticBackendBody(win, "void XInputManager::SetForceFeedback(uint8_t");
+		Check(winSet.find("_desiredRumble") != string::npos,
+			"#1106: Windows remembers each slot's requested rumble");
+	}
+
 	void TestPadChordFiresOnWhicheverPadIsInHand()
 	{
 		Check(PadChordFires({ PadKey(0, kPadSelectButton), PadKey(0, kPadStartButton) }),
@@ -17849,6 +17909,7 @@ TestW6TheFiltersAcceptTheExtendedFrame();
 	TestTheNoKeySentinelIsNeverAKey();
 	TestAPadLightIsANoOpUnlessTheBackendHasOne();
 	TestAPadIsAimableOnlyWhereTheHostCanAddressItsHaptics();
+	TestTheHapticTickBackendsKeepTheirStateSound();
 	TestPadChordFiresOnWhicheverPadIsInHand();
 	TestTheWholePadFamilyAnswersTheChord();
 	TestPadChordIsNotAnsweredAcrossPadFamilies();

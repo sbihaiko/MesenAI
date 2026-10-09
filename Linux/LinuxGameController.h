@@ -18,6 +18,8 @@ private:
 	Emulator* _emu = nullptr;
 
 	unique_ptr<ff_effect> _rumbleEffect;
+	//#1106: the menu tick's own kernel effect, so a tick never reprograms the gameplay one.
+	unique_ptr<ff_effect> _tickEffect;
 	bool _enableForceFeedback = false;
 	int _axisDefaultValue[0x100] = {};
 

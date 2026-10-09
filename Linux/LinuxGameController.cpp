@@ -74,6 +74,18 @@ LinuxGameController::LinuxGameController(Emulator* emu, int deviceID, int fileDe
 	if(rc < 0) {
 		MessageManager::Log("Could not initialize force feedback effect");
 		_rumbleEffect.reset();
+	} else {
+		_tickEffect.reset(new ff_effect());
+		memset(_tickEffect.get(), 0, sizeof(ff_effect));
+		_tickEffect->type = FF_RUMBLE;
+		_tickEffect->id = -1;
+		_tickEffect->u.rumble.strong_magnitude = 0x6000;
+		_tickEffect->u.rumble.weak_magnitude = 0x6000;
+		_tickEffect->replay.length = 40;
+		_tickEffect->replay.delay = 0;
+		if(ioctl(_fd, EVIOCSFF, _tickEffect.get()) < 0) {
+			_tickEffect.reset();
+		}
 	}
 
 	_eventThread = std::thread([=]() {
@@ -310,25 +322,14 @@ void LinuxGameController::SetForceFeedback(uint16_t magnitudeRight, uint16_t mag
 
 bool LinuxGameController::PlayTick()
 {
-	if(!_rumbleEffect || !_enableForceFeedback) {
+	if(!_tickEffect) {
 		return false;
 	}
 
-	//The effect is a 2 s rumble; a tick plays the same effect for 40 ms, then the
-	//length goes back so SetForceFeedback keeps its own duration.
-	uint16_t previousLength = _rumbleEffect->replay.length;
-	_rumbleEffect->replay.length = 40;
-	_rumbleEffect->u.rumble.strong_magnitude = 0x6000;
-	_rumbleEffect->u.rumble.weak_magnitude = 0x6000;
-	int rc = ioctl(_fd, EVIOCSFF, _rumbleEffect.get());
-	_rumbleEffect->replay.length = previousLength;
-	if(rc < 0) {
-		return false;
-	}
-
+	//Uploaded once at setup; playing it never touches the gameplay effect.
 	struct input_event play = {};
 	play.type = EV_FF;
-	play.code = _rumbleEffect->id;
+	play.code = _tickEffect->id;
 	play.value = 1;
 	return write(_fd, (const void*)&play, sizeof(play)) >= 0;
 }
@@ -361,7 +362,7 @@ uint32_t LinuxGameController::GetProductId()
 
 bool LinuxGameController::HasRumble()
 {
-	return _enableForceFeedback;
+	return _rumbleEffect != nullptr;
 }
 
 /*

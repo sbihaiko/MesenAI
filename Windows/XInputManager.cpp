@@ -17,7 +17,10 @@ void XInputManager::RefreshState()
 	for(int i = 0; i < XUSER_MAX_COUNT; i++) {
 		if(_tickStopAt[i] != 0 && now >= _tickStopAt[i]) {
 			_tickStopAt[i] = 0;
-			SetForceFeedback((uint8_t)i, 0, 0);
+			XINPUT_VIBRATION restore = {};
+			restore.wRightMotorSpeed = _desiredRumble[i].Right;
+			restore.wLeftMotorSpeed = _desiredRumble[i].Left;
+			XInputSetState(i, &restore);
 		}
 	}
 
@@ -135,6 +138,12 @@ void XInputManager::SetForceFeedback(uint8_t gamepadPort, uint16_t magnitudeRigh
 	if(gamepadPort >= XUSER_MAX_COUNT || !_gamePadConnected[gamepadPort]) {
 		return;
 	}
+	_desiredRumble[gamepadPort].Right = magnitudeRight;
+	_desiredRumble[gamepadPort].Left = magnitudeLeft;
+	if(_tickStopAt[gamepadPort] != 0) {
+		//A tick is playing; RefreshState restores this request when it ends.
+		return;
+	}
 	XINPUT_VIBRATION settings = {};
 	settings.wRightMotorSpeed = magnitudeRight;
 	settings.wLeftMotorSpeed = magnitudeLeft;
@@ -146,7 +155,10 @@ bool XInputManager::PlayTick(uint8_t gamepadPort)
 	if(!IsConnected(gamepadPort)) {
 		return false;
 	}
-	SetForceFeedback(gamepadPort, 0x6000, 0x6000);
+	XINPUT_VIBRATION tick = {};
+	tick.wRightMotorSpeed = 0x6000;
+	tick.wLeftMotorSpeed = 0x6000;
+	XInputSetState(gamepadPort, &tick);
 	_tickStopAt[gamepadPort] = GetTickCount64() + 40;
 	return true;
 }
