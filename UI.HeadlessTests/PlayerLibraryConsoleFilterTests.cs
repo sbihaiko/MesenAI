@@ -333,7 +333,14 @@ public class PlayerLibraryConsoleFilterTests : IDisposable
 	//not make the arbiter keep a ring the player had left on the header: the
 	//claims are spent by the visit's first focus change, and the rebuild is read
 	//as the filter's own. Driven through the rendered picker: the focus the pad
-	//leaves on the header, then the focus after RB narrows the grid.
+	//leaves on the header, then the focus after the filter's rebuild narrows the
+	//grid.
+	//
+	//#1108 AC2 moved the rebuild's trigger off the shoulder: the shoulders now
+	//land the ring on the row they cycled (its own cases are above), so a case
+	//about what the REBUILD does to a header ring drives the row the way the
+	//pointer does - the segment's own selection. It is one trigger either way
+	//(OnSelectedConsoleOptionChanged), so the rule under test is the same one.
 	[AvaloniaFact]
 	public void The_filters_rebuild_puts_the_ring_back_on_a_game_after_the_scans_claims_expired()
 	{
@@ -350,7 +357,7 @@ public class PlayerLibraryConsoleFilterTests : IDisposable
 		Press(window, PadNavAction.Up);
 		Press(window, PadNavAction.Up);
 
-		PressShoulder(window, "Pad1 R1");
+		model.RomPicker.SelectedConsoleOption = model.RomPicker.ConsoleOptions.First(option => option.Console == RomConsole.Nes);
 		Assert.Equal(RomConsole.Nes, model.RomPicker.SelectedConsole);
 
 		WaitFor(() => {
@@ -363,8 +370,10 @@ public class PlayerLibraryConsoleFilterTests : IDisposable
 	//restore waits on a game whose file is gone, the player walks the ring off
 	//Back to another header control, and the scan ends without the restore
 	//landing: the finish is the sheet's own bump (IsFinishFallback), which the
-	//arbiter answers by keeping the player's ring. RB's rebuild is the filter's
-	//bump, not the scan's, so the claim must not still be readable for it.
+	//arbiter answers by keeping the player's ring. The filter's rebuild is the
+	//filter's bump, not the scan's, so the claim must not still be readable for
+	//it - which the pointer's own selection drives here, for the reason the case
+	//above gives (#1108 AC2).
 	[AvaloniaFact]
 	public void The_filters_rebuild_re_claims_the_grid_after_a_restore_that_never_landed()
 	{
@@ -420,7 +429,7 @@ public class PlayerLibraryConsoleFilterTests : IDisposable
 		Assert.True(model.RomPicker.IsFinishFallback, "the scan did not end on the finish fallback this case is about");
 		Assert.Equal(moved!.Name, (window.FocusManager?.GetFocusedElement() as Control)?.Name);
 
-		PressShoulder(window, "Pad1 R1");
+		model.RomPicker.SelectedConsoleOption = model.RomPicker.ConsoleOptions.First(option => option.Console == RomConsole.Nes);
 		Assert.Equal(RomConsole.Nes, model.RomPicker.SelectedConsole);
 
 		WaitFor(() => {
@@ -526,27 +535,87 @@ public class PlayerLibraryConsoleFilterTests : IDisposable
 		Assert.Equal("RomPickerSearch", FocusedName(window));
 	}
 
-	//#1034 review finding 1: the sheet opens with the first tile focused, and a
-	//cycle rebuilds the grid under it. The ring must land on a tile of the
-	//narrowed grid rather than on nothing.
+	//#1034 review finding 1, as #1108 AC2 re-reads it: the sheet opens with the
+	//first tile focused and the cycle rebuilds the grid under it, so the ring
+	//must land somewhere real - on the SEGMENT the press selected, which is the
+	//control the press was about (ADR-0256 Decision 3: the focus is drawn on the
+	//control the pad is acting on). Before #1108 the cycle put the ring back on a
+	//tile, and the row was the last control a pad could change and never be on:
+	//the gap the pad-walk carried as KnownChipGaps (#1107 review finding 2).
 	[AvaloniaFact]
-	public void Cycling_the_filter_from_the_grid_leaves_the_focus_on_a_tile()
+	public void Cycling_the_filter_from_the_grid_lands_the_ring_on_the_segment_it_selected()
 	{
 		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
 		LibraryRoot();
 
 		(MainWindow window, MainWindowViewModel model) = OpenLibrary();
 		Pump();
-		Assert.IsType<Button>(window.FocusManager?.GetFocusedElement());
+		Assert.IsType<PlayerLibraryTile>((window.FocusManager?.GetFocusedElement() as Control)?.DataContext);
 
 		PressShoulder(window, "Pad1 R1");
 		Pump();
 
 		Assert.Equal(RomConsole.Nes, model.RomPicker.SelectedConsole);
-		Button? focused = window.FocusManager?.GetFocusedElement() as Button;
-		Assert.NotNull(focused);
-		PlayerLibraryTile tile = Assert.IsType<PlayerLibraryTile>(focused!.DataContext);
-		Assert.Contains(tile, model.RomPicker.Tiles);
+		ListBox row = window.FindNamed<ListBox>("RomPickerConsoleFilter");
+		ListBoxItem segment = Assert.IsType<ListBoxItem>(window.FocusManager?.GetFocusedElement());
+		Assert.Same(row, segment.FindAncestorOfType<ListBox>(true));
+		Assert.Equal("NES", (segment.DataContext as PlayerConsoleFilterOption)?.Label);
+		//The rebuild the same press caused re-claims the grid, and the ring stays
+		//on the row: the segment is where the player put it, not where the sheet
+		//parked it, so the claim must not take it back.
+		Pump();
+		Assert.Same(segment, window.FocusManager?.GetFocusedElement());
+		//And the grid under the row is the narrowed one: Decision 5's "the row and
+		//the grid are the same decision" holds with the ring on the row.
+		AssertDrawnTiles(window, new[] { NesContra, NesMario }, "the grid still draws the Game Boy tile under the NES segment");
+	}
+
+	//#1108 AC2 (ADR-0256 Decisions 3 and 6): the row is a place the pad can BE,
+	//and a place it can leave. Left / Right cycle the filter exactly as the
+	//shoulders do - the row is one control, so its own two directions are the
+	//filter's own states, the way a segmented row reads - and Up / Down step out
+	//of it to the header and to the grid, the same one-step-out rule every other
+	//control on the sheet has (RomPickerHeaderStep). Without the way out the
+	//segment would be a place the pad could enter and not leave, which ADR-0256's
+	//stop rule - every path reachable AND reversible - forbids.
+	[AvaloniaFact]
+	public void The_ring_on_the_filter_row_cycles_it_and_steps_out_of_it()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		LibraryRoot();
+
+		(MainWindow window, MainWindowViewModel model) = OpenLibrary();
+		PressShoulder(window, "Pad1 R1");
+		Assert.Equal("NES", FocusedSegmentLabel(window));
+
+		//Right is the next console the row draws, left the one before it, and the
+		//ring does not leave the row for either: the segment that moved is the
+		//segment that stays focused, so the row and the grid never disagree about
+		//which console is up (Decision 5).
+		Press(window, PadNavAction.Right);
+		Assert.Equal(RomConsole.GameBoy, model.RomPicker.SelectedConsole);
+		Assert.Equal("Game Boy", FocusedSegmentLabel(window));
+
+		Press(window, PadNavAction.Left);
+		Assert.Equal(RomConsole.Nes, model.RomPicker.SelectedConsole);
+		Assert.Equal("NES", FocusedSegmentLabel(window));
+
+		//Up leaves the row for the sheet's header, exactly as Up out of the grid
+		//does, and Down comes back to the grid the row is filtering.
+		Press(window, PadNavAction.Up);
+		Assert.Contains(FocusedName(window), new[] { "RomPickerBrowseFile", "RomPickerBack" });
+		Press(window, PadNavAction.Down);
+		WaitFor(() => (window.FocusManager?.GetFocusedElement() as Control)?.DataContext is PlayerLibraryTile,
+			$"Down out of the filter row did not come back to the grid ({FocusedName(window)})");
+	}
+
+	//The label the focused segment draws, so a case can say WHICH segment the
+	//ring is on rather than only that it is on the row. Null when the ring is
+	//not on a segment at all.
+	private static string? FocusedSegmentLabel(MainWindow window)
+	{
+		return (window.FocusManager?.GetFocusedElement() as Control)?.DataContext is PlayerConsoleFilterOption option
+			? option.Label : null;
 	}
 
 	//A fresh visit is one rebuild of the grid, so one bump: ShowLibrary's own,

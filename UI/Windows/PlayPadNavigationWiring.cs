@@ -349,6 +349,13 @@ namespace Mesen.Windows
 		private static IReadOnlyList<PlayBarEntry> LibraryDeclaration(MainWindow window, MainWindowViewModel model)
 		{
 			Control? focused = TopLevel.GetTopLevel(window)?.FocusManager?.GetFocusedElement() as Control;
+			//#1108 AC2: the console filter row is a place the ring can be, and it has
+			//no Play to promise - the segment is the filter itself (see
+			//PlayBarDeclarations.FilterRow). Picked by the focused control's data
+			//context rather than by name, because a segment carries no name.
+			if(focused?.DataContext is PlayerConsoleFilterOption) {
+				return PlayBarDeclarations.FilterRow;
+			}
 			return PlayFavoriteCover.Declare(focused?.Name switch {
 				"RomPickerLibraryFolders" => PlayBarDeclarations.LibraryFolders,
 				"RomPickerBrowseFile" => PlayBarDeclarations.BrowseFile,
@@ -444,6 +451,20 @@ namespace Mesen.Windows
 				//The ring is the player's when it is on a header control other than
 				//the one the sheet parked it on, whichever control that is.
 				Control? focused = window.FocusManager?.GetFocusedElement() as Control;
+				//#1108 AC2: the filter row's segment is the ring the PLAYER put
+				//there - the shoulders land the ring on the segment they cycle to
+				//(FocusLibraryConsoleSegment) - and that press is itself a
+				//TilesRevision bump: the grid under the row is rebuilt by the same
+				//press. Without this the bump's claim would take the ring straight
+				//back off the row onto the rebuilt grid (the same note as the search
+				//box's, above, for the same reason), which is the state AC2 exists to
+				//end. A detached segment is NOT answered: a rescan that changes which
+				//consoles exist rebuilds the row, and the ring then belongs on the
+				//grid like any other ring a rebuild took the container out from under.
+				if(focused is Control { DataContext: PlayerConsoleFilterOption } segment
+					&& segment.IsAttachedToVisualTree() && segment.IsEffectivelyVisible) {
+					return segment;
+				}
 				//The header control the sheet itself parked THIS window's ring on while
 				//a restore waits - per window, so a second window's sheet never reads it.
 				Installed.TryGetValue(window, out Bridge? bridge);
@@ -568,6 +589,49 @@ namespace Mesen.Windows
 					?? RomPickerTile(window) ?? Named(window, "RomPickerBack");
 			}
 			return null;
+		}
+
+		//#1108 AC2: the console filter row is a place the pad can be now - the
+		//shoulders land the ring on the segment they cycle to - so the row owes the
+		//same one-step-out answer every other control on the sheet has. Up leaves it
+		//for the header exactly as Up out of the grid's top row does (so the header
+		//stays one step from anywhere on the sheet), Down comes back to the grid the
+		//row is filtering (the tile the player left, or the sheet's own reopen
+		//target), and Left / Right are the filter's own two directions: the row is
+		//ONE control (PRD §13.3 rule 2 counts a segmented row as one element), so
+		//its neighbours are the filter's own states and not other controls - which
+		//is also what keeps the row and the grid agreeing (ADR-0264 Decision 5)
+		//while the ring is on it.
+		private static Control? RomPickerFilterRowStep(MainWindow window, MainWindowViewModel model, Control focused, Control? lastTile, PadNavAction action)
+		{
+			if(focused.DataContext is not PlayerConsoleFilterOption) {
+				return null;
+			}
+			if(action is PadNavAction.Left or PadNavAction.Right) {
+				model.RomPicker.CycleConsole(action == PadNavAction.Right ? 1 : -1);
+				return ConsoleSegment(window);
+			}
+			if(action == PadNavAction.Up) {
+				return Named(window, "RomPickerBrowseFile") ?? Named(window, "RomPickerBack");
+			}
+			if(action == PadNavAction.Down) {
+				return (lastTile is { IsEffectivelyVisible: true } ? lastTile : null)
+					?? RomPickerTile(window) ?? Named(window, "RomPickerBack");
+			}
+			return null;
+		}
+
+		//#1108 AC2: the segment the filter row draws for the option that is up,
+		//read off the row's own containers (a container's data context IS its
+		//segment). Null while the row has not drawn it, so no caller puts the ring
+		//on a control the player cannot see.
+		private static Control? ConsoleSegment(MainWindow window)
+		{
+			if(Named(window, "RomPickerConsoleFilter") is not ListBox row || row.SelectedItem is not { } selected) {
+				return null;
+			}
+			return row.ContainerFromItem(selected) as Control
+				?? row.GetVisualDescendants().OfType<ListBoxItem>().FirstOrDefault(item => Equals(item.DataContext, selected));
 		}
 
 		//The grid's first visual row. The WrapPanel owns the layout, so the row is
@@ -846,10 +910,17 @@ namespace Mesen.Windows
 				//
 				//The edge is taken from the same `_previous` the action above was,
 				//before it is recorded below, so a held shoulder cycles once.
+				//
+				//#1108 AC2: the cycle also LANDS the ring on the segment it moved,
+				//which is what makes the row a control the pad can be on and not
+				//one it changes from across the sheet (ADR-0256 Decision 3; the
+				//last gap the pad-walk carried, KnownChipGaps). Where the ring is
+				//when the press arrives decides whether it lands - see below.
 				if(authority && InPlayDoor && LibrarySheetIsUp) {
 					int shoulder = ShoulderStep(pressed, _previous, pad, keyCode);
 					if(shoulder != 0) {
 						_model.RomPicker.CycleConsole(shoulder);
+						FocusLibraryConsoleSegment();
 					}
 				}
 
@@ -937,6 +1008,40 @@ namespace Mesen.Windows
 			}
 		}
 
+		//#1108 AC2: the ring goes onto the console filter segment the cycle just
+		//selected, so the row is a place the pad can be and the focus is drawn on
+		//the control the press acted on (ADR-0256 Decision 3).
+		//
+		//The one control that does NOT give the ring up is the search box: a player
+		//typing a query keeps the box - and the pad keyboard ADR-0262 opened over it
+		//- while the shoulders narrow the grid under them, which is #1034 review
+		//finding 2, and the sheet's own answer to "the box holds the ring"
+		//(RomPickerFocusTarget asks it the same way). Everywhere else the press
+		//lands on the row, including from the sheet's header buttons: an empty
+		//library - a first run with no folder yet, or folders the scan answered
+		//nothing for - parks the ring on *Library folders…* or Back, and a rule that
+		//only landed from the grid would leave the row unreachable exactly where a
+		//pad-only player first meets it.
+		private void FocusLibraryConsoleSegment()
+		{
+			Control? focused = _window.FocusManager?.GetFocusedElement() as Control;
+			if(focused is null || SearchBoxHoldsRing()) {
+				return;
+			}
+			if(ConsoleSegment(_window) is Control segment) {
+				PlayFocusOnOpen.Enter(segment);
+			}
+		}
+
+		//The sheet's own definition of "the search box holds the ring" - the same
+		//two reads RomPickerFocusTarget answers the claim's search branch with -
+		//because a second definition is a second thing to keep in step.
+		private bool SearchBoxHoldsRing()
+		{
+			return Named(_window, "RomPickerSearch") is TextBox box
+				&& (box.IsFocused || ReferenceEquals(KeyboardField(_window), box));
+		}
+
 			//A slot grid the pad can leave: the classic grid the Save/Load screens
 			//and Advanced use, which draws a close box. The Play home's row of tiles
 			//is a StateGrid too (ShowClose false) and has nothing to leave, so Back
@@ -987,6 +1092,14 @@ namespace Mesen.Windows
 				}
 				if(RomPickerHeaderStep(_window, _model, focused, _libraryTile, action) is Control header) {
 					PlayFocusOnOpen.Enter(header);
+					return;
+				}
+				//#1108 AC2: the filter row's own steps, asked the same way and from
+				//the same place as the header's - a control the sheet owns answers
+				//before the engine's geometric search does, so the row's four
+				//directions mean what the row says they mean.
+				if(RomPickerFilterRowStep(_window, _model, focused, _libraryTile, action) is Control onRow) {
+					PlayFocusOnOpen.Enter(onRow);
 					return;
 				}
 

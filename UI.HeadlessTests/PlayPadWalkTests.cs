@@ -139,13 +139,14 @@ public class PlayPadWalkTests : IDisposable
 	//(PlayPadNavigationWiring.FooterControl). A control that goes back to being
 	//unreachable fails the walk below, which is where it belongs (#1146 review finding
 	//1): the walk's own coverage is fixed in Walk, the pad's reach in the wiring.
-	//Surfaces whose console chips (RomPickerConsoleFilter) the pad cannot land on:
-	//LB/RB cycle the selection but the focus never enters the chip ListBox (#1107
-	//review finding 2). Named so the gap shows, and asserted both ways: when the
-	//action starts entering the chips the walk reaches them and this entry must go.
-	//The chips stay a named gap tracked in #1134; only the RomPickerConsoleFilter
-	//items are set apart, so any other unreachable ListBoxItem still fails the walk.
-	public static readonly string[] KnownChipGaps = { "Library" };
+	//Surfaces whose console chips (RomPickerConsoleFilter) the pad cannot land on.
+	//Empty, and it stays that way: #1108 AC2 gave the chips their own landing, so
+	//the walk now reaches them and there is nothing left to name. The chips stay
+	//set apart from the element count (only the RomPickerConsoleFilter items are
+	//excused, so any other unreachable ListBoxItem still fails the walk below), and
+	//the check is asserted both ways: an entry that becomes reachable must leave
+	//this list, and a surface that loses its chip landing must appear in it.
+	public static readonly string[] KnownChipGaps = { };
 
 	//(surface, scale) pairs where a D-pad press moves focus to controls outside
 	//the surface's own walk root. Which controls a press would land on depends on

@@ -53,6 +53,18 @@ public static class PlayBarDeclarations
 		new PlayBarEntry(PlayAction.Back, "BarBack"),
 	};
 
+	//#1108 AC2: the console filter row, which the pad can now be on - the
+	//shoulders land the ring on the segment they cycle to. A changes nothing
+	//there (the row IS the filter; the shoulders, or the row's own Left / Right,
+	//are what move it), so the bar names no Play the row cannot make: search and
+	//Back still answer from it (ADR-0256 Decision 6 - the footer names what the
+	//control in the player's hand does).
+	public static readonly IReadOnlyList<PlayBarEntry> FilterRow = new[] {
+		new PlayBarEntry(PlayAction.Search, "BarSearch"),
+		new PlayBarEntry(PlayAction.ConsoleFilter, "BarConsole"),
+		new PlayBarEntry(PlayAction.Back, "BarBack"),
+	};
+
 	//A on the header's Back leaves the library, and A on the search's clear button
 	//empties the query: neither plays, so the bar names what A does.
 	public static readonly IReadOnlyList<PlayBarEntry> BackButton = new[] {
