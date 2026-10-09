@@ -17930,6 +17930,58 @@ void TestADefaultDeviceSpelledTwoWaysDoesNotReArm()
 	host->Stop();
 }
 
+//#1153 review: MenuSoundHost::Stop is a publish - the owner thread is detached,
+//never joined - and EmuApiWrapper::Release destroys the emulator on its next
+//line. The stream reads the running predicate through a lambda that captures a
+//raw Emulator*, and OwnerLoop's D7 branches call it, so a thread still inside
+//that loop when Release returns is a use-after-free on a destroyed emulator.
+//The teardown therefore needs a wait - and it is the one place a wait costs
+//nothing: Release runs as the process goes away, not on a UI press where #733's
+//device open stalled the emulation thread.
+void TestAMenuSoundTeardownWaitsForTheOwnerThreadItDetached()
+{
+	auto policy = std::make_shared<FakeMenuSoundPolicy>();
+	auto pool = std::make_shared<FakeMenuSoundDevicePool>();
+	auto host = MakeMenuSoundHost(pool, policy);
+
+	//The device answers its open only after the teardown is already under way, so
+	//a teardown that only publishes leaves its owner thread running past the
+	//caller - and past the emulator the caller is about to destroy.
+	pool->NextOpenDelayMs = 300;
+	host->Apply({"Slow Speakers", TestBackendWasapi});
+	Check(pool->Sinks.size() == 1, "menu sound: the teardown's device is armed", std::to_string(pool->Sinks.size()));
+	FakeMenuSoundSink* slow = pool->Sinks[0];
+	Check(WaitForMenuSound([&]() { return slow->BeginOpens.load() == 1; }),
+		"menu sound: the slow device's open has started");
+	Check(!host->IsAvailable(), "menu sound: the capability is false while that open is still running");
+
+	auto start = std::chrono::steady_clock::now();
+	host->StopAndWait();
+	long long stopMs = ElapsedMs(start);
+
+	//The property that matters: when the teardown returns, the thread that reads
+	//the emulator is gone, so nothing is left to read what the caller destroys.
+	Check(slow->Releases.load() == 1,
+		"menu sound: a waited teardown has released the device before it returns",
+		std::to_string(slow->Releases.load()));
+	Check(slow->ReleasedOnThread == slow->OwnerThread && slow->OwnerThread != std::this_thread::get_id(),
+		"menu sound: the waited teardown still releases on the device's own thread, not the caller's (D4)");
+	Check(stopMs >= 250,
+		"menu sound: the teardown waited out the open it was abandoning",
+		std::to_string(stopMs) + " ms");
+
+	//And it stays released: no second release, and no late callback, lands after
+	//the caller has gone on to tear the rest of the process down.
+	std::this_thread::sleep_for(std::chrono::milliseconds(50));
+	Check(slow->Releases.load() == 1, "menu sound: nothing releases the device again after the teardown returned");
+	Check(slow->Reader.load() == nullptr, "menu sound: the reader is unpublished once the teardown returned");
+	Check(!host->IsAvailable(), "menu sound: a waited teardown leaves the capability false");
+
+	//Idempotent, like Stop: a second teardown has nothing left to wait for.
+	host->StopAndWait();
+	Check(slow->Releases.load() == 1, "menu sound: a second waited teardown releases nothing again");
+}
+
 void TestAMenuSoundSubsystemInitThatFailsFailsTheOpen()
 {
 	int attempts = 0;
@@ -18694,6 +18746,7 @@ int main()
 	TestTheMenuSoundHostOpensNothingUntilAnApplyNamesADevice();
 	TestAReArmNeverWaitsForTheOldStreamsOpen();
 	TestADefaultDeviceSpelledTwoWaysDoesNotReArm();
+	TestAMenuSoundTeardownWaitsForTheOwnerThreadItDetached();
 	TestAMenuSoundSubsystemInitThatFailsFailsTheOpen();
 	TestAMenuSoundSubsystemInitRunsOnceForTheSession();
 	TestTheMenuSoundDeviceIsTheOneThePlayerPicked();
