@@ -78,6 +78,12 @@ public class PlayPadWalkTests : IDisposable
 	//this list (the test fails on a stale entry as well as on a new one).
 	public static readonly string[] KnownBarGaps = { "SaveStates", "Enhancements", "ToolSheetAbout" };
 
+	//Surfaces whose console chips (RomPickerConsoleFilter) the pad cannot land on:
+	//LB/RB cycle the selection but the focus never enters the chip ListBox (#1107
+	//review finding 2). Named so the gap shows, and asserted both ways: when the
+	//action starts entering the chips the walk reaches them and this entry must go.
+	public static readonly string[] KnownChipGaps = { "Library" };
+
 
 	private const int ClaimsInWiring = 18;
 
@@ -144,6 +150,10 @@ public class PlayPadWalkTests : IDisposable
 		//A walk that found nothing to reach would pass vacuously.
 		Assert.NotEmpty(observation.Interactive);
 		List<string> problems = PadWalk.Judge(observation);
+		bool chipGap = problems.RemoveAll(p => p.Contains("/ListBoxItem[") && p.Contains("is not reachable")) > 0;
+		Assert.True(chipGap == KnownChipGaps.Contains(surface),
+			chipGap ? $"{surface}: the console chips are not reachable and the surface is not listed in KnownChipGaps"
+				: $"{surface}: the pad reaches the console chips now: remove it from KnownChipGaps");
 		Assert.True(problems.Count == 0, string.Join(Environment.NewLine, problems));
 
 		//The known gaps are asserted both ways, so a surface that joins the
@@ -341,16 +351,6 @@ public class PlayPadWalkTests : IDisposable
 	//here: it is per focus (the bar row's cover flag, PlayFavoriteCover.PathOf).
 	private static HashSet<PlayAction> Available(MainWindow window, Control root, IReadOnlyCollection<Control> interactive)
 	{
-		//The chips are entered with the ConsoleFilter action, not the D-pad: press it
-		//once and count them reached only when the focus lands in their ListBox.
-		if(chips.Count > 0) {
-			Land(window, start);
-			PressShoulder(window, "Pad1 R1");
-			if(window.FocusManager?.GetFocusedElement() is Control chip && chip.FindAncestorOfType<ListBox>(true)?.Name == "RomPickerConsoleFilter") {
-				reached.UnionWith(chips);
-			}
-		}
-
 		HashSet<PlayAction> available = new();
 		if(interactive.Count > 0) {
 			available.Add(PlayAction.Confirm);
