@@ -13,6 +13,7 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
+using Avalonia.Media;
 using Mesen.Config;
 using Mesen.Controls;
 using Mesen.Interop;
@@ -768,7 +769,7 @@ public class PlayPadNavigationTests : IDisposable
 		//Down through the Window page and off its last row, then Left along
 		//Done's row: the walk a player makes with the D-pad.
 		List<string?> walk = new() { FocusedName(window) };
-		PadNavAction[] presses = { PadNavAction.Down, PadNavAction.Down, PadNavAction.Down, PadNavAction.Down, PadNavAction.Down, PadNavAction.Left };
+		PadNavAction[] presses = { PadNavAction.Down, PadNavAction.Down, PadNavAction.Down, PadNavAction.Down, PadNavAction.Down, PadNavAction.Down, PadNavAction.Left };
 		foreach(PadNavAction press in presses) {
 			if(FocusedName(window) == "btnPlayerSettingsExitFullscreen") {
 				break;
@@ -1201,6 +1202,51 @@ public class PlayPadNavigationTests : IDisposable
 		WaitFor(() => scale.IsFocused, "the focus did not come back to the drop-down after the commit");
 		AssertRing(scale);
 		model.ClosePlayerSettings();
+	}
+
+	//#1111 (spec #1102): Left / Right on the Interface size row steps it in
+	//place, applied at once - what the player sees is the row's text and the
+	//chrome's size, with the game's Scale row untouched.
+	[AvaloniaFact]
+	public void The_pad_steps_the_interface_size_with_left_and_right_and_the_chrome_follows()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		List<double> written = new();
+		PreferencesConfig preferences = ConfigManager.Config.Preferences;
+		InterfaceSize before = preferences.InterfaceSize;
+		preferences.InterfaceSize = InterfaceSize.Standard;
+		try {
+			(MainWindow window, MainWindowViewModel model, ConfigViewModel settings) = ShowSettingsTab(ConfigWindowTab.Display,
+				() => new PlayerWindowSettingsViewModel(new VideoConfig(), false, 2, () => { }, written.Add, preferences));
+			//From the strip, the pad walks down the page to the row: Down never
+			//runs along the tabs instead.
+			window.FindNamed<Control>("tabPlayerWindow").Focus(NavigationMethod.Directional);
+			Pump();
+			ComboBox size = window.FindNamed<ComboBox>("cboDisplayInterfaceSize");
+			for(int i = 0; i < 5 && !size.IsFocused; i++) {
+				Press(window, PadNavAction.Down);
+			}
+			Assert.True(size.IsFocused, $"the D-pad never reached Interface size ({FocusedName(window)})");
+			LayoutTransformControl chrome = window.FindNamed<LayoutTransformControl>("PlayChromeRoot");
+			Assert.Equal(1.0, ((ScaleTransform)chrome.LayoutTransform!).ScaleX);
+
+			Press(window, PadNavAction.Right);
+			Assert.Equal("Large", size.SelectedItem?.ToString());
+			Assert.Equal(1.25, ((ScaleTransform)chrome.LayoutTransform!).ScaleX);
+			Press(window, PadNavAction.Right);
+			Assert.Equal(1.5, ((ScaleTransform)chrome.LayoutTransform!).ScaleX);
+			Press(window, PadNavAction.Right);
+			Assert.Equal(1.5, ((ScaleTransform)chrome.LayoutTransform!).ScaleX);
+			Press(window, PadNavAction.Left);
+			Assert.Equal(1.25, ((ScaleTransform)chrome.LayoutTransform!).ScaleX);
+
+			Assert.False(size.IsDropDownOpen);
+			Assert.Empty(written);
+			Assert.Equal(2, settings.Display!.SelectedScale!.Value);
+			model.ClosePlayerSettings();
+		} finally {
+			preferences.InterfaceSize = before;
+		}
 	}
 
 	[AvaloniaFact]

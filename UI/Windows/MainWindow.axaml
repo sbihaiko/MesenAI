@@ -179,7 +179,9 @@
 			<!--ADR-0249: in Player mode PlayWorkspace is the theme's scope (`player`,
 			Play's tint); Advanced keeps the classic look.-->
 			<Panel Name="PlayWorkspace" IsVisible="{Binding IsPlayWorkspace}" Classes.player="{Binding Config.Preferences.UiMode, Converter={StaticResource EnumMatchConverter}, ConverterParameter={x:Static lg:UiMode.Player}}">
-				<ContentControl Background="#181818" Content="{Binding RecentGames}" IsVisible="{Binding RecentGames.Visible}" />
+				<LayoutTransformControl LayoutTransform="{Binding Config.Preferences.InterfaceSize, Converter={x:Static c:InterfaceSizeTransformConverter.Instance}}">
+					<ContentControl Background="#181818" Content="{Binding RecentGames}" IsVisible="{Binding RecentGames.Visible}" />
+				</LayoutTransformControl>
 
 				<!--"Sim, quadro congelado" (2026-10-03): the native picture is hidden
 				under W-P4 and its sheets (PlayGameLayer), so the frame the game
@@ -221,203 +223,210 @@
 					</Border>
 				</Popup>
 
-				<!--W-P4: the game stays behind the overlay, dimmed.-->
-				<Border Name="PlayerOverlayScrim" Classes="scrim">
-					<Border.IsVisible>
-						<MultiBinding Converter="{x:Static BoolConverters.Or}">
-							<Binding Path="IsPlayerOverlayVisible" />
-							<Binding Path="IsSaveStatesSheetVisible" />
-							<!--ADR-0249: the light sheets W-P5 … W-P11 dim the game too.-->
-							<Binding Path="IsEnhancementsPanelVisible" />
-							<Binding Path="IsPlayerPackPickerVisible" />
-							<Binding Path="IsPackDetailVisible" />
-							<Binding Path="CheatsSheet.IsVisible" />
-							<Binding Path="ReplaysSheet.IsVisible" />
-							<Binding Path="IsPlayerSettingsVisible" />
-							<!--ADR-0255 slice 1 (W-P17): the Controller sheet, over the
-							paused game like every other sheet of W-P4.-->
-							<Binding Path="ControllerSheet.IsVisible" />
-						</MultiBinding>
-					</Border.IsVisible>
-				</Border>
-
-				<!--G.2 (PRD Part B §13.5.2 W-P4, replacing P.4's overlay): the pause
-				overlay. Seven controls (rule 2, UI/Logic/PauseOverlay): Resume, Save
-				states, Pack, Enhancements, Cheats, Settings, Quit game. Advanced GUI
-				moved to the switcher's Classic door and quitting the app to the
-				shared tail, in the bar the overlay reveals.
-				D-pad/A/B and arrows move through the rows (XY focus); Resume has
-				focus on open. Esc resumes (rule 8).-->
-				<Border
-					Name="PlayerOverlay"
-					Classes="overlay-card"
-					Width="380"
-					HorizontalAlignment="Center"
-					VerticalAlignment="Center"
-					Margin="0 12"
-					Padding="16 22 16 18"
-					IsVisible="{Binding IsPauseCardVisible}"
-					IsHitTestVisible="{Binding !IsPauseCardDimmed}"
-				>
-					<!--W-P4's card is ~520 tall; a shorter window scrolls it, so
-					every control stays reachable by arrow keys (focus brings it
-					into view). The card's side padding moves inside the scroller (Margin
-					8) so the grouped list's -8 outset is not clipped.-->
-					<ScrollViewer VerticalScrollBarVisibility="Hidden">
-					<StackPanel Name="OverlayControls" Margin="8 0" XYFocus.NavigationModes="Enabled">
-						<TextBlock Name="OverlayGameTitle" Classes="title2" Text="{Binding OverlayGameTitle}" TextTrimming="CharacterEllipsis" />
-						<TextBlock Name="OverlayPausedLine" Classes="secondary" Text="{Binding OverlayPausedLine}" Margin="0 4 0 16" />
-						<!--W-P4: a drawn play icon leads the label (no ▶ glyph in the string).-->
-						<Button Name="OverlayResumeButton" Classes="primary large" HorizontalAlignment="Stretch" Click="OnOverlayResume" Margin="0 0 0 20">
-							<StackPanel Orientation="Horizontal">
-								<PathIcon Classes="leading" Data="{StaticResource PlayerIconPlay}" />
-								<TextBlock Text="{l:Translate btnOverlayResume}" />
-							</StackPanel>
-						</Button>
-						<Border Classes="group" Margin="-8 0">
-							<StackPanel>
-								<Button Name="OverlaySaveStatesButton" Classes="row" Click="OnOverlaySaveStates">
-									<DockPanel>
-										<Border Classes="badge" Background="{StaticResource PlayerIndigoBrush}"><PathIcon Data="{StaticResource PlayerIconSaveStates}" /></Border>
-										<PathIcon Classes="chevron" DockPanel.Dock="Right" />
-										<TextBlock Classes="value" DockPanel.Dock="Right" Name="OverlaySaveStatesValue" Text="{Binding SaveStatesRowValue}" />
-										<TextBlock Classes="title" Text="{l:Translate btnOverlaySaveStates}" />
-									</DockPanel>
-								</Button>
-								<!--P.5 (§5): opens the picker (2+ packs, W-P5) or the pack window.-->
-								<Button Name="OverlayPackButton" Classes="row" Click="OnOverlayPack">
-									<DockPanel>
-										<Border Classes="badge" Background="{StaticResource PlayerTintShareBrush}"><PathIcon Data="{StaticResource PlayerIconPack}" /></Border>
-										<PathIcon Classes="chevron" DockPanel.Dock="Right" />
-										<TextBlock Classes="value" DockPanel.Dock="Right" Name="OverlayPackValue" Text="{Binding PackSummary}" />
-										<TextBlock Classes="title" Text="{l:Translate btnOverlayPack}" />
-									</DockPanel>
-								</Button>
-								<!--P.7 (§6.1): the quick-toggle panel.-->
-								<Button Name="OverlayEnhancementsButton" Classes="row" Click="OnOverlayEnhancements">
-									<DockPanel>
-										<Border Classes="badge" Background="{StaticResource PlayerOrangeBrush}"><PathIcon Data="{StaticResource PlayerIconEnhancements}" /></Border>
-										<PathIcon Classes="chevron" DockPanel.Dock="Right" />
-										<TextBlock Classes="value" DockPanel.Dock="Right" Name="OverlayEnhancementsValue" Text="{Binding EnhancementsSummary}" />
-										<TextBlock Classes="title" Text="{l:Translate btnOverlayEnhancements}" />
-									</DockPanel>
-								</Button>
-								<!--P.10 (W-P4 › W-P11, ADR-0245 §1): Cheats · N on.-->
-								<Button Name="OverlayCheatsButton" Classes="row" Click="OnOverlayCheats">
-									<DockPanel>
-										<Border Classes="badge" Background="{StaticResource PlayerPinkBrush}"><PathIcon Data="{StaticResource PlayerIconCheats}" /></Border>
-										<PathIcon Classes="chevron" DockPanel.Dock="Right" />
-										<TextBlock Classes="value" DockPanel.Dock="Right" Name="OverlayCheatsSummary" Text="{Binding CheatsSummary}" />
-										<TextBlock Classes="title" Text="{l:Translate btnOverlayCheats}" />
-									</DockPanel>
-								</Button>
-								<Button Name="OverlaySettingsButton" Classes="row" Click="OnOverlaySettings">
-									<DockPanel>
-										<Border Classes="badge" Background="{StaticResource PlayerGrayBrush}"><PathIcon Data="{StaticResource PlayerIconSettings}" /></Border>
-										<PathIcon Classes="chevron" DockPanel.Dock="Right" />
-										<TextBlock Classes="title" Text="{l:Translate btnOverlaySettings}" />
-									</DockPanel>
-								</Button>
-							</StackPanel>
+				<!--#1111 (spec #1102): Interface size. Everything of Play's chrome - the
+				scrim, the pause overlay and every sheet - sits under one layout
+				transform; the game picture, its paused frame and the Scale row do not.-->
+				<LayoutTransformControl Name="PlayChromeRoot" LayoutTransform="{Binding Config.Preferences.InterfaceSize, Converter={x:Static c:InterfaceSizeTransformConverter.Instance}}">
+					<Panel>
+						<!--W-P4: the game stays behind the overlay, dimmed.-->
+						<Border Name="PlayerOverlayScrim" Classes="scrim">
+							<Border.IsVisible>
+								<MultiBinding Converter="{x:Static BoolConverters.Or}">
+									<Binding Path="IsPlayerOverlayVisible" />
+									<Binding Path="IsSaveStatesSheetVisible" />
+									<!--ADR-0249: the light sheets W-P5 … W-P11 dim the game too.-->
+									<Binding Path="IsEnhancementsPanelVisible" />
+									<Binding Path="IsPlayerPackPickerVisible" />
+									<Binding Path="IsPackDetailVisible" />
+									<Binding Path="CheatsSheet.IsVisible" />
+									<Binding Path="ReplaysSheet.IsVisible" />
+									<Binding Path="IsPlayerSettingsVisible" />
+									<!--ADR-0255 slice 1 (W-P17): the Controller sheet, over the
+									paused game like every other sheet of W-P4.-->
+									<Binding Path="ControllerSheet.IsVisible" />
+								</MultiBinding>
+							</Border.IsVisible>
 						</Border>
-						<!--W-P4: powers the game off and lands on the Play home; it no
-						longer closes the app (the shared tail's Quit MesenAI, ⌘Q / Alt+F4).-->
-						<Button Name="OverlayQuitGameButton" Classes="destructive medium" HorizontalAlignment="Stretch" Click="OnOverlayQuitGame" Margin="0 38 0 0" IsVisible="{Binding !QuitGameConfirm.IsVisible}">
-							<TextBlock Text="{l:Translate btnOverlayQuitGame}" />
-						</Button>
-						<!--ADR-0249 (W-X1): ConfirmExitResetPower asks here, in place of the button.-->
-						<v:OverlayConfirmBanner Name="QuitGameConfirm" DataContext="{Binding QuitGameConfirm}" IsVisible="{Binding IsVisible}" Margin="0 38 0 0" />
-						<!--TEXT2, not the render's TEXT3: TEXT3 on the card is 2.5:1, under
-						PlaySheetsContrastTests' 4.5:1. ADR-0256 Decision 6: the control
-						named is the one in the player's hand, so the line is computed
-						(MainWindowViewModel.PauseOverlay), not a fixed string.-->
-						<TextBlock Name="OverlayResumeHint" Classes="footnote secondary" Text="{Binding OverlayResumeHint}" HorizontalAlignment="Center" Margin="0 26 0 0" />
-					</StackPanel>
-					</ScrollViewer>
-				</Border>
 
-				<!--"Seguir o render" (2026-10-03): a sheet opened from W-P4 leaves the
-				card on screen behind it, under one more dim layer (W-P5 … W-P16).-->
-				<Border Name="PlayerSheetScrim" Background="{StaticResource PlayerSheetOverCardScrimBrush}" IsVisible="{Binding IsPauseCardDimmed}" />
-
-				<!--#909 (W-P4 Save states row): ONE grid over the game. Each slot
-				carries its own *Save here* and *Load*, Load disabled while the slot
-				is empty, the auto-save row offering Load alone; the slot's age and
-				preview stay. Esc (or Back) returns to the overlay.-->
-				<Border
-					Name="PlayerSaveStatesSheet"
-					Classes="sheet"
-					Width="440"
-					HorizontalAlignment="Center"
-					VerticalAlignment="Center"
-					IsVisible="{Binding IsSaveStatesSheetVisible}"
-				>
-					<StackPanel Spacing="10">
-						<TextBlock Classes="title3" Text="{l:Translate lblSaveStatesSheetTitle}" />
-						<TextBlock Classes="secondary" Text="{Binding SaveStatesRowValue}" Margin="0 0 0 6" />
-						<Border Classes="inset" MaxHeight="300">
-							<ScrollViewer HorizontalScrollBarVisibility="Disabled" AllowAutoHide="False">
-								<ItemsControl Name="SaveStatesGrid" ItemsSource="{Binding SaveStateSlots}" XYFocus.NavigationModes="Enabled">
-									<ItemsControl.ItemTemplate>
-										<DataTemplate x:DataType="vm:SaveStateSlotViewModel">
-											<!--The right margin keeps the actions clear of the always-shown
-											scrollbar. Up/Down use the nearest-rectangle search: the default
-											projection only looks straight down, so from an armed Load over a
-											disabled one it skipped the next row's Save here and left the grid
-											for Shared replays (ADR-0256 Decision 3).-->
-											<DockPanel Margin="0 3 10 3">
-												<Button Name="SlotLoadButton" GotFocus="OnSlotGotFocus" XYFocus.UpNavigationStrategy="RectilinearDistance" XYFocus.DownNavigationStrategy="RectilinearDistance" DockPanel.Dock="Right" Classes="secondary small" VerticalAlignment="Center" Content="{l:Translate btnSaveStatesLoadSlot}" IsEnabled="{Binding LoadEnabled}" Click="OnSlotLoad" />
-												<Button Name="SlotSaveButton" GotFocus="OnSlotGotFocus" XYFocus.UpNavigationStrategy="RectilinearDistance" XYFocus.DownNavigationStrategy="RectilinearDistance" DockPanel.Dock="Right" Classes="primary small" VerticalAlignment="Center" Margin="0 0 6 0" Content="{l:Translate btnSaveStatesSaveHere}" IsVisible="{Binding SaveHereVisible}" Click="OnSlotSaveHere" />
-												<Image Width="52" Height="49" Margin="6 0 10 0" VerticalAlignment="Center" Source="{Binding Thumbnail}" />
-												<StackPanel VerticalAlignment="Center">
-													<TextBlock Classes="title" Text="{Binding Label}" />
-													<TextBlock Classes="footnote secondary" Text="{Binding AgeText}" />
-												</StackPanel>
+						<!--G.2 (PRD Part B §13.5.2 W-P4, replacing P.4's overlay): the pause
+						overlay. Seven controls (rule 2, UI/Logic/PauseOverlay): Resume, Save
+						states, Pack, Enhancements, Cheats, Settings, Quit game. Advanced GUI
+						moved to the switcher's Classic door and quitting the app to the
+						shared tail, in the bar the overlay reveals.
+						D-pad/A/B and arrows move through the rows (XY focus); Resume has
+						focus on open. Esc resumes (rule 8).-->
+						<Border
+							Name="PlayerOverlay"
+							Classes="overlay-card"
+							Width="380"
+							HorizontalAlignment="Center"
+							VerticalAlignment="Center"
+							Margin="0 12"
+							Padding="16 22 16 18"
+							IsVisible="{Binding IsPauseCardVisible}"
+							IsHitTestVisible="{Binding !IsPauseCardDimmed}"
+						>
+							<!--W-P4's card is ~520 tall; a shorter window scrolls it, so
+							every control stays reachable by arrow keys (focus brings it
+							into view). The card's side padding moves inside the scroller (Margin
+							8) so the grouped list's -8 outset is not clipped.-->
+							<ScrollViewer VerticalScrollBarVisibility="Hidden">
+							<StackPanel Name="OverlayControls" Margin="8 0" XYFocus.NavigationModes="Enabled">
+								<TextBlock Name="OverlayGameTitle" Classes="title2" Text="{Binding OverlayGameTitle}" TextTrimming="CharacterEllipsis" />
+								<TextBlock Name="OverlayPausedLine" Classes="secondary" Text="{Binding OverlayPausedLine}" Margin="0 4 0 16" />
+								<!--W-P4: a drawn play icon leads the label (no ▶ glyph in the string).-->
+								<Button Name="OverlayResumeButton" Classes="primary large" HorizontalAlignment="Stretch" Click="OnOverlayResume" Margin="0 0 0 20">
+									<StackPanel Orientation="Horizontal">
+										<PathIcon Classes="leading" Data="{StaticResource PlayerIconPlay}" />
+										<TextBlock Text="{l:Translate btnOverlayResume}" />
+									</StackPanel>
+								</Button>
+								<Border Classes="group" Margin="-8 0">
+									<StackPanel>
+										<Button Name="OverlaySaveStatesButton" Classes="row" Click="OnOverlaySaveStates">
+											<DockPanel>
+												<Border Classes="badge" Background="{StaticResource PlayerIndigoBrush}"><PathIcon Data="{StaticResource PlayerIconSaveStates}" /></Border>
+												<PathIcon Classes="chevron" DockPanel.Dock="Right" />
+												<TextBlock Classes="value" DockPanel.Dock="Right" Name="OverlaySaveStatesValue" Text="{Binding SaveStatesRowValue}" />
+												<TextBlock Classes="title" Text="{l:Translate btnOverlaySaveStates}" />
 											</DockPanel>
-										</DataTemplate>
-									</ItemsControl.ItemTemplate>
-								</ItemsControl>
+										</Button>
+										<!--P.5 (§5): opens the picker (2+ packs, W-P5) or the pack window.-->
+										<Button Name="OverlayPackButton" Classes="row" Click="OnOverlayPack">
+											<DockPanel>
+												<Border Classes="badge" Background="{StaticResource PlayerTintShareBrush}"><PathIcon Data="{StaticResource PlayerIconPack}" /></Border>
+												<PathIcon Classes="chevron" DockPanel.Dock="Right" />
+												<TextBlock Classes="value" DockPanel.Dock="Right" Name="OverlayPackValue" Text="{Binding PackSummary}" />
+												<TextBlock Classes="title" Text="{l:Translate btnOverlayPack}" />
+											</DockPanel>
+										</Button>
+										<!--P.7 (§6.1): the quick-toggle panel.-->
+										<Button Name="OverlayEnhancementsButton" Classes="row" Click="OnOverlayEnhancements">
+											<DockPanel>
+												<Border Classes="badge" Background="{StaticResource PlayerOrangeBrush}"><PathIcon Data="{StaticResource PlayerIconEnhancements}" /></Border>
+												<PathIcon Classes="chevron" DockPanel.Dock="Right" />
+												<TextBlock Classes="value" DockPanel.Dock="Right" Name="OverlayEnhancementsValue" Text="{Binding EnhancementsSummary}" />
+												<TextBlock Classes="title" Text="{l:Translate btnOverlayEnhancements}" />
+											</DockPanel>
+										</Button>
+										<!--P.10 (W-P4 › W-P11, ADR-0245 §1): Cheats · N on.-->
+										<Button Name="OverlayCheatsButton" Classes="row" Click="OnOverlayCheats">
+											<DockPanel>
+												<Border Classes="badge" Background="{StaticResource PlayerPinkBrush}"><PathIcon Data="{StaticResource PlayerIconCheats}" /></Border>
+												<PathIcon Classes="chevron" DockPanel.Dock="Right" />
+												<TextBlock Classes="value" DockPanel.Dock="Right" Name="OverlayCheatsSummary" Text="{Binding CheatsSummary}" />
+												<TextBlock Classes="title" Text="{l:Translate btnOverlayCheats}" />
+											</DockPanel>
+										</Button>
+										<Button Name="OverlaySettingsButton" Classes="row" Click="OnOverlaySettings">
+											<DockPanel>
+												<Border Classes="badge" Background="{StaticResource PlayerGrayBrush}"><PathIcon Data="{StaticResource PlayerIconSettings}" /></Border>
+												<PathIcon Classes="chevron" DockPanel.Dock="Right" />
+												<TextBlock Classes="title" Text="{l:Translate btnOverlaySettings}" />
+											</DockPanel>
+										</Button>
+									</StackPanel>
+								</Border>
+								<!--W-P4: powers the game off and lands on the Play home; it no
+								longer closes the app (the shared tail's Quit MesenAI, ⌘Q / Alt+F4).-->
+								<Button Name="OverlayQuitGameButton" Classes="destructive medium" HorizontalAlignment="Stretch" Click="OnOverlayQuitGame" Margin="0 38 0 0" IsVisible="{Binding !QuitGameConfirm.IsVisible}">
+									<TextBlock Text="{l:Translate btnOverlayQuitGame}" />
+								</Button>
+								<!--ADR-0249 (W-X1): ConfirmExitResetPower asks here, in place of the button.-->
+								<v:OverlayConfirmBanner Name="QuitGameConfirm" DataContext="{Binding QuitGameConfirm}" IsVisible="{Binding IsVisible}" Margin="0 38 0 0" />
+								<!--TEXT2, not the render's TEXT3: TEXT3 on the card is 2.5:1, under
+								PlaySheetsContrastTests' 4.5:1. ADR-0256 Decision 6: the control
+								named is the one in the player's hand, so the line is computed
+								(MainWindowViewModel.PauseOverlay), not a fixed string.-->
+								<TextBlock Name="OverlayResumeHint" Classes="footnote secondary" Text="{Binding OverlayResumeHint}" HorizontalAlignment="Center" Margin="0 26 0 0" />
+							</StackPanel>
 							</ScrollViewer>
 						</Border>
-						<!--R.2 (ADR-0205 §7): W-P4 is at its seven controls, so the shared
-						replays for this copy open from here.-->
-						<Button Name="SaveStatesReplaysButton" Classes="secondary medium" Content="{l:Translate btnSaveStatesReplays}" HorizontalAlignment="Stretch" Click="OnSaveStatesReplays" />
-						<Button Name="SaveStatesBackButton" Classes="plain medium" Content="{l:Translate btnSaveStatesBack}" HorizontalAlignment="Stretch" Click="OnSaveStatesBack" />
-					</StackPanel>
-				</Border>
 
-				<!--#716 / ADR-0249: the sheets the overlay opens are light sheets
-				(Border.sheet, W-P5 … W-P11) with their own text color, so they need
-				no Dark theme scope any more. PlaySheetsContrastTests checks every
-				text's contrast under both app themes.-->
-				<!--G.4 (W-P7, was P.7 §6.1): the Enhancements sheet.-->
-				<v:PlayerEnhancementsSheetView Name="PlayerEnhancementsSheetHost" IsVisible="{Binding IsEnhancementsPanelVisible}" />
+						<!--"Seguir o render" (2026-10-03): a sheet opened from W-P4 leaves the
+						card on screen behind it, under one more dim layer (W-P5 … W-P16).-->
+						<Border Name="PlayerSheetScrim" Background="{StaticResource PlayerSheetOverCardScrimBrush}" IsVisible="{Binding IsPauseCardDimmed}" />
 
-				<!--P.10 (PRD Part B §13 W-P11): the Cheats sheet.-->
-				<v:PlayerCheatsSheetView Name="PlayerCheatsSheetHost" DataContext="{Binding CheatsSheet}" IsVisible="{Binding IsVisible}" />
+						<!--#909 (W-P4 Save states row): ONE grid over the game. Each slot
+						carries its own *Save here* and *Load*, Load disabled while the slot
+						is empty, the auto-save row offering Load alone; the slot's age and
+						preview stay. Esc (or Back) returns to the overlay.-->
+						<Border
+							Name="PlayerSaveStatesSheet"
+							Classes="sheet"
+							Width="440"
+							HorizontalAlignment="Center"
+							VerticalAlignment="Center"
+							IsVisible="{Binding IsSaveStatesSheetVisible}"
+						>
+							<StackPanel Spacing="10">
+								<TextBlock Classes="title3" Text="{l:Translate lblSaveStatesSheetTitle}" />
+								<TextBlock Classes="secondary" Text="{Binding SaveStatesRowValue}" Margin="0 0 0 6" />
+								<Border Classes="inset" MaxHeight="300">
+									<ScrollViewer HorizontalScrollBarVisibility="Disabled" AllowAutoHide="False">
+										<ItemsControl Name="SaveStatesGrid" ItemsSource="{Binding SaveStateSlots}" XYFocus.NavigationModes="Enabled">
+											<ItemsControl.ItemTemplate>
+												<DataTemplate x:DataType="vm:SaveStateSlotViewModel">
+													<!--The right margin keeps the actions clear of the always-shown
+													scrollbar. Up/Down use the nearest-rectangle search: the default
+													projection only looks straight down, so from an armed Load over a
+													disabled one it skipped the next row's Save here and left the grid
+													for Shared replays (ADR-0256 Decision 3).-->
+													<DockPanel Margin="0 3 10 3">
+														<Button Name="SlotLoadButton" GotFocus="OnSlotGotFocus" XYFocus.UpNavigationStrategy="RectilinearDistance" XYFocus.DownNavigationStrategy="RectilinearDistance" DockPanel.Dock="Right" Classes="secondary small" VerticalAlignment="Center" Content="{l:Translate btnSaveStatesLoadSlot}" IsEnabled="{Binding LoadEnabled}" Click="OnSlotLoad" />
+														<Button Name="SlotSaveButton" GotFocus="OnSlotGotFocus" XYFocus.UpNavigationStrategy="RectilinearDistance" XYFocus.DownNavigationStrategy="RectilinearDistance" DockPanel.Dock="Right" Classes="primary small" VerticalAlignment="Center" Margin="0 0 6 0" Content="{l:Translate btnSaveStatesSaveHere}" IsVisible="{Binding SaveHereVisible}" Click="OnSlotSaveHere" />
+														<Image Width="52" Height="49" Margin="6 0 10 0" VerticalAlignment="Center" Source="{Binding Thumbnail}" />
+														<StackPanel VerticalAlignment="Center">
+															<TextBlock Classes="title" Text="{Binding Label}" />
+															<TextBlock Classes="footnote secondary" Text="{Binding AgeText}" />
+														</StackPanel>
+													</DockPanel>
+												</DataTemplate>
+											</ItemsControl.ItemTemplate>
+										</ItemsControl>
+									</ScrollViewer>
+								</Border>
+								<!--R.2 (ADR-0205 §7): W-P4 is at its seven controls, so the shared
+								replays for this copy open from here.-->
+								<Button Name="SaveStatesReplaysButton" Classes="secondary medium" Content="{l:Translate btnSaveStatesReplays}" HorizontalAlignment="Stretch" Click="OnSaveStatesReplays" />
+								<Button Name="SaveStatesBackButton" Classes="plain medium" Content="{l:Translate btnSaveStatesBack}" HorizontalAlignment="Stretch" Click="OnSaveStatesBack" />
+							</StackPanel>
+						</Border>
 
-				<!--R.2 (ADR-0205 §7): Save states › Shared replays.-->
-				<v:PlayerReplaysSheetView Name="PlayerReplaysSheetHost" DataContext="{Binding ReplaysSheet}" IsVisible="{Binding IsVisible}" />
+						<!--#716 / ADR-0249: the sheets the overlay opens are light sheets
+						(Border.sheet, W-P5 … W-P11) with their own text color, so they need
+						no Dark theme scope any more. PlaySheetsContrastTests checks every
+						text's contrast under both app themes.-->
+						<!--G.4 (W-P7, was P.7 §6.1): the Enhancements sheet.-->
+						<v:PlayerEnhancementsSheetView Name="PlayerEnhancementsSheetHost" IsVisible="{Binding IsEnhancementsPanelVisible}" />
 
-				<!--G.4 (W-P5, was P.5 §5): the pack picker; (W-P6) the current pack detail.-->
-				<v:PlayerPackPickerSheetView Name="PlayerPackPickerHost" IsVisible="{Binding IsPlayerPackPickerVisible}" />
-				<v:PlayerPackDetailSheetView Name="PlayerPackDetailHost" IsVisible="{Binding IsPackDetailVisible}" />
+						<!--P.10 (PRD Part B §13 W-P11): the Cheats sheet.-->
+						<v:PlayerCheatsSheetView Name="PlayerCheatsSheetHost" DataContext="{Binding CheatsSheet}" IsVisible="{Binding IsVisible}" />
 
-				<!--ADR-0255 slice 1 (W-P17): the Controller sheet, which Settings ›
-				Controls' More in Options… opens over the paused game. Its own
-				IsVisible is the view-model's, like W-P15's.-->
-				<v:PlayerControllerSheetView Name="PlayerControllerSheetHost" DataContext="{Binding ControllerSheet}" />
+						<!--R.2 (ADR-0205 §7): Save states › Shared replays.-->
+						<v:PlayerReplaysSheetView Name="PlayerReplaysSheetHost" DataContext="{Binding ReplaysSheet}" IsVisible="{Binding IsVisible}" />
 
-				<!--#845 (ADR-0256 Decision 9): the ROM picker, over Play's home.
-				It is the one Play sheet not opened from W-P4 - the home's own
-				*Open a ROM…* opens it, with no game loaded - so it sits here, on
-				the load layer's own panel, above the home and below the tool
-				sheets a task door opens.-->
-				<v:PlayerRomPickerView Name="PlayerRomPickerHost" DataContext="{Binding RomPicker}" IsVisible="{Binding IsVisible}" />
+						<!--G.4 (W-P5, was P.5 §5): the pack picker; (W-P6) the current pack detail.-->
+						<v:PlayerPackPickerSheetView Name="PlayerPackPickerHost" IsVisible="{Binding IsPlayerPackPickerVisible}" />
+						<v:PlayerPackDetailSheetView Name="PlayerPackDetailHost" IsVisible="{Binding IsPackDetailVisible}" />
 
-				<!--G.5 (PRD Part B §13.5.2 W-P13, W-P15, W-P16): the Play edge-flow sheets.-->
-				<v:PlayPackDepSheetView Name="PlayPackDepSheetHost" DataContext="{Binding PackDepSheet}" IsVisible="{Binding IsVisible}" />
-				<v:PlayControllerSetupView Name="PlayControllerSetupHost" DataContext="{Binding ControllerSetup}" />
+						<!--ADR-0255 slice 1 (W-P17): the Controller sheet, which Settings ›
+						Controls' More in Options… opens over the paused game. Its own
+						IsVisible is the view-model's, like W-P15's.-->
+						<v:PlayerControllerSheetView Name="PlayerControllerSheetHost" DataContext="{Binding ControllerSheet}" />
+
+						<!--#845 (ADR-0256 Decision 9): the ROM picker, over Play's home.
+						It is the one Play sheet not opened from W-P4 - the home's own
+						*Open a ROM…* opens it, with no game loaded - so it sits here, on
+						the load layer's own panel, above the home and below the tool
+						sheets a task door opens.-->
+						<v:PlayerRomPickerView Name="PlayerRomPickerHost" DataContext="{Binding RomPicker}" IsVisible="{Binding IsVisible}" />
+
+						<!--G.5 (PRD Part B §13.5.2 W-P13, W-P15, W-P16): the Play edge-flow sheets.-->
+						<v:PlayPackDepSheetView Name="PlayPackDepSheetHost" DataContext="{Binding PackDepSheet}" IsVisible="{Binding IsVisible}" />
+						<v:PlayControllerSetupView Name="PlayControllerSetupHost" DataContext="{Binding ControllerSetup}" />
+					</Panel>
+				</LayoutTransformControl>
 			</Panel>
 
 			<!--G.3 (PRD Part B §13.5.3): Remaster's project screens (W-R0, W-R0b,

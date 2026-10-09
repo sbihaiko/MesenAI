@@ -90,6 +90,10 @@ namespace Mesen.Config
 		//an upgrade alike, and nothing resets it.
 		[ObservableProperty] public partial int PlayMenuHintsShown { get; set; } = 0;
 
+		//#1111 (spec #1102): Settings › Display › Interface size scales Play's
+		//chrome only (PlayerInterfaceSize). A missing key is Standard.
+		[ObservableProperty] public partial InterfaceSize InterfaceSize { get; set; } = InterfaceSize.Standard;
+
 		[ObservableProperty] public partial bool ShowFps { get; set; } = false;
 		[ObservableProperty] public partial bool ShowFrameCounter { get; set; } = false;
 		[ObservableProperty] public partial bool ShowGameTimer { get; set; } = false;

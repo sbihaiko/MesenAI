@@ -50,6 +50,8 @@ public static class PlayerSettingsEssentials
 	//puts there.
 	public static double SheetHeight(ConfigWindowTab tab) => tab switch {
 		ConfigWindowTab.Look or ConfigWindowTab.System => 480,
+		//#1111: Display's fourth row (Interface size) is one 46 px row and its hairline taller.
+		ConfigWindowTab.Display => 387,
 		//#1105: Audio's fourth row (Menu sounds) needs one more row's height, but
 		//only while the host can play it.
 		ConfigWindowTab.Audio when MenuSoundsAvailable() => 388,
@@ -85,15 +87,17 @@ public static class PlayerSettingsEssentials
 		return Math.Min(MaxSegment, available / count);
 	}
 
-	//PRD rule 2: an inset list of at most three rows per essentials tab; Audio
-	//is the one exception, with a fourth (Menu sounds) only while the host
-	//reports it available (#1105).
+	//PRD rule 2: an inset list of at most three rows per essentials tab; Display
+	//(Interface size, #1111) and Audio (Menu sounds, only while the host reports
+	//it available, #1105) are the exceptions, with a fourth.
 	public const int MaxRows = 4;
 
 	private static readonly PlayerSettingsRow[] DisplayRows = {
 		new("Fullscreen", PlayerSettingsRowKind.Switch),
 		new("AspectRatio", PlayerSettingsRowKind.Picker),
-		new("Scale", PlayerSettingsRowKind.Picker)
+		new("Scale", PlayerSettingsRowKind.Picker),
+		//#1111: scales Play's chrome, never the picture (Scale's meaning).
+		new("InterfaceSize", PlayerSettingsRowKind.Picker)
 	};
 	private static readonly PlayerSettingsRow[] AudioRows = {
 		new("Sound", PlayerSettingsRowKind.Switch),

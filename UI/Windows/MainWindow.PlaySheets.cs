@@ -175,7 +175,7 @@ namespace Mesen.Windows
 		//G.4 (W-P8): Display edits this window - its full screen and scale.
 		private PlayerWindowSettingsViewModel CreateDisplaySettings()
 		{
-			return new PlayerWindowSettingsViewModel(ConfigManager.Config.Video, WindowState == WindowState.FullScreen, CurrentScale, ToggleFullscreen, SetScale);
+			return new PlayerWindowSettingsViewModel(ConfigManager.Config.Video, WindowState == WindowState.FullScreen, CurrentScale, ToggleFullscreen, SetScale, ConfigManager.Config.Preferences);
 		}
 
 		//Look's "More in Options…" leaves the essentials (ConfigViewModel turns

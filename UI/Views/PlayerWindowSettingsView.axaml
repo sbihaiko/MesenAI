@@ -29,6 +29,12 @@
 				<ComboBox DockPanel.Dock="Right" Name="cboDisplayScale" Classes="popup" Width="120" ItemsSource="{Binding Scales}" SelectedItem="{Binding SelectedScale}" VerticalAlignment="Center" />
 				<TextBlock Classes="callout" Text="{l:Translate lblDisplayScale}" VerticalAlignment="Center" />
 			</DockPanel>
+			<Separator Classes="row-hairline" />
+			<!--#1111: scales Play's chrome, never the picture; Left / Right steps it in place.-->
+			<DockPanel Classes="setting-row">
+				<ComboBox DockPanel.Dock="Right" Name="cboDisplayInterfaceSize" Classes="popup" Width="120" ItemsSource="{Binding InterfaceSizes}" SelectedItem="{Binding SelectedInterfaceSizeChoice}" VerticalAlignment="Center" />
+				<TextBlock Classes="callout" Text="{l:Translate lblDisplayInterfaceSize}" VerticalAlignment="Center" />
+			</DockPanel>
 		</StackPanel>
 	</Border>
 </UserControl>
