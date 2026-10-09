@@ -271,6 +271,55 @@ public class PlayKeyboardMenuSoundsTests : IDisposable
 		Assert.Equal(new[] { MenuSoundKind.Move, MenuSoundKind.Move }, _played);
 	}
 
+	//The gate is not the whole rule: the pad ALSO asks whether the GUI is the
+	//pad's at all (PlayPadNavigation.HasAuthority, plus the capture the bridge's
+	//own predicate adds), and answers None - no action, no sound - where it is
+	//not. A game paused with no Play surface up is exactly that state, and it is
+	//the one the gate cannot see: the game is paused, so MenuSounds.ShouldPlay
+	//allows a blip, and the keyboard's move is the console's, not the GUI's.
+	//The pad's own Down is pressed in the same state, so the two paths are shown
+	//answering the same thing rather than merely both being silent.
+	[AvaloniaFact]
+	public void Without_the_pads_authority_the_keyboard_s_move_is_silent_like_the_pads()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		ConfigManager.Config.Audio.MenuSounds = true;
+		MainWindow window = ShowPlayHome(out MainWindowViewModel model);
+		LoadGame(model);
+
+		//The Pause shortcut's own pause (or a debugger break): the console is
+		//held, and no Play surface came up to hand it to the GUI.
+		EmuApi.Pause();
+		WaitFor(() => EmuApi.IsPaused(), "the game never paused");
+		Assert.False(model.IsPlaySurfaceOverGame, "a Play surface came up with the pause");
+		_played.Clear();
+
+		PressPad(window, PadNavAction.Down);
+		PressKey(window, PhysicalKey.ArrowDown);
+
+		Assert.Empty(_played);
+	}
+
+	//Esc over a running game is the same divergence on the other arm: the press
+	//opens W-P4 and pauses through TogglePlayerOverlay (OpenOverlayAndPause), so
+	//the pad never produces a Back there - it has no authority over a running
+	//game, and its overlay opens through the core's ToggleOverlay shortcut, not
+	//through Apply. The keyboard must not sound where the pad cannot.
+	[AvaloniaFact]
+	public void Escape_over_a_running_game_opens_the_overlay_and_plays_nothing()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		ConfigManager.Config.Audio.MenuSounds = true;
+		MainWindow window = ShowPlayHome(out MainWindowViewModel model);
+		LoadGame(model);
+		_played.Clear();
+
+		PressKey(window, PhysicalKey.Escape);
+		WaitFor(() => model.IsPlayerOverlayVisible && model.IsGamePaused, "Esc did not open W-P4 over the running game");
+
+		Assert.Empty(_played);
+	}
+
 	//The gate reads the state the press LEFT, not the state it found: a Confirm
 	//that resumes a game leaves it running unpaused, and MenuSounds.ShouldPlay
 	//refuses a blip over a running game. The pad's Confirm on that press is
