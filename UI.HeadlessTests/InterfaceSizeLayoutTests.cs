@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
@@ -33,16 +35,24 @@ public class InterfaceSizeLayoutTests : IDisposable
 		ConfigManager.Config.Preferences.InterfaceSize = _size;
 	}
 
-	private static (MainWindow Window, MainWindowViewModel Model) Show(Workspace workspace, InterfaceSize size)
+	private static (MainWindow Window, MainWindowViewModel Model) Show(Workspace workspace, InterfaceSize size, double width = 1024, double height = 640)
 	{
 		ConfigManager.Config.Preferences.UiMode = WorkspaceShell.UiModeFor(workspace);
 		ConfigManager.Config.Preferences.Workspace = workspace;
 		ConfigManager.Config.Preferences.InterfaceSize = size;
 		//The window's default size on a desktop; the headless host's own is smaller.
-		MainWindow main = new() { Width = 1024, Height = 640 };
+		MainWindow main = new() { Width = width, Height = height };
 		main.ShowStarted();
 		Dispatcher.UIThread.RunJobs();
 		return (main, Assert.IsType<MainWindowViewModel>(main.DataContext));
+	}
+
+	//A control's box in the window's own coordinates, transform included.
+	private static Rect BoxIn(Control control, MainWindow window)
+	{
+		Point topLeft = control.TranslatePoint(new Point(0, 0), window)!.Value;
+		Point bottomRight = control.TranslatePoint(new Point(control.Bounds.Width, control.Bounds.Height), window)!.Value;
+		return new Rect(topLeft.X, topLeft.Y, bottomRight.X - topLeft.X, bottomRight.Y - topLeft.Y);
 	}
 
 	private static double ScaleOf(MainWindow window, string layer)
@@ -139,6 +149,265 @@ public class InterfaceSizeLayoutTests : IDisposable
 		Rect doneBox = new(done.TranslatePoint(new Point(0, 0), window)!.Value, done.Bounds.Size);
 		Assert.True(doneBox.Right <= window.Bounds.Width, $"Done's right edge {doneBox.Right} is past the {window.Bounds.Width} window");
 		Assert.True(doneBox.Bottom <= window.Bounds.Height, $"Done's bottom edge {doneBox.Bottom} is past the {window.Bounds.Height} window");
+		model.ClosePlayerSettings();
+	}
+
+	//#1123 (ADR-0269 Decision 6, the width half): the height is capped against
+	//the transformed room the host gives the sheet, the width was not - a fixed
+	//480 px became 720 at 1.5 and hung off both sides of the window's own
+	//512x505 starting size. The width is capped the same way, so the sheet's
+	//rendered box stays inside the window at both sizes the ADR guarantees.
+	[AvaloniaTheory]
+	[InlineData(1024, 640)]
+	[InlineData(512, 505)]
+	public void The_sheet_width_is_capped_and_stays_inside_the_window(double width, double height)
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model) = Show(Workspace.Play, InterfaceSize.ExtraLarge, width, height);
+		window.OpenPlayerSettingsSheet();
+		Settle(window);
+
+		Rect sheet = BoxIn(window.FindNamed<Border>("PlayerSettingsSheet"), window);
+		Assert.True(sheet.Left >= 0 && sheet.Right <= window.Bounds.Width, $"The sheet {sheet} is not inside a {window.Bounds.Size} window");
+		//The uncapped 480 * 1.5 = 720 must never be drawn when the window cannot
+		//hold it: the cap leaves the sheet a margin inside the window.
+		Assert.True(sheet.Width <= window.Bounds.Width - 32, $"The sheet is {sheet.Width} wide in a {window.Bounds.Width} window: the 1.5 factor is not capped");
+		//...and the cap never shrinks a sheet the window can hold: at the ADR's
+		//guaranteed 1024x640 the sheet is still the whole 480 at 1.5.
+		if(width >= 1024) {
+			Assert.Equal(720, sheet.Width, 0);
+		}
+		//The strip narrows its segments by PlayerSettingsEssentials.SegmentWidth,
+		//a rule UI.Tests pins host-free; here it only has to leave every tab on
+		//screen. Whether the rows themselves fit across the narrower sheet is
+		//what No_row_label_is_trimmed_in_the_small_window_at_the_largest_size
+		//proves - the page's own scroller is vertical only
+		//(HorizontalScrollBarVisibility="Disabled"), so its Extent.Width is its
+		//Viewport.Width by construction and cannot witness a clipped row.
+		Assert.All(window.FindNamed<TabControl>("PlayerSettingsTabs").FindAll<TabItem>(), t => Assert.True(t.IsOnScreen() && t.Bounds.Width > 0, $"{t.Name} has no room in the strip"));
+		model.ClosePlayerSettings();
+	}
+
+	//What a label's text needs to be drawn in one line, independent of how much
+	//room the layout gave it: the same font the TextBlock carries, laid out with
+	//no constraint. A label whose Bounds are narrower than this is drawing part
+	//of itself, which is what "clipped" means here.
+	private static double TextWidth(TextBlock label)
+	{
+		Typeface typeface = new(label.FontFamily, label.FontStyle, label.FontWeight, label.FontStretch);
+		FormattedText text = new(label.Text ?? "", CultureInfo.CurrentCulture, FlowDirection.LeftToRight, typeface, label.FontSize, null);
+		return text.Width;
+	}
+
+	//#1123 (ADR-0269 Decision 6, "nothing is clipped"): capping the sheet's width
+	//only helps if the rows inside the narrower sheet still have their room. At
+	//1.5 in 512x505 the page viewport is about 254 px, and a row whose
+	//right-docked control carries a fixed 200 px - or a 150 px slider beside a
+	//34 px readout - leaves the label a sliver: the text is drawn mid-word. The
+	//cap has to reach the rows, on every tab, not only the default one.
+	[AvaloniaTheory]
+	[InlineData(ConfigWindowTab.Display)]
+	[InlineData(ConfigWindowTab.Look)]
+	[InlineData(ConfigWindowTab.Audio)]
+	[InlineData(ConfigWindowTab.Input)]
+	[InlineData(ConfigWindowTab.System)]
+	public void No_row_label_is_trimmed_in_the_small_window_at_the_largest_size(ConfigWindowTab tab)
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model) = Show(Workspace.Play, InterfaceSize.ExtraLarge, 512, 505);
+		window.OpenPlayerSettingsSheet();
+		Settle(window);
+		int index = PlayerSettingsEssentials.IndexOf(tab);
+		Assert.True(index >= 0, $"{tab} is not a tab of the Play settings strip");
+		window.FindNamed<TabControl>("PlayerSettingsTabs").SelectedIndex = index;
+		Settle(window);
+
+		ScrollViewer page = window.FindNamed<TabControl>("PlayerSettingsTabs").FindAll<ScrollViewer>().First(s => s.Classes.Contains("pageScroll") && s.IsOnScreen());
+		List<string> trimmed = [];
+		foreach(TextBlock label in page.GetVisualDescendants().OfType<TextBlock>()) {
+			if(!label.IsEffectivelyVisible || string.IsNullOrEmpty(label.Text)) {
+				continue;
+			}
+			//Only the row's own labels: a TextBlock a control generated for itself
+			//(a popup's closed value) is the control's business, not the row's.
+			if(label.Parent is not Panel) {
+				continue;
+			}
+			//A label that asks to be ellipsized (a folder path, #1013) is not one
+			//this rule covers: it says so itself, and shows the ellipsis.
+			if(label.TextTrimming != TextTrimming.None) {
+				continue;
+			}
+			//Neither is one that asks to wrap: it is not drawn past its room, it
+			//uses another line.
+			if(label.TextWrapping != TextWrapping.NoWrap) {
+				continue;
+			}
+			double needed = TextWidth(label);
+			if(needed > label.Bounds.Width + 1) {
+				trimmed.Add($"{(string.IsNullOrEmpty(label.Name) ? "unnamed" : label.Name)} \"{label.Text}\" needs {needed:0.#} px in {label.Bounds.Width:0.#}");
+			}
+		}
+		Assert.True(trimmed.Count == 0, $"On {tab} the rows draw their labels past their own room: {string.Join("; ", trimmed)}");
+		model.ClosePlayerSettings();
+	}
+
+	//The label rule above cannot see a control that is drawn over its label:
+	//once the label sits in an Auto column its own Bounds are the width its
+	//text needs, so "needed > Bounds" never fires. What Decision 6's "nothing
+	//is clipped" fails on when the sheet narrows is a sibling overlap - a
+	//right-docked control that carries a fixed 150 or 200 px is arranged at
+	//that width whatever cell it was given, and a Grid does not clip, so it is
+	//drawn over the label's column. This walks the row Grids themselves at the
+	//guaranteed 512x505, at factor 1.5, on every tab: each visible child's box
+	//sits inside its row's box, and no two of them intersect.
+	private static List<Grid> RowGrids(Control page) =>
+		page.GetVisualDescendants().OfType<Grid>()
+			.Where(g => g.Classes.Contains("setting-row") || g.Classes.Contains("look-row"))
+			.ToList();
+
+	private static string Describe(Control control) =>
+		$"{(string.IsNullOrEmpty(control.Name) ? control.GetType().Name : control.Name)} [{control.Bounds.Width:0.#}x{control.Bounds.Height:0.#}]";
+
+	private static bool Inside(Rect outer, Rect inner) =>
+		inner.Left >= outer.Left - 0.5 && inner.Top >= outer.Top - 0.5 &&
+		inner.Right <= outer.Right + 0.5 && inner.Bottom <= outer.Bottom + 0.5;
+
+	[AvaloniaTheory]
+	[InlineData(ConfigWindowTab.Display)]
+	[InlineData(ConfigWindowTab.Look)]
+	[InlineData(ConfigWindowTab.Audio)]
+	[InlineData(ConfigWindowTab.Input)]
+	[InlineData(ConfigWindowTab.System)]
+	public void No_row_child_escapes_its_row_or_covers_a_sibling_in_the_small_window_at_the_largest_size(ConfigWindowTab tab)
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model) = Show(Workspace.Play, InterfaceSize.ExtraLarge, 512, 505);
+		window.OpenPlayerSettingsSheet();
+		Settle(window);
+		int index = PlayerSettingsEssentials.IndexOf(tab);
+		Assert.True(index >= 0, $"{tab} is not a tab of the Play settings strip");
+		window.FindNamed<TabControl>("PlayerSettingsTabs").SelectedIndex = index;
+		Settle(window);
+
+		ScrollViewer page = window.FindNamed<TabControl>("PlayerSettingsTabs").FindAll<ScrollViewer>().First(s => s.Classes.Contains("pageScroll") && s.IsOnScreen());
+		List<Grid> rows = RowGrids(page);
+		//System carries no setting row of its own (storage and keyboard choices,
+		//not label/control rows); everywhere else the walk has to find rows or it
+		//proves nothing.
+		if(tab != ConfigWindowTab.System) {
+			Assert.True(rows.Count > 0, $"No row Grid is drawn on {tab}: the walk proves nothing");
+		}
+
+		List<string> broken = [];
+		foreach(Grid row in rows) {
+			Rect rowBox = BoxIn(row, window);
+			List<(Control Control, Rect Box)> boxes = [];
+			foreach(Control child in row.Children) {
+				if(!child.IsEffectivelyVisible || child.Bounds.Width <= 0 || child.Bounds.Height <= 0) {
+					continue;
+				}
+				Rect box = BoxIn(child, window);
+				if(!Inside(rowBox, box)) {
+					broken.Add($"on {tab} {Describe(child)} is drawn at {box} outside its row {rowBox}");
+				}
+				boxes.Add((child, box));
+			}
+			for(int i = 0; i < boxes.Count; i++) {
+				for(int j = i + 1; j < boxes.Count; j++) {
+					if(boxes[i].Box.Intersects(boxes[j].Box)) {
+						broken.Add($"on {tab} {Describe(boxes[i].Control)} at {boxes[i].Box} covers {Describe(boxes[j].Control)} at {boxes[j].Box}");
+					}
+				}
+			}
+		}
+		Assert.True(broken.Count == 0, $"The rows draw past their own room: {string.Join("; ", broken)}");
+		model.ClosePlayerSettings();
+	}
+
+	//#1145 review, item 1: a stretched control whose `MaxWidth` is smaller than
+	//the column it sits in is *centred* in that column - the leftover lands on
+	//both sides of it. At 1024x640 the page's star column is far wider than the
+	//150 / 200 px cap, so the capped controls sat mid-row instead of against
+	//the row's right edge: a slider left a gap before its own 34 px readout and
+	//the two Look popups floated between their label and Adjust. ADR-0249 draws
+	//them on the right ("the toggle and the two popups on the right"), and the
+	//PRD's 1024x640 is a size where nothing moves. Right-aligned, the control
+	//keeps its cap and the leftover is all on the label's side: what follows it
+	//in the row is what it touches, bar that sibling's own margin, and the
+	//row's own right edge when nothing follows.
+	[AvaloniaTheory]
+	[InlineData(ConfigWindowTab.Audio, "sldAudioVolume", 150.0)]
+	[InlineData(ConfigWindowTab.Audio, "cboAudioDevice", 200.0)]
+	[InlineData(ConfigWindowTab.Input, "sldControlsRumble", 150.0)]
+	[InlineData(ConfigWindowTab.Input, "sldControlsDeadzone", 150.0)]
+	[InlineData(ConfigWindowTab.Look, "cboLookPixels", 200.0)]
+	[InlineData(ConfigWindowTab.Look, "cboLookScreen", 200.0)]
+	public void A_capped_row_control_keeps_its_cap_at_its_row_s_right_edge(ConfigWindowTab tab, string name, double cap)
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model) = Show(Workspace.Play, InterfaceSize.ExtraLarge);
+		window.OpenPlayerSettingsSheet();
+		Settle(window);
+		int index = PlayerSettingsEssentials.IndexOf(tab);
+		Assert.True(index >= 0, $"{tab} is not a tab of the Play settings strip");
+		window.FindNamed<TabControl>("PlayerSettingsTabs").SelectedIndex = index;
+		Settle(window);
+
+		Control control = window.FindNamed<Control>(name);
+		Assert.True(control.IsOnScreen(), $"{name} is not on screen on {tab}");
+		Grid row = control.GetVisualAncestors().OfType<Grid>().First(g => g.Classes.Contains("setting-row") || g.Classes.Contains("look-row"));
+		//The cap is the control's own width, before the Interface size transform:
+		//BoxIn reports the drawn box, which is this times 1.5.
+		Assert.Equal(cap, control.Bounds.Width, 0.5);
+		Rect box = BoxIn(control, window);
+
+		//The cell boundary the control has to be flush against: the row's own
+		//right edge, or the cell of the first thing drawn after it. That cell
+		//starts at the sibling's origin less its own left margin, which is a
+		//layout-space offset - it goes through the Interface size transform with
+		//the control, so it is translated rather than subtracted.
+		Rect rowBox = BoxIn(row, window);
+		double flushAt = rowBox.Right;
+		foreach(Control sibling in row.Children) {
+			if(sibling == control || !sibling.IsEffectivelyVisible || sibling.Bounds.Width <= 0) {
+				continue;
+			}
+			Rect siblingBox = BoxIn(sibling, window);
+			if(siblingBox.Left >= box.Right - 0.5) {
+				flushAt = Math.Min(flushAt, sibling.TranslatePoint(new Point(-sibling.Margin.Left, 0), window)!.Value.X);
+			}
+		}
+		Assert.Equal(flushAt, box.Right, 0.5);
+		model.ClosePlayerSettings();
+	}
+
+	//#1123: the cap follows the room, so it shrinks with the window instead of
+	//leaving Done past the right edge - on every tab, at the largest size, in
+	//the window's own starting size.
+	[AvaloniaTheory]
+	[InlineData(ConfigWindowTab.Display)]
+	[InlineData(ConfigWindowTab.Look)]
+	[InlineData(ConfigWindowTab.Audio)]
+	[InlineData(ConfigWindowTab.Input)]
+	[InlineData(ConfigWindowTab.System)]
+	public void Done_stays_inside_the_small_window_at_the_largest_size(ConfigWindowTab tab)
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model) = Show(Workspace.Play, InterfaceSize.ExtraLarge, 512, 505);
+		window.OpenPlayerSettingsSheet();
+		Settle(window);
+		int index = PlayerSettingsEssentials.IndexOf(tab);
+		Assert.True(index >= 0, $"{tab} is not a tab of the Play settings strip");
+		window.FindNamed<TabControl>("PlayerSettingsTabs").SelectedIndex = index;
+		Settle(window);
+
+		Button done = window.FindNamed<Button>("btnPlayerSettingsDone");
+		Assert.True(done.IsOnScreen(), $"Done is off screen on {tab}");
+		Rect doneBox = BoxIn(done, window);
+		Assert.True(doneBox.Left >= 0 && doneBox.Top >= 0, $"Done starts at {doneBox.TopLeft} on {tab}");
+		Assert.True(doneBox.Right <= window.Bounds.Width, $"Done's right edge {doneBox.Right} is past the {window.Bounds.Width} window on {tab}");
+		Assert.True(doneBox.Bottom <= window.Bounds.Height, $"Done's bottom edge {doneBox.Bottom} is past the {window.Bounds.Height} window on {tab}");
 		model.ClosePlayerSettings();
 	}
 

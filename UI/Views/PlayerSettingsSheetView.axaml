@@ -35,13 +35,19 @@
 	Audio | Controls | System strip, the page, and one Done that keeps the
 	changes (Esc does the same, back to W-P4). Advanced keeps the classic
 	ConfigWindow. ADR-0256 Decision 8 added System: the first run's storage and
-	keyboard-preset choices, which no longer stand in front of the window.-->
+	keyboard-preset choices, which no longer stand in front of the window.
+	#1123 (ADR-0269 Decision 6): both sides of the box are capped against the
+	room the host gives the sheet - MaxHeight already was, MaxWidth now is - so
+	at a larger Interface size in a window too small for 480 * factor the sheet
+	shrinks with the window instead of hanging off both sides of it and taking
+	Done, past the right edge, with it. 480 stays the width wherever it fits.-->
 	<Border
 		Name="PlayerSettingsSheet"
 		Classes="sheet"
 		Width="480"
 		Height="{Binding PlayerSheetHeight}"
 		MaxHeight="{Binding $parent[UserControl].Bounds.Height, Converter={x:Static c:RoomLeftConverter.Instance}, ConverterParameter=32}"
+		MaxWidth="{Binding $parent[UserControl].Bounds.Width, Converter={x:Static c:RoomLeftConverter.Instance}, ConverterParameter=32}"
 		HorizontalAlignment="Center"
 		VerticalAlignment="Top"
 		Margin="0 24 0 0"

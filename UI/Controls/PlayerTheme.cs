@@ -51,17 +51,22 @@ namespace Mesen.Controls
 		}
 	}
 
-	//#1111, ADR-0269 Decision 6: a sheet's height cap - the room its host gives
-	//it (already in the transformed space) less the ConverterParameter's margin.
+	//#1111, ADR-0269 Decision 6: a sheet's cap on one side of its box - the room
+	//its host gives it (already in the transformed space) less the
+	//ConverterParameter's margin. The rule itself is Mesen.Logic.SheetRoom,
+	//host-free so UI.Tests can pin it (ADR-0123); this is the XAML-shaped
+	//adapter, and the one thing it adds is reading what a binding hands over.
 	public class RoomLeftConverter : IValueConverter
 	{
 		public static readonly RoomLeftConverter Instance = new();
 
 		public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
 		{
-			double room = value is double height ? height : double.PositiveInfinity;
 			double margin = parameter is string text ? double.Parse(text, CultureInfo.InvariantCulture) : 0;
-			return room > margin ? room - margin : double.PositiveInfinity;
+			//A binding that did not resolve hands over an AvaloniaProperty.
+			//UnsetValue or a BindingNotification, not a number: SheetRoom.Cap
+			//answers those with the sheet's own size rather than a collapse.
+			return SheetRoom.Cap(value as double?, margin);
 		}
 
 		public object? ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
