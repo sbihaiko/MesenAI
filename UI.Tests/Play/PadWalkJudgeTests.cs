@@ -7,10 +7,13 @@ namespace Mesen.Tests.Play
 	//#1107: PadWalk.Judge is the pad-walk rule, pure over what the walk observed.
 	//Each failure mode is handed a doctored observation so it is proven to fail
 	//without a broken build; the live walk is UI.HeadlessTests/PlayPadWalkTests.
+	//#1154: reachability is asked by LABEL, over this side of the wall - the rule
+	//lived in the headless suite, which CI skips, and the labels are what makes it
+	//answerable at all (a rebuilt page is not a pad gap).
 	public class PadWalkJudgeTests
 	{
-		private static readonly PadWalkControl A = new(new object(), "A");
-		private static readonly PadWalkControl B = new(new object(), "B");
+		private static readonly PadWalkControl A = new("A");
+		private static readonly PadWalkControl B = new("B");
 
 		private static PadWalkObservation Clean() => new(
 			"Surface", false, new[] { A, B }, new[] { A, B }, true,
@@ -26,16 +29,22 @@ namespace Mesen.Tests.Play
 		[Fact]
 		public void An_unreachable_control_fails_the_walk()
 		{
-			PadWalkObservation o = Clean() with { Interactive = new[] { A, B, new PadWalkControl(new object(), "Orphan") } };
+			PadWalkObservation o = Clean() with { Interactive = new[] { A, B, new PadWalkControl("Orphan") } };
 			Assert.Contains(PadWalk.Judge(o), p => p.StartsWith("Surface: Orphan is not reachable from the pad"));
 		}
 
+		//#1154: the rule is a LABEL-set compare and not an identity one, and this
+		//is the case that made it so. The walk lists a control per INSTANCE, and a
+		//surface that rebuilds its page under the pad (the Settings strip replaces
+		//the page a press moves away from) hands it the same control again as a new
+		//instance - which an identity judgement reports as a pad gap while the pad
+		//in fact landed on that control. What a surface shows is a set of control
+		//kinds, the names a player would point at.
 		[Fact]
-		public void An_unreachable_twin_with_a_reached_controls_name_still_fails_the_walk()
+		public void A_second_copy_of_a_reached_control_is_not_a_pad_gap()
 		{
-			PadWalkControl twin = new(new object(), "A");
-			PadWalkObservation o = Clean() with { Interactive = new[] { A, B, twin } };
-			Assert.Contains(PadWalk.Judge(o), p => p.StartsWith("Surface: A is not reachable from the pad"));
+			PadWalkObservation o = Clean() with { Interactive = new[] { A, B, new PadWalkControl("A") } };
+			Assert.Empty(PadWalk.Judge(o));
 		}
 
 		[Fact]
