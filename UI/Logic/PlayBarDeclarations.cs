@@ -75,6 +75,24 @@ public static class PlayBarDeclarations
 		new PlayBarEntry(PlayAction.Back, "BarBack"),
 	};
 
+	//#1108: every other pad-drivable sheet presses its focused control with A and
+	//leaves with B (the Esc router the pad's B shares), so they declare the same
+	//two actions as the folder browser.
+	public static readonly IReadOnlyList<PlayBarEntry> Sheet = Browser;
+
+	//#1108 (#1120 review finding): Library folders… is not the browser. A on
+	//*Add a folder…* adds one and A on a row's Remove removes it, so the bar names
+	//the action the ring is on; anywhere else on the sheet A is the control's own.
+	public static IReadOnlyList<PlayBarEntry> LibraryFoldersSheet(string? focusedName)
+	{
+		return focusedName switch {
+			"RomPickerAddFolder" => new[] { new PlayBarEntry(PlayAction.Confirm, "BarAddFolder"), new PlayBarEntry(PlayAction.Back, "BarBack") },
+			"RomPickerFolderRemove" => new[] { new PlayBarEntry(PlayAction.Confirm, "BarRemoveFolder"), new PlayBarEntry(PlayAction.Back, "BarBack") },
+			"RomPickerBack" => new[] { new PlayBarEntry(PlayAction.Confirm, "BarBack") },
+			_ => Browser
+		};
+	}
+
 	public static readonly IReadOnlyList<PlayBarEntry> PauseOverlay = new[] {
 		new PlayBarEntry(PlayAction.Confirm, "BarSelect"),
 		new PlayBarEntry(PlayAction.Back, "BarResume"),

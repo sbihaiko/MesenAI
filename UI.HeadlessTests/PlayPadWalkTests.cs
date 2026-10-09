@@ -85,7 +85,7 @@ public class PlayPadWalkTests : IDisposable
 	//null). Home and the shared bar's own surfaces are on it; these are the
 	//remainder of #1108's list, and a surface that joins the bar must leave
 	//this list (the test fails on a stale entry as well as on a new one).
-	public static readonly string[] KnownBarGaps = { "SaveStates", "Enhancements", "ToolSheetAbout" };
+	public static readonly string[] KnownBarGaps = { };
 
 	//Surfaces whose console chips (RomPickerConsoleFilter) the pad cannot land on:
 	//LB/RB cycle the selection but the focus never enters the chip ListBox (#1107

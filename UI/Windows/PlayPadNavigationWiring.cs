@@ -162,13 +162,13 @@ namespace Mesen.Windows
 		{
 			//W-X1: Quit game's question, over everything.
 			focus.When(model.QuitGameConfirm, [nameof(InterruptionViewModel.IsVisible)],
-				() => model.QuitGameConfirm.IsVisible, () => Named(window, "QuitGameKeepButton"));
+				() => model.QuitGameConfirm.IsVisible, () => Named(window, "QuitGameKeepButton"), actions: () => PlayBarDeclarations.Sheet);
 			//ADR-0250's task doors' sheets (the archive's list, Look's Adjust…, a
 			//door's tool): HandleInWindowSheetEsc's order, SelectRom → Shader → Tool.
 			focus.When(model.SelectRomSheet, [nameof(PlaySelectRomSheetViewModel.IsVisible)],
-				() => model.SelectRomSheet.IsVisible, () => Named(window, "SelectRomSheetSearch"));
+				() => model.SelectRomSheet.IsVisible, () => Named(window, "SelectRomSheetSearch"), actions: () => PlayBarDeclarations.Sheet);
 			focus.When(model, [nameof(MainWindowViewModel.IsShaderSheetVisible)],
-				() => model.IsShaderSheetVisible, () => Named(window, "ShaderSheetOk"));
+				() => model.IsShaderSheetVisible, () => Named(window, "ShaderSheetOk"), actions: () => PlayBarDeclarations.Sheet);
 			//The tool sheet is a surface for every kind it can show, not only the
 			//barcode: IsPlaySurfaceOverGame counts ToolSheet.IsVisible, and About,
 			//Command Line, Check for Updates and the video recorder's settings all
@@ -180,13 +180,14 @@ namespace Mesen.Windows
 			//only on screen in the barcode kind is the same bug in a new place.
 			focus.When(model.ToolSheet, [nameof(PlayerToolSheetViewModel.IsVisible)],
 				() => model.ToolSheet.IsVisible,
-				() => model.ToolSheet.IsBarcode ? Named(window, "ToolSheetBarcode") : FirstFocusable(window, "ToolSheet"));
+				() => model.ToolSheet.IsBarcode ? Named(window, "ToolSheetBarcode") : FirstFocusable(window, "ToolSheet"),
+				actions: () => PlayBarDeclarations.Sheet);
 			//The edge-flow sheets, which HandleEdgeFlowEsc answers only after the
 			//in-window ones: Bios, then ControllerSetup.
 			focus.When(model.BiosSheet, [nameof(PlayBiosSheetViewModel.IsVisible)],
-				() => model.BiosSheet.IsVisible, () => Named(window, "BiosSheetChooseFile"));
+				() => model.BiosSheet.IsVisible, () => Named(window, "BiosSheetChooseFile"), actions: () => PlayBarDeclarations.Sheet);
 			focus.When(model.ControllerSetup, [nameof(PlayControllerSetupViewModel.IsVisible)],
-				() => model.ControllerSetup.IsVisible, () => Named(window, "ControllerSetupSkip"));
+				() => model.ControllerSetup.IsVisible, () => Named(window, "ControllerSetupSkip"), actions: () => PlayBarDeclarations.Sheet);
 			//W-P4's sheets, in CurrentPlaySheet()'s order - the chain PlayEsc.Next
 			//reads, so the surface Esc would close first is the one that holds the
 			//focus: Settings, Controller (ADR-0255's sheet, read right after
@@ -204,14 +205,14 @@ namespace Mesen.Windows
 			//could not leave the four choices.
 			focus.When(model, [nameof(MainWindowViewModel.IsPlayerSystemTabVisible)],
 				() => model.IsPlayerSystemTabVisible, () => Named(window, "SystemStorageUserFolder"),
-				() => Named(window, "PlayerSettingsSheet"));
+				() => Named(window, "PlayerSettingsSheet"), () => PlayBarDeclarations.Sheet);
 			//#910: the sheet names its own root. Inferred from the strip's tab,
 			//the root was the TabControl, which holds neither the page's rows
 			//nor the footer (Exit full screen, Done), so the D-pad could not
 			//leave the strip.
 			focus.When(model, [nameof(MainWindowViewModel.IsPlayerSettingsVisible)],
 				() => model.IsPlayerSettingsVisible, () => Named(window, "tabPlayerWindow"),
-				() => Named(window, "PlayerSettingsSheet"));
+				() => Named(window, "PlayerSettingsSheet"), () => PlayBarDeclarations.Sheet);
 			//ADR-0255's Controller sheet, which CurrentPlaySheet() reads right
 			//after Settings (one of the two is current at a time; the sheet
 			//replaces the Settings sheet's Controls landing), so the arbiter's
@@ -225,27 +226,30 @@ namespace Mesen.Windows
 			//More in Options…, leaves for the classic Input window, which
 			//ADR-0256's non-goals say a pad cannot drive.
 			focus.When(model.ControllerSheet, [nameof(ControllerSheetViewModel.IsVisible)],
-				() => model.ControllerSheet.IsVisible, () => Named(window, "ControllerSheetDone"));
+				() => model.ControllerSheet.IsVisible, () => Named(window, "ControllerSheetDone"), actions: () => PlayBarDeclarations.Sheet);
 			focus.When(model.PackDepSheet, [nameof(PlayPackDepSheetViewModel.IsVisible)],
-				() => model.PackDepSheet.IsVisible, () => Named(window, "PackDepSheetChooseFile"));
+				() => model.PackDepSheet.IsVisible, () => Named(window, "PackDepSheetChooseFile"), actions: () => PlayBarDeclarations.Sheet);
 			//#848: and it names its own search root for the same reason #845's
 			//picker does - its first control is a row of its own list, so the
 			//inference in SearchRoot would answer with that row's item container
 			//and the D-pad could not leave the first choice.
 			focus.When(model, [nameof(MainWindowViewModel.IsPlayerPackPickerVisible)],
 				() => model.IsPlayerPackPickerVisible, () => PackPickerChoice(window),
-				() => Named(window, "PlayerPackPicker"));
+				() => Named(window, "PlayerPackPicker"), () => PlayBarDeclarations.Sheet);
 			focus.When(model, [nameof(MainWindowViewModel.IsEnhancementsPanelVisible)],
-				() => model.IsEnhancementsPanelVisible, () => Named(window, "EnhancementsModernCheckBox"));
+				() => model.IsEnhancementsPanelVisible, () => Named(window, "EnhancementsModernCheckBox"), actions: () => PlayBarDeclarations.Sheet);
 			focus.When(model, [nameof(MainWindowViewModel.IsPackDetailVisible)],
 				() => model.IsPackDetailVisible,
-				() => Named(window, PackDetailPendingFile.FirstControl(model.PackDepSheet.HasPending, model.PackDetailCanChange)));
+				() => Named(window, PackDetailPendingFile.FirstControl(model.PackDepSheet.HasPending, model.PackDetailCanChange)),
+					actions: () => PlayBarDeclarations.Sheet);
 			focus.When(model.CheatsSheet, [nameof(PlayerCheatsSheetViewModel.IsVisible)],
 				() => model.CheatsSheet.IsVisible,
-				() => Named(window, model.CheatsSheet.IsSearchEnabled ? "CheatsSearchBox" : "CheatsDoneButton"));
+				() => Named(window, model.CheatsSheet.IsSearchEnabled ? "CheatsSearchBox" : "CheatsDoneButton"),
+				actions: () => PlayBarDeclarations.Sheet);
 			focus.When(model.ReplaysSheet, [nameof(PlayerReplaysSheetViewModel.IsVisible)],
 				() => model.ReplaysSheet.IsVisible,
-				() => EnabledNamed(window, "ReplaysWatchButton") ?? Named(window, "ReplaysDoneButton"));
+				() => EnabledNamed(window, "ReplaysWatchButton") ?? Named(window, "ReplaysDoneButton"),
+				actions: () => PlayBarDeclarations.Sheet);
 			//#909: the Save states sheet is a grid of rows (#848's reason applies
 			//here too: its first control is a row of its own list), so it names its
 			//own search root and its target is the row's own *Save here* - the slot
@@ -253,7 +257,7 @@ namespace Mesen.Windows
 			//first slot).
 			focus.When(model, [nameof(MainWindowViewModel.IsSaveStatesSheetVisible)],
 				() => model.IsSaveStatesSheetVisible, () => SaveStatesFocusTarget(window, model),
-				() => Named(window, "PlayerSaveStatesSheet"));
+				() => Named(window, "PlayerSaveStatesSheet"), () => PlayBarDeclarations.Sheet);
 			//W-P4 itself, under every sheet opened from it and over the game.
 			focus.When(model, [nameof(MainWindowViewModel.IsPlayerOverlayVisible)],
 				() => model.IsPlayerOverlayVisible, () => Named(window, "OverlayResumeButton"),
@@ -301,7 +305,9 @@ namespace Mesen.Windows
 				 nameof(PlayerRomPickerViewModel.TilesRevision), nameof(PlayerRomPickerViewModel.FoldersRevision)],
 				() => model.RomPicker.IsVisible, () => RomPickerFocusTarget(window, model),
 				() => Named(window, "PlayerRomPickerSheet"),
-				() => model.RomPicker.IsLibrarySurfaceVisible ? LibraryDeclaration(window, model) : PlayBarDeclarations.Browser);
+				() => model.RomPicker.IsLibrarySurfaceVisible ? LibraryDeclaration(window, model)
+					: model.RomPicker.IsFoldersSheetVisible ? PlayBarDeclarations.LibraryFoldersSheet((TopLevel.GetTopLevel(window)?.FocusManager?.GetFocusedElement() as Control)?.Name)
+					: PlayBarDeclarations.Browser);
 
 			//The content area under all of them: the home's primary action, the
 			//Continue button, the slot grid over a game. It is not a claim (it is

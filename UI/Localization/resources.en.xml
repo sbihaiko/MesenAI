@@ -2262,6 +2262,8 @@
 		<Message ID="BarBack">Back</Message>
 		<Message ID="BarLibraryFolders">Library folders</Message>
 		<Message ID="BarBrowseFile">Browse a file</Message>
+		<Message ID="BarAddFolder">Add</Message>
+		<Message ID="BarRemoveFolder">Remove</Message>
 		<Message ID="BarSearch">Search</Message>
 		<Message ID="BarFavorite">Favorite</Message>
 		<Message ID="BarUnfavorite">Unfavorite</Message>
