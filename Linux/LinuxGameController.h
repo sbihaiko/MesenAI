@@ -18,8 +18,6 @@ private:
 	Emulator* _emu = nullptr;
 
 	unique_ptr<ff_effect> _rumbleEffect;
-	//#1106: the menu tick's own kernel effect, so a tick never reprograms the gameplay one.
-	unique_ptr<ff_effect> _tickEffect;
 	bool _enableForceFeedback = false;
 	int _axisDefaultValue[0x100] = {};
 
@@ -27,7 +25,6 @@ private:
 	bool CheckAxis(unsigned int code, bool forPositive);
 	bool CheckButton(int btn);
 	void Calibrate();
-	void ApplyForceFeedback(uint16_t rightMagnitude, uint16_t leftMagnitude);
 
 public:
 	~LinuxGameController();
@@ -40,8 +37,6 @@ public:
 	optional<int16_t> GetAxisPosition(int axis);
 
 	void SetForceFeedback(uint16_t rightMagnitude, uint16_t leftMagnitude);
-	//Tester button: rumbles even before any button was pressed on the pad.
-	void TestForceFeedback(uint16_t rightMagnitude, uint16_t leftMagnitude);
 
 	//Host input tester (PRD slice I.0): device identity from libevdev - product
 	//name, USB vendor/product ids (0 when the device does not expose them) and
@@ -50,9 +45,4 @@ public:
 	uint32_t GetVendorId();
 	uint32_t GetProductId();
 	bool HasRumble();
-
-	//#1106: one short rumble pulse on this device; false when it has no usable
-	//force feedback effect (the same condition HasRumble reports); a pad with a
-	//single slot ticks through the gameplay effect.
-	bool PlayTick();
 };

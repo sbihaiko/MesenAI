@@ -11,35 +11,6 @@ XInputManager::XInputManager(Emulator* emu)
 	}
 }
 
-XInputManager::~XInputManager()
-{
-	for(int i = 0; i < XUSER_MAX_COUNT; i++) {
-		if(_tickTimers[i].Handle) {
-			//Blocks until a running callback returns, so none outlives this object.
-			DeleteTimerQueueTimer(nullptr, _tickTimers[i].Handle, INVALID_HANDLE_VALUE);
-		}
-	}
-}
-
-VOID CALLBACK XInputManager::OnTickExpired(PVOID context, BOOLEAN timerOrWaitFired)
-{
-	TickTimer* timer = (TickTimer*)context;
-	timer->Owner->EndTick(timer->Slot);
-}
-
-void XInputManager::EndTick(uint8_t gamepadPort)
-{
-	std::lock_guard<std::mutex> lock(_rumbleLock);
-	if(_tickStopAt[gamepadPort] == 0) {
-		return;
-	}
-	_tickStopAt[gamepadPort] = 0;
-	XINPUT_VIBRATION restore = {};
-	restore.wRightMotorSpeed = _desiredRumble[gamepadPort].Right;
-	restore.wLeftMotorSpeed = _desiredRumble[gamepadPort].Left;
-	XInputSetState(gamepadPort, &restore);
-}
-
 void XInputManager::RefreshState()
 {
 	XINPUT_STATE state;
@@ -156,50 +127,8 @@ void XInputManager::SetForceFeedback(uint8_t gamepadPort, uint16_t magnitudeRigh
 	if(gamepadPort >= XUSER_MAX_COUNT || !_gamePadConnected[gamepadPort]) {
 		return;
 	}
-	std::lock_guard<std::mutex> lock(_rumbleLock);
-	_desiredRumble[gamepadPort].Right = magnitudeRight;
-	_desiredRumble[gamepadPort].Left = magnitudeLeft;
-	if(_tickStopAt[gamepadPort] != 0) {
-		//A tick is playing; EndTick restores this request when it ends.
-		return;
-	}
 	XINPUT_VIBRATION settings = {};
 	settings.wRightMotorSpeed = magnitudeRight;
 	settings.wLeftMotorSpeed = magnitudeLeft;
 	XInputSetState(gamepadPort, &settings);
-}
-
-bool XInputManager::PlayTick(uint8_t gamepadPort)
-{
-	if(!IsConnected(gamepadPort)) {
-		return false;
-	}
-	std::lock_guard<std::mutex> lock(_rumbleLock);
-	XINPUT_VIBRATION tick = {};
-	tick.wRightMotorSpeed = 0x6000;
-	tick.wLeftMotorSpeed = 0x6000;
-	if(XInputSetState(gamepadPort, &tick) != ERROR_SUCCESS) {
-		return false;
-	}
-
-	//One-shot 40 ms timer per slot, created on first use and re-armed after that.
-	TickTimer& timer = _tickTimers[gamepadPort];
-	bool armed;
-	if(timer.Handle) {
-		armed = ChangeTimerQueueTimer(nullptr, timer.Handle, 40, 0) != 0;
-	} else {
-		timer.Owner = this;
-		timer.Slot = gamepadPort;
-		armed = CreateTimerQueueTimer(&timer.Handle, nullptr, OnTickExpired, &timer, 40, 0, WT_EXECUTEONLYONCE) != 0;
-	}
-	if(!armed) {
-		//No timer, no way to end the pulse: put the requested rumble straight back.
-		XINPUT_VIBRATION restore = {};
-		restore.wRightMotorSpeed = _desiredRumble[gamepadPort].Right;
-		restore.wLeftMotorSpeed = _desiredRumble[gamepadPort].Left;
-		XInputSetState(gamepadPort, &restore);
-		return false;
-	}
-	_tickStopAt[gamepadPort] = GetTickCount64() + 40;
-	return true;
 }

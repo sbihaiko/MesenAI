@@ -74,18 +74,6 @@ LinuxGameController::LinuxGameController(Emulator* emu, int deviceID, int fileDe
 	if(rc < 0) {
 		MessageManager::Log("Could not initialize force feedback effect");
 		_rumbleEffect.reset();
-	} else {
-		_tickEffect.reset(new ff_effect());
-		memset(_tickEffect.get(), 0, sizeof(ff_effect));
-		_tickEffect->type = FF_RUMBLE;
-		_tickEffect->id = -1;
-		_tickEffect->u.rumble.strong_magnitude = 0x6000;
-		_tickEffect->u.rumble.weak_magnitude = 0x6000;
-		_tickEffect->replay.length = 40;
-		_tickEffect->replay.delay = 0;
-		if(ioctl(_fd, EVIOCSFF, _tickEffect.get()) < 0) {
-			_tickEffect.reset();
-		}
 	}
 
 	_eventThread = std::thread([=]() {
@@ -297,22 +285,7 @@ optional<int16_t> LinuxGameController::GetAxisPosition(int axis)
 
 void LinuxGameController::SetForceFeedback(uint16_t magnitudeRight, uint16_t magnitudeLeft)
 {
-	if(!_enableForceFeedback) {
-		return;
-	}
-
-	ApplyForceFeedback(magnitudeRight, magnitudeLeft);
-}
-
-void LinuxGameController::TestForceFeedback(uint16_t magnitudeRight, uint16_t magnitudeLeft)
-{
-	//The tester button must work on an idle pad, so it skips the button-press gate.
-	ApplyForceFeedback(magnitudeRight, magnitudeLeft);
-}
-
-void LinuxGameController::ApplyForceFeedback(uint16_t magnitudeRight, uint16_t magnitudeLeft)
-{
-	if(!_rumbleEffect) {
+	if(!_rumbleEffect || !_enableForceFeedback) {
 		return;
 	}
 
@@ -333,46 +306,6 @@ void LinuxGameController::ApplyForceFeedback(uint16_t magnitudeRight, uint16_t m
 	if(rc < 0) {
 		//MessageManager::Log("Could not play force feedback effect.");
 	}
-}
-
-bool LinuxGameController::PlayTick()
-{
-	if(_tickEffect) {
-		//Uploaded once at setup; playing it never touches the gameplay effect.
-		struct input_event play = {};
-		play.type = EV_FF;
-		play.code = _tickEffect->id;
-		play.value = 1;
-		return write(_fd, (const void*)&play, sizeof(play)) >= 0;
-	}
-
-	if(!_rumbleEffect) {
-		return false;
-	}
-
-	//A pad with a single force-feedback slot has no room for a tick effect: borrow
-	//the gameplay effect for a 40 ms pulse, then put its values back in memory so
-	//the next SetForceFeedback uploads the gameplay rumble again.
-	uint16_t strong = _rumbleEffect->u.rumble.strong_magnitude;
-	uint16_t weak = _rumbleEffect->u.rumble.weak_magnitude;
-	uint16_t length = _rumbleEffect->replay.length;
-	_rumbleEffect->u.rumble.strong_magnitude = 0x6000;
-	_rumbleEffect->u.rumble.weak_magnitude = 0x6000;
-	_rumbleEffect->replay.length = 40;
-
-	bool played = false;
-	if(ioctl(_fd, EVIOCSFF, _rumbleEffect.get()) >= 0) {
-		struct input_event play = {};
-		play.type = EV_FF;
-		play.code = _rumbleEffect->id;
-		play.value = 1;
-		played = write(_fd, (const void*)&play, sizeof(play)) >= 0;
-	}
-
-	_rumbleEffect->u.rumble.strong_magnitude = strong;
-	_rumbleEffect->u.rumble.weak_magnitude = weak;
-	_rumbleEffect->replay.length = length;
-	return played;
 }
 
 bool LinuxGameController::IsDisconnected()
@@ -403,9 +336,7 @@ uint32_t LinuxGameController::GetProductId()
 
 bool LinuxGameController::HasRumble()
 {
-	//The pad can rumble; PlayTick uses the tick effect when it got a slot and the
-	//gameplay effect otherwise, so every pad that rumbles can tick.
-	return _rumbleEffect != nullptr;
+	return _enableForceFeedback;
 }
 
 /*

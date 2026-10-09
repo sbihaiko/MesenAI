@@ -64,5 +64,4 @@ public:
 	bool GetGamepadInfo(uint32_t index, GamepadInfo& info) override;
 	bool GetGamepadState(uint32_t index, GamepadState& state) override;
 	void TestForceFeedback(uint32_t index, uint16_t magnitudeRight, uint16_t magnitudeLeft) override;
-	bool PlayGamepadTick(uint32_t index) override;
 };

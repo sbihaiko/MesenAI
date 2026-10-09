@@ -261,14 +261,9 @@ bool LinuxKeyManager::GetGamepadState(uint32_t index, GamepadState& state)
 	return true;
 }
 
-bool LinuxKeyManager::PlayGamepadTick(uint32_t index)
-{
-	return index < _controllers.size() && _controllers[index]->PlayTick();
-}
-
 void LinuxKeyManager::TestForceFeedback(uint32_t index, uint16_t magnitudeRight, uint16_t magnitudeLeft)
 {
 	if(index < _controllers.size()) {
-		_controllers[index]->TestForceFeedback(magnitudeRight, magnitudeLeft);
+		_controllers[index]->SetForceFeedback(magnitudeRight, magnitudeLeft);
 	}
 }
