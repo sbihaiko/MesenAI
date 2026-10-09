@@ -1,4 +1,5 @@
 using CommunityToolkit.Mvvm.ComponentModel;
+using Mesen.Logic;
 using System.Collections.Generic;
 
 namespace Mesen.Config;
@@ -27,6 +28,10 @@ public partial class PlayerEnhancementsConfig : BaseConfig<PlayerEnhancementsCon
 	//there is no recent game, so nothing reads this key any more; it is kept
 	//so an existing settings.json still round-trips it unchanged.
 	[ObservableProperty] public partial bool WelcomeCardDismissed { get; set; } = false;
+
+	//#1110 (spec #1102): the games the player favorited, newest first, by library
+	//path. Home's Favorites shelf reads it; a file without the key loads empty.
+	public PlayFavorites Favorites { get; set; } = new();
 
 	//ADR-0253 §4 (W.5): per-ROM-sha1 widescreen support the core measured,
 	//keyed like EnhancementPackConfig.RomPackPreference. Only a measured
