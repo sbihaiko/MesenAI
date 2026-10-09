@@ -3,6 +3,7 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
+using Mesen.Logic;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
@@ -36,8 +37,9 @@ internal sealed class PlayFocusOnOpen
 	private readonly Window _window;
 	private readonly List<Claim> _claims = new();
 	private Func<Control?>? _content;
+	private Func<IReadOnlyList<PlayBarEntry>>? _contentActions;
 
-	private sealed record Claim(Func<bool> IsOpen, Func<Control?> Target, Func<Control?>? Root = null);
+	private sealed record Claim(Func<bool> IsOpen, Func<Control?> Target, Func<Control?>? Root = null, Func<IReadOnlyList<PlayBarEntry>>? Actions = null);
 
 	public PlayFocusOnOpen(Window window)
 	{
@@ -56,9 +58,14 @@ internal sealed class PlayFocusOnOpen
 	//then the row's own item container - one row, and a D-pad press inside it has
 	//nowhere to go. A surface that says what its walk stays inside keeps the
 	//presses working past the first row (#845).
-	public void When(INotifyPropertyChanged source, string[] properties, Func<bool> isOpen, Func<Control?> target, Func<Control?>? root = null)
+	//
+	//`actions` is #1104's half of the same decision: the surface that claims the
+	//focus also declares what its buttons do, so the shared action bar
+	//(PlayActionBar) lists exactly what the surface performs and no surface
+	//writes a footer of its own. Null is a surface not on the bar yet (#1108).
+	public void When(INotifyPropertyChanged source, string[] properties, Func<bool> isOpen, Func<Control?> target, Func<Control?>? root = null, Func<IReadOnlyList<PlayBarEntry>>? actions = null)
 	{
-		Claim claim = new(isOpen, target, root);
+		Claim claim = new(isOpen, target, root, actions);
 		_claims.Add(claim);
 		Watch(source, properties);
 	}
@@ -67,9 +74,10 @@ internal sealed class PlayFocusOnOpen
 	//grid over a game. Deliberately not a claim - it is not in the Esc stack,
 	//and the screens that make it up also run in Advanced, where no surface
 	//above it exists. It is what is left when no claim is open.
-	public void Content(INotifyPropertyChanged source, string[] properties, Func<Control?> target)
+	public void Content(INotifyPropertyChanged source, string[] properties, Func<Control?> target, Func<IReadOnlyList<PlayBarEntry>>? actions = null)
 	{
 		_content = target;
+		_contentActions = actions;
 		Watch(source, properties);
 	}
 
@@ -240,6 +248,14 @@ internal sealed class PlayFocusOnOpen
 			return false;
 		}
 		return target.Focus(NavigationMethod.Directional);
+	}
+
+	//What the surface holding the focus declares, or null when it declared
+	//nothing (or nothing is up). The topmost open claim speaks; the content area
+	//speaks only when no claim is open, the same order Apply decides the focus in.
+	public IReadOnlyList<PlayBarEntry>? Declared()
+	{
+		return Open() is Claim claim ? claim.Actions?.Invoke() : _contentActions?.Invoke();
 	}
 
 	private Claim? Open()

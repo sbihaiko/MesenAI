@@ -113,42 +113,6 @@ public class PauseOverlayViewTests : IDisposable
 		Assert.Matches("^(none|[1-6] on)$", window.FindNamed<TextBlock>("OverlayEnhancementsValue").Text ?? "");
 	}
 
-	//ADR-0256 Decision 6: the footer names the control in the player's hand, and
-	//the pad navigation bridge is what answers which device that is. The rule is
-	//pinned host-free in UI.Tests/Play/PlayResumeHintTests; this is the wiring -
-	//the seam reaches the realized TextBlock.
-	[AvaloniaFact]
-	public void The_footer_names_the_control_in_the_players_hand()
-	{
-		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
-		(MainWindow window, MainWindowViewModel model) = ShowPlay();
-
-		//(The seam is read when the overlay opens, so each state is opened - and
-		//the footer only exists in the tree once it has been opened once.)
-		model.InHandDevice = () => (PlayInputDevice.Keyboard, null);
-		model.OpenPauseOverlay();
-		Dispatcher.UIThread.RunJobs();
-		Assert.True(window.FindNamed<Border>("PlayerOverlay").IsOnScreen());
-
-		TextBlock footer = window.FindNamed<TextBlock>("OverlayResumeHint");
-		Assert.Equal("Esc to resume", footer.Text);
-
-		model.InHandDevice = () => (PlayInputDevice.Controller, PadFamily.Xbox);
-		model.OpenPauseOverlay();
-		Dispatcher.UIThread.RunJobs();
-		Assert.Equal("B to resume", footer.Text);
-
-		model.InHandDevice = () => (PlayInputDevice.Controller, PadFamily.Ps4);
-		model.OpenPauseOverlay();
-		Dispatcher.UIThread.RunJobs();
-		Assert.Equal("Circle to resume", footer.Text);
-
-		model.InHandDevice = () => (PlayInputDevice.Controller, null);
-		model.OpenPauseOverlay();
-		Dispatcher.UIThread.RunJobs();
-		Assert.Equal("Leave the menu to resume", footer.Text);
-	}
-
 	//Rule 9 (keyboard as the gamepad proxy, §6): Resume has focus on open and
 	//the arrows walk all seven controls and back.
 	[AvaloniaFact]

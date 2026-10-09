@@ -32,17 +32,17 @@ namespace Mesen.ViewModels
 		private PadPauseReason _padPauseReason;
 		private uint? _lastPadCount;
 
-		//ADR-0256 Decision 6 ("Segue o controle na mão"): W-P4's footer names the
-		//control in the player's hand, not the keyboard's Esc.
-		[ObservableProperty] public partial string OverlayResumeHint { get; private set; } = "";
+		//#1104 (spec #1102): the shared action bar's line - every Play surface on
+		//the bar, W-P4 included, reads it; empty hides the bar.
+		[ObservableProperty] public partial string PlayActionBarText { get; private set; } = "";
 
 		//Which device the player is holding: the pad's family, or null for the
 		//keyboard and for a pad the app cannot tell apart (the two the footer must
 		//not guess between - ADR-0256 Decision 4's reason). The pad navigation
 		//bridge (ADR-0256 Decision 2, next to ShortcutHandler) owns the tracker
-		//that answers this in the running app and assigns it there; until that
-		//lands the answer is the keyboard, which is what the footer said before.
-		//The headless tests replace it to drive every state.
+		//that answers this in the running app and assigns it there (#1104); the
+		//keyboard is the answer until it does. The headless tests replace it to
+		//drive every state.
 		public Func<(PlayInputDevice Device, PadFamily? Family)> InHandDevice { get; set; }
 			= () => (PlayInputDevice.Keyboard, null);
 
@@ -289,9 +289,23 @@ namespace Mesen.ViewModels
 
 			SaveStatesRowValue = BuildSaveStatesSummary();
 
+			RefreshPlayActionBar(PlayActionBarDeclared, PlayActionBarKeyboardOpen);
+		}
+
+		//The surface's declaration and whether the on-screen keyboard is open, as
+		//the bridge last handed them: the overlay opening re-reads the pad in hand
+		//without waiting for the next 50 ms tick.
+		private IReadOnlyList<PlayBarEntry>? PlayActionBarDeclared;
+		private bool PlayActionBarKeyboardOpen;
+
+		//#1104: recompute the bar from what the surface declares, the pad in hand
+		//and the keyboard. Cheap and idempotent, so the bridge calls it every tick.
+		public void RefreshPlayActionBar(IReadOnlyList<PlayBarEntry>? declared, bool keyboardOpen)
+		{
+			PlayActionBarDeclared = declared;
+			PlayActionBarKeyboardOpen = keyboardOpen;
 			(PlayInputDevice device, PadFamily? family) = InHandDevice();
-			PlayResumeHint hint = PlayMenuHint.ResumeHint(device, family);
-			OverlayResumeHint = ResourceHelper.GetMessage(hint.Message, hint.Param);
+			PlayActionBarText = declared is null ? "" : PlayActionBar.Text(declared, device, family, keyboardOpen, key => ResourceHelper.GetMessage(key));
 		}
 
 		//"Slot 1 · 2 min ago": the newest of the ten manual slots (the auto-save

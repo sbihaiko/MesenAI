@@ -339,11 +339,6 @@
 								</Button>
 								<!--ADR-0249 (W-X1): ConfirmExitResetPower asks here, in place of the button.-->
 								<v:OverlayConfirmBanner Name="QuitGameConfirm" DataContext="{Binding QuitGameConfirm}" IsVisible="{Binding IsVisible}" Margin="0 38 0 0" />
-								<!--TEXT2, not the render's TEXT3: TEXT3 on the card is 2.5:1, under
-								PlaySheetsContrastTests' 4.5:1. ADR-0256 Decision 6: the control
-								named is the one in the player's hand, so the line is computed
-								(MainWindowViewModel.PauseOverlay), not a fixed string.-->
-								<TextBlock Name="OverlayResumeHint" Classes="footnote secondary" Text="{Binding OverlayResumeHint}" HorizontalAlignment="Center" Margin="0 26 0 0" />
 							</StackPanel>
 							</ScrollViewer>
 						</Border>
@@ -433,6 +428,16 @@
 					</Panel>
 				</LayoutTransformControl>
 			</Panel>
+
+			<!--#1104 (spec #1102, ADR-0256 Decision 6): the shared action bar. One
+			line, composed by PlayActionBar from what the surface holding the focus
+			declares and the pad in hand (MainWindowViewModel.RefreshPlayActionBar);
+			empty hides it. TEXT2, not the render's TEXT3: TEXT3 is 2.5:1 on the
+			card, under PlaySheetsContrastTests' 4.5:1. Not focusable and not hit
+			testable: it is a footer line, not an element (§13.3 rule 2).-->
+			<Border Name="PlayActionBar" VerticalAlignment="Bottom" HorizontalAlignment="Center" Margin="0 0 0 14" IsHitTestVisible="False" Focusable="False" IsVisible="{Binding PlayActionBarText.Length}">
+				<TextBlock Name="PlayActionBarText" FontSize="{StaticResource PlayerFontFootnote}" Foreground="{StaticResource PlayerText2Brush}" Text="{Binding PlayActionBarText}" />
+			</Border>
 
 			<!--G.3 (PRD Part B §13.5.3): Remaster's project screens (W-R0, W-R0b,
 			W-R1, the W-R3 card); the game keeps running behind them.-->

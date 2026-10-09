@@ -38,7 +38,7 @@ namespace Mesen.Tests.Play
 		//its own copy would pass while the shipped one said something else. This
 		//project has no `<ProjectReference>` to UI.csproj (UI.Tests/AGENTS.md), so the
 		//XML is the only way to the same text - the same route
-		//`GamesFolderNoticeTests`, `PlayResumeHintTests` and `MenuPathHintTests` take.
+		//`GamesFolderNoticeTests`, `PlayActionBarTests` and `MenuPathHintTests` take.
 		private static Dictionary<string, string> ResourceTexts()
 		{
 			XDocument doc = XDocument.Load(Path.Combine(FindRepoRoot(), "UI", "Localization", "resources.en.xml"));

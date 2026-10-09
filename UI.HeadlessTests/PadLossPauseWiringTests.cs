@@ -203,9 +203,9 @@ public class PadLossPauseWiringTests : IDisposable
 
 		_pads = 0;
 		WaitFor(() => EmuApi.IsPaused() && card.IsOnScreen(), "losing the last pad did not pause the game behind W-P4");
-		//No pad in hand: the footer names the keyboard (ADR-0256 Decision 6).
-		TextBlock hint = window.FindNamed<TextBlock>("OverlayResumeHint");
-		Assert.Equal("Esc to resume", hint.Text);
+		//No pad in hand: the shared action bar names the keyboard (ADR-0256 Decision 6, #1104).
+		TextBlock bar = window.FindNamed<TextBlock>("PlayActionBarText");
+		WaitFor(() => (bar.Text ?? "").Contains("Esc Resume"), "the action bar did not name Esc once no pad was in hand");
 		model.TogglePlayerOverlay();
 		WaitFor(() => !EmuApi.IsPaused(), "the keyboard's Esc did not resume the game");
 	}
