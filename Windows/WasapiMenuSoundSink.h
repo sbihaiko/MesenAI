@@ -99,7 +99,7 @@ public:
 
 	bool IsAlive() const override
 	{
-		return _audioClient != nullptr;
+		return _audioClient.Get() != nullptr;
 	}
 
 	uint32_t BufferFrames() const override
