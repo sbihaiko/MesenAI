@@ -6289,11 +6289,13 @@ namespace
 	}
 
 	//#1106 (spec #1102): the host can fire a short haptic tick on ONE connected
-	//pad and says whether it can. Aimable = macOS GameController with haptics
-	//present. Windows (XInput, DirectInput) and Linux (evdev) report every pad as
-	//not aimable and run no tick code (#1121, #1122 are the follow-ups). The backends are not linked into this suite,
-	//so a fake key manager stands in for each one and the shared rule is driven
-	//through IKeyManager's public surface; what the fake records is the routing.
+	//pad and says whether it can. Aimable = the pad reports rumble AND its backend
+	//has a per-slot tick: macOS GameController (#1106), Windows XInput (#1121) and
+	//Linux evdev (#1122, the device side). DirectInput has no force feedback at all
+	//here and is never aimable, whatever a pad claims. The backends are not linked
+	//into this suite, so a fake key manager stands in for each one and the shared
+	//rule is driven through IKeyManager's public surface; what the fake records is
+	//the routing.
 	void TestAPadIsAimableOnlyWhereTheHostCanAddressItsHaptics()
 	{
 		struct FakePad { GamepadBackend Backend; bool HasRumble; };
@@ -6358,11 +6360,11 @@ namespace
 
 		Check(km.IsGamepadAimable(0), "#1106: a macOS pad that reports haptics is aimable");
 		Check(!km.IsGamepadAimable(1), "#1106: a macOS pad without haptics is not aimable");
-		Check(!km.IsGamepadAimable(2), "#1106: a Windows XInput pad is not aimable (tick deferred, #1121)");
+		Check(km.IsGamepadAimable(2), "#1121: a Windows XInput pad with rumble is aimable");
 		Check(!km.IsGamepadAimable(3), "#1106: a DirectInput pad is not aimable");
 		Check(!km.IsGamepadAimable(4),
 			"#1106: ...even if it claimed rumble: DirectInput never ticks");
-		Check(!km.IsGamepadAimable(5), "#1106: a Linux evdev pad is not aimable (tick deferred, #1122)");
+		Check(km.IsGamepadAimable(5), "#1122: a Linux evdev pad that reports rumble is aimable");
 		Check(!km.IsGamepadAimable(6), "#1106: a Linux pad without force feedback is not aimable");
 		Check(!km.IsGamepadAimable(7), "#1106: a pad with no backend is not aimable");
 		Check(!km.IsGamepadAimable(8), "#1106: an index past the connected pads is not aimable");
@@ -6370,8 +6372,11 @@ namespace
 		Check(km.TickGamepad(0) && km.Ticked == vector<uint32_t>({ 0 }),
 			"#1106: a tick reaches the backend once, on the macOS pad that was asked for");
 		km.Ticked.clear();
-		Check(!km.TickGamepad(1) && !km.TickGamepad(2) && !km.TickGamepad(3) && !km.TickGamepad(4)
-			&& !km.TickGamepad(5) && !km.TickGamepad(6) && !km.TickGamepad(7) && !km.TickGamepad(8)
+		Check(km.TickGamepad(2) && km.Ticked == vector<uint32_t>({ 2 }),
+			"#1121: the tick reaches the XInput slot that was asked for, and no other");
+		km.Ticked.clear();
+		Check(!km.TickGamepad(1) && !km.TickGamepad(3) && !km.TickGamepad(4)
+			&& !km.TickGamepad(6) && !km.TickGamepad(7) && !km.TickGamepad(8)
 			&& km.Ticked.empty(),
 			"#1106: a pad that is not aimable answers false and the backend is never called");
 	}
