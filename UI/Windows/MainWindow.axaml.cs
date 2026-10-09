@@ -1199,13 +1199,18 @@ namespace Mesen.Windows
 			//#1127 (ADR-0270 D10): the keyboard walks the SAME Play surfaces the pad
 			//does, and its move and confirm raise the same menu-sound hook - one gate
 			//(MenuSounds.ShouldPlay, inside PlayMenuSound), one sink (MenuSoundOutput),
-			//so a keyboard move and a pad move are indistinguishable to it. The door is
-			//the pad's own (InPlayDoor), so the classic GUI's arrows stay silent, and a
-			//focused box or menu keeps its keys: those presses are the control's, not
-			//navigation. Esc is the third one, and it sounds where this window takes
+			//so a keyboard move and a pad move are indistinguishable to it. The gate is
+			//the pad's own authority (#1160, ThePadHasAuthority), not the Play door
+			//alone: the pad sounds only where its bridge resolved an action, and that
+			//needs the authority - so a press made in a state the pad refuses outright
+			//(a game paused with nothing of Play over it, the load card, a capture) is
+			//silent here too. The door inside it still keeps the classic GUI's arrows
+			//silent, and a focused box or menu keeps its keys: those presses are the
+			//control's, not navigation. Esc is the third one, and it sounds where this
+			//window takes
 			//that press (HandleEscInTheUi above) - the key is the overlay's, not the
 			//focused control's. Back is not one of the keys answered here.
-			if(InPlayDoor && !TheKeyboardIsSomewhereElse()) {
+			if(ThePadHasAuthority && !TheKeyboardIsSomewhereElse()) {
 				PadNavAction action = PlayMenuSound.OfNavigateKey(e.Key);
 				//A held Confirm is one press, the rule this class already applies to
 				//Esc (#1080, HandleEscInTheUi): the OS repeats the key as more KeyDowns
@@ -1374,16 +1379,27 @@ namespace Mesen.Windows
 				return true;
 			}
 
+			//#1160 (ADR-0270 D10): the authority that decides is the one in force
+			//BEFORE the press, which is what the pad's own tick reads. Read here,
+			//above the press, because Esc over a running game opens W-P4 and pauses
+			//the game under it - so an authority read afterwards would find a paused
+			//game with a Play surface up, which is an authority the press did not
+			//have when it was made, and sounds a Back the pad never produces (the
+			//pad has none over a game that runs unpaused).
+			bool hadAuthority = ThePadHasAuthority;
 			_shortcutHandler.ApplyUiEsc(action);
 			//#1127 (ADR-0270 D10): the press this window took is the GUI's Back, and
 			//it sounds like the pad's Back does - through the same hook, judged on the
 			//state the press left (a sheet that resumes the game leaves it running
-			//unpaused, and the blip must not mix into it). Scoped to the Play door like
-			//the navigation arm in OnPreviewKeyDown: this arm also answers the Settings
+			//unpaused, and the blip must not mix into it). Posted after the press for
+			//that reason, the way the Confirm arm's own sound is: this handler runs in
+			//the tunnel, and the Pause/Resume the press causes is not necessarily
+			//settled by the time it returns. Scoped to the pad's authority, like the
+			//navigation arm in OnPreviewKeyDown: this arm also answers the Settings
 			//sheet opened from Remaster's or Share's Tools, and the pad's Back does not
 			//reach that one either.
-			if(InPlayDoor) {
-				PlayMenuSound.For(PadNavAction.Back);
+			if(hadAuthority) {
+				Dispatcher.UIThread.Post(() => PlayMenuSound.For(PadNavAction.Back), DispatcherPriority.Background);
 			}
 			return true;
 		}
@@ -1409,15 +1425,21 @@ namespace Mesen.Windows
 				|| TopLevel.GetTopLevel(this)?.FocusManager?.GetFocusedElement() is TextBox;
 		}
 
-		//ADR-0256's door, asked the way the pad's bridge asks it
-		//(PlayPadNavigation.InPlayDoor): Player UI mode in a game-screen workspace.
+		//ADR-0256's authority, asked the way the pad's bridge asks it
+		//(PlayPadNavigationWiring.HasAuthority): the Play door, the Controller
+		//capture, and the pause / load-card / surface state together - the same
+		//predicate, from its single definition, so the two paths cannot drift apart.
 		//It is the one rule both of #1127's arms need - the keyboard's move/confirm
 		//presses and the Esc this window takes - because the menu sounds are the Play
-		//surfaces' and the pad's own presses are already inside this door by
-		//authority. Asked of the rule rather than spelled out as the two flags, so
-		//the two paths cannot drift apart.
-		private bool InPlayDoor => _model != null
-			&& PlayPadNavigation.InPlayDoor(_model.IsPlayerMode, _model.IsPlayWorkspace);
+		//surfaces' and the pad's own presses are already inside it by their bridge.
+		//
+		//#1160: the door alone was not enough. The pad sounds only where its bridge
+		//resolved an action, and the bridge resolves none outside the authority, so
+		//the keyboard asking the door alone made it sound where the pad is silent -
+		//a game paused with nothing of Play over it is the console's, and the arrows
+		//are game input there.
+		private bool ThePadHasAuthority => _model != null
+			&& PlayPadNavigationWiring.HasAuthority(_model);
 
 		private void OnPreviewKeyUp(object? sender, KeyEventArgs e)
 		{
