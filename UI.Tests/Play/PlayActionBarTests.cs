@@ -50,6 +50,20 @@ namespace Mesen.Tests.Play
 			Assert.Equal("Enter Play     Esc Back", Text(PlayInputDevice.Keyboard, null));
 		}
 
+		//"Recomputes when the pad in hand or the connected count changes": the bridge
+		//derives the device from the count (PlayMenuHint.ActiveDevice) and hands it to
+		//the bar, so the same declaration is named in keys at 0 pads and in buttons
+		//again at 1.
+		[Fact]
+		public void The_declaration_follows_the_connected_count_from_buttons_to_keys_and_back()
+		{
+			string AtCount(uint count) => Text(PlayMenuHint.ActiveDevice(count), PadFamily.Xbox);
+
+			Assert.Equal("A Play     X Favorite     Y Search     LB / RB Console     B Back", AtCount(1));
+			Assert.Equal("Enter Play     Esc Back", AtCount(0));
+			Assert.Equal("A Play     X Favorite     Y Search     LB / RB Console     B Back", AtCount(1));
+		}
+
 		[Fact]
 		public void The_keyboard_stays_the_keyboard_beside_a_pad_family()
 		{
