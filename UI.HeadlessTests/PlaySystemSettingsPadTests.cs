@@ -363,6 +363,32 @@ public class PlaySystemSettingsPadTests : IDisposable
 			$"the pad's Up from the storage choice did not reach the tab strip ({Focused(window)})");
 	}
 
+	//#1133: leaving the System tab from the strip must not hand the ring back to
+	//the strip's first tab. System is the last tab, so Left is the move onto the
+	//tab before it (Controls, the Input tab); the claim that put the ring on the
+	//storage choice is closed by then, and the ring has to stay on the tab the
+	//pad just moved to.
+	//
+	//The sheet is left on the System tab and the ring is put on that tab without
+	//selecting anything: Focus() is not a pad move, so the tab the sheet is on
+	//does not change and IsPlayerSystemTabVisible stays true until the press.
+	//Measured before the fix: the close re-arbitrated the focus, and the Left
+	//landed on tabPlayerWindow with the sheet dragged onto Display with it.
+	[AvaloniaFact]
+	public void Left_from_the_System_tab_keeps_the_focus_on_Input()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model) = ShowSystemTab(new RecordingSystem());
+		WaitForStorageChoice(window);
+		Assert.True(model.IsPlayerSystemTabVisible, "the sheet did not open on the System tab, so this case would prove nothing");
+
+		Assert.True(window.FindNamed<TabItem>("tabPlayerSystem").Focus(), "the System tab would not take the focus");
+		Pump();
+		Assert.True(model.IsPlayerSystemTabVisible, "putting the ring on the tab closed the System tab, so this case would prove nothing");
+
+		PressAndLand(window, PadNavAction.Left, "tabPlayerControls");
+	}
+
 	//#1133: Right on a Settings strip tab moves the ring on - to the next tab
 	//along the strip, or into the page - instead of leaving it where it was.
 	[AvaloniaFact]
@@ -373,14 +399,13 @@ public class PlaySystemSettingsPadTests : IDisposable
 		model.RomInfo = new RomInfo() { ConsoleType = ConsoleType.Nes, Format = RomFormat.iNes };
 		Pump();
 		model.OpenPlayerSettings(new ConfigViewModel(ConfigWindowTab.Audio, playerMode: true));
-		WaitFor(() => window.FocusManager?.GetFocusedElement() is TabItem, () => $"Settings did not open on a tab ({Focused(window)})");
-		Control before = (Control)window.FocusManager!.GetFocusedElement()!;
+		WaitFor(() => FocusedName(window) == "tabPlayerWindow", () => $"Settings did not open on the strip's first tab ({Focused(window)})");
 
-		Press(window, PadNavAction.Right);
-
-		Control? after = window.FocusManager?.GetFocusedElement() as Control;
-		Assert.True(after is not null && !ReferenceEquals(after, before),
-			$"the pad's Right on a Settings tab left the ring where it was ({Focused(window)})");
+		//The tab the ring moved to, not only that it moved: the sheet opens on
+		//Audio and the claim puts the ring on the strip's first tab, so the next
+		//tab along is Look - and a Right that moved the ring anywhere else (the
+		//first tab again, the sheet's own rows) is the bug this pins.
+		PressAndLand(window, PadNavAction.Right, "tabPlayerVideo");
 	}
 
 	//Presses one direction until the focus lands on the named control or stops
