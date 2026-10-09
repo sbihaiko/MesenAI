@@ -50,7 +50,7 @@ namespace Mesen.ViewModels
 		//#910: Display's Exit fullscreen, in Done's row while the window is fullscreen.
 		public bool ShowsPlayerExitFullscreen => PlayerSettingsEssentials.ShowsExitFullscreen(PlayerSettingsEssentials.TabAt(PlayerTabIndex), Display?.IsFullscreen == true);
 		//ADR-0249 (W-P8, W-P10): the Settings sheet is as high as its tab needs.
-		public double PlayerSheetHeight => PlayerSettingsEssentials.TabAt(PlayerTabIndex) is ConfigWindowTab tab ? PlayerSettingsEssentials.SheetHeight(tab) : PlayerSettingsEssentials.SheetHeight(ConfigWindowTab.Display);
+		public double PlayerSheetHeight => PlayerSettingsEssentials.TabAt(PlayerTabIndex) is ConfigWindowTab tab ? PlayerSettingsEssentials.SheetHeight(tab, _menuTickAimable) : PlayerSettingsEssentials.SheetHeight(ConfigWindowTab.Display);
 
 		//Video and Look edit the same VideoConfig, so they share one snapshot
 		//for Cancel/IsDirty, taken when the first of them opens.
@@ -67,6 +67,8 @@ namespace Mesen.ViewModels
 		private readonly Func<PlayerSystemSettingsViewModel>? _createSystem;
 		private readonly Func<IReadOnlyList<string>> _audioDevices;
 		private readonly Func<int> _connectedPads;
+		//#1112: read once per sheet opening; the row and the sheet's height share it.
+		private readonly bool _menuTickAimable = PlayerSettingsEssentials.MenuTickAimable();
 
 		[Obsolete("For designer only")]
 		public ConfigViewModel() : this(ConfigWindowTab.Audio) { }
@@ -168,7 +170,7 @@ namespace Mesen.ViewModels
 				case ConfigWindowTab.Emulation: Emulation ??= AddDisposable(new EmulationConfigViewModel()); break;
 				case ConfigWindowTab.Input:
 					if(PlayerMode) {
-						PlayerControls ??= AddDisposable(new PlayerControlsSettingsViewModel(ConfigManager.Config.Input, _connectedPads()));
+						PlayerControls ??= AddDisposable(new PlayerControlsSettingsViewModel(ConfigManager.Config.Input, _connectedPads(), _menuTickAimable));
 					} else {
 						Input ??= AddDisposable(new InputConfigViewModel());
 						if(PlayerControls != null) {

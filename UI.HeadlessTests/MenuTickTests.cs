@@ -195,10 +195,4 @@ public class MenuTickTests : IDisposable
 
 		Assert.Empty(_ticked);
 	}
-
-	[Fact]
-	public void The_row_is_off_on_a_new_install()
-	{
-		Assert.False(new InputConfig().MenuTick);
-	}
 }

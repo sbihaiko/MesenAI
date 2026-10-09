@@ -20,8 +20,9 @@ namespace Mesen.ViewModels
 		public InputConfig OriginalConfig { get; }
 		public string ControllersText { get; }
 
-		//#1112: the Menu tick row exists only while the pad in hand is aimable.
-		public bool MenuTickAvailable { get; } = PlayerSettingsEssentials.MenuTickAimable();
+		//#1112: the Menu tick row exists only while the pad in hand is aimable; the
+		//sheet reads that once and hands it to both this row and its own height.
+		public bool MenuTickAvailable { get; }
 
 		[ObservableProperty, NotifyPropertyChangedFor(nameof(RumbleText), nameof(MenuTickEnabled), nameof(MenuTickRumbleOff))] public partial double Rumble { get; set; }
 
@@ -32,8 +33,9 @@ namespace Mesen.ViewModels
 
 		public string RumbleText => PlayerSliders.ToConfig(Rumble, 10) == 0 ? ResourceHelper.GetMessage("PlayerRumbleOff") : PlayerSliders.ToConfig(Rumble, 10).ToString();
 
-		public PlayerControlsSettingsViewModel(InputConfig config, int connectedPads)
+		public PlayerControlsSettingsViewModel(InputConfig config, int connectedPads, bool menuTickAvailable)
 		{
+			MenuTickAvailable = menuTickAvailable;
 			Config = config;
 			OriginalConfig = config.Clone();
 			ControllersText = connectedPads switch {

@@ -48,14 +48,18 @@ public static class PlayerSettingsEssentials
 	//window), and Play's System tab (ADR-0256 Decision 8) needs the same room: two storage choices with their
 	//folder lines, two keyboard choices, and the restart line a folder change
 	//puts there.
-	public static double SheetHeight(ConfigWindowTab tab) => tab switch {
+	public static double SheetHeight(ConfigWindowTab tab) => SheetHeight(tab, MenuTickAimable());
+
+	//#1112: the Menu tick answer is passed in, so a sheet that froze it for the row's
+	//visibility sizes itself from the same read (the pad in hand can change mid-sheet).
+	public static double SheetHeight(ConfigWindowTab tab, bool menuTickAimable) => tab switch {
 		ConfigWindowTab.Look or ConfigWindowTab.System => 480,
 		//#1111: Display's fourth row (Interface size) is one 46 px row and its hairline taller.
 		ConfigWindowTab.Display => 387,
 		//#1105: Audio's fourth row (Menu sounds) needs one more row's height, but
 		//only while the host can play it.
 		ConfigWindowTab.Audio when MenuSoundsAvailable() => 388,
-		ConfigWindowTab.Input when MenuTickAimable() => 388,
+		ConfigWindowTab.Input when menuTickAimable => 388,
 		_ => 340
 	};
 
