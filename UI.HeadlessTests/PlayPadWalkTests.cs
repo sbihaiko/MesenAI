@@ -140,7 +140,7 @@ public class PlayPadWalkTests : IDisposable
 	//tab: it is left-aligned directly above a right-aligned Done with nothing
 	//focusable to its left, so no direction from any control the pad can reach lands
 	//on it. Moving or re-anchoring it is a Player-layout change, not a test change,
-	//so it is named here and tracked as #1148. Asserted both ways: a listed control
+	//so it is named here and tracked as #1152. Asserted both ways: a listed control
 	//the walk starts reaching has to leave this list, and a name here that the
 	//surface stops showing fails too.
 	public static readonly Dictionary<string, string[]> KnownUnreachable = new() {
