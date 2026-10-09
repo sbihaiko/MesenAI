@@ -11,9 +11,17 @@
   already did, a headless test pins it in the 512x505 starting window, and this
   Decision names the guaranteed size. No new panel pick: the work is what #1123
   asked for.
+  The same day the cap reached the rows: a right-docked control that carries a
+  fixed width kept it inside the narrower sheet and drew its label past the room
+  left over, which the review of PR #1145 named as blocking against Decision 6's
+  "nothing is clipped". The rows became Auto/star grids and a second headless
+  theory walks every tab for a label whose own text needs more room than it was
+  given; the one spot that does not meet the guarantee is named in Decision 6
+  and is #1149. No new panel pick here either: it is the same #1123 criterion,
+  read as covering the rows the cap narrows.
   Nothing is implemented by this ADR; PR #1119 implements it and must match
-  Decisions 3 and 6. The width cap and the 512x505 guarantee for the settings
-  sheet (Decision 6) are in PR #1145 (#1123).
+  Decisions 3 and 6. The width cap, the Auto/star rows and the 512x505 guarantee
+  for the settings sheet (Decision 6) are in PR #1145 (#1123).
 - Date: 2026-10-09
 - Related: ADR-0249 (tokens come from the renderer; the drift test), ADR-0241,
   ADR-0256, wireframe W-P8d, issues #1102 and #1103.
@@ -68,6 +76,21 @@ Nothing in Play is sized for a TV three meters away. Settings › Display has a
    (310 px of the 342 the host gives it, 465 px drawn) and Done is inside the
    window on every tab. Windows below 512x505, down to the 160x144 floor — the
    width the window's own `MinWidth`/`MinHeight` allow — are not guaranteed.
+   **The cap does not squeeze the rows it narrows.** A setting row is a Grid
+   whose first column is Auto and whose last is the star: the label holds the
+   width its own text needs and its control takes the rest — the width it is
+   drawn at wherever there is room for it (480 px stays 480), less when there is
+   not, the same cap the sheet itself takes. A second headless theory walks all
+   five tabs at 1.5 in 512x505 and fails on a row label whose own text needs more
+   room than the layout gave it — 18 px for the 70 px of "Smoothing", 20 px for
+   the 91 px of "Output device" before the rows became grids. A control that
+   cannot show a value as long as its box is the control's own business and not
+   this guarantee: where the value is host data of any length it wraps or is
+   ellipsized as the view says.
+   **One spot on this sheet does not meet it**: the Look footer's Hold to Compare
+   note, which shares Done's row (W-P10) and is left about 13 px of the 254 px
+   page there. It stays on one line and is ellipsized — bounded, not whole — and
+   reflowing that footer is a W-P10 decision, filed as #1149.
    The other Play sheets (Cheats, Replays, PackPicker, PackDetail, Tool,
    Controller, Enhancements, Shader) and the pause card are not covered by this
    guarantee yet: they are still guaranteed only at about 1024x640, because the

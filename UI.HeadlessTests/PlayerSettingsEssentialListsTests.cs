@@ -51,8 +51,11 @@ public class PlayerSettingsEssentialListsTests
 		Assert.True(list.IsOnScreen());
 		Assert.True(list.Bounds.Width <= sheet.FindNamed<Border>("PlayerSettingsSheet").Bounds.Width, "no horizontal overflow");
 		Assert.Equal(340, sheet.FindNamed<Border>("PlayerSettingsSheet").Bounds.Height, 0.5);
+		//A row is `:is(Panel).setting-row` (UI/AGENTS.md), whatever panel carries
+		//it: the DockPanel it used to be, or the Auto/star Grid #1123 reflowed it
+		//into so a capped sheet cannot squeeze the label.
 		Assert.Equal(PlayerSettingsEssentials.Rows(group == "AudioSettingsGroup" ? ConfigWindowTab.Audio : ConfigWindowTab.Input).Count,
-			list.FindAll<DockPanel>().Count(d => d.IsVisible && d.Classes.Contains("setting-row")));
+			list.FindAll<Panel>().Count(p => p.IsVisible && p.Classes.Contains("setting-row")));
 		Assert.True(sheet.FindNamed<Button>("btnPlayerSettingsMoreInOptions").IsOnScreen());
 		Assert.False(sheet.FindNamed<TextBlock>("lblPlayerSettingsEverythingElse").IsOnScreen());
 	}
