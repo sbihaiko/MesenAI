@@ -15,7 +15,7 @@ public sealed record PadWalkObservation(
 	IReadOnlyCollection<string> Interactive,
 	IReadOnlyCollection<string> Reached,
 	bool? BackLeft,
-	IReadOnlyList<(string Focus, IReadOnlyList<PlayBarEntry>? Declared)> BarByFocus,
+	IReadOnlyList<(string Focus, IReadOnlyList<PlayBarEntry>? Declared, bool CoverFocused)> BarByFocus,
 	IReadOnlySet<PlayAction> Available);
 
 public static class PadWalk
@@ -36,9 +36,12 @@ public static class PadWalk
 		if(declaresBack && o.BackLeft != true) {
 			problems.Add($"{o.Surface}: the action bar names Back but B does not leave");
 		}
-		foreach((string focus, IReadOnlyList<PlayBarEntry>? declared) in o.BarByFocus) {
+		foreach((string focus, IReadOnlyList<PlayBarEntry>? declared, bool cover) in o.BarByFocus) {
 			foreach(PlayBarEntry entry in declared ?? Array.Empty<PlayBarEntry>()) {
-				if(entry.Action != PlayAction.Back && !o.Available.Contains(entry.Action)) {
+				//Favorite is per focus (a cover has it, a search box does not); the rest
+				//is a property of the surface.
+				bool has = entry.Action == PlayAction.Favorite ? cover : o.Available.Contains(entry.Action);
+				if(entry.Action != PlayAction.Back && !has) {
 					problems.Add($"{o.Surface}: with {focus} focused the bar names {entry.Action} ({entry.LabelKey}) but the surface has no such action");
 				}
 			}

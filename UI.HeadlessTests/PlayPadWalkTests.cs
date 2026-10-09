@@ -85,7 +85,19 @@ public class PlayPadWalkTests : IDisposable
 	private readonly Workspace _workspace = ConfigManager.Config.Preferences.Workspace;
 	private readonly bool _confirm = ConfigManager.Config.Preferences.ConfirmExitResetPower;
 	private readonly InterfaceSize _size = ConfigManager.Config.Preferences.InterfaceSize;
+	private readonly string? _recentFolderOverride = ConfigManager.RecentGamesFolderOverride;
+	//Recents and the ROMs they name live in a temp tree of this case's own, so
+	//seeding and clearing never touch the maintainer's real RecentGames folder.
+	private readonly string _temp = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "padwalk-1107-" + Guid.NewGuid().ToString("N"));
 	private readonly List<MainWindow> _windows = new();
+
+	public PlayPadWalkTests()
+	{
+		System.IO.Directory.CreateDirectory(RecentFolder);
+		ConfigManager.RecentGamesFolderOverride = RecentFolder;
+	}
+
+	private string RecentFolder => System.IO.Path.Combine(_temp, "RecentGames");
 
 	public void Dispose()
 	{
@@ -102,6 +114,12 @@ public class PlayPadWalkTests : IDisposable
 		prefs.ConfirmExitResetPower = _confirm;
 		prefs.InterfaceSize = _size;
 		ConfigManager.Config.Save();
+		ConfigManager.RecentGamesFolderOverride = _recentFolderOverride;
+		try {
+			System.IO.Directory.Delete(_temp, true);
+		} catch {
+			//A case that failed before it seeded anything leaves nothing to remove.
+		}
 	}
 
 	[Fact]
@@ -194,12 +212,15 @@ public class PlayPadWalkTests : IDisposable
 		Control root = focus.SearchRoot() ?? RootOf(window, surface, start);
 
 		List<Control> interactive = InteractiveControls(root);
+		//The library's console chips are entered with the ConsoleFilter action, not
+		//the D-pad, so they are interactive but are reached only by that press.
+		List<Control> chips = ConsoleChips(root);
+		interactive.AddRange(chips);
 		Dictionary<Control, string> names = interactive.Concat(new[] { start }).Distinct().ToDictionary(c => c, Label);
 		HashSet<Control> reached = new() { start };
 		Queue<Control> frontier = new(new[] { start });
-		List<(string, IReadOnlyList<PlayBarEntry>?)> bar = new();
+		List<(string, IReadOnlyList<PlayBarEntry>?, bool)> bar = new();
 		Dictionary<Control, bool> seenForBar = new();
-		bool coverFocused = false;
 
 		//Edges: with the focus on a node, one pad press per direction. The press
 		//is the only thing that moves the ring between nodes; Focus() only sets
@@ -215,8 +236,7 @@ public class PlayPadWalkTests : IDisposable
 				Land(window, node);
 				if(!seenForBar.ContainsKey(node)) {
 					seenForBar[node] = true;
-					bar.Add((Label(node), focus.Declared()));
-					coverFocused |= Arbiter.CoverHasFocus(model, node);
+					bar.Add((Label(node), focus.Declared(), Arbiter.CoverHasFocus(model, node)));
 				}
 				Press(window, direction);
 				if(window.FocusManager?.GetFocusedElement() is Control focusedNext && Canonical(focusedNext) is Control next && next != node && root.IsVisualAncestorOf(next) && reached.Add(next)) {
@@ -226,7 +246,17 @@ public class PlayPadWalkTests : IDisposable
 			}
 		}
 
-		HashSet<PlayAction> available = Available(window, model, root, interactive, coverFocused);
+		//The chips are entered with the ConsoleFilter action, not the D-pad: press it
+		//once and count them reached only when the focus lands in their ListBox.
+		if(chips.Count > 0) {
+			Land(window, start);
+			PressShoulder(window, "Pad1 R1");
+			if(window.FocusManager?.GetFocusedElement() is Control chip && chip.FindAncestorOfType<ListBox>(true)?.Name == "RomPickerConsoleFilter") {
+				reached.UnionWith(chips);
+			}
+		}
+
+		HashSet<PlayAction> available = Available(window, root, interactive);
 		bool? backLeft = null;
 		Land(window, start);
 		Press(window, PadNavAction.Back);
@@ -283,6 +313,13 @@ public class PlayPadWalkTests : IDisposable
 			.ToList();
 	}
 
+	private static List<Control> ConsoleChips(Control root)
+	{
+		return root.GetVisualDescendants().OfType<ListBoxItem>()
+			.Where(c => c.FindAncestorOfType<ListBox>()?.Name == "RomPickerConsoleFilter" && c.IsEffectivelyVisible && c.IsEffectivelyEnabled)
+			.Cast<Control>().ToList();
+	}
+
 	//The slot / tile grid keeps the D-pad for its own selection (ADR-0256
 	//Decision 3), so everything inside it is reached as the grid: one pad press
 	//moves the selection, not the focus ring between its tiles.
@@ -300,10 +337,20 @@ public class PlayPadWalkTests : IDisposable
 	//What the surface can really do, read off its live controls. Confirm needs an
 	//interactive control to press; Back needs a surface to leave (the content
 	//area is the root); Search and the console row are the library's own named
-	//controls, looked up under the surface's root; Favorite is what
-	//PlayFavoriteCover.Declare adds, i.e. some walked focus resolved to a cover.
-	private static HashSet<PlayAction> Available(MainWindow window, MainWindowViewModel model, Control root, IReadOnlyCollection<Control> interactive, bool coverFocused)
+	//controls, looked up under the surface's root. Favorite is not
+	//here: it is per focus (the bar row's cover flag, PlayFavoriteCover.PathOf).
+	private static HashSet<PlayAction> Available(MainWindow window, Control root, IReadOnlyCollection<Control> interactive)
 	{
+		//The chips are entered with the ConsoleFilter action, not the D-pad: press it
+		//once and count them reached only when the focus lands in their ListBox.
+		if(chips.Count > 0) {
+			Land(window, start);
+			PressShoulder(window, "Pad1 R1");
+			if(window.FocusManager?.GetFocusedElement() is Control chip && chip.FindAncestorOfType<ListBox>(true)?.Name == "RomPickerConsoleFilter") {
+				reached.UnionWith(chips);
+			}
+		}
+
 		HashSet<PlayAction> available = new();
 		if(interactive.Count > 0) {
 			available.Add(PlayAction.Confirm);
@@ -317,9 +364,6 @@ public class PlayPadWalkTests : IDisposable
 		}
 		if(Visible("RomPickerConsoleFilter")) {
 			available.Add(PlayAction.ConsoleFilter);
-		}
-		if(coverFocused) {
-			available.Add(PlayAction.Favorite);
 		}
 		return available;
 	}
@@ -385,6 +429,14 @@ public class PlayPadWalkTests : IDisposable
 		Pump();
 	}
 
+	//LB/RB are the ConsoleFilter action; they are not one of the six nav actions.
+	private void PressShoulder(MainWindow window, string name)
+	{
+		PlayPadNavigationWiring.TickForTest(window, Array.Empty<ushort>(), TimeSpan.FromMilliseconds(50), BackendName, BackendCode);
+		PlayPadNavigationWiring.TickForTest(window, new ushort[] { BackendCode(name) }, TimeSpan.FromMilliseconds(50), BackendName, BackendCode);
+		Pump();
+	}
+
 	private (MainWindow Window, MainWindowViewModel Model) ShowPlay()
 	{
 		PreferencesConfig prefs = ConfigManager.Config.Preferences;
@@ -432,14 +484,14 @@ public class PlayPadWalkTests : IDisposable
 	//Recent-game files as the Core writes them, down to the RomInfo.txt that names
 	//a ROM that exists on disk, so a Home cover resolves to a library path (the
 	//Favorite action's precondition, PlayFavoriteCover.PathOf).
-	private static void SeedRecents(params string[] games)
+	private void SeedRecents(params string[] games)
 	{
-		string folder = ConfigManager.RecentGamesFolder;
+		string folder = RecentFolder;
 		System.IO.Directory.CreateDirectory(folder);
 		foreach(string stale in System.IO.Directory.GetFiles(folder, "*.rgd")) {
 			System.IO.File.Delete(stale);
 		}
-		string roms = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "padwalk-roms");
+		string roms = System.IO.Path.Combine(_temp, "roms");
 		System.IO.Directory.CreateDirectory(roms);
 		DateTime written = DateTime.Now;
 		foreach(string game in games) {
@@ -455,9 +507,9 @@ public class PlayPadWalkTests : IDisposable
 		}
 	}
 
-	private static void ClearRecents()
+	private void ClearRecents()
 	{
-		string folder = ConfigManager.RecentGamesFolder;
+		string folder = RecentFolder;
 		if(!System.IO.Directory.Exists(folder)) {
 			return;
 		}

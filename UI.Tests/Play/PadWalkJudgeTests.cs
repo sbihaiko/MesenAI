@@ -11,7 +11,7 @@ namespace Mesen.Tests.Play
 	{
 		private static PadWalkObservation Clean() => new(
 			"Surface", false, new[] { "A", "B" }, new[] { "A", "B" }, true,
-			new[] { ("A", (IReadOnlyList<PlayBarEntry>?)PlayBarDeclarations.PauseOverlay) },
+			new[] { ("A", (IReadOnlyList<PlayBarEntry>?)PlayBarDeclarations.PauseOverlay, false) },
 			new HashSet<PlayAction> { PlayAction.Confirm, PlayAction.Back });
 
 		[Fact]
@@ -41,7 +41,7 @@ namespace Mesen.Tests.Play
 		{
 			PadWalkObservation o = Clean() with {
 				IsRoot = true, BackLeft = false,
-				BarByFocus = new[] { ("Continue", (IReadOnlyList<PlayBarEntry>?)PlayBarDeclarations.Home) },
+				BarByFocus = new[] { ("Continue", (IReadOnlyList<PlayBarEntry>?)PlayBarDeclarations.Home, false) },
 			};
 			Assert.Empty(PadWalk.Judge(o));
 		}
@@ -51,7 +51,7 @@ namespace Mesen.Tests.Play
 		{
 			//Library's bar names Search and the console row; this surface has neither.
 			PadWalkObservation o = Clean() with {
-				BarByFocus = new[] { ("A", (IReadOnlyList<PlayBarEntry>?)PlayBarDeclarations.Library) },
+				BarByFocus = new[] { ("A", (IReadOnlyList<PlayBarEntry>?)PlayBarDeclarations.Library, false) },
 			};
 			List<string> problems = PadWalk.Judge(o);
 			Assert.Contains(problems, p => p.Contains("names Search") && p.Contains("no such action"));
@@ -62,10 +62,10 @@ namespace Mesen.Tests.Play
 		[Fact]
 		public void A_favorite_entry_fails_when_no_cover_has_the_focus()
 		{
-			//The bar declares Favorite, but the walk found no cover under any focus,
-			//so Available lacks it (PlayFavoriteCover.Declare adds it only on a cover).
+			//The bar declares Favorite, but no cover had this focus
+			//(PlayFavoriteCover.Declare adds it only on a cover).
 			PadWalkObservation o = Clean() with {
-				BarByFocus = new[] { ("A", (IReadOnlyList<PlayBarEntry>?)new[] { new PlayBarEntry(PlayAction.Favorite, "BarFavorite") }) },
+				BarByFocus = new[] { ("A", (IReadOnlyList<PlayBarEntry>?)new[] { new PlayBarEntry(PlayAction.Favorite, "BarFavorite") }, false) },
 			};
 			Assert.Contains(PadWalk.Judge(o), p => p.Contains("names Favorite"));
 		}
@@ -74,10 +74,21 @@ namespace Mesen.Tests.Play
 		public void A_favorite_entry_passes_when_a_cover_has_the_focus()
 		{
 			PadWalkObservation o = Clean() with {
-				BarByFocus = new[] { ("A", (IReadOnlyList<PlayBarEntry>?)new[] { new PlayBarEntry(PlayAction.Favorite, "BarFavorite") }) },
-				Available = new HashSet<PlayAction> { PlayAction.Confirm, PlayAction.Back, PlayAction.Favorite },
+				BarByFocus = new[] { ("A", (IReadOnlyList<PlayBarEntry>?)new[] { new PlayBarEntry(PlayAction.Favorite, "BarFavorite") }, true) },
 			};
 			Assert.Empty(PadWalk.Judge(o));
+		}
+
+		[Fact]
+		public void A_favorite_declared_on_a_non_cover_focus_fails_even_when_another_focus_is_a_cover()
+		{
+			IReadOnlyList<PlayBarEntry>? favorite = new[] { new PlayBarEntry(PlayAction.Favorite, "BarFavorite") };
+			PadWalkObservation o = Clean() with {
+				BarByFocus = new (string, IReadOnlyList<PlayBarEntry>?, bool)[] { ("Cover", favorite, true), ("Search", favorite, false) },
+			};
+			List<string> problems = PadWalk.Judge(o);
+			Assert.Contains(problems, p => p.Contains("with Search focused") && p.Contains("names Favorite"));
+			Assert.DoesNotContain(problems, p => p.Contains("with Cover focused"));
 		}
 	}
 }
