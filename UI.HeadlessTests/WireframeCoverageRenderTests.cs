@@ -7,6 +7,7 @@ using System.Threading;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Headless.XUnit;
+using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Media.Imaging;
 using Avalonia.Threading;
@@ -116,6 +117,30 @@ public class WireframeCoverageRenderTests : IDisposable
 		WaitFor(() => EmuApi.IsRunning() && !card.IsOnScreen() && model.IsNativeRendererVisible, "the game never showed its picture");
 	}
 
+	//#1167: the render has to show the ring where a player sees it, and the
+	//player sees it on the tab whose page is up. Every way to a tab at runtime
+	//ends with the ring on it: a pointer press on a header focuses it (Avalonia
+	//focuses a focusable control on press), and the pad's Confirm is
+	//PlayPadNavigationWiring's TabItem branch - `tab.IsSelected = true` - which
+	//only ever runs on the tab the ring is already on. Setting SelectedIndex
+	//alone is neither, so it left the ring on the tab the sheet opened on
+	//(Display) and the render showed a ring on Display above the Controls page.
+	private static TabItem ShownTab(MainWindow window)
+	{
+		TabControl strip = window.FindNamed<TabControl>("PlayerSettingsTabs");
+		return Assert.IsType<TabItem>(strip.ContainerFromIndex(strip.SelectedIndex));
+	}
+
+	//The ring's owner has to be that tab, or the render lies about which page
+	//is up (Directional is what paints it: PlayerTheme's :focus-visible).
+	private static void AssertRingOnShownTab(MainWindow window)
+	{
+		TabItem shown = ShownTab(window);
+		Control? focused = window.FocusManager?.GetFocusedElement() as Control;
+		Assert.True(ReferenceEquals(shown, focused), $"the ring is on '{focused?.Name}' while the page under it is '{shown.Name}'");
+		Assert.True(shown.IsFocused, $"the ring is not on the tab the page shows ('{shown.Name}')");
+	}
+
 	//W-P8b / W-P8c / W-P12's home: a sheet over W-P4, opened from its Settings row.
 	private static Border OpenSettings(MainWindow window, MainWindowViewModel model, ConfigWindowTab tab)
 	{
@@ -129,6 +154,16 @@ public class WireframeCoverageRenderTests : IDisposable
 		Dispatcher.UIThread.RunJobs();
 		window.FindNamed<TabControl>("PlayerSettingsTabs").SelectedIndex = PlayerSettingsEssentials.IndexOf(tab);
 		Dispatcher.UIThread.RunJobs();
+		//#1167: the ring rides the tab whose page is up (AssertRingOnShownTab
+		//checks it), as it does at runtime. SelectedIndex alone is not a move,
+		//so without this the render kept the ring on the tab the sheet opened
+		//on. System is the one tab that is not the strip (ADR-0256 Decision 8):
+		//its claim lands the ring on the storage choice, and picking that tab
+		//here re-arbitrated it already, so it must not be taken back.
+		if(tab != ConfigWindowTab.System) {
+			ShownTab(window).Focus(NavigationMethod.Directional);
+			Dispatcher.UIThread.RunJobs();
+		}
 		window.UpdateLayout();
 		Dispatcher.UIThread.RunJobs();
 		Border sheet = window.FindNamed<Border>("PlayerSettingsSheet");
@@ -227,6 +262,7 @@ public class WireframeCoverageRenderTests : IDisposable
 		Assert.True(sheet.FindNamed<Button>("btnPlayerSettingsMoreInOptions").IsOnScreen());
 		Assert.True(sheet.FindNamed<Button>("btnPlayerSettingsDone").IsOnScreen());
 		Assert.DoesNotContain(sheet.FindAll<ScrollBar>(), s => s.IsOnScreen());
+		AssertRingOnShownTab(window);
 
 		PlayerRender.Save(PlayerRender.Capture(window), "W-P8b");
 	}
@@ -279,6 +315,7 @@ public class WireframeCoverageRenderTests : IDisposable
 		Assert.True(sheet.FindNamed<Button>("btnPlayerSettingsMoreInOptions").IsOnScreen());
 		Assert.True(sheet.FindNamed<Button>("btnPlayerSettingsDone").IsOnScreen());
 		Assert.DoesNotContain(sheet.FindAll<ScrollBar>(), s => s.IsOnScreen());
+		AssertRingOnShownTab(window);
 
 		PlayerRender.Save(PlayerRender.Capture(window), "W-P8c");
 	}
@@ -343,6 +380,7 @@ public class WireframeCoverageRenderTests : IDisposable
 			Assert.True(sheet.FindNamed<Button>("btnPlayerSettingsMoreInOptions").IsOnScreen());
 			Assert.True(sheet.FindNamed<Button>("btnPlayerSettingsDone").IsOnScreen());
 			Assert.DoesNotContain(sheet.FindAll<ScrollBar>(), s => s.IsOnScreen());
+			AssertRingOnShownTab(window);
 
 			Bitmap frame = PlayerRender.Capture(window);
 			PlayerRender.Save(frame, "W-P8e");
