@@ -699,7 +699,11 @@ namespace Mesen.Windows
 				//the control in ADR-0256 Decision 6's on-screen text, and a pad
 				//pressed while a game runs is still the pad in hand.
 				_padInHand.OnPressed(pressed, key => PadNaming.Of(key, keyName));
-				HapticTickOutput.PadInHand = _padInHand.Current?.Device ?? -1;
+				//#1112: kept for the Menu tick row; a pad that unplugs stays here, and the
+				//host's aimable query answers false for an index that is gone.
+				if(_padInHand.Current is PadId inHand) {
+					HapticTickOutput.PadInHand = inHand.Device;
+				}
 
 				//#1104: the shared action bar names the control in this hand, so it
 				//is recomputed from the same tick that moved the hand - and from the
