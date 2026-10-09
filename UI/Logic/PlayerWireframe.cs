@@ -92,6 +92,7 @@ public static class PlayerWireframe
 		//primary button.
 		["W-P2"] = new KnownDeviation[] {
 			new("content", TextLines, "three seeded tiles, five drawn", false),
+			new("content", InkBox, ActionBar, false),
 			new("status line", InkBox, Chips, false),
 			new("continue card", InkBox, "seeded subtitle has no pack name", false),
 			new("continue button", TextLines, "focus ring under the Continue press", false),
@@ -107,7 +108,7 @@ public static class PlayerWireframe
 			new("overlay card", InkBox, "card ~38 px low", false),
 			new("resume button", Colour, "card ~38 px low puts the box on the card", true),
 			new("resume button", InkBox, "card ~38 px low", false),
-			new("grouped rows", TextLines, "card ~38 px low", true),
+			new("resume button", TextLines, "card ~38 px low: the region also crops the Paused line", false),
 			new("grouped rows", InkBox, "card ~38 px low", false),
 		},
 		//#952: the render is the bare setup sheet over the flat HUD background,
@@ -130,7 +131,8 @@ public static class PlayerWireframe
 
 	private const string NoChrome = "bare sheet over the HUD background, no Player chrome";
 
-	private const string Chips = "the P1-P4 port chips the wireframe does not draw";
+	private const string ActionBar = "the shared action bar's footer line (#1104), which the wireframe does not draw";
+	private const string Chips ="the P1-P4 port chips the wireframe does not draw";
 
 	public static IReadOnlyList<KnownDeviation> KnownDeviationsOf(string wId) => Known.TryGetValue(wId, out KnownDeviation[]? own) ? own : Array.Empty<KnownDeviation>();
 

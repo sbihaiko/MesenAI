@@ -256,7 +256,8 @@ namespace Mesen.Windows
 				() => Named(window, "PlayerSaveStatesSheet"));
 			//W-P4 itself, under every sheet opened from it and over the game.
 			focus.When(model, [nameof(MainWindowViewModel.IsPlayerOverlayVisible)],
-				() => model.IsPlayerOverlayVisible, () => Named(window, "OverlayResumeButton"));
+				() => model.IsPlayerOverlayVisible, () => Named(window, "OverlayResumeButton"),
+				actions: () => PlayBarDeclarations.PauseOverlay);
 			//#845 (ADR-0256 Decision 9): the ROM picker, over the home. It is the
 			//one Play surface over the content area rather than over W-P4, so it is
 			//claimed last of the surfaces, before the content area it covers.
@@ -299,7 +300,8 @@ namespace Mesen.Windows
 				 nameof(PlayerRomPickerViewModel.SuggestionRevision), nameof(PlayerRomPickerViewModel.Mode),
 				 nameof(PlayerRomPickerViewModel.TilesRevision), nameof(PlayerRomPickerViewModel.FoldersRevision)],
 				() => model.RomPicker.IsVisible, () => RomPickerFocusTarget(window, model),
-				() => Named(window, "PlayerRomPickerSheet"));
+				() => Named(window, "PlayerRomPickerSheet"),
+				() => model.RomPicker.IsLibrarySurfaceVisible ? LibraryDeclaration(window) : PlayBarDeclarations.Browser);
 
 			//The content area under all of them: the home's primary action, the
 			//Continue button, the slot grid over a game. It is not a claim (it is
@@ -309,7 +311,36 @@ namespace Mesen.Windows
 				[nameof(RecentGamesViewModel.Visible), nameof(RecentGamesViewModel.Mode),
 				 nameof(RecentGamesViewModel.ShowFirstRunHome), nameof(RecentGamesViewModel.ShowRecentsHome),
 				 nameof(RecentGamesViewModel.ShowPlainGrid), nameof(RecentGamesViewModel.ShowHomeGrid)],
-				() => ContentFocus(window, model));
+				() => ContentFocus(window, model),
+				() => model.IsPlayWorkspace && model.RecentGames.Visible
+					? model.RecentGames.ShowFirstRunHome ? PlayBarDeclarations.HomeFirstRun
+					: model.RecentGames.ShowRecentsHome ? HomeDeclaration(window)
+					: PlayBarDeclarations.None
+					: PlayBarDeclarations.None);
+		}
+
+		//The library's A is the focused control's, as the home's is: a tile plays,
+		//but the header actions open what they name.
+		private static IReadOnlyList<PlayBarEntry> LibraryDeclaration(MainWindow window)
+		{
+			Control? focused = TopLevel.GetTopLevel(window)?.FocusManager?.GetFocusedElement() as Control;
+			return focused?.Name switch {
+				"RomPickerLibraryFolders" => PlayBarDeclarations.LibraryFolders,
+				"RomPickerBrowseFile" => PlayBarDeclarations.BrowseFile,
+				"RomPickerSearch" => PlayBarDeclarations.SearchField,
+				"RomPickerBack" => PlayBarDeclarations.BackButton,
+				"RomPickerSearchClear" => PlayBarDeclarations.SearchClear,
+				_ => PlayBarDeclarations.Library
+			};
+		}
+
+		//The recents home's A is the focused control's, not the surface's: Continue
+		//plays, but Open a game… (the secondary button) opens the sheet.
+		private static IReadOnlyList<PlayBarEntry> HomeDeclaration(MainWindow window)
+		{
+			return TopLevel.GetTopLevel(window)?.FocusManager?.GetFocusedElement() is Control focused
+				&& focused == Named(window, "PlayHomeOpenRomSecondary")
+				? PlayBarDeclarations.HomeFirstRun : PlayBarDeclarations.Home;
 		}
 
 		//W-P1/W-P2: the home's primary action, or W-P3's Continue, or the slot
@@ -623,7 +654,31 @@ namespace Mesen.Windows
 			{
 				_window = window;
 				_model = model;
+				_model.InHandDevice = InHand;
+				_model.PlayActionBarDeclaration = BarDeclaration;
 			}
+
+			//#1104: what ADR-0256 Decision 6 calls the pad in hand: a connected pad
+			//is the input being held (PlayMenuHint.ActiveDevice), its family is the
+			//last pad pressed - null while it is not told yet, which names no
+			//control. Also the seam W-P4's footer used to leave to the keyboard
+			//"until the bridge lands".
+			private (PlayInputDevice Device, PadFamily? Family) InHand()
+			{
+				PlayInputDevice device = PlayMenuHint.ActiveDevice(_model.ConnectedGamepadCount());
+				return (device, device == PlayInputDevice.Controller ? _padInHand.Current?.Family : null);
+			}
+
+			private void RefreshActionBar()
+			{
+				_model.RefreshPlayActionBar(BarDeclaration(), _keyboard is not null);
+			}
+
+			//What the focus owner declares right now, read fresh (not from the last
+			//tick) and null - a hidden bar - outside the Play door, where pad
+			//navigation is off and the bar's actions would name nothing.
+			private IReadOnlyList<PlayBarEntry>? BarDeclaration()
+				=> InPlayDoor ? PlayFocusOnOpen.Of(_window)?.Declared() : null;
 
 			public void Tick() => Tick(InputApi.GetPressedKeys(), null);
 
@@ -642,6 +697,12 @@ namespace Mesen.Windows
 				//the control in ADR-0256 Decision 6's on-screen text, and a pad
 				//pressed while a game runs is still the pad in hand.
 				_padInHand.OnPressed(pressed, key => PadNaming.Of(key, keyName));
+
+				//#1104: the shared action bar names the control in this hand, so it
+				//is recomputed from the same tick that moved the hand - and from the
+				//connected count, read here rather than subscribed to for the reason
+				//the pad's own state is sampled (PollInterval).
+				RefreshActionBar();
 
 				//Null is a real answer (a family this backend cannot name, no pad
 				//in hand yet): Next and PadNavRepeat both take it as "the pad asks
@@ -1105,6 +1166,7 @@ namespace Mesen.Windows
 				layer.Children.Add(_keyboardPanel);
 				PaintKeyboard();
 				PadKeyboardPanel.Place(field, layer, _keyboardPanel);
+				RefreshActionBar();
 				return true;
 			}
 
@@ -1123,6 +1185,7 @@ namespace Mesen.Windows
 				_keyboard = null;
 				_keyboardField = null;
 				_keyboardPanel = null;
+				RefreshActionBar();
 				if(refocus && field is not null && field.IsEffectivelyVisible) {
 					field.Focus(NavigationMethod.Directional);
 				}
