@@ -27,6 +27,20 @@
 //that apply, which costs the first press after launch its blip while the new
 //device opens (AC1).
 //
+//#1153: and neither Apply nor the stream's own Stop ever waits. Both run on the
+//UI thread, and both replace a stream whose own device may still be opening -
+//the case that put a ~10 s stall on the emulation thread in #733 - so the
+//replaced stream is taken out of service by the publish alone and its own thread
+//finishes the release (D9, D4). No join happens here, and none happens under
+//_applyLock either: the lock only serializes applies against each other, and
+//every call made while it is held returns at once.
+//
+//#1153 review: the process teardown is the one exception, and it is a deliberate
+//one. EmuApiWrapper::Release destroys the emulator the policy lambdas capture
+//right after it stops the host, so a detached owner thread would read freed
+//memory; that caller uses StopAndWait, which returns only once the owner thread
+//has left OwnerLoop. The wait is taken outside _applyLock, so it blocks no apply.
+//
 //Host-free: the device is a factory the caller hands in, so
 //scripts/core_unit_tests.cpp changes the device and the backend under a fake and
 //watches the next blip land on the new device.
@@ -48,30 +62,70 @@ public:
 	//the audio sheet is not a device change.
 	void Apply(const MenuSoundArming& arming)
 	{
-		std::lock_guard<std::mutex> lock(_applyLock);
-		std::shared_ptr<MenuSoundStream> current = std::atomic_load(&_stream);
-		if(current != nullptr && _armed == arming) {
-			return;
-		}
+		//The replaced stream is released once the lock is gone: dropping the last
+		//reference to a stream whose own thread already exited runs its destructor
+		//here, and that is work this call has no reason to do under a lock.
+		std::shared_ptr<MenuSoundStream> previous;
+		{
+			std::lock_guard<std::mutex> lock(_applyLock);
+			std::shared_ptr<MenuSoundStream> current = std::atomic_load(&_stream);
+			if(current != nullptr && _armed == arming) {
+				return;
+			}
 
-		if(current != nullptr) {
-			//The old stream stops before the new one is built: its own thread is
-			//the one that releases the old device, and it has been joined by the
-			//time the fresh sink is created (D4 - "re-arming means the old device
-			//is released only after its own thread is joined").
-			current->Stop();
-		}
+			//D9 (#1153): the publish is what takes the old stream out of service,
+			//and Stop below returns at once - it signals the owner thread and
+			//detaches it, so the old device is released by that thread on its way
+			//out (D4) and never by this one. Nothing here waits for a device, not
+			//even for an open the old stream is still running: that is the stall
+			//#1153 removes from the settings-apply path.
+			std::atomic_store(&_stream, std::shared_ptr<MenuSoundStream>());
+			previous = std::move(current);
+			if(previous != nullptr) {
+				previous->Stop();
+			}
 
-		Arm(arming);
+			Arm(arming);
+		}
 	}
 
 	void Stop()
 	{
-		std::lock_guard<std::mutex> lock(_applyLock);
-		std::shared_ptr<MenuSoundStream> stream = std::atomic_load(&_stream);
-		std::atomic_store(&_stream, std::shared_ptr<MenuSoundStream>());
+		//Same rule as Apply: the stream is unpublished here and the release is its
+		//own thread's, so the caller - the UI thread tearing the app down, or the
+		//headless runner's Release() - is never held by a device's open (D9).
+		std::shared_ptr<MenuSoundStream> stream;
+		{
+			std::lock_guard<std::mutex> lock(_applyLock);
+			stream = std::atomic_load(&_stream);
+			std::atomic_store(&_stream, std::shared_ptr<MenuSoundStream>());
+		}
+
 		if(stream != nullptr) {
 			stream->Stop();
+		}
+	}
+
+	//#1153 review: the teardown's own stop. EmuApiWrapper::Release destroys the
+	//emulator the stream's policy lambdas capture on its next line, so a detached
+	//owner thread still inside OwnerLoop would read freed memory. This waits for
+	//that thread - the release included - and is the one caller where the wait is
+	//free: Release runs as the process goes away, not on a UI press (#733).
+	//The wait happens outside _applyLock, which no thread of the stream's ever
+	//takes, so it cannot deadlock an apply.
+	void StopAndWait()
+	{
+		std::shared_ptr<MenuSoundStream> stream;
+		{
+			std::lock_guard<std::mutex> lock(_applyLock);
+			stream = std::atomic_load(&_stream);
+			std::atomic_store(&_stream, std::shared_ptr<MenuSoundStream>());
+		}
+
+		if(stream != nullptr) {
+			//Held across the wait: the stream owns the latch being waited on, and
+			//the owner thread's own reference is gone the moment it exits.
+			stream->StopAndWait();
 		}
 	}
 
@@ -94,11 +148,11 @@ public:
 private:
 	void Arm(const MenuSoundArming& arming)
 	{
-		_armed = arming;
-
 		std::unique_ptr<IMenuSoundSink> sink = _sinkFactory(arming);
 		std::shared_ptr<MenuSoundStream> stream;
 		if(sink != nullptr) {
+			//Shared-owned: the stream's owner thread keeps a reference for as long
+			//as it runs, so Stop can detach it rather than join it (D9, #1153).
 			stream = std::make_shared<MenuSoundStream>(std::move(sink), _audioEnabled, _masterVolume, _gameRunning, _log);
 		}
 
@@ -106,6 +160,10 @@ private:
 		//stream answers unavailable, so a press that lands during the open is
 		//refused rather than queued (D9).
 		std::atomic_store(&_stream, stream);
+		//And only once it is published: an arming recorded before the factory ran
+		//would describe a stream that never came to exist, and every later apply
+		//carrying the same settings would return early on that lie.
+		_armed = arming;
 		if(stream != nullptr) {
 			stream->Start();
 		}

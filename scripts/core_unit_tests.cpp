@@ -17423,9 +17423,12 @@ namespace
 		return blip;
 	}
 
-	std::unique_ptr<MenuSoundStream> MakeMenuSoundStream(std::unique_ptr<FakeMenuSoundSink> sink, std::shared_ptr<FakeMenuSoundPolicy> policy)
+	//Shared-owned, like the host builds it: the stream's owner thread keeps a
+	//reference to the stream so a stop can detach that thread instead of joining
+	//it (D9, #1153).
+	std::shared_ptr<MenuSoundStream> MakeMenuSoundStream(std::unique_ptr<FakeMenuSoundSink> sink, std::shared_ptr<FakeMenuSoundPolicy> policy)
 	{
-		return std::make_unique<MenuSoundStream>(
+		return std::make_shared<MenuSoundStream>(
 			std::move(sink),
 			[policy]() { return policy->AudioEnabled.load(); },
 			[policy]() { return policy->MasterVolume.load(); },
@@ -17494,6 +17497,10 @@ namespace
 			Devices.push_back(arming.Device);
 			Backends.push_back(arming.Backend);
 			auto sink = std::make_shared<FakeMenuSoundSink>();
+			//How long this device takes to answer its open. A case that wants the
+			//open still running when the next arming lands - #733's slow CoreAudio
+			//device - sets this before the apply that creates the device.
+			sink->OpenDelayMs.store(NextOpenDelayMs);
 			Sinks.push_back(sink.get());
 			_owned.push_back(std::move(sink));
 			return std::make_unique<PooledMenuSoundSink>(_owned.back());
@@ -17502,6 +17509,7 @@ namespace
 		std::vector<std::string> Devices;
 		std::vector<int> Backends;
 		std::vector<FakeMenuSoundSink*> Sinks;
+		int NextOpenDelayMs = 0;
 
 	private:
 		std::vector<std::shared_ptr<FakeMenuSoundSink>> _owned;
@@ -17687,7 +17695,10 @@ void TestAPickedDeviceChangeReArmsTheMenuSoundStream()
 	host->Apply({"USB Headset", TestBackendWasapi});
 	Check(pool->Sinks.size() == 2, "menu sound: a device change opens a new device", std::to_string(pool->Sinks.size()));
 	Check(pool->Devices.size() == 2 && pool->Devices[1] == "USB Headset", "menu sound: the new device is the one the player picked");
-	Check(first->Releases.load() == 1, "menu sound: the old device is released on a re-arm", std::to_string(first->Releases.load()));
+	//D9/#1153: the release runs on the old stream's own thread, so it lands after
+	//this call returns - a re-arm that waited for it is exactly the defect.
+	Check(WaitForMenuSound([&]() { return first->Releases.load() == 1; }),
+		"menu sound: the old device is released on a re-arm", std::to_string(first->Releases.load()));
 	Check(first->ReleasedOnThread == first->OwnerThread && first->OwnerThread != std::this_thread::get_id(),
 		"menu sound: the old device is released on the old stream's own thread, not on the apply path's (D4)");
 
@@ -17708,7 +17719,8 @@ void TestAPickedDeviceChangeReArmsTheMenuSoundStream()
 	}
 
 	host->Stop();
-	Check(second != nullptr && second->Releases.load() == 1, "menu sound: stopping the host releases the armed device");
+	Check(WaitForMenuSound([&]() { return second != nullptr && second->Releases.load() == 1; }),
+		"menu sound: stopping the host releases the armed device");
 }
 
 void TestABackendChangeToAnApiWithNoMenuSinkDisarmsTheStream()
@@ -17734,7 +17746,8 @@ void TestABackendChangeToAnApiWithNoMenuSinkDisarmsTheStream()
 	//coming out of the API the player just left (D9), so the capability goes away
 	//and the row hides instead.
 	host->Apply({"", TestBackendDirectSound});
-	Check(wasapi->Releases.load() == 1, "menu sound: the old backend's device is released when the backend changes",
+	Check(WaitForMenuSound([&]() { return wasapi->Releases.load() == 1; }),
+		"menu sound: the old backend's device is released when the backend changes",
 		std::to_string(wasapi->Releases.load()));
 	Check(!host->IsAvailable(), "menu sound: a backend with no menu sink answers unavailable");
 	std::vector<int16_t> blip = MenuSoundBlip(32);
@@ -17812,7 +17825,197 @@ void TestTheMenuSoundHostOpensNothingUntilAnApplyNamesADevice()
 	Check(WaitForMenuSound([&]() { return device->Unpauses.load() == 1; }), "menu sound: the first blip plays on that device");
 
 	host->Stop();
-	Check(device->Releases.load() == 1, "menu sound: stopping the host releases the device the first apply named");
+	Check(WaitForMenuSound([&]() { return device->Releases.load() == 1; }),
+		"menu sound: stopping the host releases the device the first apply named");
+}
+
+//ADR-0270 D9, and the defect #1153 names: a re-arm must never wait for the
+//stream it is replacing. The open can take seconds (#733: a CoreAudio device
+//behind a sleeping monitor took ~10 s to fail inside SDL_OpenAudioDevice), and
+//the caller of a re-arm is the settings-apply path - the UI thread. The old
+//stream is signalled and detached instead; its own thread finishes the open and
+//releases the device, so the device is still closed exactly once, and never by
+//the caller.
+void TestAReArmNeverWaitsForTheOldStreamsOpen()
+{
+	auto policy = std::make_shared<FakeMenuSoundPolicy>();
+	auto pool = std::make_shared<FakeMenuSoundDevicePool>();
+	auto host = MakeMenuSoundHost(pool, policy);
+
+	//The player's device answers its open only after a second and a half, so the
+	//open is still running when they pick another one.
+	pool->NextOpenDelayMs = 1500;
+	host->Apply({"Slow Speakers", TestBackendWasapi});
+	Check(pool->Sinks.size() == 1, "menu sound: the first arming opens one device", std::to_string(pool->Sinks.size()));
+	FakeMenuSoundSink* slow = pool->Sinks[0];
+	Check(WaitForMenuSound([&]() { return slow->BeginOpens.load() == 1; }), "menu sound: the slow device's open has started");
+	Check(!host->IsAvailable(), "menu sound: the capability is false while that open is still running");
+
+	pool->NextOpenDelayMs = 0;
+	auto start = std::chrono::steady_clock::now();
+	host->Apply({"USB Headset", TestBackendWasapi});
+	long long applyMs = ElapsedMs(start);
+	Check(applyMs < 50,
+		"menu sound: a re-arm returns while the device it replaced is still opening",
+		std::to_string(applyMs) + " ms");
+	Check(pool->Sinks.size() == 2, "menu sound: the re-arm opened the device the player picked", std::to_string(pool->Sinks.size()));
+
+	//The stream it replaced is not abandoned: its own thread still finishes the
+	//open, releases the device there, and is the thread that does it - never the
+	//one that asked for the re-arm (D4).
+	Check(WaitForMenuSound([&]() { return slow->Releases.load() == 1; }),
+		"menu sound: the replaced device is released once its open finishes",
+		std::to_string(slow->Releases.load()));
+	Check(slow->ReleasedOnThread == slow->OwnerThread && slow->OwnerThread != std::this_thread::get_id(),
+		"menu sound: the replaced device is released on its own stream's thread, not on the re-arm's (D4)");
+
+	//And the replacement is a working stream, not a casualty of the race.
+	Check(WaitForMenuSound([&]() { return host->IsAvailable(); }), "menu sound: the capability comes up on the device the re-arm picked");
+	FakeMenuSoundSink* second = pool->Sinks.size() > 1 ? pool->Sinks[1] : nullptr;
+	if(second != nullptr) {
+		std::vector<int16_t> blip = MenuSoundBlip(2400);
+		Check(host->Submit(blip.data(), 2400, MenuSoundsTestRate), "menu sound: the replaced stream's device still accepts blips");
+		Check(WaitForMenuSound([&]() { return second->Unpauses.load() == 1; }), "menu sound: the blip plays on the new device");
+	}
+
+	host->Stop();
+}
+
+//#1153: the launch path can spell the same choice two ways, and a settings apply
+//must not re-arm over it. Windows enumerates the default endpoint as the string
+//"Default" (WasapiSoundManager::GetAvailableDevices) while a config that never
+//picked one holds "", and AudioConfigViewModel writes the enumerated first entry
+//back into the config when the saved name is not in the list. Two applies then
+//name the same endpoint and the stream must not open the default device twice:
+//the second open runs while the first press after launch wants its blip (AC1).
+void TestADefaultDeviceSpelledTwoWaysDoesNotReArm()
+{
+	auto policy = std::make_shared<FakeMenuSoundPolicy>();
+	auto pool = std::make_shared<FakeMenuSoundDevicePool>();
+	auto host = MakeMenuSoundHost(pool, policy);
+
+	host->Apply({"", TestBackendWasapi});
+	Check(pool->Sinks.size() == 1, "menu sound: an empty device name arms one device", std::to_string(pool->Sinks.size()));
+	Check(WaitForMenuSound([&]() { return host->IsAvailable(); }), "menu sound: the stream comes up on the default endpoint");
+	FakeMenuSoundSink* device = pool->Sinks[0];
+
+	host->Apply({"Default", TestBackendWasapi});
+	Check(pool->Sinks.size() == 1,
+		"menu sound: the default endpoint spelled \"Default\" is the same arming",
+		std::to_string(pool->Sinks.size()));
+	Check(device->Releases.load() == 0, "menu sound: a rename of the default endpoint does not release the running device");
+	Check(host->IsAvailable(), "menu sound: the stream stays up across that apply");
+
+	host->Apply({"", TestBackendWasapi});
+	Check(pool->Sinks.size() == 1, "menu sound: the default endpoint spelled \"\" is the same arming", std::to_string(pool->Sinks.size()));
+
+	//A device that is not the default is still a change, so the re-arm is not
+	//swallowed by the normalization above.
+	host->Apply({"USB Headset", TestBackendWasapi});
+	Check(pool->Sinks.size() == 2, "menu sound: a device that is not the default still re-arms", std::to_string(pool->Sinks.size()));
+	Check(pool->Devices.size() == 2 && pool->Devices[1] == "USB Headset", "menu sound: the re-armed device is the one the player picked");
+
+	//The rule behind it, at the unit: one default endpoint, two spellings, and a
+	//real device name that is not one of them.
+	Check(MenuSoundArming{"", TestBackendWasapi} == MenuSoundArming{"Default", TestBackendWasapi},
+		"menu sound: an empty device name and \"Default\" are the same arming");
+	Check(MenuSoundArming{MenuSoundDeviceResolve::DefaultDeviceName, TestBackendWasapi}
+		== MenuSoundArming{"", TestBackendWasapi},
+		"menu sound: the arming spells the default endpoint with the same name the resolver does");
+	Check(MenuSoundArming{"Default", TestBackendWasapi} != MenuSoundArming{"USB Headset", TestBackendWasapi},
+		"menu sound: a device that is not the default is a different arming");
+	Check(MenuSoundArming{"", TestBackendWasapi} != MenuSoundArming{"", TestBackendDirectSound},
+		"menu sound: the same device on another backend is a different arming");
+
+	host->Stop();
+}
+
+//#1153 review: MenuSoundHost::Stop is a publish - the owner thread is detached,
+//never joined - and EmuApiWrapper::Release destroys the emulator on its next
+//line. The stream reads the running predicate through a lambda that captures a
+//raw Emulator*, and OwnerLoop's D7 branches call it, so a thread still inside
+//that loop when Release returns is a use-after-free on a destroyed emulator.
+//The teardown therefore needs a wait - and it is the one place a wait costs
+//nothing: Release runs as the process goes away, not on a UI press where #733's
+//device open stalled the emulation thread.
+void TestAMenuSoundTeardownWaitsForTheOwnerThreadItDetached()
+{
+	auto policy = std::make_shared<FakeMenuSoundPolicy>();
+	auto pool = std::make_shared<FakeMenuSoundDevicePool>();
+
+	//Every policy read is counted, because that is the shape EmuApiWrapper has:
+	//the lambdas capture an Emulator* and Release destroys it on the line after
+	//it stops the host. A read that lands after the teardown returned is exactly
+	//the use-after-free the review found.
+	auto reads = std::make_shared<std::atomic<uint32_t>>(0);
+	auto host = std::make_unique<MenuSoundHost>(
+		[pool](const MenuSoundArming& arming) { return pool->Create(arming); },
+		[policy, reads]() { reads->fetch_add(1); return policy->AudioEnabled.load(); },
+		[policy, reads]() { reads->fetch_add(1); return policy->MasterVolume.load(); },
+		[policy, reads]() { reads->fetch_add(1); return policy->GameRunning.load(); },
+		[](const std::string&) {});
+
+	//Part A: the stop lands while the device is still opening - the #733 window,
+	//where a detached owner thread would outlive the teardown by seconds.
+	//The device answers its open only after the teardown is already under way, so
+	//a teardown that only publishes leaves its owner thread running past the
+	//caller - and past the emulator the caller is about to destroy.
+	pool->NextOpenDelayMs = 300;
+	host->Apply({"Slow Speakers", TestBackendWasapi});
+	Check(pool->Sinks.size() == 1, "menu sound: the teardown's device is armed", std::to_string(pool->Sinks.size()));
+	FakeMenuSoundSink* slow = pool->Sinks[0];
+	Check(WaitForMenuSound([&]() { return slow->BeginOpens.load() == 1; }),
+		"menu sound: the slow device's open has started");
+	Check(!host->IsAvailable(), "menu sound: the capability is false while that open is still running");
+
+	auto start = std::chrono::steady_clock::now();
+	host->StopAndWait();
+	long long stopMs = ElapsedMs(start);
+
+	//The property that matters: when the teardown returns, the thread that reads
+	//the emulator is gone, so nothing is left to read what the caller destroys.
+	Check(slow->Releases.load() == 1,
+		"menu sound: a waited teardown has released the device before it returns",
+		std::to_string(slow->Releases.load()));
+	Check(slow->ReleasedOnThread == slow->OwnerThread && slow->OwnerThread != std::this_thread::get_id(),
+		"menu sound: the waited teardown still releases on the device's own thread, not the caller's (D4)");
+	Check(stopMs >= 250,
+		"menu sound: the teardown waited out the open it was abandoning",
+		std::to_string(stopMs) + " ms");
+
+	//And it stays released: no second release, and no late callback, lands after
+	//the caller has gone on to tear the rest of the process down.
+	std::this_thread::sleep_for(std::chrono::milliseconds(50));
+	Check(slow->Releases.load() == 1, "menu sound: nothing releases the device again after the teardown returned");
+	Check(slow->Reader.load() == nullptr, "menu sound: the reader is unpublished once the teardown returned");
+	Check(!host->IsAvailable(), "menu sound: a waited teardown leaves the capability false");
+
+	//Idempotent, like Stop: a second teardown has nothing left to wait for.
+	host->StopAndWait();
+	Check(slow->Releases.load() == 1, "menu sound: a second waited teardown releases nothing again");
+
+	//Part B: the stop lands on a stream that is up, with its owner thread inside
+	//the D7 branch reading the running predicate - the window the review named as
+	//the actual use-after-free, since the call is what dereferences the captured
+	//emulator.
+	policy->GameRunning.store(true);
+	host->Apply({"USB Headset", TestBackendWasapi});
+	Check(pool->Sinks.size() == 2, "menu sound: the running stream armed a device of its own", std::to_string(pool->Sinks.size()));
+	FakeMenuSoundSink* running = pool->Sinks[1];
+	Check(WaitForMenuSound([&]() { return host->IsAvailable(); }), "menu sound: that device comes up");
+
+	std::vector<int16_t> runningBlip = MenuSoundBlip(2400);
+	Check(host->Submit(runningBlip.data(), 2400, MenuSoundsTestRate), "menu sound: a blip is queued on the running device");
+	Check(WaitForMenuSound([&]() { return reads->load() > 0; }),
+		"menu sound: the owner thread is inside the D7 branch reading the running predicate");
+
+	host->StopAndWait();
+	uint32_t readsAtStop = reads->load();
+	std::this_thread::sleep_for(std::chrono::milliseconds(50));
+	Check(running->Releases.load() == 1, "menu sound: the running device is released before that teardown returns");
+	Check(reads->load() == readsAtStop,
+		"menu sound: nothing reads the policy the caller destroys after the teardown returned",
+		std::to_string(reads->load() - readsAtStop) + " read(s) after");
 }
 
 void TestAMenuSoundSubsystemInitThatFailsFailsTheOpen()
@@ -17904,6 +18107,56 @@ void TestTheMenuSoundDeviceIsTheOneThePlayerPicked()
 		"menu sound: with neither endpoint there the resolution fails");
 }
 
+//#1153: the description the config holds is not the id the enumerator wants.
+//WasapiSoundManager::SetAudioDevice converts one into the other before it opens
+//the game's device, and the menu sink has to make the same conversion - asking
+//IMMDeviceEnumerator::GetDevice for a "device id" that is really a friendly name
+//fails for every device on the machine, "Default" included, and leaves the blips
+//on the default endpoint while the game plays on the device the player picked.
+void TestTheMenuSoundDeviceNameResolvesToAnEndpointId()
+{
+	std::vector<std::string> lookedUp;
+	auto idForName = [&](const std::string& name) -> std::string {
+		lookedUp.push_back(name);
+		return name == "USB Headset" ? "{0.0.0.00000000}.{usb}" : std::string();
+	};
+
+	//The device the player picked: its description becomes the endpoint id, which
+	//is the one GetDevice opens.
+	Check(MenuSoundDeviceResolve::ToEndpointId("USB Headset", idForName) == "{0.0.0.00000000}.{usb}",
+		"menu sound: a picked device's description is converted to its endpoint id");
+	Check(lookedUp.size() == 1 && lookedUp[0] == "USB Headset",
+		"menu sound: the description is what the enumeration is asked for",
+		lookedUp.empty() ? "<none>" : lookedUp[0]);
+
+	//The two spellings of the default endpoint are the default endpoint, and
+	//neither is a device to look up: an empty id is what the game device resolves
+	//to GetDefaultAudioEndpoint.
+	Check(MenuSoundDeviceResolve::ToEndpointId("Default", idForName).empty(),
+		"menu sound: \"Default\" is the default endpoint, not a device to look up");
+	Check(MenuSoundDeviceResolve::ToEndpointId("", idForName).empty(), "menu sound: an empty name is the default endpoint");
+	Check(lookedUp.size() == 1, "menu sound: the default endpoint is never looked up as a device", std::to_string(lookedUp.size()));
+
+	//A description the machine no longer has resolves to nothing, which is the
+	//"the configured one is gone" answer the game device takes to the default one.
+	Check(MenuSoundDeviceResolve::ToEndpointId("Gone Speakers", idForName).empty(),
+		"menu sound: a device that is gone has no id, so the default endpoint answers");
+	Check(lookedUp.size() == 2, "menu sound: a description that is not the default is looked up");
+
+	//And the id that conversion produced is the endpoint the choice opens.
+	Check(MenuSoundDeviceResolve::Resolve(
+			MenuSoundDeviceResolve::ToEndpointId("USB Headset", idForName),
+			[&](const std::string& id) { return id == "{0.0.0.00000000}.{usb}"; },
+			[]() { return false; }),
+		"menu sound: the converted id is the endpoint the sink asks for");
+
+	//The set of names that count as "the default endpoint" is the rule the sink's
+	//resolution and the host's arming-equality both read.
+	Check(MenuSoundDeviceResolve::IsDefaultDeviceName("") && MenuSoundDeviceResolve::IsDefaultDeviceName("Default")
+		&& !MenuSoundDeviceResolve::IsDefaultDeviceName("USB Headset"),
+		"menu sound: the default endpoint is exactly \"\" and \"Default\"");
+}
+
 void TestAStoppedSdlAudioDeviceIsNotAlive()
 {
 	MenuSoundSinkHealth health;
@@ -17988,7 +18241,9 @@ void TestReleasingTheMenuSoundDeviceNeverTouchesTheStreamAgain()
 
 	stream->Stop();
 
-	Check(device->Releases.load() == 1, "menu sound: the device is released exactly once",
+	//D9/#1153: Stop signals the owner thread and returns; the release is that
+	//thread's own exit path, so it lands after this call returns.
+	Check(WaitForMenuSound([&]() { return device->Releases.load() == 1; }), "menu sound: the device is released exactly once",
 		"releases " + std::to_string(device->Releases.load()) + ", unpauses " + std::to_string(device->Unpauses.load()));
 	Check(device->ReleasedOnThread == device->OwnerThread && device->OwnerThread != caller,
 		"menu sound: the device is released on the stream's own thread, not the caller's (D4)");
@@ -18525,9 +18780,13 @@ int main()
 	TestABackendChangeToAnApiWithNoMenuSinkDisarmsTheStream();
 	TestAnUnchangedArmingLeavesTheRunningMenuSoundStreamAlone();
 	TestTheMenuSoundHostOpensNothingUntilAnApplyNamesADevice();
+	TestAReArmNeverWaitsForTheOldStreamsOpen();
+	TestADefaultDeviceSpelledTwoWaysDoesNotReArm();
+	TestAMenuSoundTeardownWaitsForTheOwnerThreadItDetached();
 	TestAMenuSoundSubsystemInitThatFailsFailsTheOpen();
 	TestAMenuSoundSubsystemInitRunsOnceForTheSession();
 	TestTheMenuSoundDeviceIsTheOneThePlayerPicked();
+	TestTheMenuSoundDeviceNameResolvesToAnEndpointId();
 	TestAStoppedSdlAudioDeviceIsNotAlive();
 	TestAWsapiAudioClientInvalidatedIsDeadForGood();
 	TestADeadMenuSoundDeviceFlipsTheCapabilityBack();

@@ -23,7 +23,9 @@
   not taken are in Alternatives.
 - Date: 2026-10-09
 - Related: spec issue #1102 (slice 6, "Menu sounds"), issue #1105, PR #1117,
-  issues #1126 and #1127, ADR-0256 (the pad belongs to the console while a
+  issues #1126 and #1127, issue #1153 (PR #1148's Apply/Stop join stalls the UI
+  thread; fixed by PR #1156, where the re-arm no longer joins and the teardown
+  now does — see Consequences), ADR-0256 (the pad belongs to the console while a
   game runs), ADR-0254 (the Play overlay and the lost-focus reason),
   ADR-0203 (Windows + Apple-Silicon macOS is what ships), ADR-0240 (how a
   `proposed` ADR becomes `accepted` here), `UI/Logic/MenuSounds.cs`,
@@ -267,8 +269,15 @@ ADR does not fix, that is a new ADR, not a widened one.
 - **Bounded overlap on a launch press.** One blip of at most 90 ms can overlap
   the first frames of a game launched from a press that arrived mid-blip (D7).
 - **Traps left behind.** The stream must be re-armed if the audio device or
-  backend setting changes, and re-arming means the old device is released only
-  after its own thread is joined; the capability is read by a settings sheet
+  backend setting changes, and re-arming means the old device is released on
+  its own thread before that thread exits; the caller never joins (D9, #1153) —
+  with one deliberate exception, the process teardown
+  (`EmuApiWrapper::Release`), which does wait for that thread (`StopAndWait`)
+  because the emulator its policy lambdas captured is destroyed on the next
+  line, so a detached thread still inside `OwnerLoop` would read freed memory
+  (#1153 review of #1148). Every other caller, the settings-apply path above
+  all, keeps the non-blocking stop: the wait belongs where the process is going
+  away, never on a UI press. The capability is read by a settings sheet
   build, so it must be answerable at any time from any thread without opening
   anything; and a sink that is added per backend is a place where a new
   backend can ship silently without a sound path, which is why the capability

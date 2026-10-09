@@ -130,13 +130,27 @@ static_assert((int)AudioBackendType::Default == 0 && (int)AudioBackendType::Wasa
 	&& (int)AudioBackendType::DirectSound == 2 && (int)AudioBackendType::Sdl2 == 3,
 	"MenuSoundArming::Backend mirrors AudioBackendType");
 
+//ADR-0270 D6/D9 (#1153): the gate and the volume the menu stream reads, taken off
+//the live AudioConfig on the thread that applies the settings rather than read
+//from the stream's own threads. EmuSettings::SetAudioConfig assigns the whole
+//config in place, so a device thread reading it races that assignment - the same
+//race the sink carries its device and backend around to avoid (MenuSoundArming.h)
+//- and the two values can only change through an audio apply, so refreshing the
+//snapshot there answers exactly what a live read would, without the race.
+std::atomic<bool> _menuSoundAudioEnabled{true};
+std::atomic<uint32_t> _menuSoundMasterVolume{100};
+
 //ADR-0270 D2/D9: where the stream is armed - the output device the player picked
 //and the backend they picked. Read here, on the thread that applies the settings,
 //and handed down to the sink: a sink thread that read AudioConfig itself would
-//race the apply that rewrites it (MenuSoundArming.h).
+//race the apply that rewrites it (MenuSoundArming.h). The device name is copied
+//into the arming's own string here, so the const char* the apply path repoints
+//under it is never held past this call.
 MenuSoundArming CurrentMenuSoundArming()
 {
 	AudioConfig& config = _emu->GetSettings()->GetAudioConfig();
+	_menuSoundAudioEnabled.store(config.EnableAudio, std::memory_order_release);
+	_menuSoundMasterVolume.store(config.MasterVolume, std::memory_order_release);
 	return MenuSoundArming{ config.AudioDevice != nullptr ? config.AudioDevice : "", (int)config.AudioBackend };
 }
 
@@ -197,9 +211,10 @@ void PrepareMenuSoundStream()
 		[](const MenuSoundArming& arming) { return CreateMenuSoundSink(arming); },
 		//D6: audio off means the app is silent, game and menu alike; the volume is
 		//always cfg.MasterVolume, never the audio player's and never the game
-		//path's ducking rules.
-		[emu]() { return emu->GetSettings()->GetAudioConfig().EnableAudio; },
-		[emu]() { return emu->GetSettings()->GetAudioConfig().MasterVolume; },
+		//path's ducking rules. Both are the snapshot the audio apply takes, because
+		//the volume is read on the device's own thread at fill time (#1153).
+		[]() { return _menuSoundAudioEnabled.load(std::memory_order_acquire); },
+		[]() { return _menuSoundMasterVolume.load(std::memory_order_acquire); },
 		//D7: the stream's own cut, on the predicate the caller's gate uses.
 		[emu]() { return emu->IsRunning() && !emu->IsPaused(); },
 		[](const string& message) { MessageManager::Log(message); }));
@@ -477,11 +492,21 @@ extern "C"
 	DllExport void __stdcall Release()
 	{
 		if(_menuSoundHost) {
-			//ADR-0270 D2/D4: this device is not the emulator's, and it is let go
-			//before the emulator's own teardown - Stop joins the stream's owner
-			//thread, which releases the menu device on its way out, so the menu
-			//device is never still open while the game device is torn down.
-			_menuSoundHost->Stop();
+			//ADR-0270 D2/D4/D9 (#1153): this device is not the emulator's, and it
+			//is let go first, so the emulator's own teardown never runs under a
+			//menu stream that is still opening a device of its own. The host's
+			//owner thread closes this device on its way out (D4: the thread that
+			//releases is the thread that opened it). The two devices share nothing
+			//but the backend - the menu one is never routed through the emulator's
+			//device, its ring or its pause ownership.
+			//
+			//#1153 review: and this is the one place that waits for that thread.
+			//Stop alone detaches it, and the thread reads the running predicate
+			//through a lambda that captured this emulator - which the next three
+			//lines destroy. Waiting here is free: it is the process going away,
+			//not the UI press #733 stalled. Same rule as the settings-apply path
+			//otherwise: the device is not closed by this thread either way.
+			_menuSoundHost->StopAndWait();
 			_menuSoundHost.reset();
 		}
 

@@ -8,6 +8,7 @@
 #include "Utilities/UTF8Util.h"
 #include <audioclient.h>
 #include <mmdeviceapi.h>
+#include <Functiondiscoverykeys_devpkey.h>
 #include <wrl/client.h>
 
 using Microsoft::WRL::ComPtr;
@@ -156,6 +157,14 @@ public:
 		//D4: the thread that joins comes before the device is freed - the open
 		//worker first, then the device. Service() runs on the owner thread, so
 		//there is no reader thread to join here.
+		//
+		//#1153: this join therefore happens on the stream's owner thread and never
+		//on its caller. A re-arm takes a stream whose worker is still inside
+		//Activate/Initialize and detaches that owner thread instead of joining it
+		//(MenuSoundStream::Stop); the worker finishes here, on the thread whose
+		//exit path this is, and only then are _audioClient and _renderClient reset
+		//- resetting them while the worker still held them is the use-after-free
+		//D4's ordering exists to prevent.
 		if(_openWorker.joinable()) {
 			_openWorker.join();
 		}
@@ -192,6 +201,16 @@ private:
 			return false;
 		}
 
+		//#1153: AudioConfig::AudioDevice holds the endpoint's description, never
+		//its id, so the name is converted the way WasapiSoundManager::SetAudioDevice
+		//converts it before it opens the game's device. Handing the description
+		//straight to GetDevice asked for an endpoint by an id that is really a
+		//friendly name, which fails for every device - "Default" included - and
+		//left the blips on the default endpoint while the game played elsewhere.
+		std::string endpointId = MenuSoundDeviceResolve::ToEndpointId(
+			_arming.Device,
+			[&enumerator](const std::string& deviceName) { return FindEndpointId(enumerator.Get(), deviceName); });
+
 		//D2: the output device the player already picked, resolved exactly the way
 		//the game device resolves it (WasapiSoundManager::Initialize) - the
 		//configured endpoint by its id, and the default endpoint when they picked
@@ -200,7 +219,7 @@ private:
 		//on another one.
 		ComPtr<IMMDevice> device;
 		bool resolved = MenuSoundDeviceResolve::Resolve(
-			_arming.Device,
+			endpointId,
 			[&enumerator, &device](const std::string& deviceId) {
 				std::wstring wideDeviceId = utf8::utf8::decode(deviceId);
 				return SUCCEEDED(enumerator->GetDevice(wideDeviceId.c_str(), &device)) && device.Get() != nullptr;
@@ -253,6 +272,62 @@ private:
 		}
 
 		return true;
+	}
+
+	//#1153: the endpoint id behind a description, enumerated the way
+	//WasapiSoundManager::GetAvailableDeviceInfo enumerates it - the same
+	//PKEY_Device_FriendlyName the game device matches on, so both halves of the
+	//app agree on which device a name names. An empty answer means the name is
+	//not in the enumeration, which the game device treats as "the configured one
+	//is gone" and resolves to the default endpoint.
+	static std::string FindEndpointId(IMMDeviceEnumerator* enumerator, const std::string& deviceName)
+	{
+		if(enumerator == nullptr) {
+			return std::string();
+		}
+
+		ComPtr<IMMDeviceCollection> collection;
+		if(FAILED(enumerator->EnumAudioEndpoints(eRender, DEVICE_STATE_ACTIVE, &collection))) {
+			return std::string();
+		}
+
+		UINT count = 0;
+		collection->GetCount(&count);
+
+		for(UINT i = 0; i < count; i++) {
+			ComPtr<IMMDevice> device;
+			if(FAILED(collection->Item(i, &device))) {
+				continue;
+			}
+
+			ComPtr<IPropertyStore> props;
+			if(FAILED(device->OpenPropertyStore(STGM_READ, &props))) {
+				continue;
+			}
+
+			PROPVARIANT varName;
+			PropVariantInit(&varName);
+			if(FAILED(props->GetValue(PKEY_Device_FriendlyName, &varName))) {
+				PropVariantClear(&varName);
+				continue;
+			}
+
+			bool matches = varName.vt == VT_LPWSTR && utf8::utf8::encode(varName.pwszVal) == deviceName;
+			PropVariantClear(&varName);
+			if(!matches) {
+				continue;
+			}
+
+			LPWSTR deviceId = nullptr;
+			if(FAILED(device->GetId(&deviceId)) || deviceId == nullptr) {
+				return std::string();
+			}
+			std::string id = utf8::utf8::encode(deviceId);
+			CoTaskMemFree(deviceId);
+			return id;
+		}
+
+		return std::string();
 	}
 
 	//The device is opened in shared mode with the audio engine's own period as its
