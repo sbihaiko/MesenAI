@@ -267,3 +267,10 @@ void LinuxKeyManager::TestForceFeedback(uint32_t index, uint16_t magnitudeRight,
 		_controllers[index]->SetForceFeedback(magnitudeRight, magnitudeLeft);
 	}
 }
+
+bool LinuxKeyManager::PlayGamepadTick(uint32_t index)
+{
+	//#1122: one pad, addressed by the same index GetGamepadInfo takes - the pad
+	//in the player's hand ticks, the others are not touched.
+	return index < _controllers.size() && _controllers[index]->PlayTick();
+}

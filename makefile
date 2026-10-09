@@ -777,8 +777,18 @@ CUTOBJ := $(CUTSRC:.cpp=.cut.o)
 scripts/core_unit_tests: $(CUTOBJ)
 	$(CXX) $(CUTOBJ) -o $@
 
-core-unit-tests: scripts/core_unit_tests
+#ADR-0127/#1122: the Linux evdev menu tick's own suite. The backend itself needs
+#libevdev and an /dev/input/eventN, so it is not on the CUTSRC list (no second
+#main, no platform headers) - what IS host-free is the tick's decision and the
+#shape of the two files that carry it out, and Linux/LinuxHapticTick.h is the
+#header ADR-0127 asks a host-free unit to live in. Same flags as the suite above,
+#so it is compiled the same way on the Linux leg that runs this target.
+scripts/linux_haptic_tests: scripts/linux_haptic_tests.cpp Linux/LinuxHapticTick.h
+	$(CXX) $(CUTFLAGS) scripts/linux_haptic_tests.cpp -o $@
+
+core-unit-tests: scripts/core_unit_tests scripts/linux_haptic_tests
 	scripts/core_unit_tests
+	scripts/linux_haptic_tests
 
 #ADR-0237 / PRD slice P.8: the macOS Metal presenter and the renderer-selection
 #policy, driven against an offscreen NSView with the drawable read back. macOS
@@ -886,5 +896,5 @@ clean:
 	rm -r -f $(LUAOBJ)
 	rm -r -f $(MACOSOBJ)
 	rm -r -f $(DLLOBJ)
-	rm -r -f $(CUTOBJ) $(CUTOBJ:.o=.d) scripts/core_unit_tests
+	rm -r -f $(CUTOBJ) $(CUTOBJ:.o=.d) scripts/core_unit_tests scripts/linux_haptic_tests
 	rm -r -f $(OUTFOLDER)

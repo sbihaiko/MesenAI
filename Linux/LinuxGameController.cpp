@@ -52,6 +52,17 @@ std::shared_ptr<LinuxGameController> LinuxGameController::GetController(Emulator
 	return nullptr;
 }
 
+//#1122: the three fields of an FF_RUMBLE effect anything here writes. One writer
+//for all of them is what makes the borrowed-pulse restore the same call with the
+//remembered numbers (LinuxHapticTick::GameplayValues) instead of a second,
+//hand-written copy of the mapping.
+static void WriteEffectValues(ff_effect* effect, const LinuxHapticTick::EffectValues& values)
+{
+	effect->u.rumble.strong_magnitude = values.Strong;
+	effect->u.rumble.weak_magnitude = values.Weak;
+	effect->replay.length = values.Length;
+}
+
 LinuxGameController::LinuxGameController(Emulator* emu, int deviceID, int fileDescriptor, libevdev* device)
 {
 	_emu = emu;
@@ -67,13 +78,26 @@ LinuxGameController::LinuxGameController(Emulator* emu, int deviceID, int fileDe
 	_rumbleEffect->id = -1;
 	_rumbleEffect->u.rumble.strong_magnitude = 0x8000;
 	_rumbleEffect->u.rumble.weak_magnitude = 0x8000;
-	_rumbleEffect->replay.length = 2000;
+	_rumbleEffect->replay.length = LinuxHapticTick::GameplayEffectLengthMs;
 	_rumbleEffect->replay.delay = 0;
 
 	int rc = ioctl(_fd, EVIOCSFF, _rumbleEffect.get());
 	if(rc < 0) {
 		MessageManager::Log("Could not initialize force feedback effect");
 		_rumbleEffect.reset();
+	} else {
+		//#1122: a second kernel effect, for the menu tick alone. A pad that has
+		//only one force-feedback slot refuses this upload, and the tick then
+		//borrows the gameplay effect for its pulse (LinuxHapticTick::Motor).
+		_tickEffect.reset(new ff_effect());
+		memset(_tickEffect.get(), 0, sizeof(ff_effect));
+		_tickEffect->type = FF_RUMBLE;
+		_tickEffect->id = -1;
+		_tickEffect->replay.delay = 0;
+		WriteEffectValues(_tickEffect.get(), LinuxHapticTick::PulseValues());
+		if(ioctl(_fd, EVIOCSFF, _tickEffect.get()) < 0) {
+			_tickEffect.reset();
+		}
 	}
 
 	_eventThread = std::thread([=]() {
@@ -289,6 +313,12 @@ void LinuxGameController::SetForceFeedback(uint16_t magnitudeRight, uint16_t mag
 		return;
 	}
 
+	std::lock_guard<std::mutex> lock(_ffMutex);
+
+	//#1122: remembered, so the tick can tell a used motor from a free one - and
+	//so it can put these very numbers back if it borrows the effect for a pulse.
+	_tickMotor.SetGameplayRumble(magnitudeRight, magnitudeLeft);
+
 	_rumbleEffect->u.rumble.strong_magnitude = magnitudeLeft;
 	_rumbleEffect->u.rumble.weak_magnitude = magnitudeRight;
 	int rc = ioctl(_fd, EVIOCSFF, _rumbleEffect.get());
@@ -297,14 +327,52 @@ void LinuxGameController::SetForceFeedback(uint16_t magnitudeRight, uint16_t mag
 		return;
 	}
 
+	PlayEffect(_rumbleEffect->id);
+}
+
+bool LinuxGameController::PlayEffect(int effectId)
+{
 	struct input_event play = {};
 	play.type = EV_FF;
-	play.code = _rumbleEffect->id;
+	play.code = effectId;
 	play.value = 1;
 
-	rc = write(_fd, (const void*)&play, sizeof(play));
-	if(rc < 0) {
-		//MessageManager::Log("Could not play force feedback effect.");
+	return write(_fd, (const void*)&play, sizeof(play)) >= 0;
+}
+
+bool LinuxGameController::PlayTick()
+{
+	//#1122: the GUI thread ticks while the emulation thread feeds the game's
+	//rumble, so the whole tick is one critical section - the decision below reads
+	//what the game asked the motor for, and the borrowed branch writes the
+	//gameplay effect itself.
+	std::lock_guard<std::mutex> lock(_ffMutex);
+
+	switch(_tickMotor.Decide(_enableForceFeedback, _tickEffect != nullptr)) {
+		case LinuxHapticTick::Slot::Own:
+			return PlayEffect(_tickEffect->id);
+
+		case LinuxHapticTick::Slot::Borrowed: {
+			if(!_rumbleEffect) {
+				return false;
+			}
+			//A pad with a single force-feedback slot has no room for a second
+			//effect: the pulse overwrites the gameplay one for 40 ms, and the
+			//game's own values go back in memory so the next SetForceFeedback
+			//uploads a 2 s rumble rather than a 40 ms click. The gameplay rumble
+			//is zero here - Decide only borrows a free motor.
+			WriteEffectValues(_rumbleEffect.get(), LinuxHapticTick::PulseValues());
+			bool played = false;
+			if(ioctl(_fd, EVIOCSFF, _rumbleEffect.get()) >= 0) {
+				played = PlayEffect(_rumbleEffect->id);
+			}
+			WriteEffectValues(_rumbleEffect.get(), LinuxHapticTick::GameplayValues(_tickMotor));
+			return played;
+		}
+
+		case LinuxHapticTick::Slot::None:
+		default:
+			return false;
 	}
 }
 
@@ -336,6 +404,9 @@ uint32_t LinuxGameController::GetProductId()
 
 bool LinuxGameController::HasRumble()
 {
+	//#1122: what the tick is gated on, and the same condition Decide takes. Not
+	//"an effect exists" - the gameplay effect is uploaded before the pad ever
+	//reports a button, and force feedback stays off until one is pressed.
 	return _enableForceFeedback;
 }
 
