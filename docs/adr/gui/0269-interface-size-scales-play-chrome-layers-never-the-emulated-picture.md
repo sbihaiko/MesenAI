@@ -136,11 +136,11 @@ Nothing in Play is sized for a TV three meters away. Settings › Display has a
    is the control's own business and not this guarantee: where the value is host
    data of any length it wraps or is ellipsized as the view says.
    **The Look footer's Hold to Compare note (W-P10) was the one spot on this
-   sheet that did not meet it**, and #1149 is the work on it: the note shared
+   sheet that did not meet it**, and #1149 has closed it: the note shared
    Done's row and was left about 14 px of the 271 px page at 1.5 in 512x505,
-   drawn on one line and ellipsized — bounded, not whole. On the branch the note
-   wraps wherever it is drawn, so its reason is whole: it keeps the row wherever
-   the row has room for it, as W-P10 draws it, taking as many lines as that room
+   drawn on one line and ellipsized — bounded, not whole. The note now wraps
+   wherever it is drawn, so its reason is whole: it keeps the row wherever the
+   row has room for it, as W-P10 draws it, taking as many lines as that room
    needs — which is one line more than main's single ellipsized line at the
    ~1024x640 the wireframe is drawn at, so the page there is the footer's line
    taller, not unchanged; where the row has no room (less than
