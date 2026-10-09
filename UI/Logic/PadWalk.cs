@@ -9,10 +9,14 @@ namespace Mesen.Logic;
 //The live walk (UI.HeadlessTests/PlayPadWalkTests) produces the observation
 //from a real MainWindow; the rule is pure so UI.Tests proves each failure
 //fails with a doctored observation, no host or core needed.
-//A control the walk saw, by identity: Key is the control itself (compared by
-//reference), Label only names it in a sentence. Two controls with one Name are
-//two entries, so an unreachable twin cannot hide behind a reached one.
-public sealed record PadWalkControl(object Key, string Label);
+//A control the walk saw, by the label a player would point at. #1154: the label
+//IS its identity, and the only one the rule reads. The walk lists a control per
+//INSTANCE, and a surface that rebuilds its page under the pad (the Settings strip
+//replaces the page a press moves away from) hands it the same control again as a
+//new instance - so an identity compare reports that rebuild as a pad gap while
+//the pad did land on that control. Two controls with one label are one answer to
+//"can the pad reach this", which is what the walk is for.
+public sealed record PadWalkControl(string Label);
 
 public sealed record PadWalkObservation(
 	string Surface,
@@ -30,11 +34,17 @@ public static class PadWalk
 	//The four failures, as sentences that name the surface and the culprit.
 	//An off-bar surface (Declared null) is not a failure here: it is a known gap
 	//that PlayPadWalkTests.KnownBarGaps lists by name.
+	//
+	//#1154: reachability is asked by LABEL - the set of control kinds the surface
+	//shows against the set the pad landed on - and by nothing else, for the reason
+	//PadWalkControl carries. That is why this rule belongs here and not in the
+	//headless suite: it needs no window, so UI.Tests hands it a doctored
+	//observation and CI runs it (PadWalkJudgeTests).
 	public static List<string> Judge(PadWalkObservation o)
 	{
 		List<string> problems = new();
-		HashSet<object> reached = new(o.Reached.Select(c => c.Key), ReferenceEqualityComparer.Instance);
-		foreach(PadWalkControl control in o.Interactive.Where(c => !reached.Contains(c.Key))) {
+		HashSet<string> reached = new(o.Reached.Select(c => c.Label));
+		foreach(PadWalkControl control in o.Interactive.Where(c => !reached.Contains(c.Label))) {
 			problems.Add($"{o.Surface}: {control.Label} is not reachable from the pad (reached: {string.Join(", ", o.Reached.Select(c => c.Label))})");
 		}
 		foreach(string label in o.FocusOutside ?? Array.Empty<string>()) {

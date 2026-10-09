@@ -29,8 +29,12 @@ namespace Mesen.HeadlessTests;
 //  - B does not leave a surface that declares (or owes) a Back;
 //  - the shared action bar (#1104) names an action the surface does not have;
 //  - a pad press moves the focus outside the surface (#1134).
-//Controls are tracked by identity, not by Name, and are candidates by type,
-//visibility and enabled state, not by Focusable / IsTabStop (#1134).
+//Controls are tracked by identity while the walk runs - it follows an instance,
+//not a name - and the judgement over what it saw is asked by label (#1154): a
+//surface that rebuilds its page under the pad hands back the same control as a
+//new instance, and only the label answers "could the pad reach this".
+//Candidates are picked by type, visibility and enabled state, not by Focusable /
+//IsTabStop (#1134).
 //
 //The judgement is PadWalk.Judge (UI/Logic, pure; its negative cases live in
 //UI.Tests/Play/PadWalkJudgeTests). The live cases below only produce the
@@ -87,7 +91,7 @@ public class PlayPadWalkTests : IDisposable
 	public static readonly string[] WalkedSurfaces = {
 		"Home", "HomeFirstRun", "PauseOverlay", "SaveStates", "Enhancements", "Library",
 		"ToolSheetAbout", "ToolSheetCommandLine", "ToolSheetCheckForUpdates", "ToolSheetVideoRecord", "ToolSheetBarcode",
-		"QuitGameConfirm", "SelectRomSheet", "ShaderSheet", "BiosSheet", "SettingsSystemTab",
+		"QuitGameConfirm", "SelectRomSheet", "ShaderSheet", "BiosSheet", "ControllerSetup", "SettingsSystemTab",
 		"ControllerSheet", "PackDepSheet", "PackPicker", "PackDetail", "Cheats", "Replays",
 		"SettingsDisplay",
 	};
@@ -97,18 +101,16 @@ public class PlayPadWalkTests : IDisposable
 	//The_wiring_registers_the_claims_the_walk_accounts_for fail when a claim is
 	//added without a row in WalkedSurfaces or here.
 	//
-	//#1108 closed every entry but one. ControllerSetup is opened by the pad
-	//itself, not by a door: PlayControllerSetupViewModel.Tick asks
-	//UnknownControllerDetector whether an unknown pad was pressed twice inside
-	//the pill's window, and only that answer (DetectorEvent.OpenSheet) opens the
-	//sheet - there is no Open() and no view-model state to set. The headless
-	//backend has no controller to press, so the detector never answers. The gap
-	//is the harness's, not the sheet's: the preconditions are the detector's own
-	//timings over a device the core reports, and the follow-up that closes it is
-	//to drive Tick with a synthetic device once the detector's inputs are
-	//readable without a live pad. It stays named here rather than dropped, and the
-	//follow-up that owns it is #1147.
-	public static readonly string[] NotWalkedYet = { "ControllerSetup" };
+	//#1108 closed every entry, the last one (ControllerSetup) on #1147: the sheet
+	//had no door a host-free caller could take - it is opened by the pad itself,
+	//where PlayControllerSetupViewModel.Tick asks UnknownControllerDetector
+	//whether an unknown pad was pressed twice inside the pill's window - so the
+	//detector's OpenSheet answer is now a named entry point (Open), and the walk
+	//below takes it with the console and the pause/resume pair injected, exactly
+	//the way ControllerSetupNameTests already drives the same view model with no
+	//pad. The list stays, empty, because it is what fails when a claim arrives
+	//with no opener.
+	public static readonly string[] NotWalkedYet = { };
 
 	//The one ToolSheet claim serves every PlayerToolSheet kind, so every kind is
 	//walked (each gets its own surface name above). The kind guard below counts
@@ -264,22 +266,18 @@ public class PlayPadWalkTests : IDisposable
 		//reach over every page the surface can show, so a control it lists and does
 		//not land on is a gap in the pad, and it fails here.
 		//
-		//The rule is asked by LABEL rather than by instance, because the strip rebuilds
-		//its page on every tab change: most of the instances the walk listed without
-		//landing on are second copies of a control it did land on, and an identity
-		//judgement would report the rebuild as a pad gap. What a surface shows is a set
-		//of control kinds - the names a player would point at.
-		HashSet<string> shownLabels = observation.Interactive.Select(c => c.Label).ToHashSet();
-		HashSet<string> landedLabels = observation.Reached.Select(c => c.Label).ToHashSet();
-		List<string> unreached = shownLabels.Except(landedLabels).OrderBy(l => l).ToList();
-		Assert.True(unreached.Count == 0,
-			$"{surface}: the pad reaches no control named [{string.Join(", ", unreached)}] (#1146 review finding 1)");
-		//The judge still answers the other three rules, over the live observation:
-		//Back, the shared action bar, and the focus leaks the caller strips by name.
-		List<string> problems = PadWalk.Judge(observation with {
-			Interactive = Array.Empty<PadWalkControl>(),
-			FocusOutside = null,
-		});
+		//#1154: that first rule is PadWalk.Judge's own now - asked by LABEL, over
+		//this live observation - and it is asked host-free in UI.Tests
+		//(PadWalkJudgeTests), where CI runs it. The label compare that used to stand
+		//here was the same rule written in the one place CI never reaches, which is
+		//why the judge's identity rule had to stop being handed an empty Interactive
+		//list to keep it quiet.
+		//
+		//The judge answers the other three over the same observation: Back, the
+		//shared action bar, and the focus leaks - stripped here by name, because
+		//KnownFocusLeaks is asserted against them per surface and scale just above
+		//and a leak the walk excuses is a leak the judge must not report twice.
+		List<string> problems = PadWalk.Judge(observation with { FocusOutside = null });
 		Assert.True(problems.Count == 0, string.Join(Environment.NewLine, problems));
 
 		//The known gaps are asserted both ways, so a surface that joins the
@@ -392,6 +390,29 @@ public class PlayPadWalkTests : IDisposable
 			case "BiosSheet":
 				_ = model.BiosSheet.Request(FirmwareType.FDS, "disksys.rom", 8192, 8192, "Game");
 				return (window, model, () => model.BiosSheet.IsVisible, false);
+			//W-P15's setup sheet (#1147). Its only door in the app is the pad
+			//itself: PlayControllerSetupViewModel.Tick opens it when
+			//UnknownControllerDetector answers OpenSheet for a device none of whose
+			//keys any mapping uses, and the headless backend has no pad to press.
+			//The detector's answer is now the view model's own entry point (Open),
+			//so the walk calls the same one the detector calls, with the three
+			//inputs the harness cannot supply read from the seams the view model
+			//already exposes for exactly this (ControllerSetupNameTests drives it
+			//the same way): the loaded console, and the pause/resume pair the sheet
+			//would otherwise spend on a game no case here has loaded. The device and
+			//the pressed key are the pad's - Pad1 A opens the sheet with its own
+			//first button, which is what a pad that names no Start does.
+			case "ControllerSetup":
+				model.ControllerSetup.CurrentConsole = () => ConsoleType.Nes;
+				model.ControllerSetup.IsPaused = () => false;
+				model.ControllerSetup.Pause = () => { };
+				model.ControllerSetup.Resume = () => { };
+				model.ControllerSetup.KeyName = _ => "Pad1 A";
+				//The session's clock is the view model's own, so the sheet's 10 s
+				//silence-to-cancel is counted from the open the pad just made and
+				//not from a zero the live poll would read as an old session.
+				model.ControllerSetup.Open(0, new ushort[] { 0x1000 }, model.ControllerSetup.Now);
+				return (window, model, () => model.ControllerSetup.IsVisible, false);
 			//ADR-0255's Controller sheet, which replaces Settings' Controls landing.
 			case "ControllerSheet":
 				model.ControllerSheet.Open();
@@ -609,8 +630,8 @@ public class PlayPadWalkTests : IDisposable
 		//The chips are judged on their own line by the caller (chipCount, chipsReached).
 		return (new PadWalkObservation(
 			surface, isRoot,
-			interactive.Except(chips).Select(c => new PadWalkControl(c, names[c])).ToList(),
-			reached.Select(c => new PadWalkControl(c, names.TryGetValue(c, out string? n) ? n : Label(c))).ToList(),
+			interactive.Except(chips).Select(c => new PadWalkControl(names[c])).ToList(),
+			reached.Select(c => new PadWalkControl(names.TryGetValue(c, out string? n) ? n : Label(c))).ToList(),
 			isRoot ? false : backLeft, bar, available, outside.Select(l => $"{l.From} -> {l.To}").ToList()), chips.Count, chipsReached, outside);
 	}
 
