@@ -33,6 +33,20 @@ public class InterfaceSizeSettingsTests
 		Assert.Equal(InterfaceSize.Standard, old!.InterfaceSize);
 	}
 
+	//ADR-0269: a value a later version wrote that this one does not know reads as
+	//Standard; it must not fail the whole file, which would reset every setting.
+	[Theory]
+	[InlineData("\"Huge\"")]
+	[InlineData("7")]
+	[InlineData("null")]
+	public void An_unknown_size_in_the_file_reads_standard_and_keeps_the_rest(string value)
+	{
+		PreferencesConfig? loaded = (PreferencesConfig?)JsonSerializer.Deserialize(
+			"{\"InterfaceSize\":" + value + ",\"ShowFps\":true}", typeof(PreferencesConfig), MesenSerializerContext.Default);
+		Assert.Equal(InterfaceSize.Standard, loaded!.InterfaceSize);
+		Assert.True(loaded.ShowFps);
+	}
+
 	//Scope: the row writes the preference and nothing of the picture. The
 	//window's scale callback is never called and the Scale row keeps its list.
 	[Fact]

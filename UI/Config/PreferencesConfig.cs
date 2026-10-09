@@ -8,6 +8,7 @@ using Mesen.Interop;
 using Mesen.Localization;
 using Mesen.Logic;
 using Mesen.Utilities;
+using System.Text.Json.Serialization;
 using Mesen.ViewModels;
 using CommunityToolkit.Mvvm.ComponentModel;
 using System;
@@ -92,6 +93,7 @@ namespace Mesen.Config
 
 		//#1111 (spec #1102): Settings › Display › Interface size scales Play's
 		//chrome only (PlayerInterfaceSize). A missing key is Standard.
+		[JsonConverter(typeof(InterfaceSizeJsonConverter))]
 		[ObservableProperty] public partial InterfaceSize InterfaceSize { get; set; } = InterfaceSize.Standard;
 
 		[ObservableProperty] public partial bool ShowFps { get; set; } = false;
