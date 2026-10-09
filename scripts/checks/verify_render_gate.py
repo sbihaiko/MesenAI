@@ -70,7 +70,7 @@ REQUIRED_PATHS = [
 EXPECTED_WIREFRAME_RENDERS = (
     "W-S1",
     "W-P1", "W-P2", "W-P3", "W-P4", "W-P5", "W-P6", "W-P7", "W-P8", "W-P8b",
-    "W-P8c", "W-P8d", "W-P9", "W-P10", "W-P11", "W-P12", "W-P13", "W-P13-confirm",
+    "W-P8c", "W-P8d", "W-P8e", "W-P9", "W-P10", "W-P11", "W-P12", "W-P13", "W-P13-confirm",
     "W-P14", "W-P15", "W-P15-pill", "W-P16", "W-P19", "W-P19b",
     "W-P20",
 )
@@ -88,10 +88,10 @@ EXPECTED_WIREFRAME_RENDERS = (
 # and L.2 (#1033) did the same for W-P19b. The list was empty after that. Pinned like the
 # other set is. #1103 drew W-P20, W-P4b, W-P8d and W-P8e (ADR-0268, ADR-0269,
 # the ADR-0254 amendment) before the tickets of spec #1102 build them; W-P20
-# moved up with #1110 (the Favorites shelf) and W-P8d with #1111; each of the others moves
+# moved up with #1110 (the Favorites shelf), W-P8d with #1111 and W-P8e with #1112; each of the others moves
 # into EXPECTED_WIREFRAME_RENDERS with its ticket. A wireframe drawn without an
 # entry in one of the two still fails, and the next W-P wireframe drawn before its surface exists goes here.
-WIREFRAMES_AWAITING_RENDER_CASE = ("W-P4b", "W-P8e")
+WIREFRAMES_AWAITING_RENDER_CASE = ("W-P4b",)
 
 # A PNG may predate the TRX's start by this much (filesystem/clock rounding).
 FRESHNESS_SLACK_SECONDS = 2.0
