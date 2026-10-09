@@ -289,8 +289,12 @@ namespace Mesen.ViewModels
 
 			SaveStatesRowValue = BuildSaveStatesSummary();
 
-			RefreshPlayActionBar(PlayActionBarDeclared, PlayActionBarKeyboardOpen);
+			RefreshPlayActionBar(PlayActionBarDeclaration is null ? PlayActionBarDeclared : PlayActionBarDeclaration(), PlayActionBarKeyboardOpen);
 		}
+
+		//The bridge's live read of the focus owner's declaration, so the overlay
+		//opening names its own surface instead of the content area's last tick.
+		public Func<IReadOnlyList<PlayBarEntry>?>? PlayActionBarDeclaration;
 
 		//The surface's declaration and whether the on-screen keyboard is open, as
 		//the bridge last handed them: the overlay opening re-reads the pad in hand

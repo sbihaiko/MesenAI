@@ -98,6 +98,26 @@ public class PlayActionBarViewTests : IDisposable
 		return (window, model);
 	}
 
+	//Advanced UI mode on the Play workspace: IsPlayWorkspace is true but the
+	//Play door (Player mode) is not the one open, so pad navigation is off.
+	private (MainWindow Window, MainWindowViewModel Model) ShowAdvancedOnPlayWorkspace()
+	{
+		PreferencesConfig prefs = ConfigManager.Config.Preferences;
+		prefs.UiMode = UiMode.Advanced;
+		prefs.Workspace = Workspace.Play;
+		prefs.ConfirmExitResetPower = false;
+		prefs.PauseWhenInBackground = false;
+		prefs.PauseWhenInMenusAndConfig = false;
+
+		MainWindow window = new();
+		window.ShowStarted();
+		_windows.Add(window);
+		MainWindowViewModel model = Assert.IsType<MainWindowViewModel>(window.DataContext);
+		WaitFor(() => model.MainMenu.HelpMenuItems.Count > 0, "MainWindow never finished building its menus.");
+		model.ConnectedGamepadCount = () => 1;
+		return (window, model);
+	}
+
 	private static void WaitFor(Func<bool> condition, string failure)
 	{
 		Stopwatch clock = Stopwatch.StartNew();
@@ -125,6 +145,20 @@ public class PlayActionBarViewTests : IDisposable
 		PlayPadNavigationWiring.TickForTest(window, new[] { BackendCode("Pad1 " + button) }, TimeSpan.FromMilliseconds(50), BackendName, BackendCode);
 		Pump();
 		PlayPadNavigationWiring.TickForTest(window, Array.Empty<ushort>(), TimeSpan.FromMilliseconds(50), BackendName, BackendCode);
+		Pump();
+	}
+
+	//A press of a button the backend names however the case says ("Joy1 Cross",
+	//or a name no pad family owns), through the same tick door as Press.
+	private static void PressNamed(MainWindow window, string backendName)
+	{
+		ushort code = 0x2000;
+		string NameOf(ushort c) => c == code ? backendName : "";
+		ushort CodeOf(string n) => n == backendName ? code : (ushort)0;
+		PlayPadNavigationWiring.TickForTest(window, Array.Empty<ushort>(), TimeSpan.FromMilliseconds(50), NameOf, CodeOf);
+		PlayPadNavigationWiring.TickForTest(window, new[] { code }, TimeSpan.FromMilliseconds(50), NameOf, CodeOf);
+		Pump();
+		PlayPadNavigationWiring.TickForTest(window, Array.Empty<ushort>(), TimeSpan.FromMilliseconds(50), NameOf, CodeOf);
 		Pump();
 	}
 
@@ -234,5 +268,73 @@ public class PlayActionBarViewTests : IDisposable
 		model.ConnectedGamepadCount = () => 1;
 		Press(window, "Down");
 		Assert.Equal("A Select     B Resume", Bar(window));
+	}
+
+	private (MainWindow Window, MainWindowViewModel Model) ShowPauseOverlay()
+	{
+		(MainWindow window, MainWindowViewModel model) = ShowPlay();
+		string rom = Path.Combine(_folder, "synthetic-nrom.nes");
+		File.WriteAllBytes(rom, SyntheticNrom.Build());
+		Assert.True(EmuApi.LoadRom(rom, string.Empty), $"the core refused to load {rom}");
+		WaitFor(() => EmuApi.IsRunning() && model.RomInfo.Format != RomFormat.Unknown, "the ROM never reported as loaded");
+		EmuApi.Resume();
+		WaitFor(() => !EmuApi.IsPaused() && !model.IsGamePaused && !model.RecentGames.Visible, "the game never ran unpaused");
+		return (window, model);
+	}
+
+	[AvaloniaFact]
+	public void The_pause_overlay_names_a_PlayStation_pad_on_a_realized_surface()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model) = ShowPauseOverlay();
+
+		PressNamed(window, "Joy1 Cross");
+		model.OpenPauseOverlay();
+		WaitFor(() => Focused(window) == "OverlayResumeButton", "the pause overlay did not take the focus");
+		Assert.Equal("Cross Select     Circle Resume", Bar(window));
+	}
+
+	[AvaloniaFact]
+	public void The_pause_overlay_names_no_control_while_the_pad_family_is_not_told()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model) = ShowPauseOverlay();
+
+		//A pad is connected but nothing it sent has been pressed yet.
+		model.OpenPauseOverlay();
+		WaitFor(() => Focused(window) == "OverlayResumeButton", "the pause overlay did not take the focus");
+		Assert.Equal("Select     Resume", Bar(window));
+	}
+
+	[AvaloniaFact]
+	public void The_pause_overlay_follows_the_pad_family_in_hand_when_it_changes()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model) = ShowPauseOverlay();
+
+		Press(window, "Select");
+		model.OpenPauseOverlay();
+		WaitFor(() => Focused(window) == "OverlayResumeButton", "the pause overlay did not take the focus");
+		Assert.Equal("A Select     B Resume", Bar(window));
+
+		//A press the backend names outside both families is not a pad and leaves
+		//the hand where it was (PadInHand), so the family can only change by
+		//another pad pressing: the PlayStation one takes over from the Xbox one.
+		PressNamed(window, "Joy1 Cross");
+		Assert.Equal("Cross Select     Circle Resume", Bar(window));
+	}
+
+	[AvaloniaFact]
+	public void The_action_bar_is_hidden_in_Advanced_mode_on_the_Play_workspace_home()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		SeedRecents("Contra", "Zelda");
+		(MainWindow window, MainWindowViewModel model) = ShowAdvancedOnPlayWorkspace();
+		Assert.False(model.IsPlayerMode, "this case is not in Player mode");
+		model.RecentGames.Init(GameScreenMode.RecentGames);
+		WaitFor(() => model.RecentGames.Visible, "the Play workspace home did not open");
+
+		Press(window, "Down");
+		Assert.Equal("<hidden>", Bar(window));
 	}
 }

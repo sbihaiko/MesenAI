@@ -646,8 +646,15 @@ namespace Mesen.Windows
 			private void RefreshActionBar()
 			{
 				_model.InHandDevice = InHand;
-				_model.RefreshPlayActionBar(PlayFocusOnOpen.Of(_window)?.Declared(), _keyboard is not null);
+				_model.PlayActionBarDeclaration = BarDeclaration;
+				_model.RefreshPlayActionBar(BarDeclaration(), _keyboard is not null);
 			}
+
+			//What the focus owner declares right now, read fresh (not from the last
+			//tick) and null - a hidden bar - outside the Play door, where pad
+			//navigation is off and the bar's actions would name nothing.
+			private IReadOnlyList<PlayBarEntry>? BarDeclaration()
+				=> InPlayDoor ? PlayFocusOnOpen.Of(_window)?.Declared() : null;
 
 			public void Tick() => Tick(InputApi.GetPressedKeys(), null);
 
