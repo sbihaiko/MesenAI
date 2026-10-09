@@ -87,7 +87,7 @@ public class PlayPadWalkTests : IDisposable
 	public static readonly string[] WalkedSurfaces = {
 		"Home", "HomeFirstRun", "PauseOverlay", "SaveStates", "Enhancements", "Library",
 		"ToolSheetAbout", "ToolSheetCommandLine", "ToolSheetCheckForUpdates", "ToolSheetVideoRecord", "ToolSheetBarcode",
-		"QuitGameConfirm", "SelectRomSheet", "ShaderSheet", "BiosSheet", "SettingsSystemTab",
+		"QuitGameConfirm", "SelectRomSheet", "ShaderSheet", "BiosSheet", "ControllerSetup", "SettingsSystemTab",
 		"ControllerSheet", "PackDepSheet", "PackPicker", "PackDetail", "Cheats", "Replays",
 		"SettingsDisplay",
 	};
@@ -97,18 +97,16 @@ public class PlayPadWalkTests : IDisposable
 	//The_wiring_registers_the_claims_the_walk_accounts_for fail when a claim is
 	//added without a row in WalkedSurfaces or here.
 	//
-	//#1108 closed every entry but one. ControllerSetup is opened by the pad
-	//itself, not by a door: PlayControllerSetupViewModel.Tick asks
-	//UnknownControllerDetector whether an unknown pad was pressed twice inside
-	//the pill's window, and only that answer (DetectorEvent.OpenSheet) opens the
-	//sheet - there is no Open() and no view-model state to set. The headless
-	//backend has no controller to press, so the detector never answers. The gap
-	//is the harness's, not the sheet's: the preconditions are the detector's own
-	//timings over a device the core reports, and the follow-up that closes it is
-	//to drive Tick with a synthetic device once the detector's inputs are
-	//readable without a live pad. It stays named here rather than dropped, and the
-	//follow-up that owns it is #1147.
-	public static readonly string[] NotWalkedYet = { "ControllerSetup" };
+	//#1108 closed every entry, the last one (ControllerSetup) on #1147: the sheet
+	//had no door a host-free caller could take - it is opened by the pad itself,
+	//where PlayControllerSetupViewModel.Tick asks UnknownControllerDetector
+	//whether an unknown pad was pressed twice inside the pill's window - so the
+	//detector's OpenSheet answer is now a named entry point (Open), and the walk
+	//below takes it with the console and the pause/resume pair injected, exactly
+	//the way ControllerSetupNameTests already drives the same view model with no
+	//pad. The list stays, empty, because it is what fails when a claim arrives
+	//with no opener.
+	public static readonly string[] NotWalkedYet = { };
 
 	//The one ToolSheet claim serves every PlayerToolSheet kind, so every kind is
 	//walked (each gets its own surface name above). The kind guard below counts
@@ -392,6 +390,29 @@ public class PlayPadWalkTests : IDisposable
 			case "BiosSheet":
 				_ = model.BiosSheet.Request(FirmwareType.FDS, "disksys.rom", 8192, 8192, "Game");
 				return (window, model, () => model.BiosSheet.IsVisible, false);
+			//W-P15's setup sheet (#1147). Its only door in the app is the pad
+			//itself: PlayControllerSetupViewModel.Tick opens it when
+			//UnknownControllerDetector answers OpenSheet for a device none of whose
+			//keys any mapping uses, and the headless backend has no pad to press.
+			//The detector's answer is now the view model's own entry point (Open),
+			//so the walk calls the same one the detector calls, with the three
+			//inputs the harness cannot supply read from the seams the view model
+			//already exposes for exactly this (ControllerSetupNameTests drives it
+			//the same way): the loaded console, and the pause/resume pair the sheet
+			//would otherwise spend on a game no case here has loaded. The device and
+			//the pressed key are the pad's - Pad1 A opens the sheet with its own
+			//first button, which is what a pad that names no Start does.
+			case "ControllerSetup":
+				model.ControllerSetup.CurrentConsole = () => ConsoleType.Nes;
+				model.ControllerSetup.IsPaused = () => false;
+				model.ControllerSetup.Pause = () => { };
+				model.ControllerSetup.Resume = () => { };
+				model.ControllerSetup.KeyName = _ => "Pad1 A";
+				//The session's clock is the view model's own, so the sheet's 10 s
+				//silence-to-cancel is counted from the open the pad just made and
+				//not from a zero the live poll would read as an old session.
+				model.ControllerSetup.Open(0, new ushort[] { 0x1000 }, model.ControllerSetup.Now);
+				return (window, model, () => model.ControllerSetup.IsVisible, false);
 			//ADR-0255's Controller sheet, which replaces Settings' Controls landing.
 			case "ControllerSheet":
 				model.ControllerSheet.Open();

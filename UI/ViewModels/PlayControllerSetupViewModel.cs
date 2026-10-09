@@ -103,7 +103,7 @@ namespace Mesen.ViewModels
 			switch(_detector.OnPressed(pressed, mapped, k => ControllerDevices.NamesStart(KeyName(k)), now)) {
 				case DetectorEvent.ShowPill: ShowPill(_detector.PillDevice); break;
 				case DetectorEvent.DismissPill: IsPillVisible = false; break;
-				case DetectorEvent.OpenSheet: OpenSheet(_detector.SheetDevice, pressed, now); break;
+				case DetectorEvent.OpenSheet: Open(_detector.SheetDevice, pressed, now); break;
 			}
 		}
 
@@ -124,6 +124,20 @@ namespace Mesen.ViewModels
 				IsPillVisible = false;
 			}
 		}
+
+		//#1147: the sheet's one door, named. A player reaches it through the
+		//detector alone - an unknown pad pressed twice inside the pill's 8 s
+		//window (DetectorEvent.OpenSheet) - which left the surface with no entry
+		//point a caller without a live pad could take, so the pad-walk
+		//(UI.HeadlessTests/PlayPadWalkTests) could not open it and had to name it
+		//a gap. It is the same door either way: Tick routes the detector's answer
+		//here, and everything the caller has to supply beyond the pad's own
+		//device and key is this view model's own injected seam (CurrentConsole,
+		//Pause/Resume/IsPaused, KeyName), which the headless tests already drive
+		//with no core (ControllerSetupNameTests). Not a second path: a new way in
+		//would be a second set of preconditions to keep in step with the
+		//detector's.
+		public void Open(int device, IReadOnlyCollection<ushort> pressed, TimeSpan now) => OpenSheet(device, pressed, now);
 
 		private void OpenSheet(int device, IReadOnlyCollection<ushort> pressed, TimeSpan now)
 		{
