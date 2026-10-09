@@ -7,7 +7,7 @@
   is what ADR-0137's same-turn rule requires alongside the unit tests below.
 - Date: 2026-10-04
 - Related: ADR-0241, ADR-0249, ADR-0251, `docs/roadmap/PRD-mesence-enhancement-ecosystem.md` Part B §8.
-- Supersedes / amends: none. Amended 2026-10-09 (#1103, proposed): the reason line has a
+- Supersedes / amends: none. Amended 2026-10-09 (#1103, accepted): the reason line has a
   second wording, *Paused — controller disconnected* (see "Amendment").
 
 ## Context
@@ -48,10 +48,21 @@ Evidence: `UI.Tests/Play/FocusPauseTests` (8 cases over both rules — the door/
 
 ## Amendment (2026-10-09, #1103): the reason line has a second wording
 
-Status: **proposed** (no owner pick yet; it stays proposed until a human accepts it).
-Recorded by the agent under owner-away autonomy as the wording of spec #1102
-slice 3 (pause when a controller disappears); not an owner pick, and the owner
-may revert it. Nothing is implemented by this amendment.
+Status: **accepted** (2026-10-09), by the autonomy panel (Opus 5.5 as the human
+proxy, issue #1103 comment) with edits, pick quoted verbatim: **"Accept ADR-0268, ADR-0269 and the ADR-0254 amendment with the listed edits; PR #1119 waits until ADR-0269 is accepted with Decisions 3 and 6 matching its code."**
+The wording comes from spec #1102 slice 3 (pause when a controller disappears).
+Nothing is implemented by this amendment.
+
+- **The trigger is the connected-pad count dropping**, never a pad identity: on
+  macOS VID/PID are zeroed on purpose, so no pad can be told apart. A pad
+  swapped for another while the count holds does not pause.
+- **"Reconnected" means the count is back to its earlier value** (the value
+  before the drop), not that a particular pad returned.
+- **Doors:** it applies to Play only (the door that has W-P4); Classic and
+  Advanced never show this pause. It is not gated by
+  `PauseWhenInBackground`, which governs the focus pause alone; the pad-count
+  pause is its own auto-pause and is always on in Play. (Decided by the agent
+  under owner-away autonomy as the cheapest to reverse; the owner may revert it.)
 
 - The W-P4 reason line this ADR introduces for a lost focus gets a second
   wording, **Paused — controller disconnected**, written when a game runs
