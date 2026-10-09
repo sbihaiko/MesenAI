@@ -12,7 +12,8 @@
   Decision names the guaranteed size. No new panel pick: the work is what #1123
   asked for.
   Nothing is implemented by this ADR; PR #1119 implements it and must match
-  Decisions 3 and 6.
+  Decisions 3 and 6. The width cap and the 512x505 guarantee for the settings
+  sheet (Decision 6) are in PR #1145 (#1123).
 - Date: 2026-10-09
 - Related: ADR-0249 (tokens come from the renderer; the drift test), ADR-0241,
   ADR-0256, wireframe W-P8d, issues #1102 and #1103.
@@ -59,14 +60,19 @@ Nothing in Play is sized for a TV three meters away. Settings › Display has a
    box are capped against the room its host gives it — the height was, the width
    is since #1123 — so the sheet shrinks with the window instead of hanging off
    it at a larger size; 480 stays the width wherever it fits.
-   **The guaranteed size is the window's own starting size, 512x505, at every
-   size including Extra large (1.5)**, and still the PRD's drawn size, ~1024x640
-   (spec #1102; PRD Part B wireframes). A headless test pins both ends at factor
-   1.5: at 1024x640 the rows scroll and the Done row is fully on screen and
-   reachable; at 512x505 the sheet is capped to the room (310 px of the 342 the
-   host gives it, 465 px drawn) and Done is inside the window on every tab.
-   Windows below 512x505, down to the 160x144 floor — the width the window's own
-   `MinWidth`/`MinHeight` allow — are not guaranteed.
+   **The settings sheet's guaranteed size is the window's own starting size,
+   512x505, at every size including Extra large (1.5)**, and still the PRD's
+   drawn size, ~1024x640 (spec #1102; PRD Part B wireframes). A headless test
+   pins both ends at factor 1.5: at 1024x640 the rows scroll and the Done row is
+   fully on screen and reachable; at 512x505 the sheet is capped to the room
+   (310 px of the 342 the host gives it, 465 px drawn) and Done is inside the
+   window on every tab. Windows below 512x505, down to the 160x144 floor — the
+   width the window's own `MinWidth`/`MinHeight` allow — are not guaranteed.
+   The other Play sheets (Cheats, Replays, PackPicker, PackDetail, Tool,
+   Controller, Enhancements, Shader) and the pause card are not covered by this
+   guarantee yet: they are still guaranteed only at about 1024x640, because the
+   width cap so far reaches the settings sheet alone. The same cap for those
+   surfaces is the remainder of #1123, which stays open as their follow-up.
 
 ## Consequences
 
