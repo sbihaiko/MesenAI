@@ -494,13 +494,19 @@ extern "C"
 		if(_menuSoundHost) {
 			//ADR-0270 D2/D4/D9 (#1153): this device is not the emulator's, and it
 			//is let go first, so the emulator's own teardown never runs under a
-			//menu stream that is still opening a device of its own. Stop is not a
-			//join: it unpublishes the stream and detaches its owner thread, which
-			//closes this device on its way out (D4: the thread that releases is the
-			//thread that opened it). The two devices share nothing but the backend -
-			//the menu one is never routed through the emulator's device, its ring
-			//or its pause ownership.
-			_menuSoundHost->Stop();
+			//menu stream that is still opening a device of its own. The host's
+			//owner thread closes this device on its way out (D4: the thread that
+			//releases is the thread that opened it). The two devices share nothing
+			//but the backend - the menu one is never routed through the emulator's
+			//device, its ring or its pause ownership.
+			//
+			//#1153 review: and this is the one place that waits for that thread.
+			//Stop alone detaches it, and the thread reads the running predicate
+			//through a lambda that captured this emulator - which the next three
+			//lines destroy. Waiting here is free: it is the process going away,
+			//not the UI press #733 stalled. Same rule as the settings-apply path
+			//otherwise: the device is not closed by this thread either way.
+			_menuSoundHost->StopAndWait();
 			_menuSoundHost.reset();
 		}
 

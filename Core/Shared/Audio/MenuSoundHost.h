@@ -27,13 +27,19 @@
 //that apply, which costs the first press after launch its blip while the new
 //device opens (AC1).
 //
-//#1153: and neither Apply nor Stop ever waits. Both run on the UI thread, and
-//both replace a stream whose own device may still be opening - the case that put
-//a ~10 s stall on the emulation thread in #733 - so the replaced stream is taken
-//out of service by the publish alone and its own thread finishes the release
-//(D9, D4). No join happens here, and none happens under _applyLock either: the
-//lock only serializes applies against each other, and every call made while it
-//is held returns at once.
+//#1153: and neither Apply nor the stream's own Stop ever waits. Both run on the
+//UI thread, and both replace a stream whose own device may still be opening -
+//the case that put a ~10 s stall on the emulation thread in #733 - so the
+//replaced stream is taken out of service by the publish alone and its own thread
+//finishes the release (D9, D4). No join happens here, and none happens under
+//_applyLock either: the lock only serializes applies against each other, and
+//every call made while it is held returns at once.
+//
+//#1153 review: the process teardown is the one exception, and it is a deliberate
+//one. EmuApiWrapper::Release destroys the emulator the policy lambdas capture
+//right after it stops the host, so a detached owner thread would read freed
+//memory; that caller uses StopAndWait, which returns only once the owner thread
+//has left OwnerLoop. The wait is taken outside _applyLock, so it blocks no apply.
 //
 //Host-free: the device is a factory the caller hands in, so
 //scripts/core_unit_tests.cpp changes the device and the backend under a fake and
@@ -97,6 +103,29 @@ public:
 
 		if(stream != nullptr) {
 			stream->Stop();
+		}
+	}
+
+	//#1153 review: the teardown's own stop. EmuApiWrapper::Release destroys the
+	//emulator the stream's policy lambdas capture on its next line, so a detached
+	//owner thread still inside OwnerLoop would read freed memory. This waits for
+	//that thread - the release included - and is the one caller where the wait is
+	//free: Release runs as the process goes away, not on a UI press (#733).
+	//The wait happens outside _applyLock, which no thread of the stream's ever
+	//takes, so it cannot deadlock an apply.
+	void StopAndWait()
+	{
+		std::shared_ptr<MenuSoundStream> stream;
+		{
+			std::lock_guard<std::mutex> lock(_applyLock);
+			stream = std::atomic_load(&_stream);
+			std::atomic_store(&_stream, std::shared_ptr<MenuSoundStream>());
+		}
+
+		if(stream != nullptr) {
+			//Held across the wait: the stream owns the latch being waited on, and
+			//the owner thread's own reference is gone the moment it exits.
+			stream->StopAndWait();
 		}
 	}
 

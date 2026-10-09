@@ -1,10 +1,12 @@
 #pragma once
 #include <atomic>
 #include <chrono>
+#include <condition_variable>
 #include <cstdint>
 #include <cstring>
 #include <functional>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <thread>
 
@@ -30,6 +32,12 @@
 //path - the UI thread - and a device that takes seconds to answer its own open
 //(#733) must not hold it there. The thread therefore keeps the stream alive by
 //holding a reference to it, which is why the class is shared-owned.
+//
+//The one caller that must not treat the detach as fire-and-forget is the process
+//teardown (#1153 review): EmuApiWrapper::Release destroys the emulator the
+//policy lambdas capture, so it uses StopAndWait, which waits for that thread to
+//leave OwnerLoop. Both paths share the same exit latch, so a stream that is
+//stopped either way still reports "gone" exactly once.
 
 //ADR-0270 D3: the device's own reader. The sink's audio callback (SDL) or poll
 //loop (WASAPI) pulls frames here, on the device's thread. Safe to call without
@@ -117,6 +125,15 @@ public:
 	//running. Idempotent.
 	void Stop();
 
+	//#1153 review: the same stop, and then a wait for the owner thread to leave
+	//OwnerLoop - the release included. Only the process teardown uses it
+	//(EmuApiWrapper::Release), because that is the one caller that destroys what
+	//the policy lambdas capture: a detached thread still inside the D7 branches
+	//would read a freed emulator. Everywhere else the wait would be #733's stall
+	//put back on a UI press, so the settings-apply path keeps Stop. Idempotent,
+	//and a stream that never started returns at once.
+	void StopAndWait();
+
 	//D9: true only while the stream is up. Answerable from any thread at any time,
 	//without opening anything - the settings sheet asks it to decide whether the
 	//Menu sounds row exists at all.
@@ -148,6 +165,11 @@ private:
 
 	void OwnerLoop();
 
+	//The owner thread's last act, and the only thing StopAndWait waits on: the
+	//latch says the thread has left OwnerLoop, so the sink is released and
+	//nothing will read the policy lambdas again (#1153 review).
+	void SignalOwnerExited();
+
 	std::unique_ptr<IMenuSoundSink> _sink;
 	AudioEnabledFn _audioEnabled;
 	MasterVolumeFn _masterVolume;
@@ -176,6 +198,15 @@ private:
 	bool _started = false;
 	std::atomic<bool> _running{false};
 	bool _unpaused = false;
+
+	//False from the moment the owner thread is about to start until the moment it
+	//has left OwnerLoop. True with no thread ever started, which is what makes a
+	//wait on a stream that was never armed return at once.
+	std::atomic<bool> _ownerExited{true};
+	//Guards the latch, so a wait cannot miss the signal by arriving between the
+	//store and the notify.
+	std::mutex _exitLock;
+	std::condition_variable _exitSignal;
 };
 
 inline MenuSoundStream::MenuSoundStream(std::unique_ptr<IMenuSoundSink> sink, AudioEnabledFn audioEnabled, MasterVolumeFn masterVolume, GameRunningFn gameRunning, LogFn log)
@@ -198,12 +229,43 @@ inline void MenuSoundStream::Start()
 
 	_started = true;
 	_running.store(true, std::memory_order_release);
+	{
+		//Cleared before the thread exists, so a wait that arrives at any point
+		//after this sees a stream whose owner has not exited yet.
+		std::lock_guard<std::mutex> lock(_exitLock);
+		_ownerExited.store(false, std::memory_order_release);
+	}
 	//D9 (#1153): the owner thread holds a reference to the stream for as long as
 	//it runs, so a stop that detaches it cannot leave the thread writing into a
 	//stream the caller has already forgotten. The release path is that thread's
 	//own exit, and the object outlives it.
 	std::shared_ptr<MenuSoundStream> self = shared_from_this();
-	_thread = std::thread([self]() { self->OwnerLoop(); });
+	_thread = std::thread([self]() {
+		self->OwnerLoop();
+		//Every return of OwnerLoop reaches this, including the two that release
+		//the device and bail out: the latch is about the thread being gone, not
+		//about how the loop ended.
+		self->SignalOwnerExited();
+	});
+}
+
+inline void MenuSoundStream::SignalOwnerExited()
+{
+	{
+		std::lock_guard<std::mutex> lock(_exitLock);
+		_ownerExited.store(true, std::memory_order_release);
+	}
+	_exitSignal.notify_all();
+}
+
+inline void MenuSoundStream::StopAndWait()
+{
+	//The same take-out-of-service as Stop - only the wait below is added, and the
+	//detach is harmless: the latch, not the thread handle, is what this waits on.
+	Stop();
+
+	std::unique_lock<std::mutex> lock(_exitLock);
+	_exitSignal.wait(lock, [this]() { return _ownerExited.load(std::memory_order_acquire); });
 }
 
 inline void MenuSoundStream::Stop()
