@@ -249,6 +249,30 @@ public class PlayerThemeSettingsRenderTests : IDisposable
 		}
 	}
 
+	//W-P8d (ADR-0269, #1111): the Display sheet with Interface size on Large. The sheet stays 387 high with
+	//six controls at rest - Large scales the chrome from the root, so the sheet itself is not re-laid out here.
+	[AvaloniaFact]
+	public void Settings_display_with_interface_size_renders_as_the_W_P8d_sheet()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		InterfaceSize before = ConfigManager.Config.Preferences.InterfaceSize;
+		ConfigManager.Config.Preferences.InterfaceSize = InterfaceSize.Large;
+		(MainWindow window, MainWindowViewModel model, Border sheet) = ShowSettings(ConfigWindowTab.Display);
+		try {
+			AssertSettingsChrome(sheet);
+			AssertInsetGroup(sheet.FindNamed<Border>("DisplaySettingsGroup"));
+			ComboBox size = sheet.FindNamed<ComboBox>("cboDisplayInterfaceSize");
+			AssertPopup(size, 120);
+			Assert.Equal(InterfaceSize.Large, Assert.IsType<PlayerWindowSettingsViewModel.PlayerInterfaceSizeChoice>(size.SelectedItem).Value);
+			Assert.Equal(6, ControlsAtRest(sheet));
+
+			Render(window, sheet, "W-P8d");
+		} finally {
+			model.ClosePlayerSettings();
+			ConfigManager.Config.Preferences.InterfaceSize = before;
+		}
+	}
+
 	[AvaloniaFact]
 	public void Settings_look_renders_as_the_W_P10_sheet()
 	{
