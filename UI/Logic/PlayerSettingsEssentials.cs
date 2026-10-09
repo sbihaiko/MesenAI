@@ -87,10 +87,15 @@ public static class PlayerSettingsEssentials
 		return Math.Min(MaxSegment, available / count);
 	}
 
-	//PRD rule 2: an inset list of at most three rows per essentials tab; Display
-	//(Interface size, #1111) and Audio (Menu sounds, only while the host reports
-	//it available, #1105) are the exceptions, with a fourth.
+	//PRD rule 2: an inset list of at most three rows per essentials tab, except
+	//Display's fourth (#1111, Interface size), which still fits the 7 elements,
+	//and Audio's (Menu sounds, #1105) while the host reports it available.
 	public const int MaxRows = 4;
+	public static int MaxRowsFor(ConfigWindowTab tab) => tab switch {
+		ConfigWindowTab.Display => 4,
+		ConfigWindowTab.Audio when MenuSoundsAvailable() => 4,
+		_ => 3
+	};
 
 	private static readonly PlayerSettingsRow[] DisplayRows = {
 		new("Fullscreen", PlayerSettingsRowKind.Switch),

@@ -1249,6 +1249,53 @@ public class PlayPadNavigationTests : IDisposable
 		}
 	}
 
+	//#1111: the Settings sheet is part of Play's chrome too, so Extra large
+	//renders it about 1.5x bigger than Standard.
+	[AvaloniaFact]
+	public void The_settings_sheet_renders_bigger_at_extra_large()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		PreferencesConfig preferences = ConfigManager.Config.Preferences;
+		InterfaceSize before = preferences.InterfaceSize;
+		preferences.InterfaceSize = InterfaceSize.Standard;
+		try {
+			(MainWindow window, MainWindowViewModel model, _) = ShowSettingsTab(ConfigWindowTab.Display);
+			Control sheet = window.FindNamed<Control>("PlayerSettingsSheetHost");
+			double standard = sheet.TransformToVisual(window)!.Value.M11;
+
+			preferences.InterfaceSize = InterfaceSize.ExtraLarge;
+			Pump();
+			double extra = sheet.TransformToVisual(window)!.Value.M11;
+
+			Assert.Equal(1.5, extra / standard, 2);
+			model.ClosePlayerSettings();
+		} finally {
+			preferences.InterfaceSize = before;
+		}
+	}
+
+	//#1111: Down from a tab goes into that tab's page - the strip's tabs sit
+	//side by side, so the engine alone may answer with the neighbouring tab.
+	[AvaloniaTheory]
+	[InlineData(ConfigWindowTab.Display, "tabPlayerWindow")]
+	[InlineData(ConfigWindowTab.Audio, "tabPlayerAudio")]
+	[InlineData(ConfigWindowTab.Input, "tabPlayerControls")]
+	public void Down_from_a_settings_tab_walks_into_its_page(ConfigWindowTab tab, string tabName)
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model, _) = ShowSettingsTab(tab);
+		TabControl strip = window.FindNamed<TabControl>("PlayerSettingsTabs");
+		window.FindNamed<Control>(tabName).Focus(NavigationMethod.Directional);
+		Pump();
+		Press(window, PadNavAction.Down);
+
+		Control? focused = window.FocusManager?.GetFocusedElement() as Control;
+		Assert.NotNull(focused);
+		Assert.IsNotType<TabItem>(focused);
+		Assert.True(focused!.GetVisualAncestors().Contains(strip), $"Down left the page ({FocusedName(window)})");
+		model.ClosePlayerSettings();
+	}
+
 	[AvaloniaFact]
 	public void Back_on_an_open_popup_closes_it_without_changing_the_value()
 	{

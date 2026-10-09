@@ -945,6 +945,8 @@ namespace Mesen.Windows
 						//answer Down with the neighbouring tab (the page's rows are far
 						//to the right of the strip's left-most tab). Down from a tab goes
 						//into the page, never along the strip: Left / Right do that.
+						//Only the player settings strip is rewired; any other TabControl
+						//keeps the engine's answer.
 						if(action == PadNavAction.Down && focused is TabItem && next is TabItem && FirstInPage(focused) is Control inPage) {
 							next = inPage;
 						}
@@ -957,7 +959,10 @@ namespace Mesen.Windows
 			private static Control? FirstInPage(Control tab)
 			{
 				TabControl? tabs = tab.FindAncestorOfType<TabControl>();
-				return tabs?.GetVisualDescendants().OfType<Control>().FirstOrDefault(c =>
+				if(tabs?.Name != "PlayerSettingsTabs") {
+					return null;
+				}
+				return tabs.GetVisualDescendants().OfType<Control>().FirstOrDefault(c =>
 					c is not TabItem && c.Focusable && c.IsEffectivelyVisible && c.IsEffectivelyEnabled && c.FindAncestorOfType<TabItem>() is null);
 			}
 

@@ -56,4 +56,12 @@ public class InterfaceSizeSettingsTests
 		PlayerWindowSettingsViewModel display = new(new VideoConfig(), false, 2, () => { }, _ => { }, new PreferencesConfig { InterfaceSize = InterfaceSize.ExtraLarge });
 		Assert.Equal(InterfaceSize.ExtraLarge, display.SelectedInterfaceSize);
 	}
+
+	//A hand-edited settings file can hold a number no size has.
+	[Fact]
+	public void An_undefined_size_in_the_settings_falls_back_to_the_first_choice()
+	{
+		PlayerWindowSettingsViewModel display = new(new VideoConfig(), false, 2, () => { }, _ => { }, new PreferencesConfig { InterfaceSize = (InterfaceSize)3 });
+		Assert.Equal(display.InterfaceSizes[0].Value, display.SelectedInterfaceSize);
+	}
 }

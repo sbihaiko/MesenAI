@@ -53,7 +53,7 @@ namespace Mesen.ViewModels
 
 		public InterfaceSize SelectedInterfaceSize {
 			get => SelectedInterfaceSizeChoice?.Value ?? InterfaceSize.Standard;
-			set => SelectedInterfaceSizeChoice = InterfaceSizes.First(c => c.Value == value);
+			set => SelectedInterfaceSizeChoice = InterfaceSizes.FirstOrDefault(c => c.Value == value) ?? InterfaceSizes[0];
 		}
 
 		public PlayerWindowSettingsViewModel(VideoConfig config, bool isFullscreen, double currentScale, Action toggleFullscreen, Action<double> setScale, PreferencesConfig? preferences = null)

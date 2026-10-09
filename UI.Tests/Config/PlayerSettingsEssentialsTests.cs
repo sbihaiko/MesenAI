@@ -125,7 +125,8 @@ namespace Mesen.Tests.Config
 		//The bug: Audio and Controls embedded the whole classic option pages
 		//(sub-tabs, per-console button row, scrollbars). Now each essentials tab
 		//is a short inset list in the Display pattern: at most 3 rows (PRD rule
-		//2 leaves room for the link), and no classic page.
+		//2 leaves room for the link; Display's 4th is #1111's Interface size,
+		//inside the 7-element budget), and no classic page.
 		[Theory]
 		[InlineData(ConfigWindowTab.Display, 4)]
 		[InlineData(ConfigWindowTab.Audio, 3)]
@@ -134,7 +135,17 @@ namespace Mesen.Tests.Config
 		{
 			Assert.False(PlayerSettingsEssentials.EmbedsClassicPage(tab));
 			Assert.Equal(rows, PlayerSettingsEssentials.Rows(tab).Count);
-			Assert.True(PlayerSettingsEssentials.Rows(tab).Count <= PlayerSettingsEssentials.MaxRows);
+			Assert.True(PlayerSettingsEssentials.Rows(tab).Count <= PlayerSettingsEssentials.MaxRowsFor(tab));
+			//strip + rows + Done + the Settings link: PRD rule 2's 7 elements.
+			Assert.True(1 + rows + 1 + 1 <= 7);
+		}
+
+		[Fact]
+		public void Only_display_may_hold_a_fourth_row()
+		{
+			Assert.Equal(4, PlayerSettingsEssentials.MaxRowsFor(ConfigWindowTab.Display));
+			Assert.Equal(3, PlayerSettingsEssentials.MaxRowsFor(ConfigWindowTab.Audio));
+			Assert.Equal(3, PlayerSettingsEssentials.MaxRowsFor(ConfigWindowTab.Input));
 		}
 
 		[Fact]
