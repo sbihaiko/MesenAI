@@ -811,7 +811,7 @@ def w_p6():
         yy = g[1] + i * 46
         c.text(g[0] + 16, yy + 23, n, 13.5, 500, TEXT, "lm")
         c.toggle(g[2] - 54, yy + 12, True, True)
-        if i < 2:
+        if i < n - 1:
             c.line([(g[0] + 16, yy + 46), (g[2], yy + 46)], SEP)
     c.text(x0 + 26, g[3] + 16, "The switches apply to this game only.", 12.5, 400, TEXT2, "lm")
     d = 134
@@ -902,9 +902,10 @@ def essentials_sheet(c, tab, rows):
     """W-P8's Audio and Controls: Display's pattern - three rows in one inset
     list, "More in Options…" where Display has its hint (it expands to that tab's
     classic page, as Look's Pixels item does), then Done."""
-    b = settings_sheet(c, tab, 340)
+    n = len(rows)
+    b = settings_sheet(c, tab, 340 if n == 3 else 388)
     x0, y0, x1, y1 = b
-    g = (x0 + 20, y0 + 96, x1 - 20, y0 + 96 + 3 * 46)
+    g = (x0 + 20, y0 + 96, x1 - 20, y0 + 96 + n * 46)
     c.rrect(g, 12, fill=(248, 248, 250), outline=(232, 232, 236))
     for i, (name, kind, value) in enumerate(rows):
         yy = g[1] + i * 46
@@ -927,7 +928,7 @@ def essentials_sheet(c, tab, rows):
 def w_p8b():
     c = base("play", "Contra (USA) · pack Contra 80s 1.2", (52, 199, 89))
     pause_panel(c)
-    essentials_sheet(c, 2, [("Sound", "switch", None), ("Volume", "slider", (1.0, "100")), ("Output device", "popup", "Speakers")])
+    essentials_sheet(c, 2, [("Sound", "switch", None), ("Volume", "slider", (1.0, "100")), ("Output device", "popup", "Speakers"), ("Menu sounds", "switch", None)])
     c.caption("W-P8b", "Play — settings › Audio (equalizer, latency… stay in Options)", 5)
     return c
 
