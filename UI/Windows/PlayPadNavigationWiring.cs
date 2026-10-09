@@ -314,9 +314,18 @@ namespace Mesen.Windows
 				() => ContentFocus(window, model),
 				() => model.IsPlayWorkspace && model.RecentGames.Visible
 					? model.RecentGames.ShowFirstRunHome ? PlayBarDeclarations.HomeFirstRun
-					: model.RecentGames.ShowRecentsHome ? PlayBarDeclarations.Home
+					: model.RecentGames.ShowRecentsHome ? HomeDeclaration(window)
 					: PlayBarDeclarations.None
 					: PlayBarDeclarations.None);
+		}
+
+		//The recents home's A is the focused control's, not the surface's: Continue
+		//plays, but Open a game… (the secondary button) opens the sheet.
+		private static IReadOnlyList<PlayBarEntry> HomeDeclaration(MainWindow window)
+		{
+			return TopLevel.GetTopLevel(window)?.FocusManager?.GetFocusedElement() is Control focused
+				&& focused == Named(window, "PlayHomeOpenRomSecondary")
+				? PlayBarDeclarations.HomeFirstRun : PlayBarDeclarations.Home;
 		}
 
 		//W-P1/W-P2: the home's primary action, or W-P3's Continue, or the slot

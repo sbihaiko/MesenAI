@@ -166,8 +166,13 @@ public class PlayActionBarViewTests : IDisposable
 
 	//What the player reads: the bar's line, or "<hidden>" when the bar is not on
 	//screen.
+	//Read after one idle tick, the production timer's job: the bar is recomputed
+	//on the tick, so a case that opens a surface and reads the bar straight away
+	//would otherwise depend on the real timer having fired first (it does not,
+	//when a previous case's window is still draining the dispatcher).
 	private static string Bar(MainWindow window)
 	{
+		PlayPadNavigationWiring.TickForTest(window, Array.Empty<ushort>(), TimeSpan.FromMilliseconds(50), BackendName, BackendCode);
 		Pump();
 		Border bar = window.FindNamed<Border>("PlayActionBar");
 		return bar.IsEffectivelyVisible ? window.FindNamed<TextBlock>("PlayActionBarText").Text ?? "" : "<hidden>";
@@ -222,6 +227,7 @@ public class PlayActionBarViewTests : IDisposable
 		//Up again reaches Open a game…, and A on it opens the sheet.
 		Press(window, "Up");
 		Assert.Equal("PlayHomeOpenRomSecondary", Focused(window));
+		Assert.Equal("A Open a game", Bar(window));
 		Press(window, "A");
 		WaitFor(() => model.RomPicker.IsVisible, "A on Open a game… did not open the sheet");
 		Assert.Equal("A Play     Y Search     LB / RB Console     B Back", Bar(window));
