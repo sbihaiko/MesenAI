@@ -146,7 +146,6 @@ namespace Mesen.Windows
 			return Installed.TryGetValue(window, out Bridge? bridge) ? bridge.RomPickerParked : null;
 		}
 
-
 		//ADR-0256 Decision 3: ONE path decides who holds the focus when a Play
 		//surface opens or closes. The surfaces are registered in the order the Esc
 		//router itself walks them - TogglePlayerOverlay's QuitGameConfirm first,

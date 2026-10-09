@@ -132,13 +132,21 @@ public class PlayActionBarViewTests : IDisposable
 	//window waited out below is the arbiter's, not the case's, and the case fails
 	//at the end of it if the surface never took the focus.
 	//
-	//The bound is the arbiter's own two-second layout watch plus slack for the
-	//turns and the pump between them; the case's dispatcher, not the case, is
-	//what spends them.
+	//The bound is derived from the arbiter's own watch (PlayFocusWatch.Window,
+	//the constant the production deadline is built from) rather than written as a
+	//number: three windows plus a second of slack. Both clocks are wall-clock and
+	//both run under exactly the CPU contention this case is meant to survive, so
+	//a bound that sat just above the arbiter's own would time the case out with
+	//the watch still armed - the flake back again. With this one, running out
+	//means the arbiter gave up, which is the finding the case is here to report;
+	//it is not the case being impatient. The case's dispatcher, not the case, is
+	//what spends the turns.
+	private static readonly int OverlayFocusBound = (int)PlayFocusWatch.Window.TotalMilliseconds * 3 + 1000;
+
 	private static void WaitForOverlayFocus(MainWindow window)
 	{
 		WaitFor(() => Focused(window) == "OverlayResumeButton",
-			"the pause overlay did not take the focus from its own open path", 3000);
+			"the pause overlay did not take the focus from its own open path", OverlayFocusBound);
 	}
 
 	private static void WaitFor(Func<bool> condition, string failure, int timeoutMilliseconds = 30000)

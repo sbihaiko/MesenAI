@@ -39,11 +39,13 @@ internal sealed class PlayFocusOnOpen
 	private Func<Control?>? _content;
 	private Func<IReadOnlyList<PlayBarEntry>>? _contentActions;
 
-	//The give-up watch a decision keeps once its turns are spent (#1129), and the
-	//wall-clock mark it is dropped at. Both belong to the decision in flight, so
-	//Refresh clears them before posting the next one.
+	//The give-up watch a decision keeps once its turns are spent (#1129), and its
+	//own handler on the window's LayoutUpdated. Both belong to the decision in
+	//flight, so Refresh clears them before posting the next one. The arm/deadline/
+	//abandon rule itself is PlayFocusWatch (host-free, under UI/Logic); only the
+	//event, the attempt and the clock reading are here.
 	private EventHandler? _onLayoutPass;
-	private long _layoutWatchUntil;
+	private readonly PlayFocusWatch _layoutWatch = new();
 
 	private sealed record Claim(Func<bool> IsOpen, Func<Control?> Target, Func<Control?>? Root = null, Func<IReadOnlyList<PlayBarEntry>>? Actions = null);
 
@@ -51,6 +53,10 @@ internal sealed class PlayFocusOnOpen
 	{
 		_window = window;
 		Installed.AddOrUpdate(window, this);
+		//A watch that outlived its window would run one more Apply against a dead
+		//one on a late layout pass (#1129: the leaked-window suspect). Closed is
+		//the last event the window raises, so it is the last chance to come off.
+		window.Closed += (_, _) => UnwatchLayoutPass();
 	}
 
 	//The surface's own properties, watched so that a close re-arbitrates as well
@@ -101,20 +107,6 @@ internal sealed class PlayFocusOnOpen
 	//knob: the first attempt succeeds in every case but the one below, and this
 	//only bounds how long a surface that never becomes focusable is waited for.
 	private const int Attempts = 5;
-
-	//#1129: the turns above are a guess at *when* the surface becomes focusable,
-	//and under a loaded dispatcher the guess can run out before the answer
-	//arrives - measured, all five are spent inside a single drain of the queue,
-	//and a surface that was found, focusable and enabled and not yet *effectively
-	//visible* (the #824 reading) is then left with no focus at all, because a
-	//surface that is simply opening changes no watched property and so nothing
-	//re-arms the decision. The window's own LayoutUpdated is the event that says
-	//the pass which makes it visible has happened, so that is the second chance.
-	//Bounded, not open-ended: the watch is dropped the moment the decision lands,
-	//the moment the focus moves off `held` (the same abandonment rule every
-	//attempt has) and at this deadline, so a surface that never becomes
-	//focusable is still given up on.
-	private static readonly TimeSpan LayoutWatch = TimeSpan.FromSeconds(2);
 
 	//Re-arbitrate: the topmost open surface takes the focus, else the content
 	//area, else the renderer (the game's own surface, which is what has the
@@ -195,19 +187,31 @@ internal sealed class PlayFocusOnOpen
 	//it is the attempt number PAST the turn bound that keeps it to one - a failure
 	//inside it falls through to Retry, which re-arms nothing that is already armed
 	//and posts no further turn. Armed once per decision (Refresh drops any watch
-	//left over from the previous one), so the deadline below is a real bound and
-	//not a mark a later pass can push back.
+	//left over from the previous one), so the deadline PlayFocusWatch reads is a
+	//real bound and not a mark a later pass can push back - and it is read BEFORE
+	//the attempt, so a pass long after the mark applies nothing and the handler
+	//comes off instead of running one more Apply (and one more Focus()) against a
+	//window that has moved on.
 	private void WatchLayoutPass(object? held)
 	{
-		if(_onLayoutPass is not null) {
+		if(_layoutWatch.IsArmed) {
 			return;
 		}
-		_layoutWatchUntil = Environment.TickCount64 + (long)LayoutWatch.TotalMilliseconds;
+		_layoutWatch.Arm(Environment.TickCount64);
 		_onLayoutPass = (_, _) => {
-			Apply(Attempts, held);
-			if(!ReferenceEquals(_window.FocusManager?.GetFocusedElement(), held)
-				|| Environment.TickCount64 > _layoutWatchUntil) {
-				UnwatchLayoutPass();
+			bool focusMoved = !ReferenceEquals(_window.FocusManager?.GetFocusedElement(), held);
+			switch(_layoutWatch.Step(Environment.TickCount64, focusMoved)) {
+				case PlayFocusWatchStep.Attempt:
+					Apply(Attempts, held);
+					//The decision landed: the focus is no longer where it was when
+					//it was posted, so this watch has nothing left to wait for.
+					if(!ReferenceEquals(_window.FocusManager?.GetFocusedElement(), held)) {
+						UnwatchLayoutPass();
+					}
+					break;
+				default:
+					UnwatchLayoutPass();
+					break;
 			}
 		};
 		_window.LayoutUpdated += _onLayoutPass;
@@ -215,6 +219,7 @@ internal sealed class PlayFocusOnOpen
 
 	private void UnwatchLayoutPass()
 	{
+		_layoutWatch.Disarm();
 		if(_onLayoutPass is not null) {
 			_window.LayoutUpdated -= _onLayoutPass;
 			_onLayoutPass = null;
