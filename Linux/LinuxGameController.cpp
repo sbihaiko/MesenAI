@@ -348,7 +348,7 @@ bool LinuxGameController::PlayTick()
 	//gameplay effect itself.
 	std::lock_guard<std::mutex> lock(_ffMutex);
 
-	switch(_tickMotor.Decide(_enableForceFeedback, _tickEffect != nullptr)) {
+	switch(_tickMotor.Decide(_enableForceFeedback.load(), _tickEffect != nullptr)) {
 		case LinuxHapticTick::Slot::Own:
 			return PlayEffect(_tickEffect->id);
 
@@ -407,7 +407,7 @@ bool LinuxGameController::HasRumble()
 	//#1122: what the tick is gated on, and the same condition Decide takes. Not
 	//"an effect exists" - the gameplay effect is uploaded before the pad ever
 	//reports a button, and force feedback stays off until one is pressed.
-	return _enableForceFeedback;
+	return _enableForceFeedback.load();
 }
 
 /*

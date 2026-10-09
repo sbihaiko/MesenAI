@@ -777,12 +777,13 @@ CUTOBJ := $(CUTSRC:.cpp=.cut.o)
 scripts/core_unit_tests: $(CUTOBJ)
 	$(CXX) $(CUTOBJ) -o $@
 
-#ADR-0127/#1122: the Linux evdev menu tick's own suite. The backend itself needs
-#libevdev and an /dev/input/eventN, so it is not on the CUTSRC list (no second
-#main, no platform headers) - what IS host-free is the tick's decision and the
-#shape of the two files that carry it out, and Linux/LinuxHapticTick.h is the
-#header ADR-0127 asks a host-free unit to live in. Same flags as the suite above,
-#so it is compiled the same way on the Linux leg that runs this target.
+#ADR-0122/#1122: the Linux evdev menu tick's own suite, and a second binary
+#rather than more cases in scripts/core_unit_tests.cpp, because the Linux backend
+#it covers needs libevdev and an /dev/input/eventN and so can never join the
+#CUTSRC list. What IS host-free is the tick's decision and the shape of the two
+#files that carry it out; the decision lives in Linux/LinuxHapticTick.h so this
+#binary links nothing but libstdc++. Same flags as the suite above, so the Linux
+#leg that runs `make core-unit-tests` compiles it the same way.
 scripts/linux_haptic_tests: scripts/linux_haptic_tests.cpp Linux/LinuxHapticTick.h
 	$(CXX) $(CUTFLAGS) scripts/linux_haptic_tests.cpp -o $@
 
