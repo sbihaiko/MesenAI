@@ -122,6 +122,7 @@
 #include "Utilities/miniz.h"
 #include "Utilities/sha256.h"
 #include "Utilities/Video/LibrashaderUtilities.h"
+#include "Core/Shared/Audio/MenuSoundPlayback.h"
 #include <algorithm>
 #include <atomic>
 #include <chrono>
@@ -17658,6 +17659,63 @@ namespace
 	}
 }
 
+
+//--- Menu sound playback (#1105) ---------------------------------------------
+//An audio device that, like SdlSoundManager, starts as 44.1 kHz mono and resets
+//(dropping the buffer it was handed) when PlayBuffer's format differs.
+namespace {
+	class ResettingAudioDevice : public IAudioDevice
+	{
+	public:
+		uint32_t Rate = 44100;
+		bool Stereo = false;
+		uint32_t Resets = 0;
+		uint32_t FramesQueued = 0;
+		void PlayBuffer(int16_t*, uint32_t bufferSize, uint32_t sampleRate, bool isStereo) override
+		{
+			if(Rate != sampleRate || Stereo != isStereo) {
+				Rate = sampleRate;
+				Stereo = isStereo;
+				Resets++;
+				return;
+			}
+			FramesQueued += bufferSize;
+		}
+		void Stop() override {}
+		void Pause() override {}
+		void ProcessEndOfFrame() override {}
+		string GetAvailableDevices() override { return ""; }
+		void SetAudioDevice(string) override {}
+		AudioStatistics GetStatistics() override { return AudioStatistics(); }
+	};
+}
+
+static void TestTheFirstMenuSoundReachesAFreshDevice()
+{
+	ResettingAudioDevice device;
+	bool configured = false;
+	vector<int16_t> blip(48000 / 10 * 2, 1000);
+	MenuSoundPlayback::Play(&device, configured, blip.data(), 4800, 48000, 48000, 100);
+	Check(device.FramesQueued == 4800, "MenuSound: the first blip is queued, not dropped by the device's reset");
+	MenuSoundPlayback::Play(&device, configured, blip.data(), 4800, 48000, 48000, 100);
+	Check(device.Resets == 1 && device.FramesQueued == 9600, "MenuSound: later blips cause no further reset");
+}
+
+static void TestAMenuSoundIsRenderedAtTheConfiguredOutputRate()
+{
+	ResettingAudioDevice device;
+	bool configured = false;
+	vector<int16_t> blip(48000 / 10 * 2, 1000);
+	for(int i = 0; i < 3; i++) {
+		MenuSoundPlayback::Play(&device, configured, blip.data(), 4800, 48000, 44100, 100);
+	}
+	Check(device.Rate == 44100 && device.Resets == 1, "MenuSound: a 44.1 kHz output resets once, not per blip");
+	Check(device.FramesQueued == 3 * 4410, "MenuSound: the blip is resampled to 4410 frames at 44.1 kHz");
+
+	vector<int16_t> half = MenuSoundPlayback::Render(blip.data(), 4800, 48000, 44100, 50);
+	Check(half.size() == 4410 * 2 && half[100] == 500, "MenuSound: master volume scales the resampled PCM");
+}
+
 int main()
 {
 	TestTheForcedPatchOverrideFollowsTheSettingUntilTheRomIsSuppressed();
@@ -18207,6 +18265,9 @@ TestW6TheFiltersAcceptTheExtendedFrame();
 	TestAKeyUpFollowsTheRouteOfItsOwnDown();
 	TestEveryOtherPressIsStillTheCores();
 	TestTheOverlayRuleIsTheBindings();
+
+	TestTheFirstMenuSoundReachesAFreshDevice();
+	TestAMenuSoundIsRenderedAtTheConfiguredOutputRate();
 
 	printf("\n%d/%d cases passed\n", gCases - gFailures, gCases);
 	return gFailures == 0 ? 0 : 1;

@@ -4,6 +4,7 @@
 #include "Shared/Emulator.h"
 #include "Shared/EmuSettings.h"
 #include "Shared/Audio/SoundResampler.h"
+#include "Shared/Audio/MenuSoundPlayback.h"
 #include "Shared/RewindManager.h"
 #include "Shared/Video/VideoRenderer.h"
 #include "Shared/Audio/WaveRecorder.h"
@@ -35,6 +36,7 @@ SoundMixer::~SoundMixer()
 void SoundMixer::RegisterAudioDevice(IAudioDevice* audioDevice)
 {
 	_audioDevice = audioDevice;
+	_menuDeviceConfigured = false;
 }
 
 void SoundMixer::RegisterAudioProvider(IAudioProvider* provider)
@@ -185,13 +187,10 @@ void SoundMixer::PlayMenuSound(int16_t* samples, uint32_t frameCount, uint32_t s
 	//would interleave into the game's stream.
 	bool gameRunning = _emu->IsRunning() && !_emu->IsPaused();
 	if(!gameRunning && _audioDevice && _emu->GetSettings()->GetAudioConfig().EnableAudio) {
-		//The device is the one the game uses, so the master volume applies here too.
-		uint32_t masterVolume = _emu->GetSettings()->GetAudioConfig().MasterVolume;
-		vector<int16_t> scaled(samples, samples + frameCount * 2);
-		for(int16_t& s : scaled) {
-			s = (int32_t)s * (int32_t)masterVolume / 100;
-		}
-		_audioDevice->PlayBuffer(scaled.data(), frameCount, sampleRate, true);
+		//The device is the one the game uses, so the master volume and the
+		//configured output rate apply here too.
+		AudioConfig cfg = _emu->GetSettings()->GetAudioConfig();
+		MenuSoundPlayback::Play(_audioDevice, _menuDeviceConfigured, samples, frameCount, sampleRate, cfg.SampleRate, cfg.MasterVolume);
 	}
 }
 

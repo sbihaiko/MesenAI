@@ -18,6 +18,7 @@ class SoundMixer
 {
 private:
 	IAudioDevice* _audioDevice;
+	bool _menuDeviceConfigured = false;
 	vector<IAudioProvider*> _audioProviders;
 	Emulator* _emu;
 	unique_ptr<Equalizer> _equalizer;
