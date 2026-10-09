@@ -830,20 +830,19 @@ namespace Mesen.Windows
 
 				if(action != PadNavAction.None) {
 					Apply(action);
-					PlayMenuSound(action);
+					PlayMenuSoundFor(action);
 					TickPadInHand(action, pad);
 				}
 			}
 
-			//#1105: the optional move / confirm / back sound. After Apply, judged on
-			//the state the press left: a Confirm on Resume or a start-game press
-			//leaves a game running unpaused, and the blip must not mix into it.
-			private static void PlayMenuSound(PadNavAction action)
+			//#1105: the optional move / confirm / back sound, through the one hook
+			//that owns it (PlayMenuSound, #1127) - the same gate and the same sink
+			//the keyboard's own presses reach. After Apply, judged on the state the
+			//press left: a Confirm on Resume or a start-game press leaves a game
+			//running unpaused, and the blip must not mix into it.
+			private static void PlayMenuSoundFor(PadNavAction action)
 			{
-				if(MenuSounds.For(action) is MenuSoundKind kind
-					&& MenuSounds.ShouldPlay(ConfigManager.Config.Audio.MenuSounds, EmuApi.IsRunning() && !EmuApi.IsPaused())) {
-					MenuSoundOutput.Play(kind);
-				}
+				PlayMenuSound.For(action);
 			}
 
 			//#1112: the optional haptic tick on a focus move, to the pad in hand only

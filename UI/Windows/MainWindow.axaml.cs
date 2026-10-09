@@ -1196,6 +1196,19 @@ namespace Mesen.Windows
 				return;
 			}
 
+			//#1127 (ADR-0270 D10): the keyboard walks the SAME Play surfaces the pad
+			//does, and its move and confirm raise the same menu-sound hook - one gate
+			//(MenuSounds.ShouldPlay, inside PlayMenuSound), one sink (MenuSoundOutput),
+			//so a keyboard move and a pad move are indistinguishable to it. The door is
+			//the pad's own (InPlayDoor), so the classic GUI's arrows stay silent, and a
+			//focused box or menu keeps its keys: those presses are the control's, not
+			//navigation. Esc is the third one, and it sounds where this window takes
+			//that press (HandleEscInTheUi above) - the key is the overlay's, not the
+			//focused control's. Back is not one of the keys answered here.
+			if(InPlayDoor && !TheKeyboardIsSomewhereElse()) {
+				PlayMenuSound.For(PlayMenuSound.OfNavigateKey(e.Key));
+			}
+
 			if(OperatingSystem.IsMacOS()) {
 				//Keyhandler handles key internally on macOS - except the overlay's own
 				//press, which the monitor hands to this window instead
@@ -1342,6 +1355,16 @@ namespace Mesen.Windows
 			}
 
 			_shortcutHandler.ApplyUiEsc(action);
+			//#1127 (ADR-0270 D10): the press this window took is the GUI's Back, and
+			//it sounds like the pad's Back does - through the same hook, judged on the
+			//state the press left (a sheet that resumes the game leaves it running
+			//unpaused, and the blip must not mix into it). Scoped to the Play door like
+			//the navigation arm below: the pad's Back does not reach the Settings sheet
+			//opened from Remaster's or Share's Tools either, and this arm answers for
+			//both of them here.
+			if(InPlayDoor) {
+				PlayMenuSound.For(PadNavAction.Back);
+			}
 			return true;
 		}
 
@@ -1365,6 +1388,16 @@ namespace Mesen.Windows
 				|| MenuHelper.IsFocusInMenu(_shellBar.ToolsMenu)
 				|| TopLevel.GetTopLevel(this)?.FocusManager?.GetFocusedElement() is TextBox;
 		}
+
+		//ADR-0256's door, asked the way the pad's bridge asks it
+		//(PlayPadNavigation.InPlayDoor): Player UI mode in a game-screen workspace.
+		//It is the one rule both of #1127's arms need - the keyboard's move/confirm
+		//presses and the Esc this window takes - because the menu sounds are the Play
+		//surfaces' and the pad's own presses are already inside this door by
+		//authority. Asked of the rule rather than spelled out as the two flags, so
+		//the two paths cannot drift apart.
+		private bool InPlayDoor => _model != null
+			&& PlayPadNavigation.InPlayDoor(_model.IsPlayerMode, _model.IsPlayWorkspace);
 
 		private void OnPreviewKeyUp(object? sender, KeyEventArgs e)
 		{
