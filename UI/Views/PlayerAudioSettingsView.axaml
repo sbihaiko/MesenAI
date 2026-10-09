@@ -9,8 +9,8 @@
 	x:DataType="vm:PlayerAudioSettingsViewModel"
 	x:Class="Mesen.Views.PlayerAudioSettingsView"
 >
-	<!--G.4 (W-P8): Settings › Audio - three rows in Display's pattern: the
-	Sound switch, Volume, and the Output device popup. A device set in Options
+	<!--G.4 (W-P8): Settings › Audio - four rows in Display's pattern: the
+	Sound switch, Volume, the Output device popup and Menu sounds (#1105). A device set in Options
 	that is not enumerated now stays the current item. Equalizer, reverb,
 	crossfeed, latency and sample rate are "More in Options…".-->
 	<Border Name="AudioSettingsGroup" Classes="group inset" VerticalAlignment="Top">
@@ -29,6 +29,11 @@
 			<DockPanel Classes="setting-row">
 				<ComboBox DockPanel.Dock="Right" Name="cboAudioDevice" Classes="popup" Width="200" ItemsSource="{Binding Devices}" SelectedItem="{Binding SelectedDevice}" VerticalAlignment="Center" />
 				<TextBlock Classes="callout" Text="{l:Translate lblAudioOutput}" VerticalAlignment="Center" />
+			</DockPanel>
+			<Separator Classes="row-hairline" />
+			<DockPanel Classes="setting-row">
+				<ToggleSwitch DockPanel.Dock="Right" Name="chkAudioMenuSounds" IsChecked="{Binding Config.MenuSounds}" VerticalAlignment="Center" />
+				<TextBlock Classes="callout" Text="{l:Translate lblAudioMenuSounds}" VerticalAlignment="Center" />
 			</DockPanel>
 		</StackPanel>
 	</Border>

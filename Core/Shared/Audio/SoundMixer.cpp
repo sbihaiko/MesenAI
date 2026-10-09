@@ -179,6 +179,22 @@ void SoundMixer::PlayAudioBuffer(int16_t* samples, uint32_t sampleCount, uint32_
 	}
 }
 
+void SoundMixer::PlayMenuSound(int16_t* samples, uint32_t frameCount, uint32_t sampleRate)
+{
+	//While a game runs unpaused PlayAudioBuffer owns the device; a second writer
+	//would interleave into the game's stream.
+	bool gameRunning = _emu->IsRunning() && !_emu->IsPaused();
+	if(!gameRunning && _audioDevice && _emu->GetSettings()->GetAudioConfig().EnableAudio) {
+		//The device is the one the game uses, so the master volume applies here too.
+		uint32_t masterVolume = _emu->GetSettings()->GetAudioConfig().MasterVolume;
+		vector<int16_t> scaled(samples, samples + frameCount * 2);
+		for(int16_t& s : scaled) {
+			s = (int32_t)s * (int32_t)masterVolume / 100;
+		}
+		_audioDevice->PlayBuffer(scaled.data(), frameCount, sampleRate, true);
+	}
+}
+
 void SoundMixer::ProcessEqualizer(int16_t* samples, uint32_t sampleCount, uint32_t targetRate)
 {
 	AudioConfig cfg = _emu->GetSettings()->GetAudioConfig();

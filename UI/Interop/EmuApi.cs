@@ -63,6 +63,7 @@ namespace Mesen.Interop
 		[DllImport(DllPath)] public static extern void TakeScreenshot();
 
 		[DllImport(DllPath)] public static extern void ProcessAudioPlayerAction(AudioPlayerActionParams p);
+		[DllImport(DllPath)] public static extern void PlayMenuSound(short[] samples, UInt32 frameCount, UInt32 sampleRate);
 
 		[DllImport(DllPath)]
 		[return: MarshalAs(UnmanagedType.I1)]

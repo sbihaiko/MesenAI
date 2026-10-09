@@ -4,6 +4,7 @@
 #include "Core/Shared/Video/VideoDecoder.h"
 #include "Core/Shared/Interfaces/IConsole.h"
 #include "Core/Shared/Video/VideoRenderer.h"
+#include "Core/Shared/Audio/SoundMixer.h"
 #include "Core/Shared/SystemActionManager.h"
 #include "Core/Shared/MessageManager.h"
 #include "Core/Shared/SaveStateManager.h"
@@ -265,6 +266,11 @@ extern "C"
 	DllExport void __stdcall ProcessAudioPlayerAction(AudioPlayerActionParams p)
 	{
 		_emu->ProcessAudioPlayerAction(p);
+	}
+
+	DllExport void __stdcall PlayMenuSound(int16_t* samples, uint32_t frameCount, uint32_t sampleRate)
+	{
+		_emu->GetSoundMixer()->PlayMenuSound(samples, frameCount, sampleRate);
 	}
 
 	DllExport void __stdcall GetArchiveRomList(char* filename, char* outBuffer, uint32_t maxLength)

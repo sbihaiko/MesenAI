@@ -48,7 +48,12 @@ public static class PlayerSettingsEssentials
 	//window), and Play's System tab (ADR-0256 Decision 8) needs the same room: two storage choices with their
 	//folder lines, two keyboard choices, and the restart line a folder change
 	//puts there.
-	public static double SheetHeight(ConfigWindowTab tab) => tab is ConfigWindowTab.Look or ConfigWindowTab.System ? 480 : 340;
+	public static double SheetHeight(ConfigWindowTab tab) => tab switch {
+		ConfigWindowTab.Look or ConfigWindowTab.System => 480,
+		//#1105: Audio's fourth row (Menu sounds) needs one more row's height.
+		ConfigWindowTab.Audio => 388,
+		_ => 340
+	};
 
 	//#852: the strip's segment width. ADR-0249's sheet is 480 px wide behind
 	//19 px of padding a side, and the reference mockups (docs/media/
@@ -73,8 +78,9 @@ public static class PlayerSettingsEssentials
 		return Math.Min(MaxSegment, available / count);
 	}
 
-	//PRD rule 2: an inset list of at most three rows per essentials tab.
-	public const int MaxRows = 3;
+	//PRD rule 2: an inset list of at most four rows per essentials tab (spec
+	//#1102: Audio gains Menu sounds, Display gains Interface size).
+	public const int MaxRows = 4;
 
 	private static readonly PlayerSettingsRow[] DisplayRows = {
 		new("Fullscreen", PlayerSettingsRowKind.Switch),
@@ -84,7 +90,9 @@ public static class PlayerSettingsEssentials
 	private static readonly PlayerSettingsRow[] AudioRows = {
 		new("Sound", PlayerSettingsRowKind.Switch),
 		new("Volume", PlayerSettingsRowKind.Slider),
-		new("OutputDevice", PlayerSettingsRowKind.Picker)
+		new("OutputDevice", PlayerSettingsRowKind.Picker),
+		//#1105: soft sounds on move / confirm / back, off until turned on.
+		new("MenuSounds", PlayerSettingsRowKind.Switch)
 	};
 	//Per-player controller types live in each console's own config, so the
 	//essentials are what is console-independent: which pads are connected,

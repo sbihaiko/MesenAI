@@ -209,8 +209,8 @@ public class WireframeCoverageRenderTests : IDisposable
 		}
 	}
 
-	//W-P8b: Audio is one inset list - Sound, Volume, Output device - with
-	//More in Options… and Done; no classic page, no scrollbar.
+	//W-P8b: Audio is one inset list - Sound, Volume, Output device, Menu sounds
+	//(#1105) - with More in Options… and Done; no classic page, no scrollbar.
 	[AvaloniaFact]
 	public void Settings_audio_renders_as_W_P8b()
 	{
@@ -218,8 +218,10 @@ public class WireframeCoverageRenderTests : IDisposable
 		(MainWindow window, MainWindowViewModel model) = ShowPlay();
 		Border sheet = OpenSettings(window, model, ConfigWindowTab.Audio);
 
-		Assert.Equal(340, sheet.Bounds.Height, 0.5);
+		Assert.Equal(388, sheet.Bounds.Height, 0.5);
 		Assert.True(sheet.FindNamed<Border>("AudioSettingsGroup").IsOnScreen());
+		Assert.IsType<ToggleSwitch>(sheet.FindNamed<ToggleButton>("chkAudioMenuSounds"));
+		Assert.True(sheet.FindNamed<ToggleButton>("chkAudioMenuSounds").IsOnScreen());
 		Assert.IsType<ToggleSwitch>(sheet.FindNamed<ToggleButton>("chkAudioEnabled"));
 		Assert.True(sheet.FindNamed<Slider>("sldAudioVolume").IsOnScreen());
 		Assert.True(sheet.FindNamed<ComboBox>("cboAudioDevice").IsOnScreen());

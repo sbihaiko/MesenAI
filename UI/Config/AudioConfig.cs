@@ -14,6 +14,8 @@ namespace Mesen.Config
 		[ObservableProperty] public partial AudioBackendType AudioBackend { get; set; } = AudioBackendType.Default;
 		[ObservableProperty] public partial string AudioDevice { get; set; } = "";
 		[ObservableProperty] public partial bool EnableAudio { get; set; } = true;
+		//#1105: soft sounds on move / confirm / back in Play; off on a new install.
+		[ObservableProperty] public partial bool MenuSounds { get; set; } = false;
 		[ObservableProperty] public partial bool DisableDynamicSampleRate { get; set; } = false;
 
 		[ObservableProperty][MinMax(0, 100)] public partial UInt32 MasterVolume { get; set; } = 100;

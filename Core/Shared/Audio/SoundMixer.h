@@ -51,6 +51,8 @@ public:
 
 	void PlayAudioBuffer(int16_t* samples, uint32_t sampleCount, uint32_t sourceRate);
 	void StopAudio(bool clearBuffer = false);
+	//#1105: a short interface sound, straight to the audio device. Dropped while a game runs unpaused.
+	void PlayMenuSound(int16_t* samples, uint32_t frameCount, uint32_t sampleRate);
 
 	void RegisterAudioDevice(IAudioDevice* audioDevice);
 
