@@ -197,6 +197,23 @@ namespace Mesen.Tests.Config
 			}
 		}
 
+		//#1112: the frozen answer sizes rows and height alike, whatever the live seam says now.
+		[Theory]
+		[InlineData(false, 3, 340)]
+		[InlineData(true, 4, 388)]
+		public void Rows_and_max_rows_follow_the_frozen_menu_tick_answer_not_the_live_seam(bool frozen, int rows, int height)
+		{
+			Func<bool> original = PlayerSettingsEssentials.MenuTickAimable;
+			try {
+				PlayerSettingsEssentials.MenuTickAimable = () => !frozen;
+				Assert.Equal(rows, PlayerSettingsEssentials.Rows(ConfigWindowTab.Input, frozen).Count);
+				Assert.Equal(rows, PlayerSettingsEssentials.MaxRowsFor(ConfigWindowTab.Input, frozen));
+				Assert.Equal(height, PlayerSettingsEssentials.SheetHeight(ConfigWindowTab.Input, frozen));
+			} finally {
+				PlayerSettingsEssentials.MenuTickAimable = original;
+			}
+		}
+
 		[Fact]
 		public void Menu_tick_row_is_the_fourth_controls_row_when_the_pad_in_hand_is_aimable()
 		{

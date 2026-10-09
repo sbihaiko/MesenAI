@@ -255,6 +255,18 @@ public class WireframeCoverageRenderTests : IDisposable
 	public void Settings_controls_renders_as_W_P8c()
 	{
 		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		//#1112: pinned here, not left to whatever pad an earlier case or the machine has in hand.
+		Func<bool> originalAimable = PlayerSettingsEssentials.MenuTickAimable;
+		PlayerSettingsEssentials.MenuTickAimable = () => false;
+		try {
+			RenderControlsSheetWithoutMenuTick();
+		} finally {
+			PlayerSettingsEssentials.MenuTickAimable = originalAimable;
+		}
+	}
+
+	private void RenderControlsSheetWithoutMenuTick()
+	{
 		(MainWindow window, MainWindowViewModel model) = ShowPlay();
 		Border sheet = OpenSettings(window, model, ConfigWindowTab.Input);
 
@@ -285,8 +297,7 @@ public class WireframeCoverageRenderTests : IDisposable
 			body();
 		} finally {
 			PlayerSettingsEssentials.MenuTickAimable = original;
-			HapticTickOutput.PadInHand = -1;
-			HapticTickOutput.SetSeamsForTest(null, null);
+			TestAppBuilder.ResetPadSeams();
 			ConfigManager.Config.Input.ForceFeedbackIntensity = originalRumble;
 		}
 	}

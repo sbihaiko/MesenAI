@@ -73,8 +73,7 @@ public class MenuTickTests : IDisposable
 
 	public void Dispose()
 	{
-		HapticTickOutput.SetSeamsForTest(null, null);
-		HapticTickOutput.PadInHand = -1;
+		TestAppBuilder.ResetPadSeams();
 		foreach(MainWindow window in _windows) {
 			window.ReleaseCore = () => { };
 			window.Close();

@@ -103,10 +103,13 @@ public static class PlayerSettingsEssentials
 	//and the fourth of Audio (Menu sounds, #1105) and Controls (Menu tick, #1112)
 	//while the host reports it available.
 	public const int MaxRows = 4;
-	public static int MaxRowsFor(ConfigWindowTab tab) => tab switch {
+	public static int MaxRowsFor(ConfigWindowTab tab) => MaxRowsFor(tab, MenuTickAimable());
+
+	//#1112: like SheetHeight, takes the Menu tick answer a sheet froze when it opened.
+	public static int MaxRowsFor(ConfigWindowTab tab, bool menuTickAimable) => tab switch {
 		ConfigWindowTab.Display => 4,
 		ConfigWindowTab.Audio when MenuSoundsAvailable() => 4,
-		ConfigWindowTab.Input when MenuTickAimable() => 4,
+		ConfigWindowTab.Input when menuTickAimable => 4,
 		_ => 3
 	};
 
@@ -138,10 +141,13 @@ public static class PlayerSettingsEssentials
 		.Append(new("MenuTick", PlayerSettingsRowKind.Switch)).ToArray();
 
 	//The rows of a tab's inset list; Look has its own W-P10 page (empty here).
-	public static IReadOnlyList<PlayerSettingsRow> Rows(ConfigWindowTab tab) => tab switch {
+	public static IReadOnlyList<PlayerSettingsRow> Rows(ConfigWindowTab tab) => Rows(tab, MenuTickAimable());
+
+	//#1112: the Menu tick answer is the one a sheet froze when it opened.
+	public static IReadOnlyList<PlayerSettingsRow> Rows(ConfigWindowTab tab, bool menuTickAimable) => tab switch {
 		ConfigWindowTab.Display => DisplayRows,
 		ConfigWindowTab.Audio => MenuSoundsAvailable() ? AudioRowsWithMenuSounds : AudioRows,
-		ConfigWindowTab.Input => MenuTickAimable() ? ControlsRowsWithMenuTick : ControlsRows,
+		ConfigWindowTab.Input => menuTickAimable ? ControlsRowsWithMenuTick : ControlsRows,
 		_ => Array.Empty<PlayerSettingsRow>()
 	};
 
