@@ -69,6 +69,7 @@
 #include "Shared/MovieSyncGate.h"
 #include "Shared/Movies/ShareRecordingSettings.h"
 #include "Shared/ShortcutKeyRules.h"
+#include "Shared/HapticTickChain.h"
 #include "Shared/KeyMonitorRouting.h"
 #include "Shared/GamepadButtonOrder.h"
 #include "Shared/AliasedKeyState.h"
@@ -6289,11 +6290,13 @@ namespace
 	}
 
 	//#1106 (spec #1102): the host can fire a short haptic tick on ONE connected
-	//pad and says whether it can. Aimable = macOS GameController with haptics
-	//present. Windows (XInput, DirectInput) and Linux (evdev) report every pad as
-	//not aimable and run no tick code (#1121, #1122 are the follow-ups). The backends are not linked into this suite,
-	//so a fake key manager stands in for each one and the shared rule is driven
-	//through IKeyManager's public surface; what the fake records is the routing.
+	//pad and says whether it can. Aimable = the pad reports rumble AND its backend
+	//has a per-slot tick: macOS GameController (#1106), Windows XInput (#1121) and
+	//Linux evdev (#1122, the device side). DirectInput has no force feedback at all
+	//here and is never aimable, whatever a pad claims. The backends are not linked
+	//into this suite, so a fake key manager stands in for each one and the shared
+	//rule is driven through IKeyManager's public surface; what the fake records is
+	//the routing.
 	void TestAPadIsAimableOnlyWhereTheHostCanAddressItsHaptics()
 	{
 		struct FakePad { GamepadBackend Backend; bool HasRumble; };
@@ -6358,11 +6361,11 @@ namespace
 
 		Check(km.IsGamepadAimable(0), "#1106: a macOS pad that reports haptics is aimable");
 		Check(!km.IsGamepadAimable(1), "#1106: a macOS pad without haptics is not aimable");
-		Check(!km.IsGamepadAimable(2), "#1106: a Windows XInput pad is not aimable (tick deferred, #1121)");
+		Check(km.IsGamepadAimable(2), "#1121: a Windows XInput pad with rumble is aimable");
 		Check(!km.IsGamepadAimable(3), "#1106: a DirectInput pad is not aimable");
 		Check(!km.IsGamepadAimable(4),
 			"#1106: ...even if it claimed rumble: DirectInput never ticks");
-		Check(!km.IsGamepadAimable(5), "#1106: a Linux evdev pad is not aimable (tick deferred, #1122)");
+		Check(km.IsGamepadAimable(5), "#1122: a Linux evdev pad that reports rumble is aimable");
 		Check(!km.IsGamepadAimable(6), "#1106: a Linux pad without force feedback is not aimable");
 		Check(!km.IsGamepadAimable(7), "#1106: a pad with no backend is not aimable");
 		Check(!km.IsGamepadAimable(8), "#1106: an index past the connected pads is not aimable");
@@ -6370,8 +6373,11 @@ namespace
 		Check(km.TickGamepad(0) && km.Ticked == vector<uint32_t>({ 0 }),
 			"#1106: a tick reaches the backend once, on the macOS pad that was asked for");
 		km.Ticked.clear();
-		Check(!km.TickGamepad(1) && !km.TickGamepad(2) && !km.TickGamepad(3) && !km.TickGamepad(4)
-			&& !km.TickGamepad(5) && !km.TickGamepad(6) && !km.TickGamepad(7) && !km.TickGamepad(8)
+		Check(km.TickGamepad(2) && km.Ticked == vector<uint32_t>({ 2 }),
+			"#1121: the tick reaches the XInput slot that was asked for, and no other");
+		km.Ticked.clear();
+		Check(!km.TickGamepad(1) && !km.TickGamepad(3) && !km.TickGamepad(4)
+			&& !km.TickGamepad(6) && !km.TickGamepad(7) && !km.TickGamepad(8)
 			&& km.Ticked.empty(),
 			"#1106: a pad that is not aimable answers false and the backend is never called");
 	}
@@ -6407,6 +6413,82 @@ namespace
 		Check(macDtor.find("[_tickPlayer stopAtTime") != string::npos
 			&& macDtor.find("[_tickPlayer release]") != string::npos,
 			"#1106: macOS destructor stops and releases the tick player");
+	}
+
+	//#1121: the per-slot policy of a short menu tick on a backend whose rumble is a
+	//level (XInput) and so needs a timer to end the tick. The decisions are
+	//HapticTickChain's; the Windows timer is only the clock.
+	void TestAHapticTickAlwaysEndsAndNeverSilencesTheGame()
+	{
+		HapticTickChain chain;
+		chain.RecordApplied(0, 40000, 20000);
+
+		//One tick ends with what the slot held before it, not with silence: a menu
+		//tick over a rumbling game must not stop the game's rumble.
+		uint32_t first = chain.BeginTick(0);
+		Check(first != 0 && chain.IsTicking(0),
+			"#1121: a started tick is ticking on its own slot");
+		optional<HapticTickChain::Magnitudes> ended = chain.EndTick(0, first);
+		Check(ended && ended->Right == 40000 && ended->Left == 20000,
+			"#1121: a tick ends by putting the slot's own rumble back, never by zeroing it");
+		Check(!chain.IsTicking(0), "#1121: an ended tick leaves its slot idle");
+
+		//The acceptance case: two ticks in a row on one slot both stop. A one-shot
+		//timer that was armed and re-armed after it expired does not fire again,
+		//which leaves the pad buzzing.
+		uint32_t older = chain.BeginTick(1);
+		uint32_t newer = chain.BeginTick(1);
+		Check(older != newer, "#1121: every tick on a slot gets a handle of its own");
+		Check(!chain.EndTick(1, older),
+			"#1121: a superseded tick does not stop the pad under the newer tick's feet");
+		optional<HapticTickChain::Magnitudes> last = chain.EndTick(1, newer);
+		Check(last && !chain.IsTicking(1),
+			"#1121: the second tick in a row ends too - two ticks on one slot both stop");
+		Check(!chain.EndTick(1, newer),
+			"#1121: an end with nothing ticking stops nothing a second time");
+
+		//Per slot, not per manager: a tick on one pad leaves the other alone.
+		chain.RecordApplied(2, 100, 200);
+		uint32_t other = chain.BeginTick(2);
+		Check(chain.EndTick(1, newer) == std::nullopt && chain.IsTicking(2),
+			"#1121: ending a tick on one slot leaves another slot's tick running");
+		optional<HapticTickChain::Magnitudes> otherEnd = chain.EndTick(2, other);
+		Check(otherEnd && otherEnd->Right == 100 && otherEnd->Left == 200,
+			"#1121: each slot restores its own magnitudes, not the last one recorded");
+
+		Check(chain.BeginTick(HapticTickChain::SlotCount) == 0
+			&& !chain.IsTicking(HapticTickChain::SlotCount),
+			"#1121: a slot the chain does not have is not a tick");
+	}
+
+	//#1121: the Windows backend is not linked into this suite (it needs XInput and
+	//a Windows timer queue), so its wiring is pinned by reading it - same shape as
+	//the macOS tick above. What matters is that every tick arms a timer of its own
+	//(the trap named in #1121 is re-arming an expired one-shot, which never fires
+	//again) and that the tick reaches one XInput slot.
+	void TestTheWindowsHapticTickArmsItsOwnTimer()
+	{
+		string win = ReadBackendSource("Windows/XInputManager.cpp");
+		Check(!win.empty(), "#1121: the Windows XInput backend source is readable");
+		Check(win.find("CreateTimerQueueTimer(") != string::npos,
+			"#1121: a tick arms a timer to end itself");
+		Check(win.find("ChangeTimerQueueTimer(") == string::npos,
+			"#1121: ...a fresh one, never a re-armed expired one-shot, which never re-fires");
+		string playTick = HapticBackendBody(win, "bool XInputManager::PlayTick(uint8_t gamepadPort)");
+		Check(playTick.find("_tickChain.BeginTick(") != string::npos,
+			"#1121: the tick's ownership is the shared chain's, and the tick starts one");
+		Check(playTick.find("ApplyVibration(gamepadPort") != string::npos
+			&& playTick.find("XInputSetState(") == string::npos,
+			"#1121: the tick writes one slot through the same call the rest of the class uses");
+
+		string keyManager = ReadBackendSource("Windows/WindowsKeyManager.cpp");
+		Check(keyManager.find("bool WindowsKeyManager::PlayGamepadTick(uint32_t index)") != string::npos,
+			"#1121: Windows answers the shared per-pad tick hook");
+		string routing = HapticBackendBody(keyManager, "bool WindowsKeyManager::PlayGamepadTick(uint32_t index)");
+		Check(routing.find("_xInput->PlayTick((uint8_t)i)") != string::npos,
+			"#1121: the tick goes to the XInput SLOT the walk resolved, not to the index it was handed");
+		Check(routing.find("_directInput->") == string::npos && routing.find("return false;") != string::npos,
+			"#1121: ...and a joystick ordinal reaches no DirectInput tick, it answers false");
 	}
 
 	void TestPadChordFiresOnWhicheverPadIsInHand()
@@ -17880,6 +17962,8 @@ TestW6TheFiltersAcceptTheExtendedFrame();
 	TestAPadLightIsANoOpUnlessTheBackendHasOne();
 	TestAPadIsAimableOnlyWhereTheHostCanAddressItsHaptics();
 	TestTheMacHapticTickKeepsItsStateSound();
+	TestAHapticTickAlwaysEndsAndNeverSilencesTheGame();
+	TestTheWindowsHapticTickArmsItsOwnTimer();
 	TestPadChordFiresOnWhicheverPadIsInHand();
 	TestTheWholePadFamilyAnswersTheChord();
 	TestPadChordIsNotAnsweredAcrossPadFamilies();

@@ -64,4 +64,9 @@ public:
 	bool GetGamepadInfo(uint32_t index, GamepadInfo& info) override;
 	bool GetGamepadState(uint32_t index, GamepadState& state) override;
 	void TestForceFeedback(uint32_t index, uint16_t magnitudeRight, uint16_t magnitudeLeft) override;
+
+	//#1121 (spec #1102): the per-pad short tick, on the pad index GetGamepadInfo
+	//numbers. XInput only - DirectInput has no force feedback here, so its pads are
+	//not aimable and never reach this.
+	bool PlayGamepadTick(uint32_t index) override;
 };
