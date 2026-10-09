@@ -121,6 +121,25 @@ public class PlayPadWalkTests : IDisposable
 	//this list (the test fails on a stale entry as well as on a new one).
 	public static readonly string[] KnownBarGaps = { };
 
+	//Controls a surface shows that the walk lists and does not reach, per surface.
+	//They exist because the judged set is now the union of every page a surface
+	//showed (#1146 review finding 2), while the walk presses from each control
+	//once, in the context of the page that was up when it reached it: a control
+	//that only appears once another tab of the Settings strip is selected is
+	//listed the moment that tab is up, but the press that would find it is made
+	//from a control already passed while a different tab was showing. Both are
+	//control kinds the same surface reaches elsewhere (chkAudioEnabled is a
+	//ToggleSwitch beside chkDisplayFullscreen, and the footer button sits beside
+	//btnPlayerSettingsDone), so this is the walk's coverage and not the pad's
+	//reach - it stays named and asserted both ways rather than dropped: a listed
+	//control the walk does reach has to leave this list. #1108's AC2 keeps it open.
+	//Both Settings surfaces reach the strip and walk every tab of it, so both
+	//miss the same two controls, and both entries leave together.
+	public static readonly Dictionary<string, string[]> KnownUnreachable = new() {
+		["SettingsDisplay"] = new[] { "chkAudioEnabled", "btnPlayerSettingsMoreInOptions" },
+		["SettingsSystemTab"] = new[] { "chkAudioEnabled", "btnPlayerSettingsMoreInOptions" },
+	};
+
 	//Surfaces whose console chips (RomPickerConsoleFilter) the pad cannot land on:
 	//LB/RB cycle the selection but the focus never enters the chip ListBox (#1107
 	//review finding 2). Named so the gap shows, and asserted both ways: when the
@@ -235,7 +254,19 @@ public class PlayPadWalkTests : IDisposable
 		HashSet<string> known = KnownFocusLeaks.TryGetValue((surface, scale), out string[]? listed) ? listed.ToHashSet() : new HashSet<string>();
 		Assert.True(leaks.SetEquals(known),
 			$"{surface} at {scale}: focus left the surface onto [{string.Join(", ", leaks.OrderBy(l => l))}] but KnownFocusLeaks lists [{string.Join(", ", known.OrderBy(l => l))}] (#1137)");
-		List<string> problems = PadWalk.Judge(observation with { FocusOutside = null });
+		//A control the walk lists and does not reach is a known gap only while the
+		//list says so: a name the walk stops listing and a name it starts reaching
+		//both fail here, so the entry cannot outlive its own gap.
+		HashSet<string> unreachable = KnownUnreachable.TryGetValue(surface, out string[]? notReached) ? notReached.ToHashSet() : new HashSet<string>();
+		HashSet<string> shown = observation.Interactive.Select(c => c.Label).ToHashSet();
+		HashSet<string> hit = observation.Reached.Select(c => c.Label).ToHashSet();
+		Assert.True(shown.IsSupersetOf(unreachable),
+			$"{surface}: KnownUnreachable names [{string.Join(", ", unreachable.Except(shown))}] but the surface does not show them");
+		Assert.Empty(unreachable.Intersect(hit));
+		List<string> problems = PadWalk.Judge(observation with {
+			Interactive = observation.Interactive.Where(c => !unreachable.Contains(c.Label)).ToList(),
+			FocusOutside = null,
+		});
 		Assert.True(problems.Count == 0, string.Join(Environment.NewLine, problems));
 
 		//The known gaps are asserted both ways, so a surface that joins the
@@ -304,10 +335,14 @@ public class PlayPadWalkTests : IDisposable
 				return (window, model, () => model.ToolSheet.IsVisible, false);
 			//ADR-0249 (W-X1): W-P4's Quit game asks on the overlay card. The
 			//preference decides whether anything asks at all, so it is turned on
-			//for this surface and restored with the rest in Dispose.
+			//for this surface and restored with the rest in Dispose. It is set on
+			//the preference rather than passed as a literal, because that is the
+			//value the real door reads (MainWindow.OnOverlayQuitGame), so the walk
+			//can only open the question the player gets (#1146 review finding 4).
 			case "QuitGameConfirm":
 				model.OpenPauseOverlay();
-				model.ConfirmQuitGame(true, () => { });
+				ConfigManager.Config.Preferences.ConfirmExitResetPower = true;
+				model.ConfirmQuitGame(ConfigManager.Config.Preferences.ConfirmExitResetPower, () => { });
 				return (window, model, () => model.QuitGameConfirm.IsVisible, false);
 			//ADR-0250's task doors: an archive with more than one ROM asks which.
 			case "SelectRomSheet":
@@ -389,6 +424,9 @@ public class PlayPadWalkTests : IDisposable
 		interactive.AddRange(chips);
 		Dictionary<Control, string> names = interactive.Concat(new[] { start }).Distinct().ToDictionary(c => c, Label);
 		HashSet<Control> reached = new() { start };
+		//The same set in the order the pad reached it, which is the order the closing
+		//presses look for a control the surface still shows (#1146 review finding 3).
+		List<Control> reachOrder = new() { start };
 		List<(string, IReadOnlyList<PlayBarEntry>?, bool)> bar = new();
 		List<(string From, string To)> outside = new();
 		Dictionary<Control, bool> seenForBar = new();
@@ -410,6 +448,18 @@ public class PlayPadWalkTests : IDisposable
 			if(!node.IsAttachedToVisualTree()) {
 				return;
 			}
+			//A press can REPLACE the page the surface shows - the Settings strip
+			//swaps its tab's whole content for another tab's - so the controls the
+			//surface shows now are not the ones listed at walk start. Re-listing at
+			//every landing makes the judged set the union of every page the walk
+			//entered, instead of the first page's alone; without it a pointer-only
+			//control on any tab but the one the sheet opens on passes in silence
+			//(#1146 review finding 2).
+			foreach(Control shown in InteractiveControls(root)) {
+				if(names.TryAdd(shown, Label(shown))) {
+					interactive.Add(shown);
+				}
+			}
 			foreach(PadNavAction direction in new[] { PadNavAction.Down, PadNavAction.Right, PadNavAction.Up, PadNavAction.Left }) {
 				//The node is gone: the press before this one landed somewhere that
 				//took it away (a tab strip replacing its page). Nothing left to press from.
@@ -420,12 +470,21 @@ public class PlayPadWalkTests : IDisposable
 					seenForBar[node] = true;
 					bar.Add((Label(node), focus.Declared(), Arbiter.CoverHasFocus(model, node)));
 				}
-				if(Press(window, direction) is Control focusedNext && Canonical(focusedNext) is Control next && next != node) {
+				(Control? pressed, Control? settled) = Press(window, direction);
+				//Where the ring came to rest, not where it landed: a surface that
+				//takes the press inside itself and then puts the ring back out on
+				//the header leaks just as surely as one that never took it, and only
+				//the settled reading shows it (#1146 review finding 1).
+				if(settled is Control settledControl && Canonical(settledControl) is Control rested && !root.IsVisualAncestorOf(rested)) {
+					outside.Add((Label(node), Label(rested)));
+				}
+				if(pressed is Control focusedNext && Canonical(focusedNext) is Control next && next != node) {
 					//A press that lands outside the surface is a leak to report, not an edge to follow.
 					if(!root.IsVisualAncestorOf(next)) {
 						outside.Add((Label(node), Label(next)));
 					} else if(reached.Count < 200 && reached.Add(next)) {
 						names.TryAdd(next, Label(next));
+						reachOrder.Add(next);
 						Explore(next);
 					}
 				}
@@ -437,7 +496,7 @@ public class PlayPadWalkTests : IDisposable
 		//once and count them reached only when the focus lands in their ListBox.
 		bool chipsReached = false;
 		if(chips.Count > 0) {
-			Land(window, start);
+			Assert.True(LandEntry(window, reachOrder), "the walk has no control the surface still shows to press the chip action from (#1146 review finding 3)");
 			PressShoulder(window, "Pad1 R1");
 			if(window.FocusManager?.GetFocusedElement() is Control chip && chip.FindAncestorOfType<ListBox>(true)?.Name == "RomPickerConsoleFilter") {
 				chipsReached = true;
@@ -446,7 +505,7 @@ public class PlayPadWalkTests : IDisposable
 
 		HashSet<PlayAction> available = Available(window, root, interactive);
 		bool? backLeft = null;
-		Land(window, start);
+		Assert.True(LandEntry(window, reachOrder), "the walk has no control the surface still shows to press Back from (#1146 review finding 3)");
 		Press(window, PadNavAction.Back);
 		Pump();
 		backLeft = WaitUntil(() => !isUp());
@@ -594,6 +653,23 @@ public class PlayPadWalkTests : IDisposable
 		return true;
 	}
 
+	//Put the ring back on the surface's entry control before the closing presses
+	//(the chip action and Back). The walk prefers the control the surface opened
+	//on; a tab strip that swapped its page under the walk has detached it by then,
+	//and leaving the ring wherever the last press stopped would make those presses
+	//say nothing about the surface's own door (#1146 review finding 3). The
+	//fallback is the first control the pad reached that the surface still shows,
+	//which is the same door a player comes back in by.
+	private static bool LandEntry(MainWindow window, List<Control> reachOrder)
+	{
+		foreach(Control candidate in reachOrder) {
+			if(Land(window, candidate)) {
+				return true;
+			}
+		}
+		return false;
+	}
+
 	//---- plumbing shared in shape with PlayPadNavigationTests (kept local so the
 	//two classes do not collide; the stand-in backend is the same table)
 
@@ -620,21 +696,26 @@ public class PlayPadWalkTests : IDisposable
 	private PadNavMapping Mapping => _mapping ??= PadNavControls.Resolve(PadFamily.Xbox, 0, BackendCode)
 		?? throw new InvalidOperationException("the stand-in table does not answer the Xbox preset's names");
 
-	//Where the press moved the ring, read before the surface is given its turn.
-	//The press applies its move synchronously; a surface that re-arbitrates on
-	//its own state (the Settings strip selects the tab it lands on, and the
-	//System tab's claim then puts the ring on that tab's storage choice -
-	//ADR-0256 Decision 8) moves it again on the next pumped turn, and that
-	//second move is the surface's, not the pad's. Reading the landing at the
-	//press is what tells "the pad reached it" apart from "the surface kept it",
-	//and the walk asks only the first: the judge's rule is reachability.
-	private Control? Press(MainWindow window, PadNavAction action)
+	//Where the press moved the ring, read twice: at the press and after the
+	//surface has had its turn. The press applies its move synchronously; a
+	//surface that re-arbitrates on its own state (the Settings strip selects the
+	//tab it lands on, and the System tab's claim then puts the ring on that
+	//tab's storage choice - ADR-0256 Decision 8) moves it again on the next
+	//pumped turn, and that second move is the surface's, not the pad's.
+	//
+	//Both readings are needed and they answer different questions (#1146 review
+	//finding 1). Reachability takes the press reading: "the pad reached it" is
+	//the judge's rule, and a surface that keeps the ring where the pad put it
+	//has not moved it. The focus-leak check takes the settled reading: a press
+	//that lands inside the surface and is then carried OUT of it is a leak onto
+	//the header exactly like #1137, and the press reading cannot see it.
+	private (Control? Pressed, Control? Settled) Press(MainWindow window, PadNavAction action)
 	{
 		PlayPadNavigationWiring.TickForTest(window, Array.Empty<ushort>(), TimeSpan.FromMilliseconds(50), BackendName, BackendCode);
 		PlayPadNavigationWiring.TickForTest(window, new ushort[] { PlayPadNavigation.CodeOf(Mapping, action) }, TimeSpan.FromMilliseconds(50), BackendName, BackendCode);
-		Control? landed = window.FocusManager?.GetFocusedElement() as Control;
+		Control? pressed = window.FocusManager?.GetFocusedElement() as Control;
 		Pump();
-		return landed;
+		return (pressed, window.FocusManager?.GetFocusedElement() as Control);
 	}
 
 	//LB/RB are the ConsoleFilter action; they are not one of the six nav actions.
