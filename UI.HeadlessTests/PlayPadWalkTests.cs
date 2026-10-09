@@ -21,10 +21,13 @@ namespace Mesen.HeadlessTests;
 
 //#1107 (spec #1102 slice 2, ADR-0256 stop rule, PRD Part B §13.3 rule 9): one
 //walk over every Play surface with only the D-pad, A and B. It fails when a
-//pad player could be stuck, in exactly three ways:
+//pad player could be stuck, in exactly four ways:
 //  - a control the surface shows is not reachable from the pad;
 //  - B does not leave a surface that declares (or owes) a Back;
-//  - the shared action bar (#1104) names an action the surface does not have.
+//  - the shared action bar (#1104) names an action the surface does not have;
+//  - a pad press moves the focus outside the surface (#1134).
+//Controls are tracked by identity, not by Name, and are candidates by type,
+//visibility and enabled state, not by Focusable / IsTabStop (#1134).
 //
 //The judgement is PadWalk.Judge (UI/Logic, pure; its negative cases live in
 //UI.Tests/Play/PadWalkJudgeTests). The live cases below only produce the
@@ -91,6 +94,8 @@ public class PlayPadWalkTests : IDisposable
 	//LB/RB cycle the selection but the focus never enters the chip ListBox (#1107
 	//review finding 2). Named so the gap shows, and asserted both ways: when the
 	//action starts entering the chips the walk reaches them and this entry must go.
+//The chips stay a named gap tracked in #1134; only the RomPickerConsoleFilter
+//items are set apart, so any other unreachable ListBoxItem still fails the walk.
 	public static readonly string[] KnownChipGaps = { "Library" };
 
 
@@ -251,6 +256,7 @@ public class PlayPadWalkTests : IDisposable
 		HashSet<Control> reached = new() { start };
 		Queue<Control> frontier = new(new[] { start });
 		List<(string, IReadOnlyList<PlayBarEntry>?, bool)> bar = new();
+		List<string> outside = new();
 		Dictionary<Control, bool> seenForBar = new();
 
 		//Edges: with the focus on a node, one pad press per direction. The press
@@ -298,9 +304,9 @@ public class PlayPadWalkTests : IDisposable
 		//The chips are judged on their own line by the caller (chipCount, chipsReached).
 		return (new PadWalkObservation(
 			surface, isRoot,
-			interactive.Except(chips).Select(c => names[c]).Distinct().ToList(),
-			reached.Select(c => names.TryGetValue(c, out string? n) ? n : Label(c)).Distinct().ToList(),
-			isRoot ? false : backLeft, bar, available), chips.Count, chipsReached);
+			interactive.Except(chips).Select(c => new PadWalkControl(c, names[c])).ToList(),
+			reached.Select(c => new PadWalkControl(c, names.TryGetValue(c, out string? n) ? n : Label(c))).ToList(),
+			isRoot ? false : backLeft, bar, available, outside), chips.Count, chipsReached);
 	}
 
 	//Types a pad player is expected to be able to land on. Template parts
@@ -337,7 +343,9 @@ public class PlayPadWalkTests : IDisposable
 		return root.GetVisualDescendants().OfType<Control>()
 			.Select(Canonical).Distinct().Cast<Control>()
 			.Where(c => c is StateGrid or Button or ToggleButton or ComboBox or Slider or TextBox or TabItem or ListBoxItem)
-			.Where(c => c.Focusable && c.IsEffectivelyVisible && c.IsEffectivelyEnabled && c.IsTabStop)
+			//Not filtered by Focusable / IsTabStop: a visible, enabled control the ring
+				//cannot land on is exactly the pointer-only control the walk must report.
+				.Where(c => c.IsEffectivelyVisible && c.IsEffectivelyEnabled)
 			.Where(c => !c.GetVisualAncestors().TakeWhile(a => a != root).Any(a => a is ComboBox or Slider or TextBox))
 			.Where(c => c is not ListBoxItem item || !item.GetVisualDescendants().OfType<Button>().Any())
 			//The library's console chips are one ListBox the pad enters with the

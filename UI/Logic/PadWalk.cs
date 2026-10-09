@@ -33,8 +33,12 @@ public static class PadWalk
 	public static List<string> Judge(PadWalkObservation o)
 	{
 		List<string> problems = new();
-		foreach(string name in o.Interactive.Select(c => c.Label).Except(o.Reached.Select(c => c.Label))) {
-			problems.Add($"{o.Surface}: {name} is not reachable from the pad (reached: {string.Join(", ", o.Reached.Select(c => c.Label))})");
+		HashSet<object> reached = new(o.Reached.Select(c => c.Key), ReferenceEqualityComparer.Instance);
+		foreach(PadWalkControl control in o.Interactive.Where(c => !reached.Contains(c.Key))) {
+			problems.Add($"{o.Surface}: {control.Label} is not reachable from the pad (reached: {string.Join(", ", o.Reached.Select(c => c.Label))})");
+		}
+		foreach(string label in o.FocusOutside ?? Array.Empty<string>()) {
+			problems.Add($"{o.Surface}: the pad moved the focus outside the surface to {label}");
 		}
 		bool declaresBack = o.BarByFocus.Any(b => b.Declared?.Any(e => e.Action == PlayAction.Back) == true);
 		if(!o.IsRoot && o.BackLeft != true) {
