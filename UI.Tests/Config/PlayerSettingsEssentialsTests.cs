@@ -182,6 +182,35 @@ namespace Mesen.Tests.Config
 			}
 		}
 
+		//#1112: the Menu tick row follows "the pad in hand is aimable" (the host's
+		//answer, macOS only today), so by default Controls keeps three rows.
+		[Fact]
+		public void Menu_tick_row_is_hidden_while_the_pad_in_hand_is_not_aimable()
+		{
+			Func<bool> original = PlayerSettingsEssentials.MenuTickAimable;
+			try {
+				PlayerSettingsEssentials.MenuTickAimable = () => false;
+				Assert.DoesNotContain("MenuTick", PlayerSettingsEssentials.Rows(ConfigWindowTab.Input).Select(r => r.Id));
+				Assert.Equal(340, PlayerSettingsEssentials.SheetHeight(ConfigWindowTab.Input));
+			} finally {
+				PlayerSettingsEssentials.MenuTickAimable = original;
+			}
+		}
+
+		[Fact]
+		public void Menu_tick_row_is_the_fourth_controls_row_when_the_pad_in_hand_is_aimable()
+		{
+			Func<bool> original = PlayerSettingsEssentials.MenuTickAimable;
+			try {
+				PlayerSettingsEssentials.MenuTickAimable = () => true;
+				Assert.Equal(new[] { "Controllers", "Rumble", "Deadzone", "MenuTick" }, PlayerSettingsEssentials.Rows(ConfigWindowTab.Input).Select(r => r.Id));
+				Assert.Equal(388, PlayerSettingsEssentials.SheetHeight(ConfigWindowTab.Input));
+				Assert.True(PlayerSettingsEssentials.Rows(ConfigWindowTab.Input).Count <= PlayerSettingsEssentials.MaxRows);
+			} finally {
+				PlayerSettingsEssentials.MenuTickAimable = original;
+			}
+		}
+
 		[Fact]
 		public void Audio_rows_are_sound_volume_and_output_device()
 		{

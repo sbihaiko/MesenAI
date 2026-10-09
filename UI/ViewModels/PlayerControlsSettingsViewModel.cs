@@ -20,7 +20,14 @@ namespace Mesen.ViewModels
 		public InputConfig OriginalConfig { get; }
 		public string ControllersText { get; }
 
-		[ObservableProperty, NotifyPropertyChangedFor(nameof(RumbleText))] public partial double Rumble { get; set; }
+		//#1112: the Menu tick row exists only while the pad in hand is aimable.
+		public bool MenuTickAvailable { get; } = PlayerSettingsEssentials.MenuTickAimable();
+
+		[ObservableProperty, NotifyPropertyChangedFor(nameof(RumbleText), nameof(MenuTickEnabled), nameof(MenuTickRumbleOff))] public partial double Rumble { get; set; }
+
+		//Disabled with its reason while Rumble is 0 (the tick is a rumble).
+		public bool MenuTickEnabled => PlayerSliders.ToConfig(Rumble, 10) > 0;
+		public bool MenuTickRumbleOff => !MenuTickEnabled;
 		[ObservableProperty] public partial double Deadzone { get; set; }
 
 		public string RumbleText => PlayerSliders.ToConfig(Rumble, 10) == 0 ? ResourceHelper.GetMessage("PlayerRumbleOff") : PlayerSliders.ToConfig(Rumble, 10).ToString();

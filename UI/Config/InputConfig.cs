@@ -20,6 +20,9 @@ namespace Mesen.Config
 		//stays global-only. Empty list = every pad uses the global setting.
 		[ObservableProperty] public partial List<DeviceDeadzoneOverride> PerDeviceDeadzones { get; set; } = new();
 		[ObservableProperty][MinMax(0, 9)] public partial UInt32 MouseSensitivity { get; set; } = 5;
+		//#1112: a haptic tick on the pad in hand when Play's focus moves; off until
+		//turned on, and a config written before this setting has no key.
+		[ObservableProperty] public partial bool MenuTick { get; set; } = false;
 		[ObservableProperty] public partial bool HidePointerForLightGuns { get; set; } = false;
 		[ObservableProperty][MinMax(0, 10)] public partial UInt32 ForceFeedbackIntensity { get; set; } = 5;
 

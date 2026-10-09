@@ -1034,6 +1034,8 @@
 			<Control ID="lblControlsControllers">Controllers</Control>
 			<Control ID="lblControlsRumble">Rumble</Control>
 			<Control ID="lblControlsDeadzone">Stick deadzone</Control>
+			<Control ID="lblControlsMenuTick">Menu tick</Control>
+			<Control ID="lblControlsMenuTickRumbleOff">Rumble is off</Control>
 		</Form>
 		<Form ID="PlayerSystemSettingsView">
 			<Control ID="lblSystemStorageRow">Keep your saves and settings</Control>

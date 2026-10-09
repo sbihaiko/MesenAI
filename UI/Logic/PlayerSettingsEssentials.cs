@@ -55,6 +55,7 @@ public static class PlayerSettingsEssentials
 		//#1105: Audio's fourth row (Menu sounds) needs one more row's height, but
 		//only while the host can play it.
 		ConfigWindowTab.Audio when MenuSoundsAvailable() => 388,
+		ConfigWindowTab.Input when MenuTickAimable() => 388,
 		_ => 340
 	};
 
@@ -63,6 +64,12 @@ public static class PlayerSettingsEssentials
 	//own ADR), so today the row is hidden and Audio keeps its three rows. A test
 	//swaps this seam to exercise the row.
 	public static Func<bool> MenuSoundsAvailable { get; set; } = () => false;
+
+	//#1112: the Menu tick row is shown only while the host reports the pad in the
+	//player's hand as aimable (App wires HapticTickOutput.PadInHandAimable); with no
+	//pad in hand, or on a backend that cannot aim, there is no row at all. A test
+	//swaps this seam.
+	public static Func<bool> MenuTickAimable { get; set; } = () => false;
 
 	//#852: the strip's segment width. ADR-0249's sheet is 480 px wide behind
 	//19 px of padding a side, and the reference mockups (docs/media/
@@ -89,11 +96,13 @@ public static class PlayerSettingsEssentials
 
 	//PRD rule 2: an inset list of at most three rows per essentials tab, except
 	//Display's fourth (#1111, Interface size), which still fits the 7 elements,
-	//and Audio's (Menu sounds, #1105) while the host reports it available.
+	//and the fourth of Audio (Menu sounds, #1105) and Controls (Menu tick, #1112)
+	//while the host reports it available.
 	public const int MaxRows = 4;
 	public static int MaxRowsFor(ConfigWindowTab tab) => tab switch {
 		ConfigWindowTab.Display => 4,
 		ConfigWindowTab.Audio when MenuSoundsAvailable() => 4,
+		ConfigWindowTab.Input when MenuTickAimable() => 4,
 		_ => 3
 	};
 
@@ -120,12 +129,15 @@ public static class PlayerSettingsEssentials
 		new("Rumble", PlayerSettingsRowKind.Slider),
 		new("Deadzone", PlayerSettingsRowKind.Slider)
 	};
+	//#1112: the optional focus-move tick, off until turned on.
+	private static readonly PlayerSettingsRow[] ControlsRowsWithMenuTick = ControlsRows
+		.Append(new("MenuTick", PlayerSettingsRowKind.Switch)).ToArray();
 
 	//The rows of a tab's inset list; Look has its own W-P10 page (empty here).
 	public static IReadOnlyList<PlayerSettingsRow> Rows(ConfigWindowTab tab) => tab switch {
 		ConfigWindowTab.Display => DisplayRows,
 		ConfigWindowTab.Audio => MenuSoundsAvailable() ? AudioRowsWithMenuSounds : AudioRows,
-		ConfigWindowTab.Input => ControlsRows,
+		ConfigWindowTab.Input => MenuTickAimable() ? ControlsRowsWithMenuTick : ControlsRows,
 		_ => Array.Empty<PlayerSettingsRow>()
 	};
 

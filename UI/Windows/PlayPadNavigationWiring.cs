@@ -699,6 +699,7 @@ namespace Mesen.Windows
 				//the control in ADR-0256 Decision 6's on-screen text, and a pad
 				//pressed while a game runs is still the pad in hand.
 				_padInHand.OnPressed(pressed, key => PadNaming.Of(key, keyName));
+				HapticTickOutput.PadInHand = _padInHand.Current?.Device ?? -1;
 
 				//#1104: the shared action bar names the control in this hand, so it
 				//is recomputed from the same tick that moved the hand - and from the
@@ -820,6 +821,7 @@ namespace Mesen.Windows
 				if(action != PadNavAction.None) {
 					Apply(action);
 					PlayMenuSound(action);
+					TickPadInHand(action, pad);
 				}
 			}
 
@@ -831,6 +833,17 @@ namespace Mesen.Windows
 				if(MenuSounds.For(action) is MenuSoundKind kind
 					&& MenuSounds.ShouldPlay(ConfigManager.Config.Audio.MenuSounds, EmuApi.IsRunning() && !EmuApi.IsPaused())) {
 					MenuSoundOutput.Play(kind);
+				}
+			}
+
+			//#1112: the optional haptic tick on a focus move, to the pad in hand only
+			//(its device index), judged like the sound on the state the press left.
+			private static void TickPadInHand(PadNavAction action, PadId? pad)
+			{
+				InputConfig input = ConfigManager.Config.Input;
+				if(pad is PadId inHand && inHand.Device >= 0 && MenuSounds.For(action) == MenuSoundKind.Move
+					&& HapticTickRule.ShouldTickOnMove(input.MenuTick, input.ForceFeedbackIntensity, EmuApi.IsRunning() && !EmuApi.IsPaused(), (uint)inHand.Device, HapticTickOutput.IsAimable)) {
+					HapticTickOutput.Tick((uint)inHand.Device);
 				}
 			}
 
