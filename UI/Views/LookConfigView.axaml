@@ -63,25 +63,29 @@
 	<DockPanel>
 		<!--#1149 (ADR-0269 Decision 6, W-P10): the footer is Done's row, and W-P10
 		draws the compare note in it beside Hold to Compare - which is where it
-		stays wherever the row has room for it, unchanged at the ~1024x640 the
-		wireframe is drawn at. At 1.5 in 512x505 the row leaves the note about
-		14 px of the 271 px page, which is no room at all, so there the note
-		takes the line above on the page's own width. LookFooterPanel decides
-		which of the two, by LookFooter's host-free rule, and draws the note
-		whole either way: it wraps, so the room it was given is how many lines
-		it takes and never how much of it is drawn (the review of #1163,
-		findings 1 and 4).
+		stays wherever the row has room for it, including the ~1024x640 the
+		wireframe is drawn at. There the row leaves it about 184 px, which is not
+		the one ellipsized line main drew: the note wraps, so the footer is
+		taller than main's by the wrap's own line and the page's scroller above
+		loses that line. At 1.5 in 512x505 the row leaves the note about 14 px of
+		the 271 px page, which is no room at all, so there the note takes the
+		line above on the page's own width. LookFooterPanel decides which of the
+		two, by LookFooter's host-free rule, and draws the note whole either way:
+		it wraps, so the room it was given is how many lines it takes and never
+		how much of it is drawn (the review of #1163, findings 1 and 4). The
+		wrapping is the view's to set, here and below - not the panel's, which
+		would overwrite it one layer down (finding 3).
 		Its third child is the line the note is kept at: this tab carries the
 		hold-to-compare hint while Pixels or Screen has something to compare and
 		the reason while it does not, and toggling either swaps one for the
 		other - so the taller of the two is measured with the note, never drawn,
-		and the footer keeps its height (the review of #1163, finding 3). It is
-		drawn for no one: no opacity, no hit, and out of the automation tree, so
-		a screen reader is not read both of the tab's lines at once (finding 3).-->
+		and the footer keeps its height. It is drawn for no one: no opacity, no
+		hit, and out of the automation tree, so a screen reader is not read both
+		of the tab's lines at once.-->
 		<c:LookFooterPanel DockPanel.Dock="Bottom" Name="LookFooter" Margin="0 4 0 0">
 			<Button Name="btnLookHoldToCompare" Classes="secondary regular" Content="{l:Translate btnLookHoldToCompare}" IsEnabled="{Binding CanCompare}" VerticalAlignment="Center" />
-			<TextBlock Name="txtLookCompareReason" Classes="lookNote footnote tertiary" Text="{Binding CompareReason}" VerticalAlignment="Center" />
-			<TextBlock Name="txtLookCompareReserve" Classes="lookNote footnote tertiary" Text="{Binding CompareNoteReserve}" AutomationProperties.AccessibilityView="Raw" Opacity="0" IsHitTestVisible="False" VerticalAlignment="Center" />
+			<TextBlock Name="txtLookCompareReason" Classes="lookNote footnote tertiary" Text="{Binding CompareReason}" TextWrapping="Wrap" TextTrimming="None" VerticalAlignment="Center" />
+			<TextBlock Name="txtLookCompareReserve" Classes="lookNote footnote tertiary" Text="{Binding CompareNoteReserve}" TextWrapping="Wrap" TextTrimming="None" AutomationProperties.AccessibilityView="Raw" Opacity="0" IsHitTestVisible="False" VerticalAlignment="Center" />
 		</c:LookFooterPanel>
 
 		<ScrollViewer AllowAutoHide="False" HorizontalScrollBarVisibility="Disabled" Padding="0 0 2 0">

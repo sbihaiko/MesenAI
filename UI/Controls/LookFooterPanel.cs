@@ -1,6 +1,5 @@
 using Avalonia;
 using Avalonia.Controls;
-using Avalonia.Media;
 using Mesen.Logic;
 using System;
 
@@ -39,7 +38,11 @@ namespace Mesen.Controls
 			button.Measure(availableSize);
 
 			double room = RoomFor(note, availableSize.Width, button.DesiredSize.Width);
-			ShapeNote(note);
+			//The note is wrapped and never trimmed, and the view says so (LookConfigView
+			//sets both on the note and on the reserve line): the note is the tab's
+			//reason for refusing a compare, so the room it is given decides how many
+			//lines it takes and never how much of it is drawn. Shaping it here would
+			//overwrite whatever the view asked for, one layer below the view.
 			note.Measure(new Size(room, availableSize.Height));
 
 			//The room the note is kept at is the taller of the two lines the tab
@@ -98,17 +101,6 @@ namespace Mesen.Controls
 		private static bool OwnLine(Control note, double pageWidth, double buttonWidth)
 		{
 			return note.IsVisible && !LookFooter.NoteKeepsTheRow(pageWidth, buttonWidth);
-		}
-
-		//Wrapped, never trimmed, in either branch: the note is a reason, and half
-		//a reason reads as a different one - the room it is given decides how many
-		//lines it takes, not how much of it is drawn.
-		private static void ShapeNote(Control note)
-		{
-			if(note is TextBlock text) {
-				text.TextWrapping = TextWrapping.Wrap;
-				text.TextTrimming = TextTrimming.None;
-			}
 		}
 
 		private double MeasureReserve(double room, double height)

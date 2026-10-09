@@ -6,9 +6,9 @@ namespace Mesen.Logic;
 //keeps 110 px clear of Done, and the 137 px button left the note about 14 px -
 //no room at all, so the reason was drawn ellipsized to nothing ("bounded, not
 //whole", #1123). The note therefore keeps the row wherever the row has room for
-//it - unchanged at the ~1024x640 the wireframe is drawn at, where the row
-//leaves it about 184 px - and takes the line above the row only where it does
-//not. This is the rule; Controls/LookFooterPanel arranges by it, and the note is
+//it - at the ~1024x640 the wireframe is drawn at, where the row leaves it about
+//184 px and it wraps over more than the one ellipsized line main drew - and
+//takes the line above the row only where it does not. This is the rule; Controls/LookFooterPanel arranges by it, and the note is
 //drawn whole in either branch: it wraps, in the row's room or in the page's.
 //Pure, so it is pinned host-free in UI.Tests/Play/LookFooterTests and rendered
 //in UI.HeadlessTests (InterfaceSizeLayoutTests).
