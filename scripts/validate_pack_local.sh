@@ -387,7 +387,7 @@ run_game() {
     # recipe") is trusted prompt text in .github/ai/validate-classify.md, so
     # submitter-controlled bytes are never interpolated into instruction-shaped
     # context. Here we only fence the field verbatim between the sentinel pair
-    # the prompt describes, indent it, and neutralize any sentinel forged inside
+    # the prompt describes, indent it, and neutralise any sentinel forged inside
     # it so the field cannot close its own fence and escape into the prompt.
     EXT_SAFE="$(printf '%s\n' "$EXT" | sed -e 's/EXTERNAL-ASSETS-DATA-/EXTERNAL-ASSETS-DATA_/g' -e 's/^/  /')"
     SUFFIX="$(printf 'EXTERNAL-ASSETS-DATA-BEGIN\n%s\nEXTERNAL-ASSETS-DATA-END\n' "$EXT_SAFE")"
