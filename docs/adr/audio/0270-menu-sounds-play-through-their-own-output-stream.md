@@ -104,9 +104,10 @@ by where the effect lands, which is the mistake the area rule names).
   (macOS and Linux) and `Windows/WasapiSoundManager` / `Windows/DirectSoundManager`
   are chosen from `AudioConfig::AudioBackend` (`Windows/SoundManager.h`,
   `InteropDLL/EmuApiWrapper.cpp`'s `InitSoundManager`). Opening can take
-  seconds on a bad CoreAudio device, which is why the open has its own
-  host-free unit, `Core/Shared/Audio/AsyncAudioDeviceOpen.h`, driven by a fake
-  in `scripts/core_unit_tests.cpp`.
+  seconds on a bad CoreAudio device, which is why the SDL backend's open has
+  its own host-free unit, `Core/Shared/Audio/AsyncAudioDeviceOpen.h`, driven by
+  a fake in `scripts/core_unit_tests.cpp`; the Windows backends open their
+  device without it (see D9).
 - **The rejected attempt is on the record.** PR #1117 built the path as a
   second writer on that device: the UI thread wrote the blip into the game's
   ring, a separate settler thread paused the device afterwards, and the open
@@ -175,8 +176,13 @@ from the middle.
 
 **D6 — Master volume applies; the game's ducking does not.** The blip is
 scaled by `AudioConfig::MasterVolume` with the same arithmetic the game path
-uses (`sample * MasterVolume / 100`), read from the config the audio layer
-already owns, at fill time. While `AudioConfig::EnableAudio` is false the
+uses (`Core/Shared/Audio/SoundMixer.cpp:138-141` —
+`out[i] = (int32_t)out[i] * (int32_t)masterVolume / 100`, applied only while
+`masterVolume < 100`), read from the config the audio layer already owns, at
+fill time. The volume source is always `cfg.MasterVolume`: the game path's
+`audioPlayer ? audioPlayer->GetVolume() : cfg.MasterVolume` branch
+(`SoundMixer.cpp:84`) is the audio player's and never applies here. While
+`AudioConfig::EnableAudio` is false the
 submit is refused outright and nothing is queued — audio off means the app is
 silent, game and menu alike. The audio player's own volume, the
 mute/reduce-in-background rules and the turbo/rewind reductions are the game
@@ -205,12 +211,17 @@ idle — never opened and closed per blip, and never left running to output
 silence (which would hold an output client active and wake the audio path
 forty-odd times a second for nothing).
 
-**D9 — Arming, capability and failure.** The stream is armed at app start, off
-the UI thread, through the same asynchronous open the game device uses
-(`Core/Shared/Audio/AsyncAudioDeviceOpen.h` — the open must never run on the UI
-thread and must never be waited on under a lock); it is never armed lazily by
-the first blip, which is exactly the "async open dropping the first blip"
-defect of #1117. The stream exists only when the host asked for audio at all
+**D9 — Arming, capability and failure.** The stream is armed at app start, and
+the rule binds every backend: the open runs off the UI thread and is never
+awaited by it, and it is never waited on under a lock. The mechanism is each
+backend's own. `Core/Shared/Audio/AsyncAudioDeviceOpen.h` is the existing
+implementation of that rule on the SDL backend, where it drives the game
+device's open (`Sdl/SdlSoundManager.cpp`); the Windows backends that ship
+(`WasapiSoundManager`, `DirectSoundManager`) use no such helper today and must
+satisfy the same rule with a mechanism of their own, which slice #1126 picks —
+this ADR does not claim every backend already opens asynchronously. Arming is
+never lazy, by the first blip, which is exactly the "async open dropping the
+first blip" defect of #1117. The stream exists only when the host asked for audio at all
 (the same flag that gates the game device — the headless test runner passes
 `noAudio: true`, and there the capability is false). `MenuSoundsAvailable()`
 answers true only while the stream is up: a failed open leaves the row hidden,
