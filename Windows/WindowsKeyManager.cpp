@@ -351,6 +351,25 @@ void WindowsKeyManager::TestForceFeedback(uint32_t index, uint16_t magnitudeRigh
 	//DirectInput pads have no force feedback implemented - nothing to do
 }
 
+bool WindowsKeyManager::PlayGamepadTick(uint32_t index)
+{
+	if(!_xInput) {
+		return false;
+	}
+	//Same global ordinal GetGamepadInfo walks: the connected XInput slots first.
+	//DirectInput pads sit past them and are never aimable.
+	int xinputCount = 0;
+	for(int i = 0; i < XUSER_MAX_COUNT; i++) {
+		if(_xInput->IsConnected(i)) {
+			if(xinputCount == (int)index) {
+				return _xInput->PlayTick(i);
+			}
+			xinputCount++;
+		}
+	}
+	return false;
+}
+
 void WindowsKeyManager::ResetKeyState()
 {
 	memset(_keyState, 0, sizeof(_keyState));

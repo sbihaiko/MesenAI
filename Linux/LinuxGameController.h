@@ -45,4 +45,8 @@ public:
 	uint32_t GetVendorId();
 	uint32_t GetProductId();
 	bool HasRumble();
+
+	//#1106: one short rumble pulse on this device; false when it has no usable
+	//force feedback effect (the same condition HasRumble reports).
+	bool PlayTick();
 };

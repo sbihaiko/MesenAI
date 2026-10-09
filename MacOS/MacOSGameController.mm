@@ -258,6 +258,38 @@ bool MacOSGameController::HasRumble()
 	return _haptics != nil;
 }
 
+bool MacOSGameController::PlayTick()
+{
+	if(_haptics == nil) {
+		return false;
+	}
+
+	NSError* error = nil;
+	CHHapticEventParameter* intensityPar = [[CHHapticEventParameter alloc] initWithParameterID:CHHapticEventParameterIDHapticIntensity value:0.8];
+	CHHapticEventParameter* sharpnessPar = [[CHHapticEventParameter alloc] initWithParameterID:CHHapticEventParameterIDHapticSharpness value:0.6];
+	CHHapticEvent* event = [[CHHapticEvent alloc] initWithEventType:CHHapticEventTypeHapticTransient parameters:@[intensityPar, sharpnessPar] relativeTime:0.0];
+	CHHapticPattern* pattern = [[CHHapticPattern alloc] initWithEvents:@[event] parameters:@[] error:&error];
+	[intensityPar release];
+	[sharpnessPar release];
+	[event release];
+	if(error) {
+		[pattern release];
+		return false;
+	}
+
+	id<CHHapticPatternPlayer> player = [_haptics createPlayerWithPattern:pattern error:&error];
+	[pattern release];
+	if(error || player == nil) {
+		return false;
+	}
+
+	[player retain];
+	[_tickPlayer release];
+	_tickPlayer = player;
+	[_tickPlayer startAtTime:0.0 error:&error];
+	return error == nil;
+}
+
 bool MacOSGameController::SetLight(uint8_t r, uint8_t g, uint8_t b)
 {
 	GCDeviceLight* light = [_controller light];
