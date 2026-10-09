@@ -223,6 +223,7 @@ scripts/headless_record
 scripts/spike_sound_driver
 scripts/roles_probe
 scripts/core_unit_tests
+scripts/linux_haptic_tests
 scripts/metal_presenter_tests
 scripts/shader_sweep_shot
 
