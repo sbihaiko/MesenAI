@@ -488,16 +488,64 @@ public class InterfaceSizeLayoutTests : IDisposable
 		model.ClosePlayerSettings();
 	}
 
+	//#1149 (ADR-0269 Decision 6, W-P10): the wireframe puts the compare note in
+	//the footer row beside Hold to Compare, and there it stays wherever the row
+	//has room for it - at the size W-P10 is drawn, ~1024x640, nothing moves. The
+	//guaranteed 512x505 at 1.5 leaves the note about 14 px of the row, which is
+	//no room at all; there the note takes the line above, on the page's own
+	//width. This walks both ends: the same note, in the row at one size and on
+	//its own line at the other.
+	[AvaloniaTheory]
+	[InlineData(1024, 640, false)]
+	[InlineData(512, 505, true)]
+	public void The_look_compare_note_keeps_the_row_where_the_row_has_room_for_it(double width, double height, bool onItsOwnLine)
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		//Nothing to compare: Pixels and Screen are off, so the note carries the
+		//reason instead of the hint.
+		ConfigManager.Config.Video.VideoFilter = VideoFilterType.None;
+		ConfigManager.Config.Video.ShaderFile = "";
+		(MainWindow window, MainWindowViewModel model) = Show(Workspace.Play, InterfaceSize.ExtraLarge, width, height);
+		window.OpenPlayerSettingsSheet();
+		Settle(window);
+		window.FindNamed<TabControl>("PlayerSettingsTabs").SelectedIndex = PlayerSettingsEssentials.IndexOf(ConfigWindowTab.Look);
+		Settle(window);
+
+		Button hold = window.FindNamed<Button>("btnLookHoldToCompare");
+		Button done = window.FindNamed<Button>("btnPlayerSettingsDone");
+		TextBlock note = window.FindNamed<TextBlock>("txtLookCompareReason");
+		Assert.True(note.IsOnScreen(), "The Look footer draws no note");
+		Assert.False(string.IsNullOrEmpty(note.Text), "The Look footer's note is empty");
+
+		Rect holdBox = BoxIn(hold, window);
+		Rect noteBox = BoxIn(note, window);
+		Assert.Equal(BoxIn(done, window).Top, holdBox.Top, 1);
+		if(onItsOwnLine) {
+			//No room in the row: the note is on the line above it, at the real
+			//size this walks (512x505 at 1.5, the ADR's guarantee).
+			Assert.True(noteBox.Bottom <= holdBox.Top + 1, $"The note {noteBox} is not above Hold to Compare {holdBox}");
+			Assert.True(noteBox.Left <= holdBox.Left + 1, $"The note {noteBox} starts right of the button {holdBox}");
+		} else {
+			//Room: the note is the row's own, on the button's line and to its
+			//right, as W-P10 draws it.
+			Assert.True(Math.Abs(noteBox.Center.Y - holdBox.Center.Y) <= 2, $"The note {noteBox} is not on Hold to Compare's line {holdBox}");
+			Assert.True(noteBox.Left >= holdBox.Right - 1, $"The note {noteBox} is not beside Hold to Compare {holdBox}");
+		}
+		Assert.False(noteBox.Intersects(BoxIn(done, window)), $"The note {noteBox} covers Done");
+		Assert.False(noteBox.Intersects(holdBox), $"The note {noteBox} covers Hold to Compare {holdBox}");
+		model.ClosePlayerSettings();
+	}
+
 	//#1149 (ADR-0269 Decision 6): the Look footer's reason note was the one spot
-	//the 512x505 guarantee missed. It shared Done's row inside a page about 254 px
-	//wide at 1.5 and the 137 px Hold to Compare button left it about 13 px, so it
-	//was drawn on one line and ellipsized - "bounded, not whole" (#1123). W-P10's
-	//footer is reflowed instead: the note owns the line above the row, on the
-	//page's own width, and wraps. This walks the worst case the ADR guarantees -
-	//the window's own starting size at the largest size, with a reason that needs
-	//more than one line ("Nothing to compare: Pixels and Screen are off") - and
-	//asserts the whole reason is drawn, and that it stays a line or two rather
-	//than the 9-line column that took two thirds of the tab before #1123.
+	//the 512x505 guarantee missed. It shared Done's row inside a page about 271 px
+	//wide at 1.5 and the 137 px Hold to Compare button left it about 14 px, so it
+	//was drawn on one line and ellipsized - "bounded, not whole" (#1123). Where
+	//the row has no room the note takes the line above instead. This walks the
+	//worst case the ADR guarantees - the window's own starting size at the
+	//largest size, with a reason that needs more than one line ("Nothing to
+	//compare: Pixels and Screen are off") - and asserts the whole reason is
+	//drawn, and that it stays a line or two rather than the 9-line column that
+	//took two thirds of the tab before #1123.
 	[AvaloniaFact]
 	public void The_look_compare_reason_is_drawn_whole_in_the_small_window_at_the_largest_size()
 	{
@@ -524,8 +572,9 @@ public class InterfaceSizeLayoutTests : IDisposable
 		double needed = WrappedHeight(note, note.Bounds.Width);
 		Assert.True(note.Bounds.Height + 1 >= needed, $"\"{reason}\" needs {needed:0.#} px in the {note.Bounds.Width:0.#} the note was given and is drawn in {note.Bounds.Height:0.#}");
 
-		//It is not the button's leftover, either: the note is laid out on the
-		//page's own width, which is what lets the reason be read at this size.
+		//It is not the button's leftover, either: where the note has its own line
+		//it is laid out on the page's own width, which is what lets the reason be
+		//read at this size.
 		ScrollViewer page = window.FindNamed<TabControl>("PlayerSettingsTabs").FindAll<ScrollViewer>().First(s => s.Classes.Contains("pageScroll") && s.IsOnScreen());
 		Assert.True(note.Bounds.Width >= page.Bounds.Width - 2, $"The note is {note.Bounds.Width:0.#} px wide in a {page.Bounds.Width:0.#} px page");
 
@@ -533,8 +582,8 @@ public class InterfaceSizeLayoutTests : IDisposable
 		Control look = window.FindAll<Mesen.Views.LookConfigView>().First();
 		Assert.True(note.Bounds.Height <= look.Bounds.Height / 3, $"The note takes {note.Bounds.Height:0.#} px of the tab's {look.Bounds.Height:0.#}");
 
-		//W-P10 is unchanged where it already fits: Hold to Compare keeps Done's
-		//row, left of it, and the note stays out of both.
+		//W-P10's row is unchanged where the note leaves it: Hold to Compare keeps
+		//Done's row, left of it, and the note stays out of both.
 		Button done = window.FindNamed<Button>("btnPlayerSettingsDone");
 		Rect doneBox = BoxIn(done, window);
 		Rect holdBox = BoxIn(hold, window);
@@ -543,6 +592,49 @@ public class InterfaceSizeLayoutTests : IDisposable
 		Assert.False(noteBox.Intersects(doneBox), $"The reason {noteBox} covers Done {doneBox}");
 		Assert.False(noteBox.Intersects(holdBox), $"The reason {noteBox} covers Hold to Compare {holdBox}");
 		Assert.True(noteBox.Right <= window.Bounds.Width && noteBox.Bottom <= window.Bounds.Height, $"The reason {noteBox} is drawn outside the {window.Bounds.Size} window");
+		model.ClosePlayerSettings();
+	}
+
+	//#1149 (review of PR #1163, finding 3): Pixels and Screen are the two settings
+	//that decide whether Hold to Compare has anything to do, so toggling either
+	//swaps the note between its hint and its reason. The footer's height is the
+	//note's line while it has one, and the groups above it sit in the page's
+	//scroller, so a line that comes and goes there would move them under the
+	//user's hands as they change Look.
+	[AvaloniaTheory]
+	[InlineData(1024, 640)]
+	[InlineData(512, 505)]
+	public void The_look_footer_keeps_its_height_when_pixels_change(double width, double height)
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		ConfigManager.Config.Video.VideoFilter = VideoFilterType.None;
+		ConfigManager.Config.Video.ShaderFile = "";
+		(MainWindow window, MainWindowViewModel model) = Show(Workspace.Play, InterfaceSize.ExtraLarge, width, height);
+		window.OpenPlayerSettingsSheet();
+		Settle(window);
+		window.FindNamed<TabControl>("PlayerSettingsTabs").SelectedIndex = PlayerSettingsEssentials.IndexOf(ConfigWindowTab.Look);
+		Settle(window);
+
+		ScrollViewer page = window.FindNamed<TabControl>("PlayerSettingsTabs").FindAll<ScrollViewer>().First(s => s.Classes.Contains("pageScroll") && s.IsOnScreen());
+		TextBlock note = window.FindNamed<TextBlock>("txtLookCompareReason");
+		string off = note.Text ?? "";
+		Rect noteOff = BoxIn(note, window);
+		//The page is what the footer's height is taken from, so its own box is
+		//the rows above moving: a line more or less in the footer shows here.
+		Rect pageOff = BoxIn(page, window);
+
+		//Smoothing on: Pixels has something to compare, so the note swaps to the
+		//hint. (The two strings differ, this is not a no-op toggle.)
+		ConfigManager.Config.Video.VideoFilter = VideoFilterType.HQ4x;
+		Settle(window);
+		Assert.NotEqual(off, note.Text);
+		Assert.True(note.IsOnScreen(), "The note left the footer with the hint on");
+
+		//The footer is where it was, down to the pixel, and the page's rows have
+		//not moved with it.
+		Rect noteOn = BoxIn(note, window);
+		Assert.Equal(noteOff.Top, noteOn.Top, 0.5);
+		Assert.Equal(pageOff.Height, BoxIn(page, window).Height, 0.5);
 		model.ClosePlayerSettings();
 	}
 

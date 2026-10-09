@@ -19,9 +19,10 @@
   tab's rows asserting that no child is drawn outside its row or over a sibling
   — the label-width theory that came with the rows cannot see it, because a
   label in an Auto column is always as wide as its own text; the one spot that
-  does not meet the guarantee is named in Decision 6 and is #1149. The same
-  review found the cap answering "+Infinity" - no cap - on the first measure
-  pass, when the host reports a room of 0: the fallback is now the room itself,
+  did not meet it was named in Decision 6, and #1149 has since closed it by
+  reflowing the Look footer rather than drawing its note in a sliver of the row.
+  The same review found the cap answering "+Infinity" - no cap - on the first
+  measure pass, when the host reports a room of 0: the fallback is now the room itself,
   so the sheet does not lay out at 480 and flash at 720 for a frame. A second
   review round found the same cap still on the control: a control clamped by
   its own `MaxWidth` inside a column wider than that cap is *centred* there
@@ -39,12 +40,18 @@
   for the settings sheet (Decision 6) are in PR #1145 (#1123).
   Amended 2026-10-09 (Decision 6, the empty spot it named): the Look footer's
   Hold to Compare note was the one spot on the sheet the guarantee missed, and
-  #1149 reflowed that footer - the note now owns the line above the row, on the
-  page's own width, and wraps, so its reason is drawn whole at the guaranteed
-  512x505 at 1.5. The decision is the issue's own, not a new panel pick:
-  "Reflowing the footer - the button on its own line, or the note above the row
-  - is a W-P10 design decision". PR #1163 implements it, with a headless case
-  that pins the room the note is given and the whole reason drawn in it.
+  #1149 closed it - no spot on this sheet is outside the guarantee any more.
+  The decision is the issue's own, not a new panel pick: "Reflowing the footer -
+  the button on its own line, or the note above the row - is a W-P10 design
+  decision". W-P10 is what the note follows: it keeps the row it is drawn in
+  wherever the row has room for it, so nothing moves at the ~1024x640 the
+  wireframe is drawn at, and takes the line above the row - on the page's own
+  width, wrapped - only where the row has no room (about 14 px of the 271 px
+  page at 512x505 at 1.5). The reflow is a pure rule with a host-free test
+  (LookFooter, UI.Tests/Play/LookFooterTests, UI.HeadlessTests/
+  InterfaceSizeLayoutTests), and the note's line is kept at the taller of the
+  two lines the tab can carry, so toggling Pixels or Screen cannot move the
+  footer. PR #1163 implements it.
 - Date: 2026-10-09
 - Related: ADR-0249 (tokens come from the renderer; the drift test), ADR-0241,
   ADR-0256, wireframe W-P8d, issues #1102 and #1103.
@@ -130,13 +137,20 @@ Nothing in Play is sized for a TV three meters away. Settings › Display has a
    is the control's own business and not this guarantee: where the value is host
    data of any length it wraps or is ellipsized as the view says.
    **The Look footer's Hold to Compare note (W-P10) was the one spot on this
-   sheet that did not meet it**: it shared Done's row and was left about 13 px of
-   the 254 px page there, drawn on one line and ellipsized — bounded, not whole.
-   #1149 reflowed that footer instead, the W-P10 decision the issue left open:
-   the note owns the line above the row, on the page's own width, and wraps, so
-   the reason is drawn whole at 1.5 in 512x505; the row keeps the button on the
-   left, Done on its line to the right of it. The note is drawn only while it
-   carries a reason.
+   sheet that did not meet it**, and #1149 closed it: the note shared Done's row
+   and was left about 14 px of the 271 px page at 1.5 in 512x505, drawn on one
+   line and ellipsized — bounded, not whole. The note now keeps the row wherever
+   the row has room for it, still one line and ellipsized there, which is W-P10
+   as drawn and leaves the ~1024x640 page unchanged; where the row has no room
+   (less than LookFooter.MinNoteWidth, a short phrase's worth, which the
+   guaranteed size is far below and the drawn size far above) the note takes the
+   line above the row, on the page's own width, and wraps, so its reason is
+   drawn whole. The row keeps the button on the left, Done on its line to the
+   right of it, either way. The note's line is kept at the taller of the two
+   lines the tab can carry — the hold-to-compare hint while Pixels or Screen has
+   something to compare, the reason while neither has — so toggling either does
+   not move the footer or the rows in the page scroller above it, and nothing is
+   kept where the tab has neither line to draw.
    The other Play sheets (Cheats, Replays, PackPicker, PackDetail, Tool,
    Controller, Enhancements, Shader) and the pause card are not covered by this
    guarantee yet: they are still guaranteed only at about 1024x640, because the

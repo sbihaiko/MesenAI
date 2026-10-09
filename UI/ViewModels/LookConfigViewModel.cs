@@ -45,6 +45,11 @@ public partial class LookConfigViewModel : DisposableViewModel
 	[ObservableProperty] public partial bool CanAdjust { get; private set; }
 	[ObservableProperty] public partial bool CanCompare { get; private set; }
 	[ObservableProperty] public partial string CompareReason { get; private set; } = "";
+	//#1149 (review of #1163): the other line this tab can carry. The footer keeps
+	//the note's line at the taller of the two, so toggling Pixels or Screen -
+	//which swaps the hint and the reason - cannot move the footer and the rows
+	//above it. Empty where the tab has neither to say, and then nothing is kept.
+	[ObservableProperty] public partial string CompareNoteReserve { get; private set; } = "";
 	[ObservableProperty] public partial bool IsComparing { get; private set; }
 
 	//Set by ConfigViewModel: "More in Options…" switches to the Video tab.
@@ -103,7 +108,13 @@ public partial class LookConfigViewModel : DisposableViewModel
 
 			CanAdjust = view.CanAdjust;
 			CanCompare = view.CanCompare;
-			CompareReason = view.CanCompare ? ResourceHelper.GetMessage("LookCompareHint") : ReasonText(view.CompareReason);
+			//The tab's two lines: the hint while Pixels or Screen has something to
+			//compare, and the reason it gives while neither has (LookLayers.Build's
+			//CompareReason). The footer keeps the note's line at the taller.
+			string hint = ResourceHelper.GetMessage("LookCompareHint");
+			string nothing = ReasonText(LookReason.NothingToCompare);
+			CompareReason = view.CanCompare ? hint : nothing;
+			CompareNoteReserve = view.CanCompare ? nothing : hint;
 		} finally {
 			_refreshing = false;
 		}
