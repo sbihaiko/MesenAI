@@ -1035,19 +1035,53 @@ namespace Mesen.Windows
 				//surface that is - the same one whose claim took the focus.
 				if(TopLevel.GetTopLevel(focused)?.FocusManager is IFocusManager manager) {
 					FindNextElementOptions options = new() { FocusedElement = focused, SearchRoot = PlayFocusOnOpen.Of(focused)?.SearchRoot() };
-					if(manager.FindNextElement(Direction(action), options) is Control next) {
-						//#1111: a tab strip's tabs sit side by side, and the engine can
-						//answer Down with the neighbouring tab (the page's rows are far
-						//to the right of the strip's left-most tab). Down from a tab goes
-						//into the page, never along the strip: Left / Right do that.
-						//Only the player settings strip is rewired; any other TabControl
-						//keeps the engine's answer.
-						if(action == PadNavAction.Down && focused is TabItem && next is TabItem && FirstInPage(focused) is Control inPage) {
-							next = inPage;
-						}
-						PlayFocusOnOpen.Enter(next);
+					Control? next = manager.FindNextElement(Direction(action), options) as Control;
+					//#1111: a tab strip's tabs sit side by side, and the engine can
+					//answer Down with the neighbouring tab (the page's rows are far
+					//to the right of the strip's left-most tab). Down from a tab goes
+					//into the page, never along the strip: Left / Right do that.
+					//Only the player settings strip is rewired; any other TabControl
+					//keeps the engine's answer.
+					if(action == PadNavAction.Down && focused is TabItem && next is TabItem && FirstInPage(focused) is Control inPage) {
+						next = inPage;
+					}
+					//#1146 review finding 1: the settings sheet's footer line - the
+					//"More in Options…" button on Audio and Controls - is drawn above
+					//Done and to its left, so its projection never overlaps Done's and
+					//the engine never answers Up with it. The button was visible,
+					//enabled and focusable with no press reaching it, which is what
+					//made it a name in the walk's gap list instead of a control a
+					//player can use. Up from Done goes to that line.
+					else if(action == PadNavAction.Up && focused.Name == "btnPlayerSettingsDone" && FooterControl(focused, "btnPlayerSettingsMoreInOptions") is Control line) {
+						next = line;
+					}
+					//...and the line hands the ring back to the page, so the footer is
+					//a step and not a pocket: the engine answers the line's own Up with
+					//nothing (its only neighbour up there is the page, which is drawn
+					//across the line's whole width), so the answer is taken from Done,
+					//the footer's bottom row, whose Up the engine does answer - and the
+					//page's own bottom row is what lies above the line.
+					else if(action == PadNavAction.Up && focused.Name == "btnPlayerSettingsMoreInOptions" && FooterControl(focused, "btnPlayerSettingsDone") is Control done) {
+						next = manager.FindNextElement(NavigationDirection.Up, new FindNextElementOptions {
+							FocusedElement = done,
+							SearchRoot = PlayFocusOnOpen.Of(done)?.SearchRoot(),
+						}) as Control;
+					}
+					if(next is Control landed) {
+						PlayFocusOnOpen.Enter(landed);
 					}
 				}
+			}
+
+			//A control the settings sheet draws now, by the name it gave it: the
+			//footer's two rows (ADR-0249, PRD Part B §13.3 rule 10). Null when the
+			//sheet is not drawing it - "More in Options…" is on the Audio and
+			//Controls tabs alone, and the hint takes that line on the others.
+			private static Control? FooterControl(Control focused, string name)
+			{
+				Control? sheet = focused.GetVisualAncestors().OfType<Control>().FirstOrDefault(a => a.Name == "PlayerSettingsSheet");
+				return sheet?.GetVisualDescendants().OfType<Control>()
+					.FirstOrDefault(c => c.Name == name && c.IsEffectivelyVisible && c.IsEffectivelyEnabled);
 			}
 
 			//The first control of the page under the tab strip that holds this tab.
