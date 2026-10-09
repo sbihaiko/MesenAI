@@ -39,12 +39,24 @@ internal sealed class PlayFocusOnOpen
 	private Func<Control?>? _content;
 	private Func<IReadOnlyList<PlayBarEntry>>? _contentActions;
 
+	//The give-up watch a decision keeps once its turns are spent (#1129), and its
+	//own handler on the window's LayoutUpdated. Both belong to the decision in
+	//flight, so Refresh clears them before posting the next one. The arm/deadline/
+	//abandon rule itself is PlayFocusWatch (host-free, under UI/Logic); only the
+	//event, the attempt and the clock reading are here.
+	private EventHandler? _onLayoutPass;
+	private readonly PlayFocusWatch _layoutWatch = new();
+
 	private sealed record Claim(Func<bool> IsOpen, Func<Control?> Target, Func<Control?>? Root = null, Func<IReadOnlyList<PlayBarEntry>>? Actions = null);
 
 	public PlayFocusOnOpen(Window window)
 	{
 		_window = window;
 		Installed.AddOrUpdate(window, this);
+		//A watch that outlived its window would run one more Apply against a dead
+		//one on a late layout pass (#1129: the leaked-window suspect). Closed is
+		//the last event the window raises, so it is the last chance to come off.
+		window.Closed += (_, _) => UnwatchLayoutPass();
 	}
 
 	//The surface's own properties, watched so that a close re-arbitrates as well
@@ -109,6 +121,9 @@ internal sealed class PlayFocusOnOpen
 		//a retry that would take the focus from someone who moved it on purpose
 		//in the meantime is not a retry, it is a fight (see Apply).
 		object? held = _window.FocusManager?.GetFocusedElement();
+		//A new decision supersedes the previous one's give-up watch (#1129): the
+		//deadline below is measured from the give-up that armed it.
+		UnwatchLayoutPass();
 		Dispatcher.UIThread.Post(() => Apply(0, held), DispatcherPriority.Loaded);
 	}
 
@@ -159,10 +174,56 @@ internal sealed class PlayFocusOnOpen
 
 	private void Retry(int attempt, object? held)
 	{
-		if(attempt + 1 >= Attempts) {
+		if(attempt + 1 < Attempts) {
+			Dispatcher.UIThread.Post(() => Apply(attempt + 1, held), DispatcherPriority.Background);
 			return;
 		}
-		Dispatcher.UIThread.Post(() => Apply(attempt + 1, held), DispatcherPriority.Background);
+		WatchLayoutPass(held);
+	}
+
+	//The turns are spent and the surface still has not taken the focus (#1129).
+	//Every later attempt hangs off the window's own LayoutUpdated instead of off
+	//another guess at how many turns away the pass is: one attempt per pass, and
+	//it is the attempt number PAST the turn bound that keeps it to one - a failure
+	//inside it falls through to Retry, which re-arms nothing that is already armed
+	//and posts no further turn. Armed once per decision (Refresh drops any watch
+	//left over from the previous one), so the deadline PlayFocusWatch reads is a
+	//real bound and not a mark a later pass can push back - and it is read BEFORE
+	//the attempt, so a pass long after the mark applies nothing and the handler
+	//comes off instead of running one more Apply (and one more Focus()) against a
+	//window that has moved on.
+	private void WatchLayoutPass(object? held)
+	{
+		if(_layoutWatch.IsArmed) {
+			return;
+		}
+		_layoutWatch.Arm(Environment.TickCount64);
+		_onLayoutPass = (_, _) => {
+			bool focusMoved = !ReferenceEquals(_window.FocusManager?.GetFocusedElement(), held);
+			switch(_layoutWatch.Step(Environment.TickCount64, focusMoved)) {
+				case PlayFocusWatchStep.Attempt:
+					Apply(Attempts, held);
+					//The decision landed: the focus is no longer where it was when
+					//it was posted, so this watch has nothing left to wait for.
+					if(!ReferenceEquals(_window.FocusManager?.GetFocusedElement(), held)) {
+						UnwatchLayoutPass();
+					}
+					break;
+				default:
+					UnwatchLayoutPass();
+					break;
+			}
+		};
+		_window.LayoutUpdated += _onLayoutPass;
+	}
+
+	private void UnwatchLayoutPass()
+	{
+		_layoutWatch.Disarm();
+		if(_onLayoutPass is not null) {
+			_window.LayoutUpdated -= _onLayoutPass;
+			_onLayoutPass = null;
+		}
 	}
 
 	//True while a Play surface is up over the content area. A screen that asks
