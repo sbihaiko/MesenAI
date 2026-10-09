@@ -38,6 +38,7 @@ internal sealed class PlayFocusOnOpen
 	private readonly List<Claim> _claims = new();
 	private Func<Control?>? _content;
 	private Func<IReadOnlyList<PlayBarEntry>>? _contentActions;
+	private Func<Control?>? _contentRoot;
 
 	//The give-up watch a decision keeps once its turns are spent (#1129), and its
 	//own handler on the window's LayoutUpdated. Both belong to the decision in
@@ -86,10 +87,17 @@ internal sealed class PlayFocusOnOpen
 	//grid over a game. Deliberately not a claim - it is not in the Esc stack,
 	//and the screens that make it up also run in Advanced, where no surface
 	//above it exists. It is what is left when no claim is open.
-	public void Content(INotifyPropertyChanged source, string[] properties, Func<Control?> target, Func<IReadOnlyList<PlayBarEntry>>? actions = null)
+	//
+	//`root` is the content area's own answer to the same question a claim answers
+	//with its own root (#1137): what does a D-pad press stay inside while the
+	//content area holds the focus. Without one the walk is the whole window, and
+	//the home's presses reached the header's buttons - controls that sit outside
+	//the home and are drawn above it, which a pad player cannot leave again.
+	public void Content(INotifyPropertyChanged source, string[] properties, Func<Control?> target, Func<IReadOnlyList<PlayBarEntry>>? actions = null, Func<Control?>? root = null)
 	{
 		_content = target;
 		_contentActions = actions;
+		_contentRoot = root;
 		Watch(source, properties);
 	}
 
@@ -251,12 +259,19 @@ internal sealed class PlayFocusOnOpen
 	//the focused control share. Both are inside the surface by construction, so
 	//the answer is the surface itself and nothing outside it - for W-P4's card,
 	//OverlayControls; for Settings' System tab, that tab's own panel. Null when
-	//there is no surface (the content area's screens keep the whole window, which
-	//is what they had) or when the two controls are not in one tree yet, and the
-	//bridge then searches as it did before.
+	//the two controls are not in one tree yet, and the bridge then searches as it
+	//did before.
+	//
+	//With no surface up the content area holds the focus, and it answers with its
+	//own root (#1137) - the home's walk is the home, not the window. A content
+	//area that names none keeps the whole window, which is what the content area
+	//had before this.
 	public Control? SearchRoot()
 	{
-		if(Open() is not Claim claim || claim.Target() is not Control target) {
+		if(Open() is not Claim claim) {
+			return _contentRoot?.Invoke();
+		}
+		if(claim.Target() is not Control target) {
 			return null;
 		}
 		//The surface named its own root: it knows what its walk is, and the
