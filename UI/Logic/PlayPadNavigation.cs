@@ -99,6 +99,23 @@ public static class PlayPadNavigation
 		return !gameLoaded || (playSurfaceUp && gamePaused);
 	}
 
+	//ADR-0255 slice 3 adds one clause to the same predicate: while the Controller
+	//sheet is capturing "press a control", the pad is the capture's, so it is
+	//refused and the capture consumes the press. That is not a second rule - the
+	//capture is a state of "the pad is not the GUI's", which is what HasAuthority
+	//answers - and it is here, above both callers, because since #1127 TWO input
+	//paths have to give the same answer: the pad's bridge
+	//(PlayPadNavigationWiring.HasAuthority) and the window's own keyboard arms.
+	//A keyboard move or Back that sounds where this answers false - a game paused
+	//with no Play surface up, the #734 load card, a capture in progress - is the
+	//divergence the review of #1157 sent back: the two paths must agree, not
+	//merely reach the same sink.
+	public static bool AuthorityInPlayDoor(bool inPlayDoor, bool controllerCapturing, bool playSurfaceUp, bool gameLoaded, bool gamePaused, bool loadCardUp, bool firstRunPickerUp)
+	{
+		return inPlayDoor && !controllerCapturing
+			&& HasAuthority(playSurfaceUp, gameLoaded, gamePaused, loadCardUp, firstRunPickerUp);
+	}
+
 	//The pad's Back code going down, whether or not the pad has menu authority.
 	//The slot grid's own way out is the one press no authority rule may gate: a
 	//grid opened by the Load/Save-state shortcuts sits over a game the pad does

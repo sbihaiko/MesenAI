@@ -865,16 +865,16 @@ namespace Mesen.Windows
 			//(ToggleOverlay's): the pad drives the *Play* GUI, which is the door an
 			//arcade cabinet boots into, not the classic menus. Named InPlayDoor so
 			//the authority path and the grid's Back edge ask the same door.
+			//
+			//The predicate itself is PlayPadNavigation.AuthorityInPlayDoor, and it
+			//is asked of the rule rather than spelled out here because since #1127
+			//the window's own keyboard arms need the same answer from the same
+			//inputs - a keyboard move or Back that sounds where this refuses is the
+			//divergence the review of #1157 sent back. One rule, two callers.
 			private bool HasAuthority()
 			{
-				//ADR-0255 slice 3 adds one clause, and it is the same predicate:
-				//while the Controller sheet is capturing "press a control", the pad
-				//is the capture's, so authority is refused and the capture consumes
-				//the press. Not a second rule - the capture is a state of "the pad
-				//is not the GUI's", which is exactly what this predicate answers,
-				//and the capture reads the same pressed set this bridge does.
-				return InPlayDoor && !_model.IsControllerCapturing
-					&& PlayPadNavigation.HasAuthority(_model.IsPlaySurfaceOverGame, EmuApi.IsRunning(), EmuApi.IsPaused(), _model.IsLoadCardVisible, _model.IsOnLoadPackPickerVisible);
+				return PlayPadNavigation.AuthorityInPlayDoor(InPlayDoor, _model.IsControllerCapturing, _model.IsPlaySurfaceOverGame,
+					EmuApi.IsRunning(), EmuApi.IsPaused(), _model.IsLoadCardVisible, _model.IsOnLoadPackPickerVisible);
 			}
 
 			//The door the bridge is for: Player UI mode in a game-screen workspace

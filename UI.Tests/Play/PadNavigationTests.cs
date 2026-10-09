@@ -171,6 +171,26 @@ public class PadNavigationTests
 		Assert.Equal(expected, PlayPadNavigation.HasAuthority(playSurfaceUp, gameLoaded, gamePaused, loadCardUp, firstRunPickerUp));
 	}
 
+	//The composed predicate both input paths ask (#1127): the door AND "the pad is
+	//the GUI's" AND not-a-capture, in one place. It is a rule of its own because
+	//the bridge and the window's keyboard arms have to answer it identically - a
+	//keyboard move or Back that sounds where this answers false (a game paused with
+	//no Play surface up, the load card, a capture) is the divergence the review of
+	//#1157 sent back. Row 1 is the door winning over everything, row 2 the capture
+	//refusing a state the rule alone would grant, rows 3-6 the rule's own answers
+	//carried through unchanged.
+	[Theory]
+	[InlineData(false, false, true, true, true, false, false, false)]   // outside the Play door: nothing here is the pad's
+	[InlineData(true, true, true, true, true, false, false, false)]     // the Controller sheet is capturing: the press is the capture's
+	[InlineData(true, false, false, true, true, false, false, false)]   // paused, but no Play surface (classic menu / auto-pause)
+	[InlineData(true, false, true, false, false, true, false, false)]   // the load card over the home
+	[InlineData(true, false, true, true, true, false, false, true)]     // W-P4 (or a sheet from it) over a game it paused
+	[InlineData(true, false, false, false, false, false, false, true)]  // the Play home, no game
+	public void Authority_is_the_door_the_rule_and_the_capture_together(bool inPlayDoor, bool controllerCapturing, bool playSurfaceUp, bool gameLoaded, bool gamePaused, bool loadCardUp, bool firstRunPickerUp, bool expected)
+	{
+		Assert.Equal(expected, PlayPadNavigation.AuthorityInPlayDoor(inPlayDoor, controllerCapturing, playSurfaceUp, gameLoaded, gamePaused, loadCardUp, firstRunPickerUp));
+	}
+
 	//Decision 2 for the slot grid: Back is the grid's only way out from a pad, and
 	//the Load/Save-state shortcuts open it with no authority to gate it - so the
 	//edge is asked for directly, whatever the authority rule says.
