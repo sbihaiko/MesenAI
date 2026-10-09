@@ -5,9 +5,14 @@
   `ready-for-agent`. The issue states the decision itself: the sheet becomes a
   flat library, the folder browser survives only as *Browse a file…*, the pad
   map and the cover priority are fixed, and ADR-0256 Decision 9's folder
-  navigation is superseded. **Nothing implements it yet** — this ADR and the
-  wireframes are the target picture; the code arrives in the sibling tickets
-  #1032–#1039, which Part B §8 now lists one row each. The id is 0264 and not
+  navigation is superseded. **Implemented**: the code this line once deferred to
+  arrived with the sibling tickets #1032–#1039, one row each in Part B §8, and
+  #1108 (PR #1168) lands the 2026-10-09 amendment below.
+  **Amended 2026-10-09 (#1108)**: on the library sheet LB / RB cycle the console
+  filter **and land the ring on the chip row** — owner decision via panel pick,
+  2026-10-09, option A, quoted verbatim:
+  **"Sheets keep their current pad behavior, except the library sheet, where the ring now reaches the console-filter chip (AC2)."**
+  The id is 0264 and not
   the 0262 the issue text assumed: 0262 and 0263 landed on `origin/main` after
   that text was written, and ids are never reused (ADR-0035).
 - Date: 2026-10-07
