@@ -53,15 +53,22 @@ namespace Mesen.Controls
 
 	//#1111, ADR-0269 Decision 6: a sheet's height cap - the room its host gives
 	//it (already in the transformed space) less the ConverterParameter's margin.
+	//#1145 review: a room with nothing past the margin is the first measure
+	//pass, before the host has Bounds, and the answer there is the room, not
+	//+Infinity. Infinity means "no cap", so the sheet laid out at its own 480
+	//for that pass and flashed at 720 under the 1.5 transform; the room itself
+	//is finite - 0 until the host reports one - and the next pass caps it for
+	//real. A host that is genuinely narrower than the margin shrinks the sheet
+	//to itself rather than leaving it uncapped at 720.
 	public class RoomLeftConverter : IValueConverter
 	{
 		public static readonly RoomLeftConverter Instance = new();
 
 		public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
 		{
-			double room = value is double height ? height : double.PositiveInfinity;
+			double room = value is double size && !double.IsNaN(size) ? size : 0;
 			double margin = parameter is string text ? double.Parse(text, CultureInfo.InvariantCulture) : 0;
-			return room > margin ? room - margin : double.PositiveInfinity;
+			return room > margin ? room - margin : Math.Max(0, room);
 		}
 
 		public object? ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)

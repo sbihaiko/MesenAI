@@ -252,6 +252,79 @@ public class InterfaceSizeLayoutTests : IDisposable
 		model.ClosePlayerSettings();
 	}
 
+	//The label rule above cannot see a control that is drawn over its label:
+	//once the label sits in an Auto column its own Bounds are the width its
+	//text needs, so "needed > Bounds" never fires. What Decision 6's "nothing
+	//is clipped" fails on when the sheet narrows is a sibling overlap - a
+	//right-docked control that carries a fixed 150 or 200 px is arranged at
+	//that width whatever cell it was given, and a Grid does not clip, so it is
+	//drawn over the label's column. This walks the row Grids themselves at the
+	//guaranteed 512x505, at factor 1.5, on every tab: each visible child's box
+	//sits inside its row's box, and no two of them intersect.
+	private static List<Grid> RowGrids(Control page) =>
+		page.GetVisualDescendants().OfType<Grid>()
+			.Where(g => g.Classes.Contains("setting-row") || g.Classes.Contains("look-row"))
+			.ToList();
+
+	private static string Describe(Control control) =>
+		$"{(string.IsNullOrEmpty(control.Name) ? control.GetType().Name : control.Name)} [{control.Bounds.Width:0.#}x{control.Bounds.Height:0.#}]";
+
+	private static bool Inside(Rect outer, Rect inner) =>
+		inner.Left >= outer.Left - 0.5 && inner.Top >= outer.Top - 0.5 &&
+		inner.Right <= outer.Right + 0.5 && inner.Bottom <= outer.Bottom + 0.5;
+
+	[AvaloniaTheory]
+	[InlineData(ConfigWindowTab.Display)]
+	[InlineData(ConfigWindowTab.Look)]
+	[InlineData(ConfigWindowTab.Audio)]
+	[InlineData(ConfigWindowTab.Input)]
+	[InlineData(ConfigWindowTab.System)]
+	public void No_row_child_escapes_its_row_or_covers_a_sibling_in_the_small_window_at_the_largest_size(ConfigWindowTab tab)
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model) = Show(Workspace.Play, InterfaceSize.ExtraLarge, 512, 505);
+		window.OpenPlayerSettingsSheet();
+		Settle(window);
+		int index = PlayerSettingsEssentials.IndexOf(tab);
+		Assert.True(index >= 0, $"{tab} is not a tab of the Play settings strip");
+		window.FindNamed<TabControl>("PlayerSettingsTabs").SelectedIndex = index;
+		Settle(window);
+
+		ScrollViewer page = window.FindNamed<TabControl>("PlayerSettingsTabs").FindAll<ScrollViewer>().First(s => s.Classes.Contains("pageScroll") && s.IsOnScreen());
+		List<Grid> rows = RowGrids(page);
+		//System carries no setting row of its own (storage and keyboard choices,
+		//not label/control rows); everywhere else the walk has to find rows or it
+		//proves nothing.
+		if(tab != ConfigWindowTab.System) {
+			Assert.True(rows.Count > 0, $"No row Grid is drawn on {tab}: the walk proves nothing");
+		}
+
+		List<string> broken = [];
+		foreach(Grid row in rows) {
+			Rect rowBox = BoxIn(row, window);
+			List<(Control Control, Rect Box)> boxes = [];
+			foreach(Control child in row.Children) {
+				if(!child.IsEffectivelyVisible || child.Bounds.Width <= 0 || child.Bounds.Height <= 0) {
+					continue;
+				}
+				Rect box = BoxIn(child, window);
+				if(!Inside(rowBox, box)) {
+					broken.Add($"on {tab} {Describe(child)} is drawn at {box} outside its row {rowBox}");
+				}
+				boxes.Add((child, box));
+			}
+			for(int i = 0; i < boxes.Count; i++) {
+				for(int j = i + 1; j < boxes.Count; j++) {
+					if(boxes[i].Box.Intersects(boxes[j].Box)) {
+						broken.Add($"on {tab} {Describe(boxes[i].Control)} at {boxes[i].Box} covers {Describe(boxes[j].Control)} at {boxes[j].Box}");
+					}
+				}
+			}
+		}
+		Assert.True(broken.Count == 0, $"The rows draw past their own room: {string.Join("; ", broken)}");
+		model.ClosePlayerSettings();
+	}
+
 	//#1123: the cap follows the room, so it shrinks with the window instead of
 	//leaving Done past the right edge - on every tab, at the largest size, in
 	//the window's own starting size.

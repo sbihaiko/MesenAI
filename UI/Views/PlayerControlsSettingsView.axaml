@@ -29,13 +29,13 @@
 			<Separator Classes="row-hairline" />
 			<Grid Classes="setting-row" ColumnDefinitions="Auto,*,Auto">
 				<TextBlock Grid.Column="0" Classes="callout" Text="{l:Translate lblControlsRumble}" VerticalAlignment="Center" />
-				<Slider Grid.Column="1" Name="sldControlsRumble" Width="150" Minimum="0" Maximum="10" Value="{Binding Rumble}" HorizontalAlignment="Right" VerticalAlignment="Center" />
+				<Slider Grid.Column="1" Name="sldControlsRumble" MaxWidth="150" Minimum="0" Maximum="10" Value="{Binding Rumble}" HorizontalAlignment="Stretch" VerticalAlignment="Center" />
 				<TextBlock Grid.Column="2" Name="txtControlsRumble" Classes="callout" Width="34" TextAlignment="Right" Text="{Binding RumbleText}" VerticalAlignment="Center" />
 			</Grid>
 			<Separator Classes="row-hairline" />
 			<Grid Classes="setting-row" ColumnDefinitions="Auto,*,Auto">
 				<TextBlock Grid.Column="0" Classes="callout" Text="{l:Translate lblControlsDeadzone}" VerticalAlignment="Center" />
-				<Slider Grid.Column="1" Name="sldControlsDeadzone" Width="150" Minimum="0" Maximum="4" Value="{Binding Deadzone}" HorizontalAlignment="Right" VerticalAlignment="Center" />
+				<Slider Grid.Column="1" Name="sldControlsDeadzone" MaxWidth="150" Minimum="0" Maximum="4" Value="{Binding Deadzone}" HorizontalAlignment="Stretch" VerticalAlignment="Center" />
 				<TextBlock Grid.Column="2" Name="txtControlsDeadzone" Classes="callout" Width="34" TextAlignment="Right" Text="{Binding Deadzone, StringFormat={}{0:0}}" VerticalAlignment="Center" />
 			</Grid>
 			<Separator Classes="row-hairline" IsVisible="{Binding MenuTickAvailable}" />

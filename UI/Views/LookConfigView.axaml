@@ -105,17 +105,17 @@
 						draw 70 px of text in at 1.5 in 512x505; the star gives
 						the popup the rest, 200 where there is room for it. Same
 						shape as the settings sheet's rows (PlayerAudioSettingsView).-->
-						<Grid ColumnDefinitions="Auto,*">
+						<Grid Classes="look-row" ColumnDefinitions="Auto,*">
 							<TextBlock Grid.Column="0" Classes="callout" Classes.tertiary="{Binding !PixelsEnabled}" Text="{l:Translate lblLookSmoothing}" VerticalAlignment="Center" />
 							<ComboBox
 								Grid.Column="1"
 								Name="cboLookPixels"
 								Classes="lookChoices popup"
-								Width="200"
+								MaxWidth="200"
 								ItemsSource="{Binding PixelsChoices}"
 								SelectedItem="{Binding SelectedPixels, Mode=TwoWay}"
 								IsEnabled="{Binding PixelsEnabled}"
-								HorizontalAlignment="Right"
+								HorizontalAlignment="Stretch"
 							>
 								<ComboBox.ItemTemplate>
 									<DataTemplate DataType="vm:LookChoice">
@@ -140,16 +140,16 @@
 						and the label its own, so neither the label nor the button
 						the 200 px popup used to push out of the row is drawn past
 						its room at 1.5 in 512x505.-->
-						<Grid ColumnDefinitions="Auto,*,Auto">
+						<Grid Classes="look-row" ColumnDefinitions="Auto,*,Auto">
 							<TextBlock Grid.Column="0" Classes="callout" Text="{l:Translate lblLookEffect}" VerticalAlignment="Center" />
 							<ComboBox
 								Grid.Column="1"
 								Name="cboLookScreen"
 								Classes="lookChoices popup"
-								Width="200"
+								MaxWidth="200"
 								ItemsSource="{Binding ScreenChoices}"
 								SelectedItem="{Binding SelectedScreen, Mode=TwoWay}"
-								HorizontalAlignment="Right"
+								HorizontalAlignment="Stretch"
 								VerticalAlignment="Center"
 							>
 								<ComboBox.ItemTemplate>

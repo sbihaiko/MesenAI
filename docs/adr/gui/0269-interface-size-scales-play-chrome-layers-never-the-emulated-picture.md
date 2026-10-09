@@ -14,11 +14,17 @@
   The same day the cap reached the rows: a right-docked control that carries a
   fixed width kept it inside the narrower sheet and drew its label past the room
   left over, which the review of PR #1145 named as blocking against Decision 6's
-  "nothing is clipped". The rows became Auto/star grids and a second headless
-  theory walks every tab for a label whose own text needs more room than it was
-  given; the one spot that does not meet the guarantee is named in Decision 6
-  and is #1149. No new panel pick here either: it is the same #1123 criterion,
-  read as covering the rows the cap narrows.
+  "nothing is clipped". The rows became Auto/star grids whose controls stretch
+  into the star column under a `MaxWidth` cap, and a headless theory walks every
+  tab's rows asserting that no child is drawn outside its row or over a sibling
+  — the label-width theory that came with the rows cannot see it, because a
+  label in an Auto column is always as wide as its own text; the one spot that
+  does not meet the guarantee is named in Decision 6 and is #1149. The same
+  review found the cap answering "+Infinity" - no cap - on the first measure
+  pass, when the host reports a room of 0: the fallback is now the room itself,
+  so the sheet does not lay out at 480 and flash at 720 for a frame. No new
+  panel pick here either: it is the same #1123 criterion, read as covering the
+  rows the cap narrows.
   Nothing is implemented by this ADR; PR #1119 implements it and must match
   Decisions 3 and 6. The width cap, the Auto/star rows and the 512x505 guarantee
   for the settings sheet (Decision 6) are in PR #1145 (#1123).
@@ -76,17 +82,31 @@ Nothing in Play is sized for a TV three meters away. Settings › Display has a
    (310 px of the 342 the host gives it, 465 px drawn) and Done is inside the
    window on every tab. Windows below 512x505, down to the 160x144 floor — the
    width the window's own `MinWidth`/`MinHeight` allow — are not guaranteed.
+   A host with nothing past the cap's own 32 px margin leaves the sheet the room
+   it has, 0 included — the first measure pass, before the host has Bounds,
+   reports 0 — so the cap is the room itself and never "no cap": +Infinity there
+   let the sheet lay out at its own 480 and flash at 720 drawn for a frame.
    **The cap does not squeeze the rows it narrows.** A setting row is a Grid
    whose first column is Auto and whose last is the star: the label holds the
-   width its own text needs and its control takes the rest — the width it is
-   drawn at wherever there is room for it (480 px stays 480), less when there is
-   not, the same cap the sheet itself takes. A second headless theory walks all
-   five tabs at 1.5 in 512x505 and fails on a row label whose own text needs more
-   room than the layout gave it — 18 px for the 70 px of "Smoothing", 20 px for
-   the 91 px of "Output device" before the rows became grids. A control that
-   cannot show a value as long as its box is the control's own business and not
-   this guarantee: where the value is host data of any length it wraps or is
-   ellipsized as the view says.
+   width its own text needs and its control stretches into the star column,
+   capped by `MaxWidth` at the width the wireframes draw it (150 for a slider,
+   200 for the settings and Look popups). It is drawn at that width wherever the
+   column has room for it (200 stays 200) and shrinks with the column where it
+   has not. A fixed `Width` was arranged at 150 or 200 whatever cell the control
+   was given, and a Grid does not clip, so the control was drawn over the
+   label's own column: 70 px of "Output device" under a 200 px popup, 12 px of
+   "Volume" under a 150 px slider beside its 34 px readout, 18 px of "Smoothing"
+   under a 200 px popup before the rows became grids. A headless theory walks
+   all five tabs at 1.5 in 512x505 and asserts, for every row Grid, that each
+   visible child's box is inside its row's box and that no two visible children
+   intersect — which is what "nothing is clipped" means where a label's own
+   Bounds cannot witness it, a label in an Auto column being always as wide as
+   its text. The label-width theory that came first still runs over the same
+   rows and keeps the weaker half: no label's text needs more room than the
+   layout gave it. Display's rows keep their own 120 px popups, narrower than
+   the cap has to act on. A control that cannot show a value as long as its box
+   is the control's own business and not this guarantee: where the value is host
+   data of any length it wraps or is ellipsized as the view says.
    **One spot on this sheet does not meet it**: the Look footer's Hold to Compare
    note, which shares Done's row (W-P10) and is left about 13 px of the 254 px
    page there. It stays on one line and is ellipsized — bounded, not whole — and

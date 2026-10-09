@@ -31,13 +31,13 @@
 			<Separator Classes="row-hairline" />
 			<Grid Classes="setting-row" ColumnDefinitions="Auto,*,Auto">
 				<TextBlock Grid.Column="0" Classes="callout" Text="{l:Translate lblAudioVolume}" VerticalAlignment="Center" />
-				<Slider Grid.Column="1" Name="sldAudioVolume" Width="150" Minimum="0" Maximum="100" Value="{Binding Volume}" HorizontalAlignment="Right" VerticalAlignment="Center" />
+				<Slider Grid.Column="1" Name="sldAudioVolume" MaxWidth="150" Minimum="0" Maximum="100" Value="{Binding Volume}" HorizontalAlignment="Stretch" VerticalAlignment="Center" />
 				<TextBlock Grid.Column="2" Name="txtAudioVolume" Classes="callout" Width="34" TextAlignment="Right" Text="{Binding Volume, StringFormat={}{0:0}}" VerticalAlignment="Center" />
 			</Grid>
 			<Separator Classes="row-hairline" />
 			<Grid Classes="setting-row" ColumnDefinitions="Auto,*">
 				<TextBlock Grid.Column="0" Classes="callout" Text="{l:Translate lblAudioOutput}" VerticalAlignment="Center" />
-				<ComboBox Grid.Column="1" Name="cboAudioDevice" Classes="popup" Width="200" ItemsSource="{Binding Devices}" SelectedItem="{Binding SelectedDevice}" HorizontalAlignment="Right" VerticalAlignment="Center" />
+				<ComboBox Grid.Column="1" Name="cboAudioDevice" Classes="popup" MaxWidth="200" ItemsSource="{Binding Devices}" SelectedItem="{Binding SelectedDevice}" HorizontalAlignment="Stretch" VerticalAlignment="Center" />
 			</Grid>
 			<Separator Classes="row-hairline" IsVisible="{Binding MenuSoundsAvailable}" />
 			<Grid Classes="setting-row" ColumnDefinitions="Auto,*" IsVisible="{Binding MenuSoundsAvailable}">
