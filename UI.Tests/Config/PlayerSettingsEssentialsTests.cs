@@ -183,49 +183,31 @@ namespace Mesen.Tests.Config
 		}
 
 		//#1112: the Menu tick row follows "the pad in hand is aimable" (the host's
-		//answer, macOS only today), so by default Controls keeps three rows.
+		//answer, macOS only today), so by default Controls keeps three rows. The
+		//answer is passed in, so no test touches the process-global seam.
 		[Fact]
 		public void Menu_tick_row_is_hidden_while_the_pad_in_hand_is_not_aimable()
 		{
-			Func<bool> original = PlayerSettingsEssentials.MenuTickAimable;
-			try {
-				PlayerSettingsEssentials.MenuTickAimable = () => false;
-				Assert.DoesNotContain("MenuTick", PlayerSettingsEssentials.Rows(ConfigWindowTab.Input).Select(r => r.Id));
-				Assert.Equal(340, PlayerSettingsEssentials.SheetHeight(ConfigWindowTab.Input));
-			} finally {
-				PlayerSettingsEssentials.MenuTickAimable = original;
-			}
+			Assert.DoesNotContain("MenuTick", PlayerSettingsEssentials.Rows(ConfigWindowTab.Input, false).Select(r => r.Id));
+			Assert.Equal(340, PlayerSettingsEssentials.SheetHeight(ConfigWindowTab.Input, false));
 		}
 
-		//#1112: the frozen answer sizes rows and height alike, whatever the live seam says now.
 		[Theory]
 		[InlineData(false, 3, 340)]
 		[InlineData(true, 4, 388)]
-		public void Rows_and_max_rows_follow_the_frozen_menu_tick_answer_not_the_live_seam(bool frozen, int rows, int height)
+		public void Rows_max_rows_and_height_follow_the_one_menu_tick_answer(bool aimable, int rows, int height)
 		{
-			Func<bool> original = PlayerSettingsEssentials.MenuTickAimable;
-			try {
-				PlayerSettingsEssentials.MenuTickAimable = () => !frozen;
-				Assert.Equal(rows, PlayerSettingsEssentials.Rows(ConfigWindowTab.Input, frozen).Count);
-				Assert.Equal(rows, PlayerSettingsEssentials.MaxRowsFor(ConfigWindowTab.Input, frozen));
-				Assert.Equal(height, PlayerSettingsEssentials.SheetHeight(ConfigWindowTab.Input, frozen));
-			} finally {
-				PlayerSettingsEssentials.MenuTickAimable = original;
-			}
+			Assert.Equal(rows, PlayerSettingsEssentials.Rows(ConfigWindowTab.Input, aimable).Count);
+			Assert.Equal(rows, PlayerSettingsEssentials.MaxRowsFor(ConfigWindowTab.Input, aimable));
+			Assert.Equal(height, PlayerSettingsEssentials.SheetHeight(ConfigWindowTab.Input, aimable));
 		}
 
 		[Fact]
 		public void Menu_tick_row_is_the_fourth_controls_row_when_the_pad_in_hand_is_aimable()
 		{
-			Func<bool> original = PlayerSettingsEssentials.MenuTickAimable;
-			try {
-				PlayerSettingsEssentials.MenuTickAimable = () => true;
-				Assert.Equal(new[] { "Controllers", "Rumble", "Deadzone", "MenuTick" }, PlayerSettingsEssentials.Rows(ConfigWindowTab.Input).Select(r => r.Id));
-				Assert.Equal(388, PlayerSettingsEssentials.SheetHeight(ConfigWindowTab.Input));
-				Assert.True(PlayerSettingsEssentials.Rows(ConfigWindowTab.Input).Count <= PlayerSettingsEssentials.MaxRows);
-			} finally {
-				PlayerSettingsEssentials.MenuTickAimable = original;
-			}
+			Assert.Equal(new[] { "Controllers", "Rumble", "Deadzone", "MenuTick" }, PlayerSettingsEssentials.Rows(ConfigWindowTab.Input, true).Select(r => r.Id));
+			Assert.Equal(388, PlayerSettingsEssentials.SheetHeight(ConfigWindowTab.Input, true));
+			Assert.True(PlayerSettingsEssentials.Rows(ConfigWindowTab.Input, true).Count <= PlayerSettingsEssentials.MaxRows);
 		}
 
 		[Fact]

@@ -1,5 +1,6 @@
 using System;
 using Mesen.Interop;
+using Mesen.Logic;
 
 namespace Mesen.Windows
 {
@@ -13,7 +14,16 @@ namespace Mesen.Windows
 		private static Action<uint> _tick = index => InputApi.TickGamepad(index);
 
 		//The device index of the pad the player last pressed, -1 for none.
-		public static int PadInHand { get; set; } = -1;
+		private static int _padInHand = -1;
+		public static int PadInHand {
+			get => _padInHand;
+			set {
+				if(_padInHand != value) {
+					_padInHand = value;
+					PlayerSettingsEssentials.RaiseMenuTickAimableChanged();
+				}
+			}
+		}
 
 		private static bool ToHost(uint index)
 		{

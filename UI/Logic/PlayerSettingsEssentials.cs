@@ -75,6 +75,10 @@ public static class PlayerSettingsEssentials
 	//swaps this seam.
 	public static Func<bool> MenuTickAimable { get; set; } = () => false;
 
+	//Raised when the pad in hand changes; an open sheet re-reads MenuTickAimable.
+	public static event Action? MenuTickAimableChanged;
+	public static void RaiseMenuTickAimableChanged() => MenuTickAimableChanged?.Invoke();
+
 	//#852: the strip's segment width. ADR-0249's sheet is 480 px wide behind
 	//19 px of padding a side, and the reference mockups (docs/media/
 	//gui-redesign/W-P8..W-P11.png) draw the strip at four tabs, where 96 px

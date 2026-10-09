@@ -302,6 +302,20 @@ public class WireframeCoverageRenderTests : IDisposable
 		}
 	}
 
+	//ADR-0249: the fresh render's regions (the settings sheet, the Menu tick row)
+	//must match the wireframe save for the known deviations, and match the
+	//committed baseline in UI.Tests/Theme/PlayerRenders/.
+	private static void AssertWireframeRegions(Bitmap frame, string wId)
+	{
+		RgbFrame fresh = PlayerRender.Rgb(frame);
+		IReadOnlyList<RegionResult> results = PlayerWireframe.Compare(wId, fresh, RgbFrame.FromPng(PlayerRender.WireframePath(wId)));
+		List<string> violations = PlayerWireframe.Gate(wId, results, PlayerWireframe.KnownDeviationsOf(wId)).ToList();
+		string committed = PlayerRender.DriftBaselinePath(wId);
+		Assert.True(File.Exists(committed), $"{wId} has no committed render at {committed}; commit {Path.Combine(PlayerRender.OutputFolder, wId + ".png")} there");
+		violations.AddRange(PlayerWireframe.Drift(wId, fresh, RgbFrame.FromPng(committed), committed));
+		Assert.True(violations.Count == 0, string.Join(Environment.NewLine, violations));
+	}
+
 	//W-P8e: Controls with the Menu tick row, which exists only because the host
 	//answered that the pad in hand is aimable (#1112).
 	[AvaloniaFact]
@@ -325,7 +339,9 @@ public class WireframeCoverageRenderTests : IDisposable
 			Assert.True(sheet.FindNamed<Button>("btnPlayerSettingsDone").IsOnScreen());
 			Assert.DoesNotContain(sheet.FindAll<ScrollBar>(), s => s.IsOnScreen());
 
-			PlayerRender.Save(PlayerRender.Capture(window), "W-P8e");
+			Bitmap frame = PlayerRender.Capture(window);
+			PlayerRender.Save(frame, "W-P8e");
+			AssertWireframeRegions(frame, "W-P8e");
 		});
 	}
 

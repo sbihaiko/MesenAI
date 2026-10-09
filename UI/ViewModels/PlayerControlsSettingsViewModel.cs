@@ -21,8 +21,8 @@ namespace Mesen.ViewModels
 		public string ControllersText { get; }
 
 		//#1112: the Menu tick row exists only while the pad in hand is aimable; the
-		//sheet reads that once and hands it to both this row and its own height.
-		public bool MenuTickAvailable { get; }
+		//sheet owns that value (ConfigViewModel.MenuTickAimable) and pushes it here.
+		[ObservableProperty] public partial bool MenuTickAvailable { get; set; }
 
 		[ObservableProperty, NotifyPropertyChangedFor(nameof(RumbleText), nameof(MenuTickEnabled), nameof(MenuTickRumbleOff))] public partial double Rumble { get; set; }
 
