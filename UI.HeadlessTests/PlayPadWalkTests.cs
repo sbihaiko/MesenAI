@@ -21,10 +21,13 @@ namespace Mesen.HeadlessTests;
 
 //#1107 (spec #1102 slice 2, ADR-0256 stop rule, PRD Part B §13.3 rule 9): one
 //walk over every Play surface with only the D-pad, A and B. It fails when a
-//pad player could be stuck, in exactly three ways:
+//pad player could be stuck, in exactly four ways:
 //  - a control the surface shows is not reachable from the pad;
 //  - B does not leave a surface that declares (or owes) a Back;
-//  - the shared action bar (#1104) names an action the surface does not have.
+//  - the shared action bar (#1104) names an action the surface does not have;
+//  - a pad press moves the focus outside the surface (#1134).
+//Controls are tracked by identity, not by Name, and are candidates by type,
+//visibility and enabled state, not by Focusable / IsTabStop (#1134).
 //
 //The judgement is PadWalk.Judge (UI/Logic, pure; its negative cases live in
 //UI.Tests/Play/PadWalkJudgeTests). The live cases below only produce the
@@ -91,7 +94,18 @@ public class PlayPadWalkTests : IDisposable
 	//LB/RB cycle the selection but the focus never enters the chip ListBox (#1107
 	//review finding 2). Named so the gap shows, and asserted both ways: when the
 	//action starts entering the chips the walk reaches them and this entry must go.
+//The chips stay a named gap tracked in #1134; only the RomPickerConsoleFilter
+//items are set apart, so any other unreachable ListBoxItem still fails the walk.
 	public static readonly string[] KnownChipGaps = { "Library" };
+
+	//Surfaces where a D-pad press moves focus to header controls outside the
+	//PlayHomeHost root. Product focus behavior is unchanged and the root is not
+	//widened; the real focus-scope fix is tracked in #1137. Asserted both ways:
+	//a listed leak that disappears and any unlisted leak both fail the walk.
+	public static readonly Dictionary<string, string[]> KnownFocusLeaks = new() {
+		["Home"] = new[] { "ProfileButton", "ToolsMenuButton" },
+		["HomeFirstRun"] = new[] { "ProfileButton", "ToolsMenuButton" },
+	};
 
 
 	private const int ClaimsInWiring = 18;
@@ -174,7 +188,18 @@ public class PlayPadWalkTests : IDisposable
 		Assert.True(chipGap == KnownChipGaps.Contains(surface),
 			chipGap ? $"{surface}: the console chips are not reachable and the surface is not listed in KnownChipGaps"
 				: $"{surface}: the pad reaches the console chips now: remove it from KnownChipGaps");
-		List<string> problems = PadWalk.Judge(observation);
+		//Judge still reports a leak (PadWalkJudgeTests); the walk only strips the
+		//ones named in KnownFocusLeaks after checking the set matches exactly.
+		//A leak label reads "<control the press started on> -> <control that took focus>".
+		string[] leaks = (observation.FocusOutside ?? Array.Empty<string>()).Select(l => l[(l.LastIndexOf("-> ", StringComparison.Ordinal) + 3)..]).Distinct().ToArray();
+		string[] known = KnownFocusLeaks.TryGetValue(surface, out string[]? listed) ? listed : Array.Empty<string>();
+		Assert.True(leaks.Except(known).Count() == 0,
+			$"{surface}: focus left the surface onto [{string.Join(", ", leaks.Except(known))}], not listed in KnownFocusLeaks (#1137)");
+		//Which header button the pad lands on depends on the scale's layout, so a
+		//stale entry is caught per surface: a listed surface that no longer leaks.
+		Assert.True(known.Length == 0 || leaks.Length > 0,
+			$"{surface}: focus no longer leaves the surface: remove it from KnownFocusLeaks (#1137)");
+		List<string> problems = PadWalk.Judge(observation with { FocusOutside = null });
 		Assert.True(problems.Count == 0, string.Join(Environment.NewLine, problems));
 
 		//The known gaps are asserted both ways, so a surface that joins the
@@ -251,6 +276,7 @@ public class PlayPadWalkTests : IDisposable
 		HashSet<Control> reached = new() { start };
 		Queue<Control> frontier = new(new[] { start });
 		List<(string, IReadOnlyList<PlayBarEntry>?, bool)> bar = new();
+		List<string> outside = new();
 		Dictionary<Control, bool> seenForBar = new();
 
 		//Edges: with the focus on a node, one pad press per direction. The press
@@ -270,9 +296,14 @@ public class PlayPadWalkTests : IDisposable
 					bar.Add((Label(node), focus.Declared(), Arbiter.CoverHasFocus(model, node)));
 				}
 				Press(window, direction);
-				if(window.FocusManager?.GetFocusedElement() is Control focusedNext && Canonical(focusedNext) is Control next && next != node && root.IsVisualAncestorOf(next) && reached.Add(next)) {
-					frontier.Enqueue(next);
-					names.TryAdd(next, Label(next));
+				if(window.FocusManager?.GetFocusedElement() is Control focusedNext && Canonical(focusedNext) is Control next && next != node) {
+					//A press that lands outside the surface is a leak to report, not an edge to follow.
+					if(!root.IsVisualAncestorOf(next)) {
+						outside.Add($"{Label(node)} -> {Label(next)}");
+					} else if(reached.Add(next)) {
+						frontier.Enqueue(next);
+						names.TryAdd(next, Label(next));
+					}
 				}
 			}
 		}
@@ -298,9 +329,9 @@ public class PlayPadWalkTests : IDisposable
 		//The chips are judged on their own line by the caller (chipCount, chipsReached).
 		return (new PadWalkObservation(
 			surface, isRoot,
-			interactive.Except(chips).Select(c => names[c]).Distinct().ToList(),
-			reached.Select(c => names.TryGetValue(c, out string? n) ? n : Label(c)).Distinct().ToList(),
-			isRoot ? false : backLeft, bar, available), chips.Count, chipsReached);
+			interactive.Except(chips).Select(c => new PadWalkControl(c, names[c])).ToList(),
+			reached.Select(c => new PadWalkControl(c, names.TryGetValue(c, out string? n) ? n : Label(c))).ToList(),
+			isRoot ? false : backLeft, bar, available, outside), chips.Count, chipsReached);
 	}
 
 	//Types a pad player is expected to be able to land on. Template parts
@@ -337,7 +368,9 @@ public class PlayPadWalkTests : IDisposable
 		return root.GetVisualDescendants().OfType<Control>()
 			.Select(Canonical).Distinct().Cast<Control>()
 			.Where(c => c is StateGrid or Button or ToggleButton or ComboBox or Slider or TextBox or TabItem or ListBoxItem)
-			.Where(c => c.Focusable && c.IsEffectivelyVisible && c.IsEffectivelyEnabled && c.IsTabStop)
+			//Not filtered by Focusable / IsTabStop: a visible, enabled control the ring
+				//cannot land on is exactly the pointer-only control the walk must report.
+				.Where(c => c.IsEffectivelyVisible && c.IsEffectivelyEnabled)
 			.Where(c => !c.GetVisualAncestors().TakeWhile(a => a != root).Any(a => a is ComboBox or Slider or TextBox))
 			.Where(c => c is not ListBoxItem item || !item.GetVisualDescendants().OfType<Button>().Any())
 			//The library's console chips are one ListBox the pad enters with the
