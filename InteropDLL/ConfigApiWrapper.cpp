@@ -8,6 +8,11 @@
 
 extern unique_ptr<Emulator>& _emu;
 
+//ADR-0270 D9's "Traps" (issue #1126): the menu blip's own stream has to follow the
+//player when they pick another output device or another backend, so the audio
+//config's apply path re-arms it (EmuApiWrapper.cpp).
+void ReArmMenuSoundStream();
+
 extern "C"
 {
 	DllExport void __stdcall SetVideoConfig(VideoConfig config)
@@ -23,6 +28,11 @@ extern "C"
 	DllExport void __stdcall SetAudioConfig(AudioConfig config)
 	{
 		_emu->GetSettings()->SetAudioConfig(config);
+
+		//ADR-0270 D2/D9: the config is in place, so the menu stream can be re-armed
+		//on it. An apply that did not touch the device or the backend leaves the
+		//running stream alone.
+		ReArmMenuSoundStream();
 	}
 
 	DllExport void __stdcall SetInputConfig(InputConfig config)

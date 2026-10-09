@@ -699,6 +699,12 @@
     <ClInclude Include="Shared\Audio\SmfWriter.h" />
     <ClInclude Include="Shared\Audio\SoundResampler.h" />
     <ClInclude Include="Shared\Audio\AudioPlayerHud.h" />
+    <ClInclude Include="Shared\Audio\MenuSoundStream.h" />
+    <ClInclude Include="Shared\Audio\MenuSoundHost.h" />
+    <ClInclude Include="Shared\Audio\MenuSoundSinkHealth.h" />
+    <ClInclude Include="Shared\Audio\MenuSoundDeviceResolve.h" />
+    <ClInclude Include="Shared\Audio\MenuSoundAudioSubsystem.h" />
+    <ClInclude Include="Shared\Audio\MenuSoundArming.h" />
     <ClInclude Include="pch.h" />
     <ClInclude Include="Shared\SystemActionManager.h" />
     <ClInclude Include="Shared\Video\VideoDecoder.h" />
