@@ -179,9 +179,7 @@
 			<!--ADR-0249: in Player mode PlayWorkspace is the theme's scope (`player`,
 			Play's tint); Advanced keeps the classic look.-->
 			<Panel Name="PlayWorkspace" IsVisible="{Binding IsPlayWorkspace}" Classes.player="{Binding Config.Preferences.UiMode, Converter={StaticResource EnumMatchConverter}, ConverterParameter={x:Static lg:UiMode.Player}}">
-				<LayoutTransformControl LayoutTransform="{Binding Config.Preferences.InterfaceSize, Converter={x:Static c:InterfaceSizeTransformConverter.Instance}}">
-					<ContentControl Background="#181818" Content="{Binding RecentGames}" IsVisible="{Binding RecentGames.Visible}" />
-				</LayoutTransformControl>
+				<ContentControl Background="#181818" Content="{Binding RecentGames}" IsVisible="{Binding RecentGames.Visible}" />
 
 				<!--"Sim, quadro congelado" (2026-10-03): the native picture is hidden
 				under W-P4 and its sheets (PlayGameLayer), so the frame the game
@@ -211,8 +209,7 @@
 				the keyboard.-->
 				<Popup Name="PackInstallPillPopup" IsOpen="{Binding IsPackInstallPillShown}" IsLightDismissEnabled="False" WindowManagerAddShadowHint="False" ShouldUseOverlayLayer="False" TakesFocusFromNativeControl="False"
 					Placement="AnchorAndGravity" PlacementAnchor="TopRight" PlacementGravity="BottomLeft" HorizontalOffset="-4" VerticalOffset="4">
-					<LayoutTransformControl LayoutTransform="{Binding Config.Preferences.InterfaceSize, Converter={x:Static c:InterfaceSizeTransformConverter.Instance}}">
-						<Border Name="PackInstallPill" Classes="hud" Classes.compact="{Binding IsPackInstallPillFailed}" Padding="16 14" Margin="12 12 12 20" MaxWidth="440" IsHitTestVisible="False">
+					<Border Name="PackInstallPill" Classes="hud" Classes.compact="{Binding IsPackInstallPillFailed}" Padding="16 14" Margin="12 12 12 20" MaxWidth="440" IsHitTestVisible="False">
 							<DockPanel>
 								<Border Classes="badge medium" DockPanel.Dock="Left" Margin="0 0 14 0" Background="{StaticResource PlayerTintShareBrush}" IsVisible="{Binding IsPackInstallPillInstalling}"><PathIcon Data="{StaticResource PlayerIconPack}" /></Border>
 								<PathIcon DockPanel.Dock="Left" Data="{StaticResource PlayerIconWarning}" Foreground="{StaticResource PlayerOrangeBrush}" IsVisible="{Binding IsPackInstallPillFailed}" />
@@ -221,8 +218,7 @@
 									<ProgressBar Name="PackInstallPillBar" Width="300" Minimum="0" Maximum="100" IsVisible="{Binding IsPackInstallPillInstalling}" IsIndeterminate="{Binding IsPackInstallPillIndeterminate}" Value="{Binding PackInstallPillPercent}" />
 								</StackPanel>
 							</DockPanel>
-						</Border>
-					</LayoutTransformControl>
+					</Border>
 				</Popup>
 
 				<!--#1111 (spec #1102): Interface size. Everything of Play's chrome - the

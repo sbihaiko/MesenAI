@@ -90,7 +90,7 @@ public class InterfaceSizeLayoutTests : IDisposable
 	//every tab, at the largest size, in the window's default size.
 	[AvaloniaTheory]
 	[InlineData(ConfigWindowTab.Display)]
-	[InlineData(ConfigWindowTab.Video)]
+	[InlineData(ConfigWindowTab.Look)]
 	[InlineData(ConfigWindowTab.Audio)]
 	[InlineData(ConfigWindowTab.Input)]
 	[InlineData(ConfigWindowTab.System)]
@@ -100,7 +100,9 @@ public class InterfaceSizeLayoutTests : IDisposable
 		(MainWindow window, MainWindowViewModel model) = Show(Workspace.Play, InterfaceSize.ExtraLarge);
 		window.OpenPlayerSettingsSheet();
 		Settle(window);
-		window.FindNamed<TabControl>("PlayerSettingsTabs").SelectedIndex = PlayerSettingsEssentials.IndexOf(tab);
+		int index = PlayerSettingsEssentials.IndexOf(tab);
+		Assert.True(index >= 0, $"{tab} is not a tab of the Play settings strip");
+		window.FindNamed<TabControl>("PlayerSettingsTabs").SelectedIndex = index;
 		Settle(window);
 
 		Button done = window.FindNamed<Button>("btnPlayerSettingsDone");
@@ -109,6 +111,29 @@ public class InterfaceSizeLayoutTests : IDisposable
 		Point bottomRight = done.TranslatePoint(new Point(done.Bounds.Width, done.Bounds.Height), window)!.Value;
 		Assert.True(topLeft.Y >= 0 && topLeft.X >= 0, $"Done starts at {topLeft} on {tab}");
 		Assert.True(bottomRight.Y <= window.Bounds.Height && bottomRight.X <= window.Bounds.Width, $"Done ends at {bottomRight} in a {window.Bounds.Size} window on {tab}");
+		model.ClosePlayerSettings();
+	}
+
+	//W-P10: Look's Hold to Compare shares Done's row, left of it - the page's
+	//own scroller holds the rows, so neither is pushed out or covered.
+	[AvaloniaFact]
+	public void Look_keeps_hold_to_compare_beside_done_without_overlap()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model) = Show(Workspace.Play, InterfaceSize.ExtraLarge);
+		window.OpenPlayerSettingsSheet();
+		Settle(window);
+		window.FindNamed<TabControl>("PlayerSettingsTabs").SelectedIndex = PlayerSettingsEssentials.IndexOf(ConfigWindowTab.Look);
+		Settle(window);
+
+		Button done = window.FindNamed<Button>("btnPlayerSettingsDone");
+		Button hold = window.FindNamed<Button>("btnLookHoldToCompare");
+		Assert.True(done.IsOnScreen());
+		Assert.True(hold.IsOnScreen());
+		Rect doneBox = new(done.TranslatePoint(new Point(0, 0), window)!.Value, done.Bounds.Size);
+		Rect holdBox = new(hold.TranslatePoint(new Point(0, 0), window)!.Value, hold.Bounds.Size);
+		Assert.False(doneBox.Intersects(holdBox), $"Hold to Compare {holdBox} overlaps Done {doneBox}");
+		Assert.True(holdBox.Bottom <= window.Bounds.Height && doneBox.Bottom <= window.Bounds.Height);
 		model.ClosePlayerSettings();
 	}
 

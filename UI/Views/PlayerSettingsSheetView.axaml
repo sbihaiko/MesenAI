@@ -57,6 +57,15 @@
 				<Style Selector="TabControl#PlayerSettingsTabs.look">
 					<Setter Property="Margin" Value="0" />
 				</Style>
+				<!--Look is a DockPanel with its own scroller and Hold to Compare
+				docked below it (W-P10): an outer scroller would give it unbounded
+				height, so only the list tabs scroll here.-->
+				<Style Selector="ScrollViewer.pageScroll">
+					<Setter Property="VerticalScrollBarVisibility" Value="Auto" />
+				</Style>
+				<Style Selector="TabControl#PlayerSettingsTabs.look ScrollViewer.pageScroll">
+					<Setter Property="VerticalScrollBarVisibility" Value="Disabled" />
+				</Style>
 			</Grid.Styles>
 			<TextBlock Grid.Row="0" Name="lblPlayerSettingsTitle" Classes="title3" Text="{l:Translate lblPlayerSettingsTitle}" Margin="0 0 0 14" />
 			<!--G.4 (W-P8): the strip in PlayerSettingsEssentials.Tabs order -
@@ -70,7 +79,7 @@
 				Done below stay put.-->
 				<TabControl.ContentTemplate>
 					<DataTemplate>
-						<ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+						<ScrollViewer Classes="pageScroll" HorizontalScrollBarVisibility="Disabled">
 							<ContentControl Content="{Binding}" />
 						</ScrollViewer>
 					</DataTemplate>

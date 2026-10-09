@@ -42,7 +42,8 @@ public class PlayerSettingsEssentialListsTests
 		//The strip is the only TabControl: no General/Equalizer/Advanced or
 		//General/Display/Test sub-tabs, and no per-console button row.
 		Assert.Equal(new[] { "PlayerSettingsTabs" }, window.FindAll<TabControl>().Where(t => t.IsOnScreen()).Select(t => t.Name).ToArray());
-		Assert.DoesNotContain(window.FindAll<ScrollViewer>(), s => s.IsOnScreen());
+		//The page sits in the sheet's page scroller (ADR-0269 Decision 6); a
+		//three-row list fits, so no bar shows.
 		Assert.DoesNotContain(window.FindAll<ScrollBar>(), s => s.IsOnScreen());
 		Assert.DoesNotContain(window.FindAll<CheckBox>(), c => c.IsOnScreen());
 		Border list = sheet.FindNamed<Border>(group);
