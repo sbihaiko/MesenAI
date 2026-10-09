@@ -709,6 +709,47 @@ def w_p2():
     return c
 
 
+def w_p20():
+    # Home with a Favorites shelf between Continue and Recent (ADR-0268). X toggles
+    # Favorite on the focused cover; the star marks a favorite.
+    c = base("play")
+    x0, y0, x1, y1 = c.content()
+    c.text(x0 + 40, y0 + 36, "Continue playing", 22, 700)
+    c.button(x1 - 40, y0 + 22, "Open a game\u2026", "secondary", anchor="r", icon="folder")
+    hero = (x0 + 40, y0 + 76, x1 - 40, y0 + 196)
+    c.card(hero, 16)
+    c.d.rounded_rectangle(scb((hero[0], hero[1], hero[0] + 200, hero[3])), radius=sc(16), fill=(0, 0, 0))
+    c.scene((hero[0], hero[1], hero[0] + 200, hero[3]), 0)
+    c.d.rectangle(scb((hero[0] + 184, hero[1], hero[0] + 200, hero[3])), fill=CARD)
+    c.text(hero[0] + 228, hero[1] + 32, "Super Mario Bros. 3", 20, 700)
+    c.text(hero[0] + 228, hero[1] + 56, "Last played today \u00b7 Enhanced pack", 13, 400, TEXT2)
+    c.button(hero[0] + 228, hero[1] + 74, "Continue", "primary", TINT["play"], h=36, size=14, icon="play")
+    tw, th = 150, 112
+
+    def shelf(y, label, titles, stars, seed0, focus_first=False):
+        c.text(x0 + 40, y, label, 15, 650)
+        for i, t in enumerate(titles):
+            tx = x0 + 40 + i * (tw + 20)
+            ty = y + 26
+            c.shadow((tx, ty, tx + tw, ty + th), 10, blur=5, dy=2, alpha=40)
+            c.d.rounded_rectangle(scb((tx, ty, tx + tw, ty + th)), radius=sc(10), fill=(0, 0, 0))
+            c.scene((tx, ty, tx + tw, ty + th), seed0 + i)
+            c.text(tx, ty + th + 14, t, 13, 590)
+            if focus_first and i == 0:
+                c.rrect((tx - 4, ty - 4, tx + tw + 4, ty + th + 4), 13, outline=TINT["play"], width=3)
+            if stars:
+                c.rrect((tx + tw - 30, ty + 8, tx + tw - 8, ty + 30), 6, fill=(255, 255, 255))
+                c.icon("sparkle", tx + tw - 19, ty + 19, 13, ORANGE)
+        c.text(x1 - 40, y + 26 + th / 2, "\u25b8", 16, 500, TEXT3, "rm")
+
+    shelf(y0 + 232, "Favorites", ["Castlevania", "The Legend of Zelda", "Metroid", "Mega Man 2"], True, 1, focus_first=True)
+    shelf(y0 + 414, "Recent", ["Contra", "Punch-Out!!", "Kirby's Adventure", "Excitebike", "Tetris"], False, 5)
+    c.line([(x0, y1 - 44), (x1, y1 - 44)], (226, 226, 230))
+    c.text(x0 + 24, y1 - 22, "A  Play      X  Unfavorite      B  \u2014", 12, 500, TEXT2, "lm")
+    c.caption("W-P20", "Play \u2014 home with a Favorites shelf (X toggles Favorite)", 2)
+    return c
+
+
 def w_p3():
     c = Canvas()
     c.window(bg=(0, 0, 0))
@@ -727,7 +768,7 @@ def w_p3():
     return c
 
 
-def pause_panel(c):
+def pause_panel(c, reason="Paused", hint="Esc to resume"):
     x0, y0, x1, y1 = WIN
     gw = (y1 - 53 - y0) * 4 / 3
     gx = (x0 + x1) / 2 - gw / 2
@@ -741,7 +782,7 @@ def pause_panel(c):
     c.rrect(pb, 18, fill=(250, 250, 252))
     px0, py0, px1, _ = pb
     c.text(px0 + 24, py0 + 34, "Contra (USA)", 20, 700, TEXT, "lm")
-    c.text(px0 + 24, py0 + 58, "Paused", 13, 400, TEXT2, "lm")
+    c.text(px0 + 24, py0 + 58, reason, 13, 400, TEXT2, "lm")
     c.button(px0 + 24, py0 + 82, "Resume", "primary", TINT["play"], h=44, size=16, w=pw - 48, icon="play")
     g2 = (px0 + 16, py0 + 150, px1 - 16, py0 + 150 + 250)
     c.rrect(g2, 12, fill=CARD, outline=(232, 232, 236))
@@ -751,7 +792,7 @@ def pause_panel(c):
     c.row(g2[0], g2[2], g2[1] + 150, 50, "Cheats", "2 on", icon="sparkle", tint=(255, 45, 85))
     c.row(g2[0], g2[2], g2[1] + 200, 50, "Settings", None, icon="gear", tint=(142, 142, 147), sep=False)
     c.button((px0 + px1) / 2, py0 + 434, "Quit Game", "destructive", h=36, w=pw - 48, anchor="c")
-    c.text((px0 + px1) / 2, py0 + 496, "Esc to resume", 11.5, 400, TEXT3, "mm")
+    c.text((px0 + px1) / 2, py0 + 496, hint, 11.5, 400, TEXT3, "mm")
     return pb
 
 
@@ -759,6 +800,16 @@ def w_p4():
     c = base("play", "Contra (USA) · pack Contra 80s 1.2 · textures and audio", (52, 199, 89))
     pause_panel(c)
     c.caption("W-P4", "Play — pause overlay (Esc)", 7)
+    return c
+
+
+def w_p4b():
+    # ADR-0254 amendment (#1103): the reason line's second wording. The seven
+    # controls are W-P4's; the hint names the pad still connected, here a
+    # PlayStation one (ADR-0256 Decision 6: words for the pad in hand).
+    c = base("play", "Contra (USA) · pack Contra 80s 1.2 · textures and audio", (255, 159, 10))
+    pause_panel(c, "Paused \u2014 controller disconnected", "Cross  Select      Circle  Resume")
+    c.caption("W-P4b", "Play \u2014 pause overlay, controller disconnected (PlayStation names)", 7)
     return c
 
 
@@ -937,6 +988,56 @@ def w_p8c():
     pause_panel(c)
     essentials_sheet(c, 3, [("Controllers", "text", "2 controllers connected"), ("Rumble", "slider", (0.5, "5")), ("Stick deadzone", "slider", (0.5, "2"))])
     c.caption("W-P8c", "Play — settings › Controls (button mapping stays in Options)", 5)
+    return c
+
+
+def inset_rows(c, b, rows, hint):
+    """W-P8d/W-P8e: the settings sheet's inset list with four rows (#1103)."""
+    x0, y0, x1, y1 = b
+    g = (x0 + 20, y0 + 96, x1 - 20, y0 + 96 + len(rows) * 46)
+    c.rrect(g, 12, fill=(248, 248, 250), outline=(232, 232, 236))
+    for i, (name, kind, value) in enumerate(rows):
+        yy = g[1] + i * 46
+        c.text(g[0] + 16, yy + 23, name, 13.5, 500, TEXT, "lm")
+        if kind == "switch":
+            c.toggle(g[2] - 54, yy + 12, value)
+        elif kind == "slider":
+            slider(c, g[2] - 190, yy + 23, 150, value[0])
+            c.text(g[2] - 16, yy + 23, value[1], 13.5, 400, TEXT, "rm")
+        elif kind == "popup":
+            c.popup(g[2] - 136, yy + 11, 120, value)
+        else:
+            c.text(g[2] - 16, yy + 23, value, 13.5, 400, TEXT2, "rm")
+        if i < len(rows) - 1:
+            c.line([(g[0] + 16, yy + 46), (g[2], yy + 46)], SEP)
+    c.text(x0 + 22, g[3] + 26, hint, 12.5, 400, TEXT2, "lm")
+    c.button(x1 - 20, y1 - 50, "Done", "primary", TINT["play"], anchor="r", h=32, w=90)
+
+
+def w_p8d():
+    # ADR-0269: Interface size sits under Scale; Scale is the picture, this is the chrome.
+    c = base("play", "Contra (USA) · pack Contra 80s 1.2", (52, 199, 89))
+    pause_panel(c)
+    b = settings_sheet(c, 0, 386)
+    inset_rows(c, b, [("Full screen", "switch", False), ("Aspect ratio", "popup", "Auto"),
+                      ("Scale", "popup", "3\u00d7"), ("Interface size", "popup", "Standard")],
+               "Everything else: Classic \u203a Settings")
+    c.caption("W-P8d", "Play \u2014 settings \u203a Display with Interface size (chrome only, never the picture)", 6)
+    return c
+
+
+def w_p8e():
+    # Controls with the optional Menu tick (only when the host can aim the pad) and
+    # PlayStation names in the pad hint and the controller row (ADR-0256 Decision 6).
+    c = base("play", "Contra (USA) \u00b7 pack Contra 80s 1.2", (52, 199, 89))
+    pause_panel(c, hint="Cross  Select      Circle  Resume")
+    b = settings_sheet(c, 3, 386)
+    inset_rows(c, b, [("Controllers", "text", "DualSense connected"), ("Rumble", "slider", (0.5, "5")),
+                      ("Stick deadzone", "slider", (0.5, "2")), ("Menu tick", "switch", False)],
+               "More in Options\u2026")
+    x0, y0, x1, y1 = b
+    c.text(x0 + 22, y1 - 34, "Left / Right  Change      Cross  Open      Circle  Done", 11.5, 500, TEXT2, "lm")
+    c.caption("W-P8e", "Play \u2014 settings \u203a Controls with Menu tick (PlayStation names)", 7)
     return c
 
 
@@ -1722,8 +1823,8 @@ def w_x3():
 
 SCREENS = [
     ("W-S1", w_s1), ("W-S2", w_s2), ("W-S3", w_s3),
-    ("W-P1", w_p1), ("W-P2", w_p2), ("W-P3", w_p3), ("W-P4", w_p4), ("W-P5", w_p5), ("W-P6", w_p6),
-    ("W-P7", w_p7), ("W-P8", w_p8), ("W-P8b", w_p8b), ("W-P8c", w_p8c), ("W-P9", w_p9), ("W-P10", w_p10), ("W-P11", w_p11),
+    ("W-P1", w_p1), ("W-P2", w_p2), ("W-P20", w_p20), ("W-P3", w_p3), ("W-P4", w_p4), ("W-P4b", w_p4b), ("W-P5", w_p5), ("W-P6", w_p6),
+    ("W-P7", w_p7), ("W-P8", w_p8), ("W-P8b", w_p8b), ("W-P8c", w_p8c), ("W-P8d", w_p8d), ("W-P8e", w_p8e), ("W-P9", w_p9), ("W-P10", w_p10), ("W-P11", w_p11),
     ("W-P12", w_p12), ("W-P13", w_p13), ("W-P14", w_p14), ("W-P15", w_p15), ("W-P16", w_p16),
     ("W-P19", w_p19), ("W-P19b", w_p19b),
     ("W-R0", w_r0), ("W-R0b", w_r0b), ("W-R1", w_r1), ("W-R2", w_r2), ("W-R3", w_r3), ("W-R4", w_r4),

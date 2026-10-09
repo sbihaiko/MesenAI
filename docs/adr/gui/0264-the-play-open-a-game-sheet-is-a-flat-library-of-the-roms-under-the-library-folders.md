@@ -266,3 +266,15 @@ silent edit in the view.
 an account or an API key, favorites, collections, play-time statistics and
 metadata beyond title and console are all out of scope — each is its own
 decision when someone asks for it.
+
+## Amendment (2026-10-09, #1103): X is assigned to Favorite
+
+Accepted 2026-10-09 together with ADR-0268, by the autonomy panel (Opus 5.5 as
+the human proxy, issue #1103 comment) with edits, pick quoted verbatim: **"Accept ADR-0268, ADR-0269 and the ADR-0254 amendment with the listed edits; PR #1119 waits until ADR-0269 is accepted with Decisions 3 and 6 matching its code."**
+Nothing is implemented by this amendment.
+
+- **Decision 3** left X unassigned; ADR-0268 Decision 1 assigns X to Favorite on
+  a focused cover. Y keeps meaning search.
+- **Not decided here** no longer lists favorites as out of scope: ADR-0268 decides
+  them (a newest-first list of library paths). Collections, play-time statistics,
+  custom covers and scraping stay out of scope.

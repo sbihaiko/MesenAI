@@ -7,7 +7,8 @@
   is what ADR-0137's same-turn rule requires alongside the unit tests below.
 - Date: 2026-10-04
 - Related: ADR-0241, ADR-0249, ADR-0251, `docs/roadmap/PRD-mesence-enhancement-ecosystem.md` Part B §8.
-- Supersedes / amends: none.
+- Supersedes / amends: none. Amended 2026-10-09 (#1103, accepted): the reason line has a
+  second wording, *Paused — controller disconnected* (see "Amendment").
 
 ## Context
 
@@ -44,3 +45,37 @@ Evidence: `UI.Tests/Play/FocusPauseTests` (8 cases over both rules — the door/
 - **Classic and Advanced now pause on focus loss by default with nothing to explain it.** `PauseWhenInBackground` is one global preference and the answer was "on by default", so those doors get the pause and no W-P4 — the accepted cost; a door-scoped default would need the preference split in two.
 - Auto-pause already suppresses the debugger's bring-to-front on break (`SuppressBringToFront()`); opening an overlay on top of that path must not re-enable it.
 - This ADR does not make the emulator run while its window is behind another window any safer on its own; it only makes the pause visible and the resume deliberate.
+
+## Amendment (2026-10-09, #1103): the reason line has a second wording
+
+Status: **accepted** (2026-10-09), by the autonomy panel (Opus 5.5 as the human
+proxy, issue #1103 comment) with edits, pick quoted verbatim: **"Accept ADR-0268, ADR-0269 and the ADR-0254 amendment with the listed edits; PR #1119 waits until ADR-0269 is accepted with Decisions 3 and 6 matching its code."**
+The wording comes from spec #1102 slice 3 (pause when a controller disappears).
+Nothing is implemented by this amendment.
+
+- **The trigger is the connected-pad count dropping**, never a pad identity: on
+  macOS VID/PID are zeroed on purpose, so no pad can be told apart. A pad
+  swapped for another while the count holds does not pause.
+- **"Reconnected" means the count is back to its earlier value** (the value
+  before the drop), not that a particular pad returned.
+- **Doors:** it applies to Play only (the door that has W-P4); Classic and
+  Advanced never show this pause. It is not gated by
+  `PauseWhenInBackground`, which governs the focus pause alone; the pad-count
+  pause is its own auto-pause and is always on in Play. (Decided by the agent
+  under owner-away autonomy as the cheapest to reverse; the owner may revert it.)
+
+- The W-P4 reason line this ADR introduces for a lost focus gets a second
+  wording, **Paused — controller disconnected**, written when a game runs
+  unpaused and a connected pad vanishes. It is the same line on the same surface:
+  W-P4 keeps its seven controls and no overlay is added. The pause is an
+  auto-pause with the overlay, like the focus one.
+- **Reconnecting rewrites the line and never resumes.** When the pad returns the
+  line reads **Controller reconnected** and the game stays paused, exactly as
+  this ADR answers focus regain ("stay paused"): only the player's own Resume
+  (or Esc) leaves W-P4. The line is not cleared by the reconnect, and a second
+  disconnect rewrites it back.
+- The action bar on W-P4 names the control in words for the pad still connected
+  (PlayStation names such as Cross and Circle on that family); with none, the
+  keyboard (ADR-0256 Decision 6).
+- The picture is W-P4b, a variant of W-P4 (ADR-0264 Decision 12 applies: held as
+  awaiting until its ticket lands).
