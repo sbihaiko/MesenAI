@@ -9,25 +9,32 @@ namespace Mesen.Logic;
 //The live walk (UI.HeadlessTests/PlayPadWalkTests) produces the observation
 //from a real MainWindow; the rule is pure so UI.Tests proves each failure
 //fails with a doctored observation, no host or core needed.
+//A control the walk saw, by identity: Key is the control itself (compared by
+//reference), Label only names it in a sentence. Two controls with one Name are
+//two entries, so an unreachable twin cannot hide behind a reached one.
+public sealed record PadWalkControl(object Key, string Label);
+
 public sealed record PadWalkObservation(
 	string Surface,
 	bool IsRoot,
-	IReadOnlyCollection<string> Interactive,
-	IReadOnlyCollection<string> Reached,
+	IReadOnlyCollection<PadWalkControl> Interactive,
+	IReadOnlyCollection<PadWalkControl> Reached,
 	bool? BackLeft,
 	IReadOnlyList<(string Focus, IReadOnlyList<PlayBarEntry>? Declared, bool CoverFocused)> BarByFocus,
-	IReadOnlySet<PlayAction> Available);
+	IReadOnlySet<PlayAction> Available,
+	//Labels of the controls a pad press moved the focus to outside the surface root.
+	IReadOnlyCollection<string>? FocusOutside = null);
 
 public static class PadWalk
 {
-	//The three failures, as sentences that name the surface and the culprit.
+	//The four failures, as sentences that name the surface and the culprit.
 	//An off-bar surface (Declared null) is not a failure here: it is a known gap
 	//that PlayPadWalkTests.KnownBarGaps lists by name.
 	public static List<string> Judge(PadWalkObservation o)
 	{
 		List<string> problems = new();
-		foreach(string name in o.Interactive.Except(o.Reached)) {
-			problems.Add($"{o.Surface}: {name} is not reachable from the pad (reached: {string.Join(", ", o.Reached)})");
+		foreach(string name in o.Interactive.Select(c => c.Label).Except(o.Reached.Select(c => c.Label))) {
+			problems.Add($"{o.Surface}: {name} is not reachable from the pad (reached: {string.Join(", ", o.Reached.Select(c => c.Label))})");
 		}
 		bool declaresBack = o.BarByFocus.Any(b => b.Declared?.Any(e => e.Action == PlayAction.Back) == true);
 		if(!o.IsRoot && o.BackLeft != true) {

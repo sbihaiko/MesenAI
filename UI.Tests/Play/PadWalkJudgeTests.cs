@@ -9,8 +9,11 @@ namespace Mesen.Tests.Play
 	//without a broken build; the live walk is UI.HeadlessTests/PlayPadWalkTests.
 	public class PadWalkJudgeTests
 	{
+		private static readonly PadWalkControl A = new(new object(), "A");
+		private static readonly PadWalkControl B = new(new object(), "B");
+
 		private static PadWalkObservation Clean() => new(
-			"Surface", false, new[] { "A", "B" }, new[] { "A", "B" }, true,
+			"Surface", false, new[] { A, B }, new[] { A, B }, true,
 			new[] { ("A", (IReadOnlyList<PlayBarEntry>?)PlayBarDeclarations.PauseOverlay, false) },
 			new HashSet<PlayAction> { PlayAction.Confirm, PlayAction.Back });
 
@@ -23,8 +26,23 @@ namespace Mesen.Tests.Play
 		[Fact]
 		public void An_unreachable_control_fails_the_walk()
 		{
-			PadWalkObservation o = Clean() with { Interactive = new[] { "A", "B", "Orphan" } };
+			PadWalkObservation o = Clean() with { Interactive = new[] { A, B, new PadWalkControl(new object(), "Orphan") } };
 			Assert.Contains(PadWalk.Judge(o), p => p.StartsWith("Surface: Orphan is not reachable from the pad"));
+		}
+
+		[Fact]
+		public void An_unreachable_twin_with_a_reached_controls_name_still_fails_the_walk()
+		{
+			PadWalkControl twin = new(new object(), "A");
+			PadWalkObservation o = Clean() with { Interactive = new[] { A, B, twin } };
+			Assert.Contains(PadWalk.Judge(o), p => p.StartsWith("Surface: A is not reachable from the pad"));
+		}
+
+		[Fact]
+		public void A_focus_that_lands_outside_the_surface_fails_the_walk()
+		{
+			PadWalkObservation o = Clean() with { FocusOutside = new[] { "MainMenu" } };
+			Assert.Contains(PadWalk.Judge(o), p => p == "Surface: the pad moved the focus outside the surface to MainMenu");
 		}
 
 		[Fact]
