@@ -256,9 +256,12 @@ public class PlayerThemeSettingsRenderTests : IDisposable
 	{
 		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
 		InterfaceSize before = ConfigManager.Config.Preferences.InterfaceSize;
-		ConfigManager.Config.Preferences.InterfaceSize = InterfaceSize.Large;
-		(MainWindow window, MainWindowViewModel model, Border sheet) = ShowSettings(ConfigWindowTab.Display);
+		MainWindowViewModel? model = null;
+		//The setup sits inside the try: a ShowSettings that throws must still restore the global preference.
 		try {
+			ConfigManager.Config.Preferences.InterfaceSize = InterfaceSize.Large;
+			(MainWindow window, MainWindowViewModel shown, Border sheet) = ShowSettings(ConfigWindowTab.Display);
+			model = shown;
 			AssertSettingsChrome(sheet);
 			AssertInsetGroup(sheet.FindNamed<Border>("DisplaySettingsGroup"));
 			ComboBox size = sheet.FindNamed<ComboBox>("cboDisplayInterfaceSize");
@@ -268,7 +271,7 @@ public class PlayerThemeSettingsRenderTests : IDisposable
 
 			Render(window, sheet, "W-P8d");
 		} finally {
-			model.ClosePlayerSettings();
+			model?.ClosePlayerSettings();
 			ConfigManager.Config.Preferences.InterfaceSize = before;
 		}
 	}
