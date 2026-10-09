@@ -34,7 +34,29 @@
 		second control; the tiles are list rows (rule 2: 2 + tiles). Gamepad:
 		the two buttons and the grid are focusable (XY focus), and the grid keeps
 		today's StateGrid arrow navigation.-->
-		<DockPanel Name="PlayHomeWithRecents" Margin="40 26 40 16" IsVisible="{Binding ShowRecentsHome}" XYFocus.NavigationModes="Enabled">
+		<DockPanel Name="PlayHomeWithRecents" Classes.favorites="{Binding ShowFavorites}" Margin="40 26 40 16" IsVisible="{Binding ShowRecentsHome}" XYFocus.NavigationModes="Enabled">
+			<!--#1110 (W-P20): the shelf takes a row, so the hero and both tile rows
+			tighten to the wireframe's proportions and the Recent row stays on screen
+			above the action bar.-->
+			<DockPanel.Styles>
+				<Style Selector="Border#PlayHomeContinueCard">
+					<Setter Property="Height" Value="160" />
+					<Setter Property="Margin" Value="0 0 0 34" />
+				</Style>
+				<Style Selector="Panel#PlayHomeRecentGrid">
+					<Setter Property="Height" Value="172" />
+				</Style>
+				<Style Selector="DockPanel.favorites Border#PlayHomeContinueCard">
+					<Setter Property="Height" Value="120" />
+					<Setter Property="Margin" Value="0 0 0 22" />
+				</Style>
+				<Style Selector="DockPanel.favorites Panel#PlayHomeFavoritesGrid">
+					<Setter Property="Height" Value="164" />
+				</Style>
+				<Style Selector="DockPanel.favorites Panel#PlayHomeRecentGrid">
+					<Setter Property="Height" Value="164" />
+				</Style>
+			</DockPanel.Styles>
 			<DockPanel DockPanel.Dock="Top" Margin="0 0 0 14">
 				<Button Name="PlayHomeOpenRomSecondary" Classes="secondary" DockPanel.Dock="Right" VerticalAlignment="Top" Click="OnOpenRom">
 					<StackPanel Orientation="Horizontal">
@@ -47,7 +69,7 @@
 			<!--W-P2's hero: a game-picture panel and the Continue block. The
 			picture is the recent entry's screenshot (the .rgd's Screenshot.png),
 			a placeholder gradient when it has none.-->
-			<Border Name="PlayHomeContinueCard" Classes="card hero" DockPanel.Dock="Top" Height="160" ClipToBounds="True" Margin="0 0 0 34">
+			<Border Name="PlayHomeContinueCard" Classes="card hero" DockPanel.Dock="Top" ClipToBounds="True">
 				<DockPanel>
 					<Border Name="PlayHomeContinueArt" DockPanel.Dock="Left" Width="260" CornerRadius="16 0 0 16">
 						<Border.Background>
@@ -78,14 +100,14 @@
 			<!--#1110 (ADR-0268, W-P20): the Favorites shelf, between Continue and Recent;
 			not drawn while the list has no file that exists, so Home is W-P2 as today.-->
 			<TextBlock Name="PlayHomeFavoritesHeader" DockPanel.Dock="Top" Classes="headline" Text="{l:Translate lblPlayHomeFavoritesHeader}" Margin="0 0 0 8" IsVisible="{Binding ShowFavorites}" />
-			<Panel Name="PlayHomeFavoritesGrid" DockPanel.Dock="Top" IsVisible="{Binding ShowFavorites}" VerticalAlignment="Top" Height="172" Margin="0 0 0 14">
+			<Panel Name="PlayHomeFavoritesGrid" DockPanel.Dock="Top" IsVisible="{Binding ShowFavorites}" VerticalAlignment="Top" Margin="0 0 0 12">
 				<c:StateGrid Classes="tiles" Entries="{Binding FavoriteEntries}" Title="" Mode="{Binding Mode}" />
 			</Panel>
 			<TextBlock DockPanel.Dock="Top" Classes="headline" Text="{l:Translate lblPlayHomeRecentHeader}" Margin="0 0 0 8" IsVisible="{Binding ShowHomeGrid}" />
 			<!--StateGrid names its own root ("root", for its ElementName bindings),
 			so the test handle is the Panel around it. `tiles`: one row of
 			W-P2 tiles (StateGrid.Tiles) instead of the classic paged grid.-->
-			<Panel Name="PlayHomeRecentGrid" IsVisible="{Binding ShowHomeGrid}" VerticalAlignment="Top" Height="172">
+			<Panel Name="PlayHomeRecentGrid" IsVisible="{Binding ShowHomeGrid}" VerticalAlignment="Top">
 				<c:StateGrid Classes="tiles" Entries="{Binding HomeGridEntries}" Title="" Mode="{Binding Mode}" />
 			</Panel>
 		</DockPanel>
