@@ -18,7 +18,10 @@
     "sha1": "<no-intro sha1 per ADR-0003, filled when the adapter lands>"
   },
   "settings": {
-    "profile": "fresh"
+    "profiles": {
+      "fresh": "no play history, no favorites",
+      "history-one-favorite": "one game in play history (so Continue and Recent exist) and that game favorited (so Favorites exists, ADR-0268 Decision 4)"
+    }
   }
 }
 ```
@@ -29,7 +32,7 @@ Steps:
 
 | ID | Role | Precondition | Action | Wait | Check | Expected | Variants | Severity | Mode |
 |---|---|---|---|---|---|---|---|---|---|
-| `launch.first-run-home` | under-test | `settings == fresh` | — | `ui.screen == play.home` within 120 ticks | `ui.screen(is="play.home")` | No wizard appears (ADR-0256 Decision 8); Home W-P1 is on screen. | window.mode=windowed | major | automated |
+| `launch.first-run-home` | under-test | `fixture settings.profiles.fresh` | — | `ui.screen == play.home` within 120 ticks | `ui.screen(is="play.home")` | No wizard appears (ADR-0256 Decision 8); Home W-P1 is on screen. | window.mode=windowed | major | automated |
 | `launch.open-rom-focused` | under-test | `ui.screen == play.home` | — | `ui.focused == play.home.open-rom` within 120 ticks | `ui.focused(is="play.home.open-rom")` | The one control, Open a ROM, is already focused at launch. | window.mode=windowed | major | automated |
 | `launch.port-lamp-p1` | under-test | `ui.screen == play.home` | — | — | — | The ring is visible on Open a ROM and the pad port lamps show P1 lit (ADR-0261); judged by eye, the hook exposes neither. | window.mode=windowed | minor | manual |
 
@@ -57,7 +60,7 @@ Setup:
 
 | ID | Role | Precondition | Action | Wait | Check | Expected | Variants | Severity | Mode |
 |---|---|---|---|---|---|---|---|---|---|
-| `after-game.reach-home` | setup | `library.rom == present and game == none` | `nav.goal(goal="ui.screen == play.home")` | `ui.screen == play.home` within 600 ticks | — | Home W-P2 (Continue / Favorites / Recent) with at least one game played (the HOME-03 precondition). | all | major | automated |
+| `after-game.reach-home` | setup | `fixture settings.profiles.history-one-favorite and fixture rom` | `nav.goal(goal="ui.screen == play.home")` | `ui.screen == play.home` within 600 ticks | — | Home W-P2 (Continue / Favorites / Recent) with at least one game played (the HOME-03 precondition). | all | major | automated |
 
 Steps:
 
@@ -70,5 +73,8 @@ Steps:
 | `after-game.one-ring` | under-test | `ui.screen == play.home` | — | — | — | The ring is on exactly one control at a time (ADR-0256 Decision 3); with a Favorites shelf present the order is Continue, Favorites, Recent. Both are judged by eye. | all | minor | manual |
 | `after-game.contained-up-continue` | under-test | `ui.focused == play.home.continue` | `pad.press(button="Up", ticks=12)` | within 12 ticks | `ui.focused(within="play.home")` | Repeated D-pad Up from Continue never leaves the Home host for the header's Profile or Tools buttons (#1137, #1166). | all | major | automated |
 | `after-game.contained-up-recent` | under-test | `ui.focused == play.home.recent` | `pad.press(button="Up", ticks=12)` | within 12 ticks | `ui.focused(within="play.home")` | Repeated D-pad Up from Recent never leaves the Home host for the header's Profile or Tools buttons (#1137, #1166). | all | major | automated |
+| `after-game.contained-up-favorites` | under-test | `ui.focused == play.home.favorites` | `pad.press(button="Up", ticks=12)` | within 12 ticks | `ui.focused(within="play.home")` | Repeated D-pad Up from Recent never leaves the Home host for the header's Profile or Tools buttons (#1137, #1166). | all | major | automated |
+| `after-game.contained-up-open-rom` | under-test | `ui.focused == play.home.open-rom` | `pad.press(button="Up", ticks=12)` | within 12 ticks | `ui.focused(within="play.home")` | Repeated D-pad Up from Recent never leaves the Home host for the header's Profile or Tools buttons (#1137, #1166). | all | major | automated |
 | `after-game.contained-sideways-left` | under-test | `ui.focused == play.home.continue` | `pad.press(button="Left", ticks=12)` | within 12 ticks | `ui.focused(within="play.home")` | Left on the top row stays inside the Home host. | all | major | automated |
 | `after-game.contained-sideways-right` | under-test | `ui.focused == play.home.continue` | `pad.press(button="Right", ticks=12)` | within 12 ticks | `ui.focused(within="play.home")` | Right on the top row stays inside the Home host. | all | major | automated |
+| `after-game.contained-other-controls-gap` | under-test | `ui.screen == play.home` | — | — | — | From Favorites, Recent and Open a ROM, D-pad Left and Right keep focus inside Home (the automated steps press them from Continue only) | all | major | manual |

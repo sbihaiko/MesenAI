@@ -24,7 +24,10 @@
   },
   "fixtures": {
     "settings": {
-      "profile": "fresh"
+      "profiles": {
+        "fresh": "no play history, no favorites",
+        "history-one-favorite": "one game in play history (so Continue and Recent exist) and that game favorited (so Favorites exists, ADR-0268 Decision 4)"
+      }
     },
     "rom": {
       "path": "<library>/Contra (USA).nes",
@@ -41,7 +44,7 @@
         {
           "id": "launch.first-run-home",
           "role": "under-test",
-          "precondition": "settings == fresh",
+          "precondition": "fixture settings.profiles.fresh",
           "wait": {
             "check": "ui.screen == play.home",
             "timeout_ticks": 120
@@ -342,7 +345,7 @@
         {
           "id": "after-game.reach-home",
           "role": "setup",
-          "precondition": "library.rom == present and game == none",
+          "precondition": "fixture settings.profiles.history-one-favorite and fixture rom",
           "action": {
             "name": "nav.goal",
             "args": {
@@ -516,6 +519,54 @@
           "mode": "automated"
         },
         {
+          "id": "after-game.contained-up-favorites",
+          "role": "under-test",
+          "precondition": "ui.focused == play.home.favorites",
+          "action": {
+            "name": "pad.press",
+            "args": {
+              "button": "Up",
+              "ticks": 12
+            }
+          },
+          "wait": {
+            "timeout_ticks": 12
+          },
+          "check": {
+            "name": "ui.focused",
+            "args": {
+              "within": "play.home"
+            }
+          },
+          "expect": "Repeated D-pad Up from Recent never leaves the Home host for the header's Profile or Tools buttons (#1137, #1166).",
+          "severity": "major",
+          "mode": "automated"
+        },
+        {
+          "id": "after-game.contained-up-open-rom",
+          "role": "under-test",
+          "precondition": "ui.focused == play.home.open-rom",
+          "action": {
+            "name": "pad.press",
+            "args": {
+              "button": "Up",
+              "ticks": 12
+            }
+          },
+          "wait": {
+            "timeout_ticks": 12
+          },
+          "check": {
+            "name": "ui.focused",
+            "args": {
+              "within": "play.home"
+            }
+          },
+          "expect": "Repeated D-pad Up from Recent never leaves the Home host for the header's Profile or Tools buttons (#1137, #1166).",
+          "severity": "major",
+          "mode": "automated"
+        },
+        {
           "id": "after-game.contained-sideways-left",
           "role": "under-test",
           "precondition": "ui.focused == play.home.continue",
@@ -562,6 +613,14 @@
           "expect": "Right on the top row stays inside the Home host.",
           "severity": "major",
           "mode": "automated"
+        },
+        {
+          "id": "after-game.contained-other-controls-gap",
+          "role": "under-test",
+          "precondition": "ui.screen == play.home",
+          "expect": "From Favorites, Recent and Open a ROM, D-pad Left and Right keep focus inside Home (the automated steps press them from Continue only)",
+          "severity": "major",
+          "mode": "manual"
         }
       ]
     }

@@ -1,5 +1,5 @@
 # vendored-from: agent-squad local fork (~/VSCodeProjects/agent-squad), branch gui/1179, file squad/gui_test_render.py
-# source-commit: ac1006d9d5d8d880e953a732d2ae37de6c672710
+# source-commit: 12c53284b27d3d8036a343c8757ea14e93826d08
 # sha256: a532f20a4e8e4b52c44909ed019440c7168fd10a7905eb419c650e3fde022fb5
 # read-only copy: edit it in the fork, never here (scripts/checks/verify_gui_test_render.py fails on any change)
 # ---- end vendored header ----
