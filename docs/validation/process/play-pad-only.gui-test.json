@@ -538,7 +538,7 @@
               "within": "play.home"
             }
           },
-          "expect": "Repeated D-pad Up from Recent never leaves the Home host for the header's Profile or Tools buttons (#1137, #1166).",
+          "expect": "Repeated D-pad Up from Favorites never leaves the Home host for the header's Profile or Tools buttons (#1137, #1166).",
           "severity": "major",
           "mode": "automated"
         },
@@ -562,7 +562,7 @@
               "within": "play.home"
             }
           },
-          "expect": "Repeated D-pad Up from Recent never leaves the Home host for the header's Profile or Tools buttons (#1137, #1166).",
+          "expect": "Repeated D-pad Up from Open a ROM never leaves the Home host for the header's Profile or Tools buttons (#1137, #1166).",
           "severity": "major",
           "mode": "automated"
         },
