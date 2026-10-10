@@ -1,8 +1,9 @@
 # ADR-0274: An overlapping slice is refused at dispatch, not serialized at merge
 
-- Status: accepted (2026-10-10, by the user: "Porta no dispatch (recomendado)"; implementation = #1400, not yet built)
+- Status: proposed (2026-10-10; the user chose "Porta no dispatch (recomendado)", but the work is not built — tracked by GitHub issue #1400 / PR #1401, fork-only agent-squad work; becomes accepted when #1400 lands)
 - Date: 2026-10-10
 - Related: ADR-0273 (the two-level review verdict this completes the other half of; its Context and Consequences put GitHub's native merge queue out of scope)
+- Supersedes / amends: amends ADR-0273 (closes its merge-queue non-goal; no measurement taken — see Context)
 
 ## Context
 
