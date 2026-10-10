@@ -57,7 +57,7 @@ pixel (ADR-0271).
 | `pad.release` | `button`, `pad` (0) | the button goes up now, before the hold it is under has run out - a two-button gesture is written `pad.hold` then `pad.release`. A button no hold is keeping down is put up anyway: a release never fails a step. |
 | `text.type` | `text` | types through the on-screen keyboard the application itself shows (the one pad keyboard, ADR-0262), by walking its grid and pressing each key. A keyboard that is not open, or a character it has no key for, fails the step. |
 | `pad.connect` | `index`, `family` (`xbox` \| `playstation`, default `xbox`) | hot-plugs a simulated pad on that device index. While a run is up the connected-pad count the window polls for its port lamps and its pad-loss pause is the hook's, so a script's connect is seen the way a real pad's is; until a script touches it, that count is the backend's own. |
-| `pad.disconnect` | `index` | unplugs the pad on that index. A pad plugged back in is read in the family it was connected with. |
+| `pad.disconnect` | `index` | unplugs the pad on that index. The family goes with the pad: a `pad.connect` after a disconnect, with no `family`, is the default one (`xbox`), never the family the unplugged pad had - a PlayStation pad put back without `family` has its buttons read as Xbox, so name the family again on the reconnect. |
 
 `pad` is a **device index**: `0` is the pad in the hand - ADR-0272 item 4's
 "device 0" - and `1` is the second pad. The hook resolves it to the

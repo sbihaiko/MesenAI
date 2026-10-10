@@ -28,7 +28,12 @@ from pathlib import Path
 #step's check then reads the state before the ring instead of the behavior under
 #test (#1232: `home.focus-holds-up` failed with `expected play.home.open-rom,
 #observed None`). So the first automated step of a batch observes; it does not act.
-PRESS_ACTIONS = {"pad.press", "pad.chord"}
+#
+#`pad.hold` belongs here for the same reason `pad.press` does (#1281 review): a
+#hold puts a button down on the very next tick, so a hold sent before the ring is
+#dropped exactly as the press was - `pad.hold` is a press that stays down, not an
+#observation.
+PRESS_ACTIONS = {"pad.press", "pad.chord", "pad.hold"}
 
 
 def check_script(doc: dict, name: str) -> list[str]:
