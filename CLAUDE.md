@@ -204,3 +204,54 @@ label is not "accepted" — only a live catalog row is. De-listing rules
   `pack:known-missing` is applied by the validation run itself, from the
   errata resolved against the computed Pack Hash (ADR-0152) — never by the
   classify step, whose inputs are submitter-controlled.
+
+## Coding squad (agent-squad) and squad hub
+
+All coding goes through agent-squad, never an Agent-tool coder. The
+autonomous loop that drives issues through it is the global `squad-goal`
+skill (`~/.claude/skills/squad-goal/`, outside this repo); its operating
+rules are summarized in `docs/squad/README.md`.
+
+- **Launch**: write the request to `~/.cache/squad-goal/req/<name>.txt`, then
+  run `python3 ~/.claude/skills/squad-goal/scripts/launch.py <file>` from the
+  main checkout (`launch.py` refuses another directory). Launch detached
+  (`Popen(start_new_session=True)`); never `nohup … &` with `disown`, and never
+  `squad start` in the Bash tool, both of which die when the tool's task ends.
+  `/agent-squad:work` inside a goal means `launch.py`.
+- **Graph root**: the workflow's root node is `mesenai` (`"root"` and the
+  node's `"name"` together); `launch.py` checks and validates it.
+- **Goal mode**: never end a turn with work dispatched and no background task
+  alive; keep a Monitor on `~/.claude/skills/squad-goal/scripts/watchtail.sh`.
+  A scheduled wakeup does not count. When the goal's Stop hook blocks and
+  nothing changed, reply with one short line once, never a repeated status.
+  Don't run the loop on a Haiku session model.
+- **Owner questions**: ask every pending owner decision once, at the start of
+  the execution, then run to the end.
+- **One panel per frontier**: every startable issue goes in one `squad start`
+  request, one child and one PR each. A separate run only for a fix on an
+  existing PR branch or work that cannot join the panel.
+- **Caps**: `docs/squad/workflows/dynamic.graph.json` — `max_parallel` 10,
+  `max_children` 20, `spend_cap` 168. Give each child a disjoint file slice.
+- **Every coding request states**: base `origin/main`; open the PR yourself;
+  `Refs #N`, never `Closes`; `GitHub issue #N`; the coding model is the
+  first entry of `coding_models` in
+  `~/.claude/skills/squad-goal/scripts/models.json` (edited from the hub's
+  "squad models" panel; no `[1m]` suffix), the next entry its fallback —
+  never a model typed from memory (`launch.py` refuses a request that does not
+  name it); en-US; no `Co-Authored-By` and no "Generated with Claude Code" line.
+- **Fix runs** on an existing PR: check out `origin/<branch>`, push to the same
+  branch, no new PR.
+- **Review chain**: the `review_models` list in the same `models.json`, tried
+  top to bottom (`review.sh` calls each through its own CLI: codex, grok, agy
+  or claude); never a chain typed from memory.
+- **Owner carve-outs** stay with the owner: money, credentials, access,
+  permanent deletion, external publication.
+- **Dashboards**: no per-run dashboard tab, ever; the hub is the only page.
+  `launch.py` runs `squad start` with `SQUAD_HEADLESS=1`, so the run's
+  dashboard server starts for the hub without opening a tab. Never run
+  `/agent-squad:dashboard`.
+- **Hub** (`~/.claude/skills/squad-goal/scripts/hub.py`, default port 7700,
+  loopback, read-only): lists every live run dashboard in one page. Start it
+  once, detached, and open http://127.0.0.1:7700/ once.
+- **Issue state**: every dispatch, PR, verdict, CI result, merge and e2e result
+  is commented on the issue and reflected on the board at once.
