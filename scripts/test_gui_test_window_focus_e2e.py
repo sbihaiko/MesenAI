@@ -120,7 +120,12 @@ class RealRunKeepsTheFront(unittest.TestCase):
             # hook and found it on the primary display - a run that opened no
             # window at all is refused there.
             session.inject("pad.press", {"button": "Up", "ticks": 4})
-            session.wait("ui.focused == play.home.open-rom", 300)
+            # `wait` answers "timeout" rather than raising, so an unchecked wait
+            # would let this test pass on a run whose driven step never landed -
+            # and the focus claim for a driven step needs the step to have
+            # happened.
+            self.assertEqual(session.wait("ui.focused == play.home.open-rom", 300), "met",
+                             "the driven step did not reach the focused state")
             self.assert_front_kept(before, "a driven step")
         finally:
             self.assertEqual(session.teardown(), [])
