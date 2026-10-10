@@ -19,6 +19,13 @@ public interface ITestHookTarget
 	//between (a wait polls state, ADR-0272 item 4) consume nothing.
 	void Step();
 
+	//The string typed through the on-screen keyboard the application shows - the
+	//one pad keyboard (ADR-0262) - by walking that keyboard's grid and pressing
+	//each key, the way a player types. Never an OS input path (#1281). Null when
+	//the text was typed, otherwise why it was not: no keyboard is open, or the
+	//keyboard has no key for a character.
+	string? TypeText(string text);
+
 	//A PNG of the application window only, never the desktop.
 	CaptureResult Capture(string path);
 
