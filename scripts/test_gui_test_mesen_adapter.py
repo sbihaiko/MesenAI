@@ -291,7 +291,7 @@ class AdapterE2E(unittest.TestCase):
             # HOME does not isolate the app; the fresh profile is a settings.json next to the cloned binary.
             clone = Path(session.argv[0])
             self.assertEqual(clone.parent, self.tmp / "run" / "app")
-            self.assertEqual(json.loads((clone.parent / "settings.json").read_text()), {"Preferences": {"UiMode": "Player"}})
+            self.assertEqual(json.loads((clone.parent / "settings.json").read_text()), {"Preferences": {"UiMode": "Player", "SingleInstance": False}})
             self.assertTrue(session.log_text().startswith("test hook listening on"))
         finally:
             session.teardown()
