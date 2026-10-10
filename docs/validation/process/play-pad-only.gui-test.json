@@ -53,7 +53,8 @@
             "window.mode": "windowed"
           },
           "severity": "major",
-          "mode": "automated"
+          "mode": "automated",
+          "content_hash": "a951de53b2260401da0cf60b8cdd5d78d403c3f872d4d9296aa461afb46f0e34"
         },
         {
           "id": "launch.open-rom-focused",
@@ -74,7 +75,8 @@
             "window.mode": "windowed"
           },
           "severity": "major",
-          "mode": "automated"
+          "mode": "automated",
+          "content_hash": "1807981d2ae2a79be28fde659ec565aff84b33f9f3bc8309373f1b6d58a4e704"
         },
         {
           "id": "launch.port-lamp-p1",
@@ -85,7 +87,8 @@
             "window.mode": "windowed"
           },
           "severity": "minor",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "56efbe4b6af0dad32a598aa10f8c4e5dc6d99b4f45314cea4730e2077e79550a"
         }
       ]
     },
@@ -108,7 +111,8 @@
           },
           "expect": "HOME-01 - no wizard (ADR-0256 Decision 8); Play Home W-P1 is on screen and Open a ROM is already focused",
           "severity": "major",
-          "mode": "automated"
+          "mode": "automated",
+          "content_hash": "95c077e6eb904dc26b460847ab764dd1ea3addd1528616ba900b5665efaa2c3a"
         }
       ],
       "teardown": [],
@@ -135,7 +139,8 @@
           },
           "expect": "Focus stays on Open a ROM after D-pad Up. (HOME-02, HOME-04)",
           "severity": "major",
-          "mode": "automated"
+          "mode": "automated",
+          "content_hash": "7aa93648f8e6e32767588ec5dfa4a62a82306b24369b4c7b8c23581ce1155c12"
         },
         {
           "id": "home.focus-holds-down",
@@ -159,7 +164,8 @@
           },
           "expect": "Focus stays on Open a ROM after D-pad Down.",
           "severity": "major",
-          "mode": "automated"
+          "mode": "automated",
+          "content_hash": "ac0fe64e16ba302940ad982ea4eba72301b9c6ce9fb9955e6889089a7e9d3c85"
         },
         {
           "id": "home.focus-holds-left",
@@ -183,7 +189,8 @@
           },
           "expect": "Focus stays on Open a ROM after D-pad Left.",
           "severity": "major",
-          "mode": "automated"
+          "mode": "automated",
+          "content_hash": "1bfd1f2ae615b1726c9be8c141b238681fdeb4fd31768d0f03f581f766c0ab79"
         },
         {
           "id": "home.focus-holds-right",
@@ -207,7 +214,8 @@
           },
           "expect": "Focus stays on Open a ROM after D-pad Right.",
           "severity": "major",
-          "mode": "automated"
+          "mode": "automated",
+          "content_hash": "5d9f4b5e8aa79e54f6081f6d447439bc8cf605bb7e5302f2d4effc48b36f950a"
         },
         {
           "id": "home.ring-visible",
@@ -215,7 +223,8 @@
           "precondition": "by hand: the ring is on play.home.open-rom",
           "expect": "The focus ring never disappears through the four presses.",
           "severity": "minor",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "2c38a82920e9c95bed37b30dd048d98b1948544f6fbf82875e97ed03c0a0f246"
         },
         {
           "id": "home.open-library",
@@ -240,7 +249,8 @@
           },
           "expect": "A on Open a ROM opens the library sheet (LIB-01). (HOME-02)",
           "severity": "major",
-          "mode": "automated"
+          "mode": "automated",
+          "content_hash": "ae68a33037b9a0b27721271e738a8eb5823c2528c6684810d1b4e40b11464253"
         },
         {
           "id": "home.back-to-home",
@@ -265,7 +275,8 @@
           },
           "expect": "B on the sheet returns to Home.",
           "severity": "major",
-          "mode": "automated"
+          "mode": "automated",
+          "content_hash": "9c389c55e74391e89c4f53c2bf397c5659576dacf5ff662d3337d4ba3d023f09"
         },
         {
           "id": "home.back-focus-restored",
@@ -273,7 +284,8 @@
           "precondition": "by hand: the screen is play.home",
           "expect": "The ring is back on Open a ROM after B. (manual: needs action pad.release, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "26d90f25339ff27ca88ffa3fa5df52eb10355ad382570356263faef8161d8eaf"
         },
         {
           "id": "home.chord-opens-nothing",
@@ -281,7 +293,8 @@
           "precondition": "by hand: the screen is play.home",
           "expect": "The chord with no game loaded opens no overlay. (HOME-05) (manual: needs action pad.chord, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "a6b432d3bad0bf67f803c1d044091834a5d82950d80a03fd169847623e7b633a"
         },
         {
           "id": "home.chord-focus-unchanged",
@@ -289,7 +302,8 @@
           "precondition": "by hand: the screen is play.home",
           "expect": "Focus is unchanged after the chord. (manual: needs action pad.release, which mesen-gui does not advertise)",
           "severity": "minor",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "4ffb2836a451a9e9f59ed8e68581a04c9f48d52f3a468513c4efbd4f21fcb92b"
         },
         {
           "id": "home.settings-by-pad-gap",
@@ -297,7 +311,8 @@
           "precondition": "by hand: the screen is play.home",
           "expect": "Y opens the Settings sheet from Home with no game loaded (bug #1177, ADR-0256 W-P8); B returns to Home.",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "a8172b9cc539b1ff59f5737be9d7e3c0f80a697dc129b149a70d71df68eadef5"
         }
       ]
     },
@@ -310,7 +325,8 @@
           "precondition": "fixture settings.profiles.history-one-favorite and fixture rom",
           "expect": "Home W-P2 (Continue / Favorites / Recent) with at least one game played (the HOME-03 precondition). (manual: needs action nav.goal, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "d0cf413d7f69b665b83a88c17184178476fbf4cd3536f0723753057f66250f13"
         }
       ],
       "teardown": [],
@@ -321,7 +337,8 @@
           "precondition": "by hand: the screen is play.home",
           "expect": "Continue playing is the first focus stop. (manual: needs action pad.release, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "a0e96b853c5b1aa95dedc4081fd06ce2bcbcafa80bdb7eae26578ad23b836167"
         },
         {
           "id": "after-game.order-favorites",
@@ -329,7 +346,8 @@
           "precondition": "by hand: the ring is on play.home.continue",
           "expect": "Favorites follows Continue when the shelf exists (ADR-0268 Decision 6). (manual: needs control play.home.favorites, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "b684255e26b6125d920275258aea2dc23eaf506279a382a4dcffa26d3ba01111"
         },
         {
           "id": "after-game.order-recent",
@@ -337,7 +355,8 @@
           "precondition": "by hand: the ring is on play.home.favorites",
           "expect": "Recent follows Favorites (Continue, Favorites, Recent; ADR-0268 Decision 6). (manual: needs control play.home.recent, control play.home.favorites, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "28e0c88f7e62695a8a69e3f19c0152b14082b7a58800430e29595cf0828d1e66"
         },
         {
           "id": "after-game.order-open-rom",
@@ -345,7 +364,8 @@
           "precondition": "by hand: the ring is on play.home.recent",
           "expect": "Open a ROM is reachable last. (manual: needs control play.home.recent, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "c609c7aca31b7e0938ef10c5e5f982867d8f0da0cf2843c354132b0b6b31e563"
         },
         {
           "id": "after-game.one-ring",
@@ -353,7 +373,8 @@
           "precondition": "by hand: the screen is play.home",
           "expect": "The ring is on exactly one control at a time (ADR-0256 Decision 3); with a Favorites shelf present the order is Continue, Favorites, Recent. Both are judged by eye.",
           "severity": "minor",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "98e4f024cfb6d1902ff5e330eb43826e8478067987c8b6b966bf217a2c7a437c"
         },
         {
           "id": "after-game.contained-up-continue",
@@ -361,7 +382,8 @@
           "precondition": "by hand: the ring is on play.home.continue",
           "expect": "Repeated D-pad Up from Continue never leaves the Home host for the header's Profile or Tools buttons (#1137, #1166). (manual: batch setup after-game.reach-home is manual, so nothing established the state this step asserts)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "04920e6691d10e168fccf2acc81ccb633a7691d84cb261f4edc19f8729de2462"
         },
         {
           "id": "after-game.contained-up-recent",
@@ -369,7 +391,8 @@
           "precondition": "by hand: the ring is on play.home.recent",
           "expect": "Repeated D-pad Up from Recent never leaves the Home host for the header's Profile or Tools buttons (#1137, #1166). (manual: needs control play.home.recent, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "9c4ec7e1c006c25aa21b64a5efd7f3f7f5aa7bdbf4ba67e01cdd14034158a5d1"
         },
         {
           "id": "after-game.contained-up-favorites",
@@ -377,7 +400,8 @@
           "precondition": "by hand: the ring is on play.home.favorites",
           "expect": "Repeated D-pad Up from Favorites never leaves the Home host for the header's Profile or Tools buttons (#1137, #1166). (manual: needs control play.home.favorites, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "20a338168e1becbfb6004d82bef1e0a9411c9adea00afdf381462405b68b539a"
         },
         {
           "id": "after-game.contained-up-open-rom",
@@ -385,7 +409,8 @@
           "precondition": "by hand: the ring is on play.home.open-rom",
           "expect": "Repeated D-pad Up from Open a ROM never leaves the Home host for the header's Profile or Tools buttons (#1137, #1166). (manual: batch setup after-game.reach-home is manual, so nothing established the state this step asserts)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "cc297012ad252b4fd3a18a68a436e0da181fbd413bb6817d3b1d26c24380e2a1"
         },
         {
           "id": "after-game.contained-sideways-left",
@@ -393,7 +418,8 @@
           "precondition": "by hand: the ring is on play.home.continue",
           "expect": "Left on the top row stays inside the Home host. (manual: batch setup after-game.reach-home is manual, so nothing established the state this step asserts)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "40235b0ff90af73da60d8b81881ae3f12293ad9c6aa90cd6d4ca612eddfc7950"
         },
         {
           "id": "after-game.contained-sideways-right",
@@ -401,7 +427,8 @@
           "precondition": "by hand: the ring is on play.home.continue",
           "expect": "Right on the top row stays inside the Home host. (manual: batch setup after-game.reach-home is manual, so nothing established the state this step asserts)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "d7080137caeb217786aa8dafefb03b69884a91d7a33d99f4b80f5016c8ce5f16"
         },
         {
           "id": "after-game.contained-other-controls-gap",
@@ -409,7 +436,8 @@
           "precondition": "by hand: the screen is play.home",
           "expect": "From Favorites, Recent and Open a ROM, D-pad Left and Right keep focus inside Home (the automated steps press them from Continue only)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "bd4513ff46bcd2ef24a1a5a4e6d418b34e60d1621ba5c551bd7ffa20c4d3a4a2"
         }
       ]
     },
@@ -432,7 +460,8 @@
           },
           "expect": "HOME-01 - the batch opens on a settled home before it presses anything; the ring is not up yet at a fresh launch, so a press sent first is dropped and the step below reads None (#1232).",
           "severity": "major",
-          "mode": "automated"
+          "mode": "automated",
+          "content_hash": "39a961aef4ba0140c741b58d07500febba787032830c1114609c2753ec829ad4"
         },
         {
           "id": "lib.reach-library",
@@ -457,7 +486,8 @@
           },
           "expect": "LIB-01 - A on the Home's focused Open a ROM opens the Library W-P19 by pad alone, on a fresh settings folder",
           "severity": "major",
-          "mode": "automated"
+          "mode": "automated",
+          "content_hash": "191dfccfbeda28be39a6346ce94dbec497bc156c1ba9dd1edeeb5ee51ee1dc39"
         }
       ],
       "steps": [
@@ -477,7 +507,8 @@
           },
           "expect": "LIB-01: the flat library grid is open.",
           "severity": "major",
-          "mode": "automated"
+          "mode": "automated",
+          "content_hash": "9b3d02781b4c6cb535457ebc62eccb2d3ba6fdf0d68255760416be03a47c10ba"
         },
         {
           "id": "lib.first-tile-focused",
@@ -485,7 +516,8 @@
           "precondition": "by hand: the screen is play.library",
           "expect": "LIB-01: a tile is focused (ring on the grid's first tile). (manual: needs control play.library.tile, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "4658f0d1e038320117125fcad857c81d3e0a1d8ee72ef1d277d821f08f7fd141"
         },
         {
           "id": "lib.header-footer-scan",
@@ -493,7 +525,8 @@
           "precondition": "by hand: the screen is play.library",
           "expect": "LIB-01: header reads \"Your library · N games in M folders\", the footer names A/B/Y/X/LB/RB in the pad's own words (ADR-0256 Decision 6), an animated indicator shows while scanning.",
           "severity": "minor",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "5d6888faeab8a23cc47427b053620e756cdad01b40004e8af5fbaa41f6dd8b51"
         },
         {
           "id": "lib.hold-down-repeats",
@@ -501,7 +534,8 @@
           "precondition": "fixture rom-library-large and a library of 100+ ROMs",
           "expect": "LIB-02: with 100+ ROMs, a held Down repeats after 400 ms then every 100 ms (ADR-0256 Decision 7) and the grid scrolls; judged by timing and eye. Part 2 (same with Right) is the next step.",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "ee4698cfbe346e543eb290657014b97800b9d962042bbf6b190638d2f1930208"
         },
         {
           "id": "lib.hold-right-repeats",
@@ -509,7 +543,8 @@
           "precondition": "fixture rom-library-large and a library of 100+ ROMs",
           "expect": "LIB-02: the same with Right: a held Right repeats after 400 ms then every 100 ms and the focus walks the row, wrapping onto the next row.",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "1affdc52de01a7c969de9fdb371cd92eb8501a3778def45618c8f8e10b680c46"
         },
         {
           "id": "lib.tap-down-steps-once",
@@ -517,7 +552,8 @@
           "precondition": "fixture rom-library-large and a tile focused in the library",
           "expect": "LIB-02: one tap steps the focus once and the focus stays in the grid. (manual: needs control play.library.tile, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "acafc48050c8a1a2f175e7b49f59a5958ca047c56f8eb00a925208f63acd8d7f"
         },
         {
           "id": "lib.up-back-to-row-one",
@@ -525,7 +561,8 @@
           "precondition": "a tile focused in the library",
           "expect": "LIB-03 setup: Up returns the focus from row 2 to the top grid row, ready to enter the header. (manual: needs control play.library.tile, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "a539a4097be3e6e7e6e76fced304b33c3fc34e41b5fcc5f23671b502b039550a"
         },
         {
           "id": "lib.up-enters-header",
@@ -533,7 +570,8 @@
           "precondition": "a tile focused in the library",
           "expect": "LIB-03: Up from the top grid row enters the header row (search first, ADR-0264 Decision 3). (manual: needs control play.library.search, control play.library.tile, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "e9283d602768947c11ff58af326eddabd6fe84de269a11eb492d727f9e716497"
         },
         {
           "id": "lib.header-right-folders",
@@ -541,7 +579,8 @@
           "precondition": "by hand: the ring is on play.library.search",
           "expect": "LIB-03: Right moves to Library folders. (manual: needs control play.library.folders, control play.library.search, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "66c46d3d69793a9c17a11e550b30f2517ea1d266f59122095b0985c32ef9e91f"
         },
         {
           "id": "lib.header-right-browse",
@@ -549,7 +588,8 @@
           "precondition": "by hand: the ring is on play.library.folders",
           "expect": "LIB-03: Right moves to Browse a file. (manual: needs control play.library.browse, control play.library.folders, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "440007cc0c33e006c0e447585da90658535ad387ee3b5e85b6225baa4869a66f"
         },
         {
           "id": "lib.header-right-back",
@@ -557,7 +597,8 @@
           "precondition": "by hand: the ring is on play.library.browse",
           "expect": "LIB-03: Right moves to Back. (manual: needs control play.library.back, control play.library.browse, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "44034d9594a4f97e068161919e9cffd00cab0e5dee6a1b00f2a813c33314118b"
         },
         {
           "id": "lib.header-left-across",
@@ -565,7 +606,8 @@
           "precondition": "by hand: the ring is on play.library.back",
           "expect": "LIB-03: Left walks back across the header row (Back -> Browse), mirroring the Right walk. (manual: needs control play.library.browse, control play.library.back, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "fbf581734b023c2bdc3e6d659f2b94d23be5b3d21bacc943cdeafd972f896c9d"
         },
         {
           "id": "lib.header-down-grid",
@@ -573,7 +615,8 @@
           "precondition": "by hand: the ring is on play.library.browse",
           "expect": "LIB-03: Down from the header returns to the grid. (manual: needs control play.library.tile, control play.library.browse, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "760bff056ffa5a7f75f21e8702c098d6c316670fe16af3aed472136b41ce2acf"
         },
         {
           "id": "lib.filter-rb-wraps",
@@ -581,7 +624,8 @@
           "precondition": "by hand: the screen is play.library",
           "expect": "LIB-04: RB steps All -> each console present -> All, wrapping at both ends, the grid narrows, and the ring lands on the segment the press selected (PlayerRomPickerViewModel.ConsoleFilter.cs; ADR-0264 amendment 2026-10-09, #1108), never an empty filter. Record whether the segment the ring is on is obvious at couch distance. The row is not a named control the hook reads, so the landing is judged by eye.",
           "severity": "minor",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "114a1f86924b8dd3123fb64e87b70c3f706d44d82801a06f8cca462986340488"
         },
         {
           "id": "lib.filter-lb-backwards",
@@ -589,7 +633,8 @@
           "precondition": "by hand: the screen is play.library",
           "expect": "LIB-04: LB walks the same ring backwards, wrapping at both ends, and lands the ring on the segment it moved (ADR-0264 amendment 2026-10-09, #1108).",
           "severity": "minor",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "d3516987e1afd05f82b1ee90da29ea7f8b4e32c2af0065dcd95dd6fea4d4733f"
         },
         {
           "id": "lib.filter-segment-focus",
@@ -597,7 +642,8 @@
           "precondition": "by hand: the screen is play.library",
           "expect": "LIB-04 (ADR-0264 amendment 2026-10-09, #1108): after a shoulder press the ring is ON the chip row, on the segment the press selected - the row is one element, so its Left/Right step the same ring one console at a time, its Up leaves for the header and its Down returns to the grid it filters, and the footer names the shoulders and no Play (ADR-0256 Decision 6). The landing is skipped only where the sheet's own claim outranks it: while a restore is in flight (IsRestorePending / IsRestoreLanding) the ring lands on the remembered game, and the search box keeps the ring as it always did. FAIL if the ring does not reach the row outside those two. The row is not a named control the hook reads, so this is judged by eye. Record whether the ring on the row is obvious at couch distance.",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "4df6f8b716dd70ab26efaec98d334cc8795cdd5375c5f555d01ebae96cf7d5be"
         },
         {
           "id": "lib.search-y-focuses-field",
@@ -605,7 +651,8 @@
           "precondition": "a tile focused in the library",
           "expect": "LIB-05: Y moves the ring to the search field. (manual: needs control play.library.search, control play.library.tile, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "42b8a8cefa55350c358a3295a6b025a9a83cd2660ce050fba1155529633fb9ec"
         },
         {
           "id": "lib.search-a-opens-keyboard",
@@ -613,7 +660,8 @@
           "precondition": "by hand: the ring is on play.library.search",
           "expect": "LIB-05: A opens the shared on-screen keyboard (ADR-0262) below the field; the sheet stays open. (manual: needs control play.keyboard, control play.library.search, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "8c7cf085aa9edf2cce86199013ca5ccc2d1263dde7e38c5204b09a8a1f348588"
         },
         {
           "id": "lib.search-type-filters",
@@ -621,7 +669,8 @@
           "precondition": "by hand: play.keyboard is visible",
           "expect": "LIB-05: typing `zel` (or a prefix of an owned title) with D-pad + A filters the grid per letter; OK commits and focus returns to the field; an empty result shows \"No games match\" with a way to clear it. (manual: needs control play.keyboard, which mesen-gui does not advertise)",
           "severity": "minor",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "5e5361bc55ddb6a467c9fd98b1fe9afa9d2fe1f31eb782ef9e26c234a299a27b"
         },
         {
           "id": "lib.search-b-cancels",
@@ -629,7 +678,8 @@
           "precondition": "by hand: play.keyboard is visible",
           "expect": "LIB-05: B on the open keyboard closes it, focus returns to the search field and the sheet does not close. The text revert on a second Y, A, B is judged by eye (next step). (manual: needs control play.library.search, control play.keyboard, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "4ec56fa6977a37f2d0594033d5e64cd049b410bdac4e308a2142a23a335edc84"
         },
         {
           "id": "lib.search-second-cancel-reverts",
@@ -637,7 +687,8 @@
           "precondition": "by hand: the ring is on play.library.search",
           "expect": "LIB-05: after typing, a second Y, A, B returns the field to its previous text; focus returns to it and the sheet does not close (typing is manual, so the text revert is manual). (manual: needs control play.library.search, which mesen-gui does not advertise)",
           "severity": "minor",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "f17980fa8a5c82846507039ec735b3e4160083e6c358cd59c6a6e28fd4fe3f5c"
         },
         {
           "id": "lib.search-sheet-stays",
@@ -645,7 +696,8 @@
           "precondition": "by hand: the ring is on play.library.search",
           "expect": "LIB-05: the library sheet is still open under the cancelled keyboard. (manual: needs control play.library.search, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "56e5696b408ee531625583aa53de187d4bf52002463dc9362b6b9aaaa08e6d9f"
         },
         {
           "id": "lib.search-right-folders",
@@ -653,7 +705,8 @@
           "precondition": "by hand: the ring is on play.library.search",
           "expect": "LIB-06: Right from the search field reaches Library folders. (manual: needs control play.library.folders, control play.library.search, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "226cae7527c95f802d98670b2c2acf575ac318fce77a3c14a29cc550e83cbbc0"
         },
         {
           "id": "lib.folders-open",
@@ -661,7 +714,8 @@
           "precondition": "by hand: the ring is on play.library.folders",
           "expect": "LIB-06: A on Library folders opens the pad-reachable folder list (ADR-0264 Decision 8). (manual: needs control play.library.folders, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "8bc6cfa04ec6a59ac8f7ed63212f7a7f062c5b93a8ace9df413f51a973f0e506"
         },
         {
           "id": "lib.folders-no-native-dialog",
@@ -669,7 +723,8 @@
           "precondition": "by hand: the screen is play.library.folders",
           "expect": "LIB-06: no native OS dialog is open over the folder list. (manual: needs control play.library.folders, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "6e0ee9dd11edec965449eedd792426f50e99fbc87ce4f71a1ecc88c13d2fd527"
         },
         {
           "id": "lib.folders-add-remove",
@@ -677,7 +732,8 @@
           "precondition": "by hand: the screen is play.library.folders",
           "expect": "LIB-06: add a folder, remove it, add it back by pad; the header count updates. (manual: needs control play.library.folders, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "3827ad9089bc5097803ecb96aeb3b8c6b134870660376e8d205929e9dd1b0366"
         },
         {
           "id": "lib.folders-b-closes",
@@ -685,7 +741,8 @@
           "precondition": "by hand: the screen is play.library.folders",
           "expect": "LIB-06: B closes the folder list back to the library. (manual: needs control play.library.folders, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "ea696394abcd5a0a4a7ea434dfdaa6984227f73b661e0446b835058d3f74c4ae"
         },
         {
           "id": "lib.folders-right-browse",
@@ -693,7 +750,8 @@
           "precondition": "by hand: the ring is on play.library.folders",
           "expect": "LIB-07: Right from Library folders reaches Browse a file. (manual: needs control play.library.browse, control play.library.folders, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "9ca90b2d607c37dafc004a8072d3404c96642ae01eacfc5096d3a3b6bd768fb1"
         },
         {
           "id": "lib.browse-open",
@@ -701,7 +759,8 @@
           "precondition": "by hand: the ring is on play.library.browse",
           "expect": "LIB-07: A on Browse a file opens the folder browser (ADR-0256 Decision 9). (manual: needs control play.library.browse, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "bae834195cbd8cbb19f6251a5e70f72f987e557750880d5c40039cd7bea47037"
         },
         {
           "id": "lib.browse-walk",
@@ -709,7 +768,8 @@
           "precondition": "by hand: the screen is play.library.browse",
           "expect": "LIB-07: Confirm descends, B ascends; the action row leads the list but the ring never lands on it first (first-row guard); Make this my games folder inside a non-empty folder. (manual: needs control play.library.browse, which mesen-gui does not advertise)",
           "severity": "minor",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "f408f7db406f218edbed35c12fa1f2964d589d00c1834fe2585813254e52fcda"
         },
         {
           "id": "lib.browse-b-root-dismisses",
@@ -717,7 +777,8 @@
           "precondition": "by hand: the screen is play.library.browse",
           "expect": "LIB-07: B on the root dismisses with no load, back to the library. (manual: needs control play.library.browse, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "9ed147980ac4db56e143511045474a22cf30706cab881d518b522d74e4abe998"
         },
         {
           "id": "lib.box-art",
@@ -725,7 +786,8 @@
           "precondition": "by hand: the screen is play.library",
           "expect": "LIB-08: box art for known ROMs (lazy, visible tiles only), a generic console-colored cover carrying the title for unknown ones, nothing waits on the network; a visual check, record only if it blocks focus or scrolling.",
           "severity": "minor",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "df8a93a2d204b1990872f0c80a13c7cc12b2614820b9c71424eda0cc4a618cf1"
         },
         {
           "id": "lib.browse-down-grid",
@@ -733,7 +795,8 @@
           "precondition": "by hand: the ring is on play.library.browse",
           "expect": "LIB-09: Down from the header returns to the grid (LIB-09 starts from the grid). (manual: needs control play.library.tile, control play.library.browse, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "855c6a53c7e0836078586345f12d3a7948f8a11d1440cd500a0c25df90b93a6a"
         },
         {
           "id": "lib.back-to-home",
@@ -758,7 +821,8 @@
           },
           "expect": "LIB-09: B from the grid goes back to Home.",
           "severity": "major",
-          "mode": "automated"
+          "mode": "automated",
+          "content_hash": "c38a1f3f3ded399a1a375540bfd80b9f4d99daabea163436e41f2c880be3b524"
         },
         {
           "id": "lib.back-ring-on-opener",
@@ -776,7 +840,8 @@
           },
           "expect": "LIB-09: the ring is on the control that opened the sheet, Open a ROM.",
           "severity": "major",
-          "mode": "automated"
+          "mode": "automated",
+          "content_hash": "37d26c06a1328d8bc1e85c541646f739ff47fd11753475e923f84a1fa0377e77"
         }
       ],
       "teardown": []
@@ -790,7 +855,8 @@
           "precondition": "fixture rom and fixture settings.profiles.history-no-favorite",
           "expect": "The library sheet is open with a tile focused (the FAV-01 precondition). (manual: needs action nav.goal, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "6501aee1fd5112a899daa0d177304f7fc914300342fff37f7bb3b25ef3fcd343"
         }
       ],
       "steps": [
@@ -800,7 +866,8 @@
           "precondition": "a tile focused in the library",
           "expect": "FAV-01: X on the focused tile keeps the ring on the grid and toggles Favorite (ADR-0268). (manual: needs control play.library.tile, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "9befbdddfe4d383c507758d1c4fc9459c0edbeed4a4493ebae6505db7b353760"
         },
         {
           "id": "fav.footer-reads-unfavorite",
@@ -808,7 +875,8 @@
           "precondition": "by hand: the screen is play.library",
           "expect": "FAV-01: the footer's X entry now reads Unfavorite (it read Favorite before).",
           "severity": "minor",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "13ab801849323cab367e48bc1cdd1d1b51ab364d9f0a73bacbf1ccd747fbac09"
         },
         {
           "id": "fav.back-to-home",
@@ -816,7 +884,8 @@
           "precondition": "by hand: the screen is play.library",
           "expect": "FAV-01: B returns to Home. (manual: batch setup fav.reach-library is manual, so nothing established the state this step asserts)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "da805aadc1f70f16e1cc4066e8332be665471a4c1b46652659ae28869753f94c"
         },
         {
           "id": "fav.home-shelf-shown",
@@ -824,7 +893,8 @@
           "precondition": "by hand: the screen is play.home",
           "expect": "FAV-01: Home shows a Favorites shelf between Continue and Recent, newest favorite first. (manual: needs control play.home.favorites, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "cd46b2db580aa1b4a183f665dd81066754180dc804330a7e28979693fe1f6afc"
         },
         {
           "id": "fav.library-again",
@@ -832,7 +902,8 @@
           "precondition": "by hand: the ring is on play.home.open-rom",
           "expect": "FAV-01: A on Open a ROM returns to the library. (manual: batch setup fav.reach-library is manual, so nothing established the state this step asserts)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "c8a4610b1309ac4100a8cba0e6d775a1d3f34a19478983e355126cff6b36e97a"
         },
         {
           "id": "fav.x-unfavorites-tile",
@@ -840,7 +911,8 @@
           "precondition": "a tile focused in the library",
           "expect": "FAV-01: X on the same tile unfavorites it; the ring stays on the grid. (manual: needs control play.library.tile, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "edf1bd5c3f91954d7cac03e8a5e4e7347aca25ee04997986ac6f1749c166b065"
         },
         {
           "id": "fav.back-home-again",
@@ -848,7 +920,8 @@
           "precondition": "by hand: the screen is play.library",
           "expect": "FAV-01: B returns to Home. (manual: batch setup fav.reach-library is manual, so nothing established the state this step asserts)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "da805aadc1f70f16e1cc4066e8332be665471a4c1b46652659ae28869753f94c"
         },
         {
           "id": "fav.shelf-hides-when-empty",
@@ -856,7 +929,8 @@
           "precondition": "by hand: the screen is play.home",
           "expect": "FAV-01: with no favorite left the Favorites shelf is hidden.",
           "severity": "minor",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "eac2816d98bc187e1fb8cac593dc708b29e0c7ba1779c44c7bf20d29e7fe319d"
         }
       ],
       "teardown": []
@@ -870,7 +944,8 @@
           "precondition": "fixture rom, fixture rom-second and fixture settings.profiles.history-two-favorites",
           "expect": "Home W-P2 with a Favorites shelf and the ring on a favorite tile (the FAV-02 precondition). (manual: needs action nav.goal, control play.home.favorite, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "9b88660595f84540153a162e198d76c7ea5cc6b2b25327c482aafc1eb7d32529"
         }
       ],
       "steps": [
@@ -880,7 +955,8 @@
           "precondition": "by hand: the ring is on play.home.favorite",
           "expect": "FAV-02: X acts on the focused cover; on a Home favorite tile it toggles that game, the ring stays on the shelf and the Favorites shelf stays visible (two favorites, so the shelf survives the toggle; ADR-0268 Decision 4). (manual: needs control play.home.favorites, control play.home.favorite, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "35991dbd1aee1d101c08aa55cd93c29967533c5c9b8f68a78e7aebe2334df5e6"
         },
         {
           "id": "fav2.focus-stays-on-favorite-tile",
@@ -888,7 +964,8 @@
           "precondition": "by hand: play.home.favorites is visible",
           "expect": "FAV-02: after X the ring is still on a Home favorite tile (the shelf remains because a second favorite is left). (manual: needs control play.home.favorite, control play.home.favorites, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "8178c8493d3325480ccc36bc1b164ce01eae97f717d16dea147df3b2d8403728"
         },
         {
           "id": "fav2.up-to-continue",
@@ -896,7 +973,8 @@
           "precondition": "by hand: the ring is on play.home.favorite",
           "expect": "FAV-02: Up reaches the Continue card (focus order Continue -> Favorites -> Recent, ADR-0268 Decision 6). (manual: needs control play.home.favorite, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "2577b1650352877b211be2b55a1b92713412f5d55fd51e3dbf2b4c534baabe8b"
         },
         {
           "id": "fav2.x-on-continue",
@@ -904,7 +982,8 @@
           "precondition": "by hand: the ring is on play.home.continue",
           "expect": "FAV-02: X on the Continue card favorites the Continue game (ADR-0268 Decision 1); the ring stays on Continue. (manual: batch setup fav2.reach-favorite-tile is manual, so nothing established the state this step asserts)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "c0b242c050550b4fd2499ba4920868bbbfc822a91ec7eac6f837b1c31b2581cf"
         },
         {
           "id": "fav2.down-favorite",
@@ -912,7 +991,8 @@
           "precondition": "by hand: the ring is on play.home.continue",
           "expect": "FAV-02: Down returns to the Favorites shelf. (manual: needs control play.home.favorite, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "6703d86475fdbceb1ae624e3ac6dc76d17a5480b67246b159e7b05f81054d69f"
         },
         {
           "id": "fav2.down-recent",
@@ -920,7 +1000,8 @@
           "precondition": "by hand: the ring is on play.home.favorite",
           "expect": "FAV-02: Down reaches the Recent grid. (manual: needs control play.home.recent, control play.home.favorite, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "abb3c1c51fabce4befebec897cf0fadd53cd0c440580adf7deb44016b885950f"
         },
         {
           "id": "fav2.down-open-rom",
@@ -928,7 +1009,8 @@
           "precondition": "by hand: the ring is on play.home.recent",
           "expect": "FAV-02: Down reaches Open a ROM. (manual: needs control play.home.recent, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "ec57fb55ee33643deb4cb12fbb93d01e9117ba912639f16705418e9377139d97"
         },
         {
           "id": "fav2.x-elsewhere-does-nothing",
@@ -936,7 +1018,8 @@
           "precondition": "by hand: the ring is on play.home.open-rom",
           "expect": "FAV-02: X on Open a ROM does nothing; the ring stays put. (manual: batch setup fav2.reach-favorite-tile is manual, so nothing established the state this step asserts)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "ee4653887f96da17145fabc8f33d5e3081c5d95ed719800fd2d96fbe7e08d903"
         }
       ],
       "teardown": []
@@ -950,7 +1033,8 @@
           "precondition": "fixture rom and fixture settings.profiles.fresh",
           "expect": "The library sheet is open with a tile focused (the GAME-01 precondition). (manual: needs action nav.goal, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "d91a843088b3421bb4482a2592d360b0c2977ec9d40f2c18397e9bc0a882d278"
         }
       ],
       "steps": [
@@ -960,7 +1044,8 @@
           "precondition": "a tile focused in the library",
           "expect": "GAME-01: A on a tile closes the sheet and the game runs. (manual: needs control play.game, control play.library.tile, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "bcd75aafe3c36d31eb9b3f9b3933f4cf4872c80110b45dfcfcf4b5784d36cc3b"
         },
         {
           "id": "game.load-card-and-toast",
@@ -968,7 +1053,8 @@
           "precondition": "by hand: the screen is play.game",
           "expect": "GAME-01: a load card with a moving indicator shows; for the first three starts the entry toast ends with the menu hint naming the pad's chord, e.g. \"· Select+Start for the menu\" (ADR-0251 §2), not \"Esc\". (manual: needs control play.game, which mesen-gui does not advertise)",
           "severity": "minor",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "84914c9972483eff94f63139b2c8a4419175892bca23ce660a5d0359bc29b97c"
         },
         {
           "id": "game.pad-is-the-consoles",
@@ -976,7 +1062,8 @@
           "precondition": "by hand: the screen is play.game",
           "expect": "GAME-02: playing 10 s with the D-pad leaves the game running; the pad is the console's (ADR-0256 Decision 1). (manual: needs control play.game, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "4f99b092f2b95f58b5d9182a0910849aece4472485678bbb7d39296e988e391e"
         },
         {
           "id": "game.buttons-are-the-consoles",
@@ -984,7 +1071,8 @@
           "precondition": "by hand: the screen is play.game",
           "expect": "GAME-02: the face buttons reach the console too; pressing A and B leaves the game running and nothing in the GUI reacts. (manual: needs control play.game, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "df4e29e8c0575e2a5fa4ea0aca348ae60eb29f2b0c5b382720049c616bfb3139"
         },
         {
           "id": "game.no-menu-feedback",
@@ -992,7 +1080,8 @@
           "precondition": "by hand: the screen is play.game",
           "expect": "GAME-02: no menu sound, no focus ring, no haptic tick, nothing in the GUI reacts; the status bar and lamps are hidden (ADR-0261 Consequences). (manual: needs control play.game, which mesen-gui does not advertise)",
           "severity": "minor",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "cb35ef0934f20eeed7ac09adff51ee3ea2d0aa80bb05246489c5dfdc4934009f"
         }
       ],
       "teardown": []
@@ -1006,7 +1095,8 @@
           "precondition": "fixture rom-zip (a library holding only that file) and fixture settings.profiles.fresh",
           "expect": "The library sheet is open with the multi-ROM archive tile focused (fixture rom-zip). (manual: needs action nav.goal, control play.library.tile, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "5049aafe702a8ce180cb58f8ca438f910baba8bd7d5730cf599256711e93df1d"
         }
       ],
       "steps": [
@@ -1016,7 +1106,8 @@
           "precondition": "a tile focused in the library (fixture rom-zip)",
           "expect": "GAME-03: A on the archive tile opens the \"which game\" sheet (PlaySelectRomSheet). (manual: needs control play.select-rom, control play.library.tile, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "d55e072f3c00a3087d2bfef745ceda0b10e872a4e6c02a9e94e1a9222180a026"
         },
         {
           "id": "game-archive.b-cancels-back",
@@ -1024,7 +1115,8 @@
           "precondition": "by hand: the screen is play.select-rom",
           "expect": "GAME-03: B cancels back to the library. (manual: needs control play.select-rom, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "4ef6ba3a23f9a21080dbbaf8fdd13f90c3656250e474bde2bf66c179cff6b813"
         },
         {
           "id": "game-archive.a-reopens",
@@ -1032,7 +1124,8 @@
           "precondition": "a tile focused in the library",
           "expect": "GAME-03: A on the archive tile opens the sheet again. (manual: needs control play.select-rom, control play.library.tile, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "b582c93a02d1fc366d037f901e4b5795ccfbb87d6b3142fe1b5c3761f29805fd"
         },
         {
           "id": "game-archive.a-picks-a-game",
@@ -1040,7 +1133,8 @@
           "precondition": "by hand: the screen is play.select-rom",
           "expect": "GAME-03: D-pad + A picks a game and it loads. (manual: needs control play.game, control play.select-rom, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "9b30c820872519623882a17bf950a5b9dadb638a7258687346bec0787b5ddddf"
         }
       ],
       "teardown": []
@@ -1054,7 +1148,8 @@
           "precondition": "fixture rom-fds (a library holding only that file) and fixture settings.profiles.fresh",
           "expect": "The library sheet is open with the FDS tile focused (fixture rom-fds, disksys.rom not installed). (manual: needs action nav.goal, control play.library.tile, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "463eef952061a953b78cc19982aacd1e3617867a7f38f74dd73c2c7ac678202e"
         }
       ],
       "steps": [
@@ -1064,7 +1159,8 @@
           "precondition": "a tile focused in the library (fixture rom-fds)",
           "expect": "GAME-04: A on the FDS image shows the BIOS sheet (W-P13). (manual: needs control play.bios, control play.library.tile, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "72751e424d7e9a8f9e1a670838d8b17427539ac70225edb21058413144495732"
         },
         {
           "id": "game-bios.choose-file-native",
@@ -1072,7 +1168,8 @@
           "precondition": "by hand: the screen is play.bios",
           "expect": "KNOWN GAP: GAME-04: Choose File... on the BIOS sheet is a native dialog (ADR-0256 Decision 9 refusals). Expected FAIL; record that Cancel still backs out. (manual: needs control play.bios, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "4a88036384cc5944f9f1735e432297cf3afd6706cdc886c86e2c545c957042bf"
         },
         {
           "id": "game-bios.b-cancels",
@@ -1080,7 +1177,8 @@
           "precondition": "by hand: the screen is play.bios",
           "expect": "GAME-04: B/Cancel backs out cleanly to the library. (manual: needs control play.bios, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "cb705e4d0437d6655d2199c869250ef8bad4787694383d8bdf6f30ed7ffa5ea6"
         },
         {
           "id": "game-bios.status-names-bios",
@@ -1088,7 +1186,8 @@
           "precondition": "by hand: the screen is play.library",
           "expect": "GAME-04: the status line names the missing BIOS.",
           "severity": "minor",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "3ea6f55ba754a29de3f982ef38f731032d9c0b4a8b0be43e6f7b108aa857a6e6"
         }
       ],
       "teardown": []
@@ -1102,7 +1201,8 @@
           "precondition": "fixture settings.profiles.fresh",
           "expect": "Home W-P2 is on screen, the precondition of the dialogs sweep. (manual: needs action nav.goal, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "d253640e0fc20a06000044d84a370891798c33b53a052ff2543ff94bebf42e86"
         }
       ],
       "teardown": [],
@@ -1113,7 +1213,8 @@
           "precondition": "by hand: the screen is play.home",
           "expect": "Jev walks Home by pad toward screens it has not visited; every dialog it reaches has a pad move that leaves it (no trap), within 60 moves. (manual: needs action nav.sweep, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "96b1e3244b54a2a64e96be84bb97485d24981d5b292fa1aedb53e6d1b5f44781"
         }
       ]
     },
@@ -1126,7 +1227,8 @@
           "precondition": "fixture rom, fixture pack and fixture settings.profiles.fresh",
           "expect": "A game is running (the P4-01 precondition). (manual: needs action nav.goal, control play.game, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "dcd3b61c61ea5e03393be55882f59430b739ca14da27031b3a6e1fd204a7e079"
         }
       ],
       "teardown": [],
@@ -1137,7 +1239,8 @@
           "precondition": "by hand: the screen is play.game",
           "expect": "P4-01: the chord opens W-P4 with the game paused behind it. (manual: needs action pad.chord, control play.pause, control play.game, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "3577c3b8704d5885ad989f6f65ec43f2a540e44491374d2729f529212f5ac45c"
         },
         {
           "id": "pause.resume-focused",
@@ -1145,7 +1248,8 @@
           "precondition": "by hand: the screen is play.pause",
           "expect": "P4-01: Resume is the focused control. (manual: needs control play.pause.resume, control play.pause, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "600971ad2c0e6775e309cbe22eef6cd14b71d4d62bda5f4dab62214b6355ce40"
         },
         {
           "id": "pause.row-resume",
@@ -1153,7 +1257,8 @@
           "precondition": "by hand: the screen is play.pause",
           "expect": "P4-01: the control resume is present (seven in all: Resume, Save states, Pack, Enhancements, Cheats, Settings, Quit game). (manual: needs control play.pause.resume, control play.pause, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "ef77bc18eb9f58cf5c2f1484b28c982a953bef4cbda743a37a653fd78929e835"
         },
         {
           "id": "pause.row-save-states",
@@ -1161,7 +1266,8 @@
           "precondition": "by hand: the screen is play.pause",
           "expect": "P4-01: the control save-states is present (seven in all: Resume, Save states, Pack, Enhancements, Cheats, Settings, Quit game). (manual: needs control play.pause.save-states, control play.pause, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "f3fb9ce218d10b3b25b3c4c5d8faa20203ef1371cab1419f33ae1b762e23d3b1"
         },
         {
           "id": "pause.row-pack",
@@ -1169,7 +1275,8 @@
           "precondition": "by hand: the screen is play.pause",
           "expect": "P4-01: the control pack is present (seven in all: Resume, Save states, Pack, Enhancements, Cheats, Settings, Quit game). (manual: needs control play.pause.pack, control play.pause, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "c130fc306eb321df41e86b392ab95389fccc5bb694e6204ef5aa8e1632bf30f4"
         },
         {
           "id": "pause.row-enhancements",
@@ -1177,7 +1284,8 @@
           "precondition": "by hand: the screen is play.pause",
           "expect": "P4-01: the control enhancements is present (seven in all: Resume, Save states, Pack, Enhancements, Cheats, Settings, Quit game). (manual: needs control play.pause.enhancements, control play.pause, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "d63d6c6ffebd4bc6f244d75950998318623a546e63790955cc97e12d3fe2cac5"
         },
         {
           "id": "pause.row-cheats",
@@ -1185,7 +1293,8 @@
           "precondition": "by hand: the screen is play.pause",
           "expect": "P4-01: the control cheats is present (seven in all: Resume, Save states, Pack, Enhancements, Cheats, Settings, Quit game). (manual: needs control play.pause.cheats, control play.pause, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "896f746cd85f5d0e4f688916ed2b5a2bfd7d6ac9c70fa9dd25fdc970698fe2b6"
         },
         {
           "id": "pause.row-settings",
@@ -1193,7 +1302,8 @@
           "precondition": "by hand: the screen is play.pause",
           "expect": "P4-01: the control settings is present (seven in all: Resume, Save states, Pack, Enhancements, Cheats, Settings, Quit game). (manual: needs control play.pause.settings, control play.pause, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "f5aac8c8742153067bd6b3695c8ff70588ad2a913bed343fee95b4a14cf73295"
         },
         {
           "id": "pause.row-quit-game",
@@ -1201,7 +1311,8 @@
           "precondition": "by hand: the screen is play.pause",
           "expect": "P4-01: the control quit-game is present (seven in all: Resume, Save states, Pack, Enhancements, Cheats, Settings, Quit game). (manual: needs control play.pause.quit-game, control play.pause, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "c939ab4399311383dc7ed3943b5e2590c87b950fa70b8c3219f6b025113beea7"
         },
         {
           "id": "pause.footer-words",
@@ -1209,7 +1320,8 @@
           "precondition": "by hand: the screen is play.pause",
           "expect": "P4-01: the footer names \"B to resume\" in words for the pad in hand (ADR-0256 Decision 6: \"Circle\", never a glyph); the hook does not read footer text. (manual: needs control play.pause, which mesen-gui does not advertise)",
           "severity": "minor",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "3e6140d9bd8ccce25e5195800a34fc72c7364cb139b4afb09a34463ab41cdda3"
         },
         {
           "id": "pause.frozen-frame-bar-lamps",
@@ -1217,7 +1329,8 @@
           "precondition": "by hand: the screen is play.pause",
           "expect": "P4-01: a frozen frame shows behind the overlay and the status bar and lamps are visible; judged by eye. (manual: needs control play.pause, which mesen-gui does not advertise)",
           "severity": "minor",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "d748081cb32f7e1eca25c5a5d17b30c4161afb7319dfcd9871893e3a73f09e06"
         },
         {
           "id": "pause.chord-again-resumes",
@@ -1225,7 +1338,8 @@
           "precondition": "by hand: the screen is play.pause",
           "expect": "P4-02: the chord again closes W-P4 and resumes the game (ADR-0241 Esc order: game, W-P4, resume). (manual: needs action pad.chord, control play.game, control play.pause, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "f34c583b29cff9649bf56e75f6f21b3acddf588f4325e180e4c5b8a3bac9db43"
         },
         {
           "id": "pause.reopen-for-b",
@@ -1233,7 +1347,8 @@
           "precondition": "by hand: the screen is play.game",
           "expect": "P4-02: the chord reopens W-P4 (setup for the B half). (manual: needs action pad.chord, control play.pause, control play.game, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "ecacbe7994d4c58cf1d621990fb0d069054c28ac1b2f0c5add7236b53958b26c"
         },
         {
           "id": "pause.b-resumes",
@@ -1241,7 +1356,8 @@
           "precondition": "by hand: the screen is play.pause",
           "expect": "P4-02: B closes W-P4 and resumes the game. (manual: needs control play.game, control play.pause, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "2baa8f5a436adad5eac305a6eb09daeee097a381118eea25137e82f3b25c80ec"
         },
         {
           "id": "pause.reopen-for-rows",
@@ -1249,7 +1365,8 @@
           "precondition": "by hand: the screen is play.game",
           "expect": "P4-03: the chord reopens W-P4 with Resume focused (P4-01 precondition). (manual: needs action pad.chord, control play.pause, control play.game, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "6f449c82a0ba486111b812dd803391ba2986661014061e05c3f6856e0e2d7a0a"
         },
         {
           "id": "pause.down-to-save-states",
@@ -1257,7 +1374,8 @@
           "precondition": "by hand: the ring is on play.pause.resume",
           "expect": "P4-03: D-pad Down from resume reaches save-states; the ring is on it. (manual: needs control play.pause.save-states, control play.pause.resume, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "d189150dfecb5a43191060581b768979da34444217ec8c9c4f51e4d2ac6e7050"
         },
         {
           "id": "pause.down-to-pack",
@@ -1265,7 +1383,8 @@
           "precondition": "by hand: the ring is on play.pause.save-states",
           "expect": "P4-03: D-pad Down from save-states reaches pack; the ring is on it. (manual: needs control play.pause.pack, control play.pause.save-states, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "b1738411c241a4137ad6b1791fe49558324efdc716c4fe3ecc62c77140fb8694"
         },
         {
           "id": "pause.down-to-enhancements",
@@ -1273,7 +1392,8 @@
           "precondition": "by hand: the ring is on play.pause.pack",
           "expect": "P4-03: D-pad Down from pack reaches enhancements; the ring is on it. (manual: needs control play.pause.enhancements, control play.pause.pack, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "6700e05c043d5a20f9d53fdf0f9a839af77968309a0f7edab7c0c1f23428ba54"
         },
         {
           "id": "pause.down-to-cheats",
@@ -1281,7 +1401,8 @@
           "precondition": "by hand: the ring is on play.pause.enhancements",
           "expect": "P4-03: D-pad Down from enhancements reaches cheats; the ring is on it. (manual: needs control play.pause.cheats, control play.pause.enhancements, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "45dc5da590f0de6e00b9257bf48ea536c827e872da104101d75cf7196177bdb5"
         },
         {
           "id": "pause.down-to-settings",
@@ -1289,7 +1410,8 @@
           "precondition": "by hand: the ring is on play.pause.cheats",
           "expect": "P4-03: D-pad Down from cheats reaches settings; the ring is on it. (manual: needs control play.pause.settings, control play.pause.cheats, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "c24e7eac19c4de1399fcef4367ebb4c3d2ad6fd441d48778700dc1c0319ab447"
         },
         {
           "id": "pause.down-to-quit-game",
@@ -1297,7 +1419,8 @@
           "precondition": "by hand: the ring is on play.pause.settings",
           "expect": "P4-03: D-pad Down from settings reaches quit-game; the ring is on it. (manual: needs control play.pause.quit-game, control play.pause.settings, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "0c24a961396466e2afe1daed69ed38900e76954b57ebf9c0809a5e46c3f6ed9b"
         },
         {
           "id": "pause.down-no-wrap",
@@ -1305,7 +1428,8 @@
           "precondition": "by hand: the ring is on play.pause.quit-game",
           "expect": "P4-03: Down on the last row does not wrap and is not a dead end that moves the ring away. (manual: needs control play.pause.quit-game, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "b86393f8ec4d082224cb4badaa04a3d68f562a8e06face90f75e3f6fcaba2bb3"
         },
         {
           "id": "pause.left-contained",
@@ -1313,7 +1437,8 @@
           "precondition": "by hand: the ring is on play.pause.quit-game",
           "expect": "P4-03: Left keeps focus on the last row, no escape from W-P4. (manual: needs control play.pause.quit-game, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "64435e199190f1fbca7ea56306615be8a0efa3cd53115785ef33e4a52cb823bc"
         },
         {
           "id": "pause.right-contained",
@@ -1321,7 +1446,8 @@
           "precondition": "by hand: the ring is on play.pause.quit-game",
           "expect": "P4-03: Right keeps focus on the last row, no escape from W-P4. (manual: needs control play.pause.quit-game, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "0e606ace133f21e3351440bd5b08e01c7fd8d402f46a5cca4084616d68b82bbe"
         },
         {
           "id": "pause.up-to-settings",
@@ -1329,7 +1455,8 @@
           "precondition": "by hand: the ring is on play.pause.quit-game",
           "expect": "P4-03: D-pad Up from quit-game reaches settings. (manual: needs control play.pause.settings, control play.pause.quit-game, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "a49fd9ffda40c1b4de675c4ea08391e25ce887c3ea1922cd4c7a48ceb6a80fa1"
         },
         {
           "id": "pause.up-to-cheats",
@@ -1337,7 +1464,8 @@
           "precondition": "by hand: the ring is on play.pause.settings",
           "expect": "P4-03: D-pad Up from settings reaches cheats. (manual: needs control play.pause.cheats, control play.pause.settings, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "bafb22894a129b753fb0a46967823b00a73f84fe453acee774e2b7a6d09b20ef"
         },
         {
           "id": "pause.up-to-enhancements",
@@ -1345,7 +1473,8 @@
           "precondition": "by hand: the ring is on play.pause.cheats",
           "expect": "P4-03: D-pad Up from cheats reaches enhancements. (manual: needs control play.pause.enhancements, control play.pause.cheats, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "bda29b8ce03c58c08abf408078c6d9c526f49229a05cba98a35857137fb58300"
         },
         {
           "id": "pause.up-to-pack",
@@ -1353,7 +1482,8 @@
           "precondition": "by hand: the ring is on play.pause.enhancements",
           "expect": "P4-03: D-pad Up from enhancements reaches pack. (manual: needs control play.pause.pack, control play.pause.enhancements, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "60e806c374445b8643023d072f2ca0f32ba70bc5e655c0d9b3015d21323ff796"
         },
         {
           "id": "pause.up-to-save-states",
@@ -1361,7 +1491,8 @@
           "precondition": "by hand: the ring is on play.pause.pack",
           "expect": "P4-03: D-pad Up from pack reaches save-states. (manual: needs control play.pause.save-states, control play.pause.pack, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "d6092c1fe75b18945dbc8dcb9b94cddb7b1860b5ce0b0dec70d133f8bb61b430"
         },
         {
           "id": "pause.up-to-resume",
@@ -1369,7 +1500,8 @@
           "precondition": "by hand: the ring is on play.pause.save-states",
           "expect": "P4-03: D-pad Up from save-states reaches resume. (manual: needs control play.pause.resume, control play.pause.save-states, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "a107f1df10f9b2170b1bcd70fb05eedc8847af867ca4e3841b7a5ac073e2a0a2"
         },
         {
           "id": "pause.up-no-wrap-header",
@@ -1377,7 +1509,8 @@
           "precondition": "by hand: the ring is on play.pause.resume",
           "expect": "P4-03: Up on Resume stays on Resume: no wrap into the header. (manual: needs control play.pause.resume, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "b588a0bc97ccfd2c6af1726991893bbe9276e009a8772b528c86d271250b9686"
         },
         {
           "id": "pause.ring-visible-each-row",
@@ -1385,7 +1518,8 @@
           "precondition": "by hand: the screen is play.pause",
           "expect": "P4-03: the ring is visible on every row through the walk; judged by eye. (manual: needs control play.pause, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "af3644de51ef21f942b9d743c7de039f1d2939c8587c19fa584fdeffa428b392"
         },
         {
           "id": "pause.footer-follows-pad",
@@ -1393,7 +1527,8 @@
           "precondition": "by hand: the screen is play.pause",
           "expect": "P4-04 (pass 3): switching to the other pad mid-overlay and pressing any direction makes the footer re-read for the pad now in hand (ADR-0256 Decision 6); needs two pads. (manual: needs control play.pause, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "3b6ceacc30e05ead26130ec396ef7bd8b831f83f42110706d5577007d5c19e19"
         },
         {
           "id": "pause.save-states-focus",
@@ -1401,7 +1536,8 @@
           "precondition": "by hand: the screen is play.pause",
           "expect": "P4-05 (setup): focus Save states. (manual: needs action nav.goal, control play.pause.save-states, control play.pause, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "2b5f0dcadba7c6e33506f371b34dc3f0483711b7b0f36d510628bd7cfd080c04"
         },
         {
           "id": "pause.save-states-opens",
@@ -1409,7 +1545,8 @@
           "precondition": "by hand: the ring is on play.pause.save-states",
           "expect": "P4-05: A on Save states opens the Save states sheet. (manual: needs control play.save-states, control play.pause.save-states, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "15e6d3645dec1a3a48e9c745f2279c610d3c73d48831f51cd6337018be2a8fcc"
         },
         {
           "id": "pause.save-states-slot-roundtrip",
@@ -1417,7 +1554,8 @@
           "precondition": "by hand: the screen is play.save-states",
           "expect": "P4-05: walk the slot grid, save to a slot, load it, all with D-pad + A; Shared replays... (if shown) opens and B backs out. (manual: needs control play.save-states, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "ec2b2d9b81f492ec7afa737ff1455e6c5b0a5a70408f4c3729a43ace3400ad8b"
         },
         {
           "id": "pause.save-states-b-to-pause",
@@ -1425,7 +1563,8 @@
           "precondition": "by hand: the screen is play.save-states",
           "expect": "P4-05: B closes back to W-P4, not to the game. (manual: needs control play.pause, control play.save-states, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "b22dfd467c569e33876f030dbf8e7ee299fbcac3f694102b71e8ad7853d96928"
         },
         {
           "id": "pause.pack-focus",
@@ -1433,7 +1572,8 @@
           "precondition": "by hand: the screen is play.pause",
           "expect": "P4-06 (setup): focus Pack. (manual: needs action nav.goal, control play.pause.pack, control play.pause, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "95dd13b78e2d9db22daf9abdcd6252809aa191bcb8ba2cd38f8c92964c87a503"
         },
         {
           "id": "pause.pack-opens",
@@ -1441,7 +1581,8 @@
           "precondition": "the pack row focused in the pause menu (fixture pack)",
           "expect": "P4-06: with one pack, A on Pack opens the pack detail (W-P6). (manual: needs control play.pack, control play.pause.pack, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "193898bfd29aa71a0244ae97882335ebc9c830d766da1179a2a452f45cb221cc"
         },
         {
           "id": "pause.pack-detail-controls",
@@ -1449,7 +1590,8 @@
           "precondition": "by hand: play.pack is visible",
           "expect": "P4-06: with one pack the detail (W-P6) shows Done, Show pack folder, Details. (manual: needs control play.pack, which mesen-gui does not advertise)",
           "severity": "minor",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "68e934e3b300d988529e39e32af8037cfac7c9f52364ca455e316bc44847721a"
         },
         {
           "id": "pause.pack-show-folder-gap",
@@ -1457,7 +1599,8 @@
           "precondition": "by hand: play.pack is visible",
           "expect": "KNOWN GAP (P4-06): Show pack folder is expected FAIL; Finder takes the foreground and the pad cannot bring MesenAI back. PASS only if the pad still drives Play afterwards with no keyboard or mouse. The hook cannot observe the OS foreground. (manual: needs control play.pack, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "c513a7f17a934a6feaad1e134b8bbc4621f2079c226a524d5217d415c6205369"
         },
         {
           "id": "pause.pack-b-to-pause",
@@ -1465,7 +1608,8 @@
           "precondition": "by hand: play.pack is visible",
           "expect": "P4-06: B closes back to W-P4; focus returns to play.pause.pack. (manual: needs control play.pause.pack, control play.pack, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "137aeb457dc84956df6fd2c6bc9c8350160712137fb61de3bb0a6b295e88af5e"
         },
         {
           "id": "pause.enh-focus",
@@ -1473,7 +1617,8 @@
           "precondition": "by hand: the screen is play.pause",
           "expect": "P4-07 (setup): focus Enhancements. (manual: needs action nav.goal, control play.pause.enhancements, control play.pause, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "e8bbf8727d6dd6c380e76dbd22bafc4c108af7e064a41a41b2a35d1e7a731c57"
         },
         {
           "id": "pause.enh-opens",
@@ -1481,7 +1626,8 @@
           "precondition": "by hand: the ring is on play.pause.enhancements",
           "expect": "P4-07: A on Enhancements opens the sheet. (manual: needs control play.enhancements, control play.pause.enhancements, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "d77530d149c0d845c9d39bf4c410d9574fc88ab1fec7112f377fe25c8097e914"
         },
         {
           "id": "pause.enh-toggle-apply",
@@ -1489,7 +1635,8 @@
           "precondition": "by hand: the screen is play.enhancements",
           "expect": "P4-07: a switch toggles by A; the footer label (Done/Apply/Apply & Reload) follows the draft; applying with a reload returns to the game or W-P4 with no mouse. (manual: needs control play.enhancements, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "0668e34a98a303bfe321261a720b0cea854d7eab06e727d251b9527aaf041e4a"
         },
         {
           "id": "pause.enh-b-discards",
@@ -1497,7 +1644,8 @@
           "precondition": "by hand: the screen is play.enhancements",
           "expect": "P4-07: B discards back to W-P4. (manual: needs control play.pause, control play.enhancements, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "fa84d3aa6e46d565a67d55ba8be7e8b810e21407c4d6198a3fb0506e6bb1f884"
         },
         {
           "id": "pause.cheats-focus",
@@ -1505,7 +1653,8 @@
           "precondition": "by hand: the screen is play.pause",
           "expect": "P4-08 (setup): focus Cheats. (manual: needs action nav.goal, control play.pause.cheats, control play.pause, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "1ad9c967aee10fcfb748129c3649fbd52a66c378eeca570fdc9610b46934b331"
         },
         {
           "id": "pause.cheats-opens",
@@ -1513,7 +1662,8 @@
           "precondition": "by hand: the ring is on play.pause.cheats",
           "expect": "P4-08: A on Cheats opens the sheet. (manual: needs control play.cheats, control play.pause.cheats, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "327660e431dc4af52a8d223a20c68988ef35f074ecbd62820c24239483fa5124"
         },
         {
           "id": "pause.cheats-add-focus",
@@ -1521,7 +1671,8 @@
           "precondition": "by hand: the screen is play.cheats",
           "expect": "P4-08 (setup): focus Add a Code. (manual: needs action nav.goal, control play.cheats.add-code, control play.cheats, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "654874fbbbcdc7210a4a5ad82c5f50075ce0a4c42cf59f692667b678f74633cd"
         },
         {
           "id": "pause.cheats-add-keyboard",
@@ -1529,7 +1680,8 @@
           "precondition": "by hand: the ring is on play.cheats.add-code",
           "expect": "P4-08: A on Add a Code opens the on-screen keyboard (code-shaped field, ADR-0262 Decision 2). (manual: needs control play.keyboard, control play.cheats.add-code, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "b5cf3965e4399b50f9239c07a4fe82e02e6cb2452541c525a36b17ba79ea60d2"
         },
         {
           "id": "pause.cheats-code-keyboard-letters",
@@ -1537,7 +1689,8 @@
           "precondition": "by hand: play.keyboard is visible",
           "expect": "P4-08: the code keyboard shows APZLGITYEOXUKSVN (Game Genie letters) first; the description field is free text; commit works. (manual: needs control play.keyboard, which mesen-gui does not advertise)",
           "severity": "minor",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "d819da1b4dd3fafa592e348c1a25a3cd1d876cbf4661890ff94f196f7e3433a0"
         },
         {
           "id": "pause.cheats-field-b-cancels",
@@ -1545,7 +1698,8 @@
           "precondition": "by hand: play.keyboard is visible",
           "expect": "P4-08: B cancels a field without closing the sheet; focus returns to play.cheats.add-code. (manual: needs control play.cheats.add-code, control play.keyboard, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "d61cc08ab2290074dfd18847bebed3952dd78b839303a2b171242af13d6ed672"
         },
         {
           "id": "pause.cheats-api-key-mask",
@@ -1553,7 +1707,8 @@
           "precondition": "by hand: the screen is play.cheats",
           "expect": "P4-08: the API key field (if visible) masks its draft as the bullet character. (manual: needs control play.cheats, which mesen-gui does not advertise)",
           "severity": "minor",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "57271b42e547921526213b73b9bcd92c9edd17288761dfd75dbed3f6eaa44879"
         },
         {
           "id": "pause.cheats-b-to-pause",
@@ -1561,7 +1716,8 @@
           "precondition": "by hand: the screen is play.cheats",
           "expect": "P4-08: B closes the sheet back to W-P4. (manual: needs control play.pause, control play.cheats, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "b676a0ba2296aeb696558f57411d1409beb9125b7c404523bac44529c2dbf323"
         },
         {
           "id": "pause.quit-focus",
@@ -1569,7 +1725,8 @@
           "precondition": "by hand: the screen is play.pause",
           "expect": "P4-09 (setup): focus Quit game. (manual: needs action nav.goal, control play.pause.quit-game, control play.pause, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "7d230897825e63a33ccfc0d0d4637302d5a9c265c262c907ff94a8359441e460"
         },
         {
           "id": "pause.quit-confirm-in-place",
@@ -1577,7 +1734,8 @@
           "precondition": "by hand: the ring is on play.pause.quit-game",
           "expect": "P4-09: A on Quit game shows the confirm in place on W-P4, reachable. (manual: needs control play.pause.quit-confirm, control play.pause.quit-game, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "31f142bd56a09147d51ab6c61512672782e950a2bec7039d60f9f5ad9944fdf9"
         },
         {
           "id": "pause.quit-b-keeps-playing",
@@ -1585,7 +1743,8 @@
           "precondition": "by hand: play.pause.quit-confirm is visible",
           "expect": "P4-09: B on the confirm dismisses it and stays on W-P4 (keep playing); focus returns to play.pause.quit-game. (manual: needs control play.pause.quit-game, control play.pause.quit-confirm, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "a72b16c9c8617fac4f12bedb4c1e72283ed735b4b76ddb06d7e19fc8b7b9618a"
         },
         {
           "id": "pause.quit-reconfirm",
@@ -1593,7 +1752,8 @@
           "precondition": "by hand: the ring is on play.pause.quit-game",
           "expect": "P4-09: A again shows the confirm. (manual: needs control play.pause.quit-confirm, control play.pause.quit-game, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "000bbb2b22d4476ba42c32b1b46227d54cbdf1458b2a8504ee64c424b30fc8c3"
         },
         {
           "id": "pause.quit-confirm-lands-home",
@@ -1601,7 +1761,8 @@
           "precondition": "by hand: play.pause.quit-confirm is visible",
           "expect": "P4-09: confirming powers the game off and lands on Home. (manual: needs control play.pause.quit-confirm, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "0bba2248dbdbb0e668fc5a9d84ff9324d7d634843bcb3dd6e4894d18b6a88758"
         },
         {
           "id": "pause.quit-home-ring",
@@ -1609,7 +1770,8 @@
           "precondition": "by hand: the screen is play.home",
           "expect": "P4-09: the ring is placed on Home's first control. (manual: batch setup pause.reach-game is manual, so nothing established the state this step asserts)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "2258af691b89f47501ba29b4f7bf79d8d5bed93fd2f4afd69b20b03dd7f32c43"
         }
       ]
     },
@@ -1622,7 +1784,8 @@
           "precondition": "fixture rom and fixture settings.profiles.fresh",
           "expect": "W-P4 is open with Settings focused (the SET-01 precondition, from P4-01). (manual: needs action nav.goal, control play.pause.settings, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "4c6415efe4f84b7332c1e9d58053f487943c8f553b4ae752cdbdd671b0d50907"
         }
       ],
       "teardown": [],
@@ -1633,7 +1796,8 @@
           "precondition": "by hand: the ring is on play.pause.settings",
           "expect": "SET-01: A on Settings opens W-P8. (manual: needs control play.settings, control play.pause.settings, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "1665ed82739db19cc7a4890960b9301e7be440ed3042369df16b9a3e2cc1ffc2"
         },
         {
           "id": "settings.tab-display-first",
@@ -1641,7 +1805,8 @@
           "precondition": "by hand: the screen is play.settings",
           "expect": "SET-01: the sheet opens on the Display tab. (manual: needs control play.settings.tab-display, control play.settings, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "a2264b9e5e732241b6b0df04fcd61f07f5dc3fb7ac904e9395b333ba3fff4fc7"
         },
         {
           "id": "settings.display-down-into-page",
@@ -1649,7 +1814,8 @@
           "precondition": "by hand: the ring is on play.settings.tab-display",
           "expect": "SET-01: Down from the display tab enters its page. (manual: needs control play.settings.page, control play.settings.tab-display, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "b272e11841f8fd9c9f3fafe152029c77c6ea57c8e889743d6ae68bc779814b1b"
         },
         {
           "id": "settings.display-done-reachable",
@@ -1657,7 +1823,8 @@
           "precondition": "by hand: the screen is play.settings",
           "expect": "SET-01: Done is reachable on the display page. Premise: held Down repeats at 400 ms then every 100 ms (~17 moves in 40 ticks), the Settings vertical chain does not wrap, and Done is its last row. (manual: needs control play.settings.done, control play.settings, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "c5911ec999f1f1268e37935ac85a0c5d2f4599351893a8df33b58d7da927d204"
         },
         {
           "id": "settings.display-up-page",
@@ -1665,7 +1832,8 @@
           "precondition": "by hand: the ring is on play.settings.done",
           "expect": "SET-01: Up from Done on display goes to the page (no More in Options on this tab). (manual: needs control play.settings.page, control play.settings.done, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "15d31114b1fc6175276432b2eb4665404ec7efc5fbe2cebbfae059d0a22ae7aa"
         },
         {
           "id": "settings.display-back-to-tab",
@@ -1673,7 +1841,8 @@
           "precondition": "by hand: the screen is play.settings",
           "expect": "SET-01 (setup): back to the display tab for the next step. (manual: needs action nav.goal, control play.settings.tab-display, control play.settings, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "cbc3f41a23527ca111450a34349bf4a35994e04d0d0ad7bd8b435beb87d5d82c"
         },
         {
           "id": "settings.tab-right-look",
@@ -1681,7 +1850,8 @@
           "precondition": "by hand: the ring is on play.settings.tab-display",
           "expect": "SET-01: Right on the tab strip reaches look. (manual: needs control play.settings.tab-look, control play.settings.tab-display, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "fa75bbc11898a9243616f122beef73305f7ce64d094e94ec90be279c3befdaf1"
         },
         {
           "id": "settings.tab-left-display",
@@ -1689,7 +1859,8 @@
           "precondition": "by hand: the ring is on play.settings.tab-look",
           "expect": "SET-01: Left on the tab strip goes back to display. (manual: needs control play.settings.tab-display, control play.settings.tab-look, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "25d78073654ec7862ecbd01ef9c72883aea90f6d1dddb4f9a4d134110f9a81ca"
         },
         {
           "id": "settings.tab-right-look-again",
@@ -1697,7 +1868,8 @@
           "precondition": "by hand: the ring is on play.settings.tab-display",
           "expect": "SET-01 (setup): back to the look tab for the next step. (manual: needs control play.settings.tab-look, control play.settings.tab-display, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "6e8ef21808a047893712ea8d5a0c4f916fcbe46002b880e84d9d64d634bdf2eb"
         },
         {
           "id": "settings.look-down-into-page",
@@ -1705,7 +1877,8 @@
           "precondition": "by hand: the ring is on play.settings.tab-look",
           "expect": "SET-01: Down from the look tab enters its page. (manual: needs control play.settings.page, control play.settings.tab-look, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "e2092086a5a2bd597fdedb4d073933e1174a2809643120aa68c8d274761d5edd"
         },
         {
           "id": "settings.look-done-reachable",
@@ -1713,7 +1886,8 @@
           "precondition": "by hand: the screen is play.settings",
           "expect": "SET-01: Done is reachable on the look page. Premise: held Down repeats at 400 ms then every 100 ms (~17 moves in 40 ticks), the Settings vertical chain does not wrap, and Done is its last row. (manual: needs control play.settings.done, control play.settings, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "d4d77003002613a03636746f6e572ae3ab288c9fbf20e3cd4853e8fdac1a6da1"
         },
         {
           "id": "settings.look-up-page",
@@ -1721,7 +1895,8 @@
           "precondition": "by hand: the ring is on play.settings.done",
           "expect": "SET-01: Up from Done on look goes to the page (no More in Options on this tab). (manual: needs control play.settings.page, control play.settings.done, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "2f4d72778dc32c70cba1adf0c5e965c1c81246c8b8cdd303ff45f466991f3250"
         },
         {
           "id": "settings.look-back-to-tab",
@@ -1729,7 +1904,8 @@
           "precondition": "by hand: the screen is play.settings",
           "expect": "SET-01 (setup): back to the look tab for the next step. (manual: needs action nav.goal, control play.settings.tab-look, control play.settings, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "be72362c9ce8df7a719dea0ccdaa962072c1cd66d05c2ab2aeb021c507315be3"
         },
         {
           "id": "settings.tab-right-audio",
@@ -1737,7 +1913,8 @@
           "precondition": "by hand: the ring is on play.settings.tab-look",
           "expect": "SET-01: Right on the tab strip reaches audio. (manual: needs control play.settings.tab-audio, control play.settings.tab-look, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "17fddc4055add01f7cea6bf69679752203e5bc649ae092e7eb5d99da92427ec8"
         },
         {
           "id": "settings.audio-down-into-page",
@@ -1745,7 +1922,8 @@
           "precondition": "by hand: the ring is on play.settings.tab-audio",
           "expect": "SET-01: Down from the audio tab enters its page. (manual: needs control play.settings.page, control play.settings.tab-audio, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "c49025d27aec948ca21f6ea52a3483b5f09dba6e5069b8383e6d8eb9ba7359ab"
         },
         {
           "id": "settings.audio-done-reachable",
@@ -1753,7 +1931,8 @@
           "precondition": "by hand: the screen is play.settings",
           "expect": "SET-01: Done is reachable on the audio page. Premise: held Down repeats at 400 ms then every 100 ms (~17 moves in 40 ticks), the Settings vertical chain does not wrap, and Done is its last row. (manual: needs control play.settings.done, control play.settings, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "14681d59ff90f9479c0cb0d32ed0e2a82b7539d18cfdae7075f2da5e81856405"
         },
         {
           "id": "settings.audio-up-more",
@@ -1761,7 +1940,8 @@
           "precondition": "by hand: the ring is on play.settings.done",
           "expect": "SET-01: Up from Done on audio reaches More in Options. (manual: needs control play.settings.more-in-options, control play.settings.done, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "2c4598b6c99f78f9ef5058183137e8de14b908e99e2c0d39a4eb541537fc5bd7"
         },
         {
           "id": "settings.audio-up-page",
@@ -1769,7 +1949,8 @@
           "precondition": "by hand: the ring is on play.settings.more-in-options",
           "expect": "SET-01: Up again from More in Options reaches the audio page. (manual: needs control play.settings.page, control play.settings.more-in-options, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "61a4f8159e7a96facfee159ed2fb608b39866a6e5dbd95ca22342fc919d9a57e"
         },
         {
           "id": "settings.audio-back-to-tab",
@@ -1777,7 +1958,8 @@
           "precondition": "by hand: the screen is play.settings",
           "expect": "SET-01 (setup): back to the audio tab for the next step. (manual: needs action nav.goal, control play.settings.tab-audio, control play.settings, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "ddc33a9a03299d99f909c36f47e086070132bc7fbdb3e1a6eb4f1e0614040f92"
         },
         {
           "id": "settings.tab-right-controls",
@@ -1785,7 +1967,8 @@
           "precondition": "by hand: the ring is on play.settings.tab-audio",
           "expect": "SET-01: Right on the tab strip reaches controls. (manual: needs control play.settings.tab-controls, control play.settings.tab-audio, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "93e8574337eaa35aee1611226d0991d1f012b9b6552d7c7f62e2b72ab25f74c3"
         },
         {
           "id": "settings.controls-down-into-page",
@@ -1793,7 +1976,8 @@
           "precondition": "by hand: the ring is on play.settings.tab-controls",
           "expect": "SET-01: Down from the controls tab enters its page. (manual: needs control play.settings.page, control play.settings.tab-controls, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "14424f684d2fda65b6aaadcee8d909b3efe028e997f72e7105dc3b72ffb3d1fa"
         },
         {
           "id": "settings.controls-done-reachable",
@@ -1801,7 +1985,8 @@
           "precondition": "by hand: the screen is play.settings",
           "expect": "SET-01: Done is reachable on the controls page. Premise: held Down repeats at 400 ms then every 100 ms (~17 moves in 40 ticks), the Settings vertical chain does not wrap, and Done is its last row. (manual: needs control play.settings.done, control play.settings, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "1ca937b7f3d5da33df98edcd2fdee2b735524f18ea435948b004cdd6c0e17a7d"
         },
         {
           "id": "settings.controls-up-more",
@@ -1809,7 +1994,8 @@
           "precondition": "by hand: the ring is on play.settings.done",
           "expect": "SET-01: Up from Done on controls reaches More in Options. (manual: needs control play.settings.more-in-options, control play.settings.done, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "c5e72c5f0bcd5f0164e9fb77d5d97816ede3f3e8fc198cd2a4b679ec4e14e838"
         },
         {
           "id": "settings.controls-up-page",
@@ -1817,7 +2003,8 @@
           "precondition": "by hand: the ring is on play.settings.more-in-options",
           "expect": "SET-01: Up again from More in Options reaches the controls page. (manual: needs control play.settings.page, control play.settings.more-in-options, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "e637b6003f431cb4dfc11f1ee3d397ff911fc2542feb4931a0981dca31ec6e10"
         },
         {
           "id": "settings.controls-back-to-tab",
@@ -1825,7 +2012,8 @@
           "precondition": "by hand: the screen is play.settings",
           "expect": "SET-01 (setup): back to the controls tab for the next step. (manual: needs action nav.goal, control play.settings.tab-controls, control play.settings, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "61d80c138e1f08c320a4f9fd1cd407040437672b504f551b2fcc789ead633544"
         },
         {
           "id": "settings.tab-right-system",
@@ -1833,7 +2021,8 @@
           "precondition": "by hand: the ring is on play.settings.tab-controls",
           "expect": "SET-01: Right on the tab strip reaches system. (manual: needs control play.settings.tab-system, control play.settings.tab-controls, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "d59e5a6c49188a7154c5689fc7b6a36d722925dd02318a76ee4580fe6049572d"
         },
         {
           "id": "settings.system-down-into-page",
@@ -1841,7 +2030,8 @@
           "precondition": "by hand: the ring is on play.settings.tab-system",
           "expect": "SET-01: Down from the system tab enters its page. (manual: needs control play.settings.page, control play.settings.tab-system, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "a8b1f1fbf5371d8caf6f63f318b2eea31565d7f7fb1e00442fd3ee724091cc87"
         },
         {
           "id": "settings.system-done-reachable",
@@ -1849,7 +2039,8 @@
           "precondition": "by hand: the screen is play.settings",
           "expect": "SET-01: Done is reachable on the system page. Premise: held Down repeats at 400 ms then every 100 ms (~17 moves in 40 ticks), the Settings vertical chain does not wrap, and Done is its last row. (manual: needs control play.settings.done, control play.settings, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "5e05e419ff7a6eab06561fb33738ba5e768f1b9ca7c02f0bea2bc86ded206bd8"
         },
         {
           "id": "settings.system-up-page",
@@ -1857,7 +2048,8 @@
           "precondition": "by hand: the ring is on play.settings.done",
           "expect": "SET-01: Up from Done on system goes to the page (no More in Options on this tab). (manual: needs control play.settings.page, control play.settings.done, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "75a2957d44e1ec3f6abe024a45091a3cf6830d91bfacc059656a1eff199b3e0d"
         },
         {
           "id": "settings.system-back-to-tab",
@@ -1865,7 +2057,8 @@
           "precondition": "by hand: the screen is play.settings",
           "expect": "SET-01 (setup): back to the system tab for the next step. (manual: needs action nav.goal, control play.settings.tab-system, control play.settings, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "16b31166d0f315c6c2a65ad7738ce23d927ec434adac87e7e5dfc94451050524"
         },
         {
           "id": "settings.exit-fullscreen-done-focus",
@@ -1873,7 +2066,8 @@
           "precondition": "by hand: the screen is play.settings",
           "expect": "SET-01 (setup): focus Done. (manual: needs action nav.goal, control play.settings.done, control play.settings, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "91a478a36a1aee4aec1cf97071e9d9322d27e734a651b06460a85feff547a931"
         },
         {
           "id": "settings.exit-fullscreen-left-of-done",
@@ -1881,7 +2075,8 @@
           "precondition": "by hand: the ring is on play.settings.done",
           "expect": "SET-01: Exit full screen is Left of Done, not above it (FS-02). (manual: needs variant window.mode=fullscreen, control play.settings.exit-fullscreen, control play.settings.done, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "3b523f4b98853f753df58b046c09685026eb63bfa7a774e843b861f3dd26cc5d"
         },
         {
           "id": "settings.size-focus",
@@ -1889,7 +2084,8 @@
           "precondition": "by hand: the screen is play.settings",
           "expect": "SET-02 (setup): focus Interface size on the Display tab. (manual: needs action nav.goal, control play.settings.interface-size, control play.settings, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "069733d9bf219cf5522c429579cc66a4cb803e124e00f635ed2b4ecb71e1ac0e"
         },
         {
           "id": "settings.size-right-large",
@@ -1897,7 +2093,8 @@
           "precondition": "by hand: the ring is on play.settings.interface-size",
           "expect": "SET-02: Right steps the value in place to Large; the focus stays on the row. (manual: needs control play.settings.interface-size, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "518ce7c38373630a8e05b4e39382358c5fb3723ab3bf787b4f91a4ef9d168fee"
         },
         {
           "id": "settings.size-right-xlarge",
@@ -1905,7 +2102,8 @@
           "precondition": "by hand: the ring is on play.settings.interface-size",
           "expect": "SET-02: Right steps the value in place to Extra large; the focus stays on the row. (manual: needs control play.settings.interface-size, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "d928ce6fba9aa5291cf862e114b4fb779e6b72b83c7c7e477023caf81cd2bac4"
         },
         {
           "id": "settings.size-xlarge-done",
@@ -1913,7 +2111,8 @@
           "precondition": "by hand: the ring is on play.settings.interface-size",
           "expect": "SET-02: at Extra large Done stays pinned and reachable (ADR-0269 Decision 6). Premise: held Down repeats at 400 ms then every 100 ms (~17 moves in 40 ticks, so this step holds 60 ticks for the taller Extra large chain), the Settings vertical chain does not wrap, and Done is its last row. (manual: needs control play.settings.done, control play.settings.interface-size, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "87e0ccf74cb63ef58821fb4f7af83cb52dec64197e125883932d408564f4ba6d"
         },
         {
           "id": "settings.size-back-to-row",
@@ -1921,7 +2120,8 @@
           "precondition": "by hand: the ring is on play.settings.done",
           "expect": "SET-02 (setup): back to Interface size. (manual: needs action nav.goal, control play.settings.interface-size, control play.settings.done, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "5afa667024e57d14e57a04a56b66a094eb1607fd05cde73b6841bbf226733d52"
         },
         {
           "id": "settings.size-left-standard",
@@ -1929,7 +2129,8 @@
           "precondition": "by hand: the ring is on play.settings.interface-size",
           "expect": "SET-02: Left steps the value back toward Standard in place. (manual: needs control play.settings.interface-size, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "659c65c9b559baf5de95c76fb2c3da62e17bf1f48d4d5167750a364d4876cc24"
         },
         {
           "id": "settings.size-left-standard-2",
@@ -1937,7 +2138,8 @@
           "precondition": "by hand: the ring is on play.settings.interface-size",
           "expect": "SET-02: the second Left reaches Standard; the focus stays on the row. (manual: needs control play.settings.interface-size, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "107164d3439685966990a2299187c49036e0652d06a4b8242a6471fbf315f6d0"
         },
         {
           "id": "settings.size-standard-done",
@@ -1945,7 +2147,8 @@
           "precondition": "by hand: the ring is on play.settings.interface-size",
           "expect": "SET-02: at Standard Done is reachable. Premise: held Down repeats at 400 ms then every 100 ms (~17 moves in 40 ticks), the Settings vertical chain does not wrap, and Done is its last row. (manual: needs control play.settings.done, control play.settings.interface-size, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "78e4619b39001fee560fcf5c19cbe63e35d5b36f4441093b4bfde977c85196f5"
         },
         {
           "id": "settings.size-applies-scrolls",
@@ -1953,7 +2156,8 @@
           "precondition": "by hand: the screen is play.settings",
           "expect": "SET-02: each value applies at once and only Play chrome scales, never the game picture; at Extra large the rows scroll with nothing clipped (guaranteed at 1024x640 and 512x505); record legibility at couch distance per size in the rubric. The hook exposes no values or geometry. (manual: needs control play.settings, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "74442c8423e3b3f9a4d1e179992d1cfdbfb69cfef71435cf7e61b285828a2c4b"
         },
         {
           "id": "settings.menu-sounds-row",
@@ -1961,7 +2165,8 @@
           "precondition": "by hand: the screen is play.settings",
           "expect": "SET-03: Menu sounds is visible when the host audio path exists (ADR-0270, #1126) and hidden otherwise; record which. (manual: needs control play.settings, which mesen-gui does not advertise)",
           "severity": "minor",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "bb0a05bf0c4f787b64430dfca608fa6c89be074c20d097127d396f112e11793c"
         },
         {
           "id": "settings.rumble-focus",
@@ -1969,7 +2174,8 @@
           "precondition": "by hand: the screen is play.settings",
           "expect": "SET-04 (setup): focus the Rumble slider on the Controls tab. (manual: needs action nav.goal, control play.settings.rumble, control play.settings, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "204866dfe0d02cdaf20dbf2437d3c676e8f9d5b854f6d629e0ee0bb38f8ca2ca"
         },
         {
           "id": "settings.rumble-left",
@@ -1977,7 +2183,8 @@
           "precondition": "by hand: the ring is on play.settings.rumble",
           "expect": "SET-04: Left steps Rumble toward 0 in place. (manual: needs control play.settings.rumble, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "09d8f7d9d0f84b33ab57b86a9533c61aa589f6bc998979506e8ce7608bac959a"
         },
         {
           "id": "settings.rumble-right",
@@ -1985,7 +2192,8 @@
           "precondition": "by hand: the ring is on play.settings.rumble",
           "expect": "SET-04: Right steps Rumble back up in place. (manual: needs control play.settings.rumble, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "90de61683dacfa8a5b746f3df6e081a653a6bb2e9bef2b329aa91a900bbc2447"
         },
         {
           "id": "settings.menu-tick",
@@ -1993,7 +2201,8 @@
           "precondition": "by hand: the ring is on play.settings.rumble",
           "expect": "SET-04: Menu tick shows only when the core says the pad is aimable (MenuTickAvailable; macOS with a rumble-capable pad); with Rumble 0 the switch is disabled with the reason text; on, a short tick on each focus move, never while a game runs unpaused (HapticTickRule.ShouldTickOnMove). On a pad without rumble mark N/A, not FAIL. (manual: needs control play.settings.rumble, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "a54630b5c4ed4126aeccdc69101c908eeb7fbd4de1755a85db2d548d968b2165"
         },
         {
           "id": "settings.deadzone-focus",
@@ -2001,7 +2210,8 @@
           "precondition": "by hand: the ring is on play.settings.rumble",
           "expect": "SET-05 (setup): focus the Deadzone slider. (manual: needs action nav.goal, control play.settings.deadzone, control play.settings.rumble, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "611ca1447071ee4d5a673d72a6769bcc28fa1b1728f9fa84f4d134ecfb2fe196"
         },
         {
           "id": "settings.deadzone-left",
@@ -2009,7 +2219,8 @@
           "precondition": "by hand: the ring is on play.settings.deadzone",
           "expect": "SET-05: Left steps the Deadzone slider in place. (manual: needs control play.settings.deadzone, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "463fce147f8cf3e35e82ac93514fc460d9e99efec95936ca0738504bf5faa2c6"
         },
         {
           "id": "settings.deadzone-right",
@@ -2017,7 +2228,8 @@
           "precondition": "by hand: the ring is on play.settings.deadzone",
           "expect": "SET-05: Right steps the Deadzone slider in place. (manual: needs control play.settings.deadzone, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "5f0153f639c857822374d65e552ff3eb93e0a4ba2481dd548ed17ae3cc6d3189"
         },
         {
           "id": "settings.deadzone-readout-drift",
@@ -2025,7 +2237,8 @@
           "precondition": "by hand: the ring is on play.settings.deadzone",
           "expect": "SET-05: the value readout follows the slider; stick drift must not move the menu cursor (the bridge reads D-pad names only, see PAD-03). The hook reads no values or stick axes. (manual: needs control play.settings.deadzone, which mesen-gui does not advertise)",
           "severity": "minor",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "275835be5e0d94cefb77afc1047a31d7f21ca60df4e2190cf104258c18afdb80"
         },
         {
           "id": "settings.box-art-focus",
@@ -2033,7 +2246,8 @@
           "precondition": "by hand: the screen is play.settings",
           "expect": "SET-06 (setup): focus Download box art on the System tab. (manual: needs action nav.goal, control play.settings.download-box-art, control play.settings, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "7e5c4363a1f87c12d298658187a1b0829d197498a7db64eefff3823f8d8fd70e"
         },
         {
           "id": "settings.box-art-change",
@@ -2041,7 +2255,8 @@
           "precondition": "by hand: the ring is on play.settings.download-box-art",
           "expect": "SET-06: A changes Download box art by pad; the focus stays on the row. (manual: needs control play.settings.download-box-art, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "3fa226031fce481aac96ad54e1887b80cc6cf31ea4234054478c8eadfecf40c5"
         },
         {
           "id": "settings.box-art-change-back",
@@ -2049,7 +2264,8 @@
           "precondition": "by hand: the ring is on play.settings.download-box-art",
           "expect": "SET-06: A changes it back; the focus stays on the row. (manual: needs control play.settings.download-box-art, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "a0c4996b720a09ffb3c6f6aaa9ceb3fb0d1c6ce3b1aa088ba3a156d872e7a995"
         },
         {
           "id": "settings.system-no-native-dialog",
@@ -2057,7 +2273,8 @@
           "precondition": "by hand: the screen is play.settings",
           "expect": "KNOWN GAP: SET-06: no native OS dialog opens on the System tab. A native panel is not an Avalonia control, so the hook's dialogs list (app sheets, ADR-0272 §3) cannot see it; verify by eye or with the vision fallback. (manual: needs control play.settings, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "cc4ac8c1742925bbd9628c90b9a0908494b6a3d95f1f61a96bb7b0d36057a994"
         },
         {
           "id": "settings.system-rows-restart",
@@ -2065,7 +2282,8 @@
           "precondition": "by hand: the screen is play.settings",
           "expect": "SET-06: every System row (storage, keyboard preset, ...) is a pad-drivable control; a storage change offers a restart rather than pretending (ADR-0256 Decision 8). (manual: needs control play.settings, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "02bed97fe4f38bbc936ebc80d331b641f81abd186eb39d4882699322c3347a3b"
         },
         {
           "id": "settings.b-closes-to-pause",
@@ -2073,7 +2291,8 @@
           "precondition": "by hand: the screen is play.settings",
           "expect": "SET-07: B closes the sheet back to W-P4. (manual: needs control play.pause, control play.settings, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "75be0bb1ea876e5bde4dd1387376aad9388fdf423b1bb8957beee96b97ed0582"
         },
         {
           "id": "settings.changes-kept",
@@ -2081,7 +2300,8 @@
           "precondition": "by hand: the screen is play.pause",
           "expect": "SET-07: the changes made on the tabs are kept after B; the hook reads no setting values. (manual: needs control play.pause, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "4dc6dda7192c07a94b848a54275443b70dc6af27dd017b2ed02e6d0532f73b9d"
         }
       ]
     },
@@ -2094,7 +2314,8 @@
           "precondition": "fixture rom, fixture pack-multi and fixture settings.profiles.fresh",
           "expect": "A game is running (the P4-01 precondition). (manual: needs action nav.goal, control play.game, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "4d4ef5759c4de877c3b42a0cca3946f45176d07c84777973d14afef82d38053a"
         },
         {
           "id": "pause-pack-multi.chord-opens",
@@ -2102,7 +2323,8 @@
           "precondition": "by hand: the screen is play.game",
           "expect": "W-P4 is open over the running game (setup, from P4-01). (manual: needs action pad.chord, control play.pause, control play.game, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "48b7fe7e26068f5b4f4cc8b7bcb790b45d736a5d4aabc154e0885e571d6ab335"
         },
         {
           "id": "pause-pack-multi.pack-focus",
@@ -2110,7 +2332,8 @@
           "precondition": "by hand: the screen is play.pause",
           "expect": "P4-06 (setup): focus Pack with 2+ installed packs. (manual: needs action nav.goal, control play.pause.pack, control play.pause, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "c0de03c14ac44013b904dbb9a73e72996a5bd8fd652861ce25a737a87ea704fc"
         }
       ],
       "steps": [
@@ -2120,7 +2343,8 @@
           "precondition": "the pack row focused in the pause menu (fixture pack-multi)",
           "expect": "P4-06: with 2+ packs A on Pack opens the picker W-P5. (manual: needs control play.pack, control play.pause.pack, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "ec61c2d4fe1fe9b5a61e79c6d0411f8bf06723bd9bdc53ce4f1932e3440a6ec2"
         },
         {
           "id": "pause-pack-multi.pack-picker-controls",
@@ -2128,7 +2352,8 @@
           "precondition": "by hand: play.pack is visible",
           "expect": "P4-06: the picker (W-P5) has radios by D-pad, Use This Pack and Cancel. (manual: needs control play.pack, which mesen-gui does not advertise)",
           "severity": "minor",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "ae0dff3bf763374c438294026d1edc0609994dbba87390d64c91a766377aee75"
         },
         {
           "id": "pause-pack-multi.pack-picker-b-to-pause",
@@ -2136,7 +2361,8 @@
           "precondition": "by hand: play.pack is visible",
           "expect": "P4-06: B closes the picker back to W-P4; focus returns to play.pause.pack. (manual: needs control play.pause.pack, control play.pack, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "005751255cfe0f21013f5dfa93c2c56912fd6c70f70f407f32f2a486934a7fd6"
         }
       ],
       "teardown": []
@@ -2150,7 +2376,8 @@
           "precondition": "fixture rom and fixture settings.profiles.fresh",
           "expect": "Settings is open on the Audio tab (the SET-03 precondition). (manual: needs action nav.goal, control play.settings.tab-audio, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "f257ae41d5deeb9a07bbd1989252f304de47d6ad4c545f0c08ba88c01d1d564d"
         },
         {
           "id": "settings-menu-sounds.menu-sounds-focus",
@@ -2158,7 +2385,8 @@
           "precondition": "by hand: the screen is play.settings",
           "expect": "SET-03: focus Menu sounds on the Audio tab; if the host has no Menu sounds row this step fails and stops only this batch. (manual: needs action nav.goal, control play.settings.menu-sounds, control play.settings, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "6df4da26458022e8bd54809d6e10cec786b113fc8f2cdbd0351af6136cb2c392"
         }
       ],
       "steps": [
@@ -2168,7 +2396,8 @@
           "precondition": "by hand: the ring is on play.settings.menu-sounds",
           "expect": "SET-03: A toggles Menu sounds on; the focus stays on the row. (manual: needs control play.settings.menu-sounds, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "02d3326edd325977ec61bca87240b6681367c19c29430d95d7da96fd8f9d79c2"
         },
         {
           "id": "settings-menu-sounds.menu-sounds-blips",
@@ -2176,7 +2405,8 @@
           "precondition": "by hand: the ring is on play.settings.menu-sounds",
           "expect": "SET-03: a soft blip on move, confirm and back at a fixed low level, never while a game runs unpaused (MenuSounds.ShouldPlay); the game's own audio is unaffected (ADR-0270). Judged by ear. (manual: needs control play.settings.menu-sounds, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "4dee4a725ef62e16e292a3cc0da67ac4871f6b1c726876239a47b7114764e74e"
         }
       ],
       "teardown": []
@@ -2190,7 +2420,8 @@
           "precondition": "fixture rom and fixture settings.profiles.fresh",
           "expect": "Settings is open with the Controls tab focused; More in Options exists on both Audio and Controls, so the Controls tab is pinned first. (manual: needs action nav.goal, control play.settings.tab-controls, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "c9acc4af753ad7d2b87fbed9342785c48f9b5f7a2a5785588b859d5d0fdc0aca"
         },
         {
           "id": "ctl.reach-more-in-options",
@@ -2198,7 +2429,8 @@
           "precondition": "by hand: the ring is on play.settings.tab-controls",
           "expect": "Settings is open on the Controls tab with More in Options focused (the CTL-01 precondition: SET-01, Controls tab, game loaded); reached from the Controls tab so the goal cannot stop on Audio's identical button. (manual: needs action nav.goal, control play.settings.more-in-options, control play.settings.tab-controls, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "917cdb76bf427026efeb4beddaa6d3e1a066ecf256352ab86bd8976ba634834d"
         }
       ],
       "steps": [
@@ -2208,7 +2440,8 @@
           "precondition": "by hand: the ring is on play.settings.more-in-options",
           "expect": "CTL-01: A on More in Options opens the Play Controller sheet over the paused game, not the classic ConfigWindow. (manual: needs control play.controller, control play.settings.more-in-options, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "617062df66c0f54a093c22bbace8f61c5518e5410a608c350fa85d74f4c59d3d"
         },
         {
           "id": "ctl.sheet-holds-focus",
@@ -2216,7 +2449,8 @@
           "precondition": "by hand: the screen is play.controller",
           "expect": "CTL-01: the sheet holds the pad's focus (Done reachability is checked by the controller-done batch setup). (manual: needs control play.controller, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "554ac81df4b8b53cb17d29741d941fc167142143e296d80ad11532772b3c1e88"
         },
         {
           "id": "ctl.pad-drawing-lights",
@@ -2224,7 +2458,8 @@
           "precondition": "by hand: the screen is play.controller",
           "expect": "CTL-01: the live pad drawing lights the buttons you press; the hook does not read the drawing, judged by eye on a real pad. (manual: needs control play.controller, which mesen-gui does not advertise)",
           "severity": "minor",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "37aca4d7c2b2c3bcfe16c3a8d25116e04354b6a08c618fcd11783a55e7d8e376"
         },
         {
           "id": "ctl.reach-first-row",
@@ -2232,7 +2467,8 @@
           "precondition": "by hand: the screen is play.controller",
           "expect": "The first console-control row of the Controller sheet is focused (the CTL-02 precondition). (manual: needs action nav.goal, control play.controller.row-first, control play.controller, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "58a6a7a19c0e70433eabab3e2c12e2678023c3a496471af9a950b938f74fb894"
         },
         {
           "id": "ctl.arm-row",
@@ -2240,7 +2476,8 @@
           "precondition": "by hand: the ring is on play.controller.row-first",
           "expect": "CTL-02: A on a console-control row arms the capture. (manual: needs control play.controller.capture-armed, control play.controller.row-first, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "200bfae6c161e0765aa2c51ca392b015da974c44d151f3fcefaffc205932d174"
         },
         {
           "id": "ctl.arm-waits-release",
@@ -2248,7 +2485,8 @@
           "precondition": "by hand: play.controller.capture-armed is visible",
           "expect": "CTL-02: arming waits for the first button to be released, then the next pad button pressed maps and lights the two lights (pad side / port side); needs a real pad. (manual: needs control play.controller.capture-armed, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "f1756cab13a0a0af82a3bd46e226183985624cd32ade0bb2bacdf4f92ceab4c4"
         },
         {
           "id": "ctl.nav-control-refused",
@@ -2256,7 +2494,8 @@
           "precondition": "by hand: play.controller.capture-armed is visible",
           "expect": "CTL-02: pressing a navigation control (A, B or a D-pad direction) while armed is refused visibly (ADR-0256 Decision 4); the refusal is not exposed by the hook and A/B are the pad's own presses. (manual: needs control play.controller.capture-armed, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "e81e735cc1335200297a7bc0eda592ae318c4a3be116c04d90fe8b1467536575"
         },
         {
           "id": "ctl.b-refused-capture-stays-armed",
@@ -2264,7 +2503,8 @@
           "precondition": "by hand: play.controller.capture-armed is visible",
           "expect": "CTL-02: B is a navigation control and is refused; the capture stays armed (ADR-0256 Decision 4); the refusal note is not exposed by the hook (manual: needs control play.controller.capture-armed, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "d72dffa9055a9fa0cbbcc74153781c1f92097da39a4d18fa70623f333cf8b760"
         },
         {
           "id": "ctl.focus-stays-on-row-after-cancel",
@@ -2272,7 +2512,8 @@
           "precondition": "by hand: play.controller.capture-armed is visible",
           "expect": "CTL-02: after Esc cancels the capture (ADR-0255 slice 3), the focus ring stays on the row that was armed. Esc is keyboard-only, outside the pad-only vocabulary (manual: needs control play.controller.capture-armed, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "6062257af2c8bd1db035a67876c0a1b46eb471147615574f79a51de4de254ad1"
         },
         {
           "id": "ctl.sheet-stays-after-cancel",
@@ -2280,7 +2521,8 @@
           "precondition": "by hand: play.controller.capture-armed is visible",
           "expect": "CTL-02: after Esc cancels the capture, the Controller sheet stays open and the pad drives it again (HasAuthority gains !IsControllerCapturing). Esc is keyboard-only, outside the pad-only vocabulary (manual: needs control play.controller.capture-armed, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "c275d294b5da5469c141ca88f03a381365d70a27dbd279f1b877906bbbeeb5f2"
         },
         {
           "id": "ctl.bind-extra-button",
@@ -2288,7 +2530,8 @@
           "precondition": "by hand: the screen is play.controller",
           "expect": "CTL-04: bind a spare button (a paddle or the right stick click) to Rewind, B to the game, press it while playing: the binding takes and the action fires in game (engine third key set, ADR-0255 slice 4); navigation controls are not offered in the list. Needs a real pad with a spare button. (manual: needs control play.controller, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "039ba16c903fa8f5857c5d05ae2c63912bc25f73bf742e48bd6a4fce084fc41c"
         }
       ],
       "teardown": []
@@ -2302,7 +2545,8 @@
           "precondition": "fixture rom and fixture settings.profiles.fresh",
           "expect": "The Controller sheet is open with Done focused (the CTL-03 precondition: CTL-01). (manual: needs action nav.goal, control play.controller.done, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "887c6ae62e079e94057ea2721fae79ac006476da0b523158cd54606048a8604d"
         }
       ],
       "steps": [
@@ -2312,7 +2556,8 @@
           "precondition": "by hand: the ring is on play.controller.done",
           "expect": "CTL-03: A on Done leaves the sheet to W-P4. (manual: needs control play.pause, control play.controller.done, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "d90becfc54b959ecce0096eb13cbf89867f4954ac7360d5c8c5233f2b24fe8bc"
         },
         {
           "id": "controller-done.reach-settings-row",
@@ -2320,7 +2565,8 @@
           "precondition": "by hand: the screen is play.pause",
           "expect": "W-P4 is open with the Settings row focused (reopen does not restore a row, so the row is pinned before the Down press). (manual: needs action nav.goal, control play.pause.settings, control play.pause, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "0fc749a09741007a889452402c7540f3312fcf614286f1b00074073111e5964c"
         },
         {
           "id": "controller-done.pad-still-moves",
@@ -2328,7 +2574,8 @@
           "precondition": "by hand: the ring is on play.pause.settings",
           "expect": "CTL-03: no capture stays armed after close; the pad still moves focus on W-P4. (manual: needs control play.pause.quit-game, control play.pause.settings, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "604aef31bc673c2a9405e54eb79f8481522b7624cb76e6ff91358b5350996a9c"
         }
       ],
       "teardown": []
@@ -2342,7 +2589,8 @@
           "precondition": "fixture rom and fixture settings.profiles.fresh",
           "expect": "The Controller sheet is open with a row focused (the CTL-03 precondition: CTL-01). (manual: needs action nav.goal, control play.controller.row-first, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "df68917ca7925ecc81286a9c7f96bda9308e23741ca5cd0e7d0f597255865ca8"
         }
       ],
       "steps": [
@@ -2352,7 +2600,8 @@
           "precondition": "by hand: the ring is on play.controller.row-first",
           "expect": "CTL-03: B instead of Done leaves the sheet to W-P4. (manual: needs control play.pause, control play.controller.row-first, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "4d5893af617bedbaae744b025c3eef4a347f9fd1f82f6d2a6adee29e3bd561f5"
         },
         {
           "id": "controller-b.reach-settings-row",
@@ -2360,7 +2609,8 @@
           "precondition": "by hand: the screen is play.pause",
           "expect": "W-P4 is open with the Settings row focused (reopen does not restore a row, so the row is pinned before the Down press). (manual: needs action nav.goal, control play.pause.settings, control play.pause, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "0fc749a09741007a889452402c7540f3312fcf614286f1b00074073111e5964c"
         },
         {
           "id": "controller-b.pad-still-moves",
@@ -2368,7 +2618,8 @@
           "precondition": "by hand: the ring is on play.pause.settings",
           "expect": "CTL-03: no capture stays armed after close; the pad still moves focus on W-P4. (manual: needs control play.pause.quit-game, control play.pause.settings, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "604aef31bc673c2a9405e54eb79f8481522b7624cb76e6ff91358b5350996a9c"
         }
       ],
       "teardown": []
@@ -2382,7 +2633,8 @@
           "precondition": "fixture settings.profiles.fresh",
           "expect": "Home with no game loaded (the CTL-05 precondition). (manual: needs action nav.goal, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "88fc6b25a501fc585e4b32df23c11ff6661013b6fdc0de6bf00bb2e5cab49bac"
         }
       ],
       "steps": [
@@ -2392,7 +2644,8 @@
           "precondition": "by hand: the screen is play.home",
           "expect": "CTL-05: KNOWN GAP, expected FAIL. Settings is not reachable by pad with no game (HOME-06, bug #1177), so neither is the Controller sheet. With Settings reached by keyboard, Controls > More in Options opens the classic Options window's Input page because OpenControllerSheet() returns false with no game loaded (ADR-0256 Decision 5 note). Record what the player sees.",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "dd345b7eb958672c9342e98d225bea29a7da29972de50de33e743fe8523f00cd"
         }
       ],
       "teardown": []
@@ -2406,7 +2659,8 @@
           "precondition": "fixture settings.profiles.fresh",
           "expect": "Home with the pad port lamps on the status line (the LAMP-01 precondition: one pad). (manual: needs action nav.goal, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "5b81e60b335712f675d737ff75cd5c27ad6f9f540e6e5a35703146a18ba9c615"
         }
       ],
       "steps": [
@@ -2416,7 +2670,8 @@
           "precondition": "by hand: the screen is play.home",
           "expect": "LAMP-01: the status line shows four lamps, P1 lit and the others dim; the number is the label and the pad name is the tooltip; the hook exposes neither lamps nor tooltips, judged by eye.",
           "severity": "minor",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "d58277671142af6e4b855be76c3a9cd6ffe55e5f136510dd70410209a9f7e59b"
         },
         {
           "id": "lamp.second-pad-hotplug",
@@ -2424,7 +2679,8 @@
           "precondition": "by hand: the screen is play.home",
           "expect": "LAMP-02: plug a second pad in (or power it on over Bluetooth), wait 2 s, power it off: the second lamp lights within about 1 s (1 s poll) and dims again, nothing else moves, the ring stays where it was; the W-P15 pill \"New controller …\" on its first press is expected. A real plug is physical-only and is not simulated.",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "ebd3e416e4edafdc66924699dae9f27b00eb15ed7b2f580b902b9f114d402600"
         }
       ],
       "teardown": []
@@ -2438,7 +2694,8 @@
           "precondition": "fixture rom and fixture settings.profiles.fresh",
           "expect": "A game is running unpaused (the LAMP-03 precondition). (manual: needs action nav.goal, control play.game, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "cc077f681743c267a64af0f24697a95929ebe280c928c3e277dd0aef9748e699"
         }
       ],
       "steps": [
@@ -2448,7 +2705,8 @@
           "precondition": "by hand: the screen is play.game",
           "expect": "LAMP-03: the status bar and lamps are hidden while the game runs; a pack-install pill over a running game keeps the bar (sheetOpen), record only if observed; the hook does not read the bar. (manual: needs control play.game, which mesen-gui does not advertise)",
           "severity": "minor",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "0c81e8228a0ecad2f3d7f0195bf5266ad9be72ded3fa01ea2afa8d5f6e4710f0"
         }
       ],
       "teardown": []
@@ -2462,7 +2720,8 @@
           "precondition": "fixture rom and fixture settings.profiles.fresh",
           "expect": "A game is running unpaused with PauseWhenInBackground at its default (on). (manual: needs action nav.goal, control play.game, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "c68cf558a658c9923b49caea45212529a3cbd1457c39b88d1561ab1075022afe"
         }
       ],
       "steps": [
@@ -2472,7 +2731,8 @@
           "precondition": "by hand: the screen is play.game",
           "expect": "LOSS-01: another app takes focus: W-P4 opens with \"Paused — …\" naming the lost focus; regaining focus stays paused (ADR-0254 answer 1) and only Resume or the chord resumes. Taking focus by pad is not possible on macOS without a keyboard, so this is BLOCKED unless a second machine or remote switch exists; the keyboard (Cmd-Tab) may be used if noted. (manual: needs control play.game, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "d94287e6dda16cacfa8176cea5f2614e2c63499503992f8107f085024346b06f"
         },
         {
           "id": "loss.pad-unplug-pauses",
@@ -2480,7 +2740,8 @@
           "precondition": "by hand: the screen is play.game",
           "expect": "LOSS-02: unplug the pad, then replug it: W-P4 opens with \"Paused — controller disconnected\" (ADR-0254 amendment, always on in Play, not gated by PauseWhenInBackground); replugging rewrites the line to \"Controller reconnected\" and does not resume; the action bar names the pad still connected, or the keyboard with none. Then record whether the replugged pad resumes (chord or A on Resume). A real unplug is not simulated. (manual: needs control play.game, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "9dbb243f1eb6c2befa9ae11745402fefe9d1ee40327c79ca1b41e3ad10217f80"
         },
         {
           "id": "loss.pad-off-mid-menu",
@@ -2488,7 +2749,8 @@
           "precondition": "by hand: the screen is play.game",
           "expect": "LOSS-03 (pass 3): the tester opens W-P4 first (pause the running game); then, with a Bluetooth second pad, power it off, on again, press a direction: no second pause (already paused); on return the pad drives focus again and the footer names the right control. (manual: needs control play.game, which mesen-gui does not advertise)",
           "severity": "minor",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "55af83c39eb8f01011a88485f36616f36c44954c3a94a00b75b7029ff5466244"
         },
         {
           "id": "loss.pad-sleep",
@@ -2496,7 +2758,8 @@
           "precondition": "by hand: the screen is play.game",
           "expect": "LOSS-04 (pass 3): leave a Bluetooth pad idle until it sleeps (vendor timeout, typically 10-15 min), then wake it: sleep is a disconnect, W-P4 opens as in LOSS-02, and waking reconnects so the pad can navigate W-P4 and resume. Not covered by any repo test; observation only. (manual: needs control play.game, which mesen-gui does not advertise)",
           "severity": "minor",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "8df83642b97456a1a3e592f90b2aa0b95374a85ad90f82264b980468c7cef461"
         }
       ],
       "teardown": []
@@ -2512,7 +2775,8 @@
           "precondition": "W-P4 > Settings > Display, windowed",
           "expect": "A on the Fullscreen switch goes full screen and the ring stays on the switch; the mouse cursor is hidden over the game (needs variant window.mode=fullscreen, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "a8edab2549538d17e04f82bf1623bf6fbd0bd08192f1c75003a696e87a3856cc"
         },
         {
           "id": "FS-02",
@@ -2520,7 +2784,8 @@
           "precondition": "Full screen, W-P4 > Settings > Display",
           "expect": "Left from Done to Exit full screen (its own row, visible only in full screen, #910), A: back to a window with the ring on Done (needs variant window.mode=fullscreen, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "aa174f4d74fc24562e5d0b7fd3c9e8be2edd95031afc8261e899f8a327681265"
         },
         {
           "id": "FS-03",
@@ -2528,7 +2793,8 @@
           "precondition": "Full screen, game running",
           "expect": "Chord, walk W-P4, open Settings, B, B: the [F] column of P4-01..SET-07, recorded only where it differs (needs variant window.mode=fullscreen, which mesen-gui does not advertise; needs action pad.chord, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "6394ecb5867cc7b6fa782146aab5cba42afd3633a73b48f5564af43cf0e6cdc1"
         },
         {
           "id": "FS-04",
@@ -2536,7 +2802,8 @@
           "precondition": "Windowed",
           "expect": "Shrink the window to its minimum by pad: BLOCKED by design; record only whether the default window is below 1024x640 (ADR-0269 Decision 6). (manual: by design, not automatable - the pad cannot shrink the window, and the case asks a person to read the default window size, which no action or check the adapter advertises expresses)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "98c68066303764c31d402354dea00bac85b49c997382e9a505dd20ec4cabdaf3"
         },
         {
           "id": "FS-05",
@@ -2544,7 +2811,8 @@
           "precondition": "Full screen, Interface size Extra large",
           "expect": "Open the library, Cheats and the Controller sheet: nothing clipped, every Done/Back reachable (ADR-0269 Decision 6 names them; needs variant window.mode=fullscreen, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "c9f81f3a68de0ecf00b4aaa7e00c875d31a967f222ff0e5848309cee16f62a63"
         }
       ]
     },
@@ -2559,7 +2827,8 @@
           "precondition": "Any long list (library 100+)",
           "expect": "Hold Down 5 s, release, hold Up 5 s: steady repeat (~10/s after 0.4 s), stops on release, no overshoot",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "7234492d559c25f98306cc56e9c064989d46a805d170444917afc4a66a231a9d"
         },
         {
           "id": "PAD-02",
@@ -2567,7 +2836,8 @@
           "precondition": "W-P4",
           "expect": "Tap a direction 10 times quickly: ten steps or as many as rows allow, none dropped, none doubled",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "d48303db63efe3d7aec8270bf1b98ef4b70b6b297f87407317dd779b7c8f2489"
         },
         {
           "id": "PAD-04",
@@ -2575,7 +2845,8 @@
           "precondition": "Library",
           "expect": "Diagonal D-pad press (Up+Right): one deterministic step or none, no focus jump off the surface",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "0b32607d63ec06015ede0f35fa0adb5881f6223e82e47efc123a53f3df17be3b"
         }
       ]
     },
@@ -2590,7 +2861,8 @@
           "precondition": "Every Play surface and the three Options exits",
           "expect": "Enter, press B: every surface closes on B to its parent, no surface needs a mouse to leave (needs action pad.chord, which mesen-gui does not advertise to open W-P4 from a game)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "f811539f164cd5284d6d74e9f43516fb6e0844ea78643fb79a8b6d730ac42fa0"
         },
         {
           "id": "TRAP-02",
@@ -2598,7 +2870,8 @@
           "precondition": "Any point",
           "expect": "Watch for any native dialog or classic window: none in the Play door except the ones ADR-0256 Decision 9 lists as deliberately native",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "13b3c31e819c4c40e05fdecfbe850a9918f0bcfe7f06e961566f57d37c9531b9"
         },
         {
           "id": "TRAP-03",
@@ -2606,7 +2879,8 @@
           "precondition": "W-P15 pill shown (a never-mapped pad)",
           "expect": "Start on the pill, follow the lit steps, hold to skip, let it time out once (needs action pad.chord, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "6edef35ac888f64adacbf0c9f9a0a311eb017a390da006e8f649f1a5deb919ab"
         },
         {
           "id": "TRAP-04",
@@ -2614,7 +2888,8 @@
           "precondition": "Home",
           "expect": "Quit the application by pad: expected FAIL, Tools ... is deliberately unpadded (#1137) and there is no pad route to quit",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "bd9b454f126ce640f2ad018d725a5b239d68ef5b02c54705fa12be6eb58a764e"
         }
       ]
     },
@@ -2629,7 +2904,8 @@
           "precondition": "Cold start: the app is launched by OS means first (HOME-01 - a pad-only launch does not exist), the keyboard and mouse are set aside, and the timed pad-only journey starts at Home",
           "expect": "Launch -> Home -> Open a ROM -> search with Y, A -> A on a tile -> play 30 s -> chord -> Settings > Display > Interface size -> Large -> B -> Save states -> save a slot -> B -> Resume -> chord -> Quit game -> confirm -> Home, under 5 minutes (needs action pad.chord, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "d5bd528c53c419141c8cd698e65712491f253fd0fdbef2d9ae73f14de298769b"
         },
         {
           "id": "JOURNEY-02",
@@ -2637,7 +2913,8 @@
           "precondition": "JOURNEY-01",
           "expect": "The same trip entered in full screen first and left at the end, focus kept across both mode switches (needs variant window.mode=fullscreen, which mesen-gui does not advertise; needs action pad.chord, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "57f301cc4ba2f7b936cf82bdf4d9c24b281f0bc46e1a4f5c7860e23e177bf2cf"
         }
       ]
     },
@@ -2652,7 +2929,8 @@
           "precondition": "Both pads connected, game running",
           "expect": "Chord on P-B: W-P4 opens and the footer names P-B's buttons (needs action pad.chord, which mesen-gui does not advertise)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "3d7fa669d9d85e4054158252a02ac282900deac7c5450689798efbe6ca662aa3"
         },
         {
           "id": "PAD2-02",
@@ -2660,7 +2938,8 @@
           "precondition": "W-P4 open",
           "expect": "Navigate with P-A, then with P-B, alternating: both move the focus, one ring, no double-step",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "ad35819ab5dc1aec4171d378bde42513dcbaa6b73c78df299e39db01842c7ac2"
         },
         {
           "id": "PAD2-03",
@@ -2668,7 +2947,8 @@
           "precondition": "Controller sheet, both connected",
           "expect": "Walk the PLAYERS rows and move P-B to P2 by pad: the port lamps are unchanged (ADR-0261)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "739812c764aacceed9916041e7f337a45ce950b58281718e9c06d3a033be4770"
         },
         {
           "id": "PAD2-04",
@@ -2676,7 +2956,8 @@
           "precondition": "PAD2-03",
           "expect": "Unplug P-A, replug: on macOS the reconnect repair never fires and P-A may return on another index (a note for #813's family)",
           "severity": "major",
-          "mode": "manual"
+          "mode": "manual",
+          "content_hash": "6d669b2400e893055abb4c2831a2d5fdf196cdbca2425cd2cfe4160a3faf5d60"
         }
       ]
     }

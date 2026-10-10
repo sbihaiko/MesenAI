@@ -1,0 +1,94 @@
+{
+  "parent": {
+    "number": 1286,
+    "state": "open",
+    "comments": 2,
+    "last": "## Run summary: `play-pad-only`\n\n- Run: `20261010T174902-7e3300` | script `a738986b7997562abb9a1f1a4c92db483ae9638574affb5cadefb76713bfde19` | build `31ea201301d1727d0997d97fb076a51eec91c09f` | platform `darwin-arm64`\n\n- passed: 7\n- pending: 5\n- pending: `home.back-focus-restored`, `home.chord-focus-unchanged`, `home.chord-opens-nothing`, `home.ring-visible`, `home.settings-by-pad-gap`\n- no result in the run: `after-game.contained-other-controls-gap`, `after-game.contained-sideways-left`, `after-game.contained-sideways-right`, `after-game.contained-up-continue`, `after-game.contained-up-favorites`, `after-game.contained-up-open-rom`, `after-game.contained-up-recent`, `after-game.continue-first`, `after-game.one-ring`, `after-game.order-favorites`, `after-game.order-open-rom`, `after-game.order-recent`, `after-game.reach-home`, `dialogs.reach-home`, `fav.back-home-again`, `fav.back-to-home`, `fav.footer-reads-unfavorite`, `fav.home-shelf-shown`, `fav.library-again`, `fav.reach-library`, `fav.shelf-hides-when-empty`, `fav.x-favorites-tile`, `fav.x-unfavorites-tile`, `fav2.down-favorite`, `fav2.down-open-rom`, `fav2.down-recent`, `fav2.focus-stays-on-favorite-tile`, `fav2.reach-favorite-tile`, `fav2.up-to-continue`, `fav2.x-elsewhere-does-nothing`, `fav2.x-on-continue`, `fav2.x-on-favorite-tile`, `game-archive.a-opens-select-sheet`, `game-archive.a-picks-a-game`, `game-archive.a-reopens`, `game-archive.b-cancels-back`, `game-archive.reach-library`, `game-bios.a-opens-bios-sheet`, `game-bios.b-cancels`, `game-bios.choose-file-native`, `game-bios.reach-library`, `game-bios.status-names-bios`, `game.a-loads-game`, `game.buttons-are-the-consoles`, `game.load-card-and-toast`, `game.no-menu-feedback`, `game.pad-is-the-consoles`, `game.reach-library`, `launch.first-run-home`, `launch.open-rom-focused`, `launch.port-lamp-p1`, `lib.back-ring-on-opener`, `lib.back-to-home`, `lib.box-art`, `lib.browse-b-root-dismisses`, `lib.browse-down-grid`, `lib.browse-open`, `lib.browse-walk`, `lib.filter-lb-backwards`, `lib.filter-rb-wraps`, `lib.filter-segment-focus`, `lib.first-tile-focused`, `lib.folders-add-remove`, `lib.folders-b-closes`, `lib.folders-no-native-dialog`, `lib.folders-open`, `lib.folders-right-browse`, `lib.header-down-grid`, `lib.header-footer-scan`, `lib.header-left-across`, `lib.header-right-back`, `lib.header-right-browse`, `lib.header-right-folders`, `lib.hold-down-repeats`, `lib.hold-right-repeats`, `lib.home-ring`, `lib.open-screen`, `lib.reach-library`, `lib.search-a-opens-keyboard`, `lib.search-b-cancels`, `lib.search-right-folders`, `lib.search-second-cancel-reverts`, `lib.search-sheet-stays`, `lib.search-type-filters`, `lib.search-y-focuses-field`, `lib.tap-down-steps-once`, `lib.up-back-to-row-one`, `lib.up-enters-header`\n- bug: none reported by the run command\n\nThe parent is closed by a person after reading these results, never by the run."
+  },
+  "home_cases": [
+    {
+      "case": "home.back-focus-restored",
+      "issue": 1299,
+      "state": "open",
+      "last_comment": "**pending**",
+      "parent": "1286"
+    },
+    {
+      "case": "home.back-to-home",
+      "issue": 1298,
+      "state": "closed",
+      "last_comment": "**passed**",
+      "parent": "1286"
+    },
+    {
+      "case": "home.chord-focus-unchanged",
+      "issue": 1301,
+      "state": "open",
+      "last_comment": "**pending**",
+      "parent": "1286"
+    },
+    {
+      "case": "home.chord-opens-nothing",
+      "issue": 1300,
+      "state": "open",
+      "last_comment": "**pending**",
+      "parent": "1286"
+    },
+    {
+      "case": "home.first-focus",
+      "issue": 1291,
+      "state": "closed",
+      "last_comment": "**passed**",
+      "parent": "1286"
+    },
+    {
+      "case": "home.focus-holds-down",
+      "issue": 1293,
+      "state": "closed",
+      "last_comment": "**passed**",
+      "parent": "1286"
+    },
+    {
+      "case": "home.focus-holds-left",
+      "issue": 1294,
+      "state": "closed",
+      "last_comment": "**passed**",
+      "parent": "1286"
+    },
+    {
+      "case": "home.focus-holds-right",
+      "issue": 1295,
+      "state": "closed",
+      "last_comment": "**passed**",
+      "parent": "1286"
+    },
+    {
+      "case": "home.focus-holds-up",
+      "issue": 1292,
+      "state": "closed",
+      "last_comment": "**passed**",
+      "parent": "1286"
+    },
+    {
+      "case": "home.open-library",
+      "issue": 1297,
+      "state": "closed",
+      "last_comment": "**passed**",
+      "parent": "1286"
+    },
+    {
+      "case": "home.ring-visible",
+      "issue": 1296,
+      "state": "open",
+      "last_comment": "**pending**",
+      "parent": "1286"
+    },
+    {
+      "case": "home.settings-by-pad-gap",
+      "issue": 1302,
+      "state": "open",
+      "last_comment": "**pending**",
+      "parent": "1286"
+    }
+  ]
+}

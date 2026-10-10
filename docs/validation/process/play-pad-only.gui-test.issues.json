@@ -1,0 +1,406 @@
+{
+  "boarded": true,
+  "cases": {
+    "after-game.contained-other-controls-gap": {
+      "hash": "bd4513ff46bcd2ef24a1a5a4e6d418b34e60d1621ba5c551bd7ffa20c4d3a4a2",
+      "number": 1315
+    },
+    "after-game.contained-sideways-left": {
+      "hash": "40235b0ff90af73da60d8b81881ae3f12293ad9c6aa90cd6d4ca612eddfc7950",
+      "number": 1313
+    },
+    "after-game.contained-sideways-right": {
+      "hash": "d7080137caeb217786aa8dafefb03b69884a91d7a33d99f4b80f5016c8ce5f16",
+      "number": 1314
+    },
+    "after-game.contained-up-continue": {
+      "hash": "04920e6691d10e168fccf2acc81ccb633a7691d84cb261f4edc19f8729de2462",
+      "number": 1309
+    },
+    "after-game.contained-up-favorites": {
+      "hash": "20a338168e1becbfb6004d82bef1e0a9411c9adea00afdf381462405b68b539a",
+      "number": 1311
+    },
+    "after-game.contained-up-open-rom": {
+      "hash": "cc297012ad252b4fd3a18a68a436e0da181fbd413bb6817d3b1d26c24380e2a1",
+      "number": 1312
+    },
+    "after-game.contained-up-recent": {
+      "hash": "9c4ec7e1c006c25aa21b64a5efd7f3f7f5aa7bdbf4ba67e01cdd14034158a5d1",
+      "number": 1310
+    },
+    "after-game.continue-first": {
+      "hash": "a0e96b853c5b1aa95dedc4081fd06ce2bcbcafa80bdb7eae26578ad23b836167",
+      "number": 1304
+    },
+    "after-game.one-ring": {
+      "hash": "98e4f024cfb6d1902ff5e330eb43826e8478067987c8b6b966bf217a2c7a437c",
+      "number": 1308
+    },
+    "after-game.order-favorites": {
+      "hash": "b684255e26b6125d920275258aea2dc23eaf506279a382a4dcffa26d3ba01111",
+      "number": 1305
+    },
+    "after-game.order-open-rom": {
+      "hash": "c609c7aca31b7e0938ef10c5e5f982867d8f0da0cf2843c354132b0b6b31e563",
+      "number": 1307
+    },
+    "after-game.order-recent": {
+      "hash": "28e0c88f7e62695a8a69e3f19c0152b14082b7a58800430e29595cf0828d1e66",
+      "number": 1306
+    },
+    "after-game.reach-home": {
+      "hash": "d0cf413d7f69b665b83a88c17184178476fbf4cd3536f0723753057f66250f13",
+      "number": 1303
+    },
+    "dialogs.reach-home": {
+      "hash": "d253640e0fc20a06000044d84a370891798c33b53a052ff2543ff94bebf42e86",
+      "number": 1387
+    },
+    "fav.back-home-again": {
+      "hash": "da805aadc1f70f16e1cc4066e8332be665471a4c1b46652659ae28869753f94c",
+      "number": 1360
+    },
+    "fav.back-to-home": {
+      "hash": "da805aadc1f70f16e1cc4066e8332be665471a4c1b46652659ae28869753f94c",
+      "number": 1356
+    },
+    "fav.footer-reads-unfavorite": {
+      "hash": "13ab801849323cab367e48bc1cdd1d1b51ab364d9f0a73bacbf1ccd747fbac09",
+      "number": 1355
+    },
+    "fav.home-shelf-shown": {
+      "hash": "cd46b2db580aa1b4a183f665dd81066754180dc804330a7e28979693fe1f6afc",
+      "number": 1357
+    },
+    "fav.library-again": {
+      "hash": "c8a4610b1309ac4100a8cba0e6d775a1d3f34a19478983e355126cff6b36e97a",
+      "number": 1358
+    },
+    "fav.reach-library": {
+      "hash": "6501aee1fd5112a899daa0d177304f7fc914300342fff37f7bb3b25ef3fcd343",
+      "number": 1353
+    },
+    "fav.shelf-hides-when-empty": {
+      "hash": "eac2816d98bc187e1fb8cac593dc708b29e0c7ba1779c44c7bf20d29e7fe319d",
+      "number": 1361
+    },
+    "fav.x-favorites-tile": {
+      "hash": "9befbdddfe4d383c507758d1c4fc9459c0edbeed4a4493ebae6505db7b353760",
+      "number": 1354
+    },
+    "fav.x-unfavorites-tile": {
+      "hash": "edf1bd5c3f91954d7cac03e8a5e4e7347aca25ee04997986ac6f1749c166b065",
+      "number": 1359
+    },
+    "fav2.down-favorite": {
+      "hash": "6703d86475fdbceb1ae624e3ac6dc76d17a5480b67246b159e7b05f81054d69f",
+      "number": 1367
+    },
+    "fav2.down-open-rom": {
+      "hash": "ec57fb55ee33643deb4cb12fbb93d01e9117ba912639f16705418e9377139d97",
+      "number": 1369
+    },
+    "fav2.down-recent": {
+      "hash": "abb3c1c51fabce4befebec897cf0fadd53cd0c440580adf7deb44016b885950f",
+      "number": 1368
+    },
+    "fav2.focus-stays-on-favorite-tile": {
+      "hash": "8178c8493d3325480ccc36bc1b164ce01eae97f717d16dea147df3b2d8403728",
+      "number": 1364
+    },
+    "fav2.reach-favorite-tile": {
+      "hash": "9b88660595f84540153a162e198d76c7ea5cc6b2b25327c482aafc1eb7d32529",
+      "number": 1362
+    },
+    "fav2.up-to-continue": {
+      "hash": "2577b1650352877b211be2b55a1b92713412f5d55fd51e3dbf2b4c534baabe8b",
+      "number": 1365
+    },
+    "fav2.x-elsewhere-does-nothing": {
+      "hash": "ee4653887f96da17145fabc8f33d5e3081c5d95ed719800fd2d96fbe7e08d903",
+      "number": 1370
+    },
+    "fav2.x-on-continue": {
+      "hash": "c0b242c050550b4fd2499ba4920868bbbfc822a91ec7eac6f837b1c31b2581cf",
+      "number": 1366
+    },
+    "fav2.x-on-favorite-tile": {
+      "hash": "35991dbd1aee1d101c08aa55cd93c29967533c5c9b8f68a78e7aebe2334df5e6",
+      "number": 1363
+    },
+    "game-archive.a-opens-select-sheet": {
+      "hash": "d55e072f3c00a3087d2bfef745ceda0b10e872a4e6c02a9e94e1a9222180a026",
+      "number": 1378
+    },
+    "game-archive.a-picks-a-game": {
+      "hash": "9b30c820872519623882a17bf950a5b9dadb638a7258687346bec0787b5ddddf",
+      "number": 1381
+    },
+    "game-archive.a-reopens": {
+      "hash": "b582c93a02d1fc366d037f901e4b5795ccfbb87d6b3142fe1b5c3761f29805fd",
+      "number": 1380
+    },
+    "game-archive.b-cancels-back": {
+      "hash": "4ef6ba3a23f9a21080dbbaf8fdd13f90c3656250e474bde2bf66c179cff6b813",
+      "number": 1379
+    },
+    "game-archive.reach-library": {
+      "hash": "5049aafe702a8ce180cb58f8ca438f910baba8bd7d5730cf599256711e93df1d",
+      "number": 1377
+    },
+    "game-bios.a-opens-bios-sheet": {
+      "hash": "72751e424d7e9a8f9e1a670838d8b17427539ac70225edb21058413144495732",
+      "number": 1383
+    },
+    "game-bios.b-cancels": {
+      "hash": "cb705e4d0437d6655d2199c869250ef8bad4787694383d8bdf6f30ed7ffa5ea6",
+      "number": 1385
+    },
+    "game-bios.choose-file-native": {
+      "hash": "4a88036384cc5944f9f1735e432297cf3afd6706cdc886c86e2c545c957042bf",
+      "number": 1384
+    },
+    "game-bios.reach-library": {
+      "hash": "463eef952061a953b78cc19982aacd1e3617867a7f38f74dd73c2c7ac678202e",
+      "number": 1382
+    },
+    "game-bios.status-names-bios": {
+      "hash": "3ea6f55ba754a29de3f982ef38f731032d9c0b4a8b0be43e6f7b108aa857a6e6",
+      "number": 1386
+    },
+    "game.a-loads-game": {
+      "hash": "bcd75aafe3c36d31eb9b3f9b3933f4cf4872c80110b45dfcfcf4b5784d36cc3b",
+      "number": 1372
+    },
+    "game.buttons-are-the-consoles": {
+      "hash": "df4e29e8c0575e2a5fa4ea0aca348ae60eb29f2b0c5b382720049c616bfb3139",
+      "number": 1375
+    },
+    "game.load-card-and-toast": {
+      "hash": "84914c9972483eff94f63139b2c8a4419175892bca23ce660a5d0359bc29b97c",
+      "number": 1373
+    },
+    "game.no-menu-feedback": {
+      "hash": "cb35ef0934f20eeed7ac09adff51ee3ea2d0aa80bb05246489c5dfdc4934009f",
+      "number": 1376
+    },
+    "game.pad-is-the-consoles": {
+      "hash": "4f99b092f2b95f58b5d9182a0910849aece4472485678bbb7d39296e988e391e",
+      "number": 1374
+    },
+    "game.reach-library": {
+      "hash": "d91a843088b3421bb4482a2592d360b0c2977ec9d40f2c18397e9bc0a882d278",
+      "number": 1371
+    },
+    "home.back-focus-restored": {
+      "hash": "26d90f25339ff27ca88ffa3fa5df52eb10355ad382570356263faef8161d8eaf",
+      "number": 1299
+    },
+    "home.back-to-home": {
+      "hash": "9c389c55e74391e89c4f53c2bf397c5659576dacf5ff662d3337d4ba3d023f09",
+      "number": 1298
+    },
+    "home.chord-focus-unchanged": {
+      "hash": "4ffb2836a451a9e9f59ed8e68581a04c9f48d52f3a468513c4efbd4f21fcb92b",
+      "number": 1301
+    },
+    "home.chord-opens-nothing": {
+      "hash": "a6b432d3bad0bf67f803c1d044091834a5d82950d80a03fd169847623e7b633a",
+      "number": 1300
+    },
+    "home.first-focus": {
+      "hash": "95c077e6eb904dc26b460847ab764dd1ea3addd1528616ba900b5665efaa2c3a",
+      "number": 1291
+    },
+    "home.focus-holds-down": {
+      "hash": "ac0fe64e16ba302940ad982ea4eba72301b9c6ce9fb9955e6889089a7e9d3c85",
+      "number": 1293
+    },
+    "home.focus-holds-left": {
+      "hash": "1bfd1f2ae615b1726c9be8c141b238681fdeb4fd31768d0f03f581f766c0ab79",
+      "number": 1294
+    },
+    "home.focus-holds-right": {
+      "hash": "5d9f4b5e8aa79e54f6081f6d447439bc8cf605bb7e5302f2d4effc48b36f950a",
+      "number": 1295
+    },
+    "home.focus-holds-up": {
+      "hash": "7aa93648f8e6e32767588ec5dfa4a62a82306b24369b4c7b8c23581ce1155c12",
+      "number": 1292
+    },
+    "home.open-library": {
+      "hash": "ae68a33037b9a0b27721271e738a8eb5823c2528c6684810d1b4e40b11464253",
+      "number": 1297
+    },
+    "home.ring-visible": {
+      "hash": "2c38a82920e9c95bed37b30dd048d98b1948544f6fbf82875e97ed03c0a0f246",
+      "number": 1296
+    },
+    "home.settings-by-pad-gap": {
+      "hash": "a8172b9cc539b1ff59f5737be9d7e3c0f80a697dc129b149a70d71df68eadef5",
+      "number": 1302
+    },
+    "launch.first-run-home": {
+      "hash": "a951de53b2260401da0cf60b8cdd5d78d403c3f872d4d9296aa461afb46f0e34",
+      "number": 1288
+    },
+    "launch.open-rom-focused": {
+      "hash": "1807981d2ae2a79be28fde659ec565aff84b33f9f3bc8309373f1b6d58a4e704",
+      "number": 1289
+    },
+    "launch.port-lamp-p1": {
+      "hash": "56efbe4b6af0dad32a598aa10f8c4e5dc6d99b4f45314cea4730e2077e79550a",
+      "number": 1290
+    },
+    "lib.back-ring-on-opener": {
+      "hash": "37d26c06a1328d8bc1e85c541646f739ff47fd11753475e923f84a1fa0377e77",
+      "number": 1352
+    },
+    "lib.back-to-home": {
+      "hash": "c38a1f3f3ded399a1a375540bfd80b9f4d99daabea163436e41f2c880be3b524",
+      "number": 1351
+    },
+    "lib.box-art": {
+      "hash": "df8a93a2d204b1990872f0c80a13c7cc12b2614820b9c71424eda0cc4a618cf1",
+      "number": 1349
+    },
+    "lib.browse-b-root-dismisses": {
+      "hash": "9ed147980ac4db56e143511045474a22cf30706cab881d518b522d74e4abe998",
+      "number": 1348
+    },
+    "lib.browse-down-grid": {
+      "hash": "855c6a53c7e0836078586345f12d3a7948f8a11d1440cd500a0c25df90b93a6a",
+      "number": 1350
+    },
+    "lib.browse-open": {
+      "hash": "bae834195cbd8cbb19f6251a5e70f72f987e557750880d5c40039cd7bea47037",
+      "number": 1346
+    },
+    "lib.browse-walk": {
+      "hash": "f408f7db406f218edbed35c12fa1f2964d589d00c1834fe2585813254e52fcda",
+      "number": 1347
+    },
+    "lib.filter-lb-backwards": {
+      "hash": "d3516987e1afd05f82b1ee90da29ea7f8b4e32c2af0065dcd95dd6fea4d4733f",
+      "number": 1332
+    },
+    "lib.filter-rb-wraps": {
+      "hash": "114a1f86924b8dd3123fb64e87b70c3f706d44d82801a06f8cca462986340488",
+      "number": 1331
+    },
+    "lib.filter-segment-focus": {
+      "hash": "4df6f8b716dd70ab26efaec98d334cc8795cdd5375c5f555d01ebae96cf7d5be",
+      "number": 1333
+    },
+    "lib.first-tile-focused": {
+      "hash": "4658f0d1e038320117125fcad857c81d3e0a1d8ee72ef1d277d821f08f7fd141",
+      "number": 1319
+    },
+    "lib.folders-add-remove": {
+      "hash": "3827ad9089bc5097803ecb96aeb3b8c6b134870660376e8d205929e9dd1b0366",
+      "number": 1343
+    },
+    "lib.folders-b-closes": {
+      "hash": "ea696394abcd5a0a4a7ea434dfdaa6984227f73b661e0446b835058d3f74c4ae",
+      "number": 1344
+    },
+    "lib.folders-no-native-dialog": {
+      "hash": "6e0ee9dd11edec965449eedd792426f50e99fbc87ce4f71a1ecc88c13d2fd527",
+      "number": 1342
+    },
+    "lib.folders-open": {
+      "hash": "8bc6cfa04ec6a59ac8f7ed63212f7a7f062c5b93a8ace9df413f51a973f0e506",
+      "number": 1341
+    },
+    "lib.folders-right-browse": {
+      "hash": "9ca90b2d607c37dafc004a8072d3404c96642ae01eacfc5096d3a3b6bd768fb1",
+      "number": 1345
+    },
+    "lib.header-down-grid": {
+      "hash": "760bff056ffa5a7f75f21e8702c098d6c316670fe16af3aed472136b41ce2acf",
+      "number": 1330
+    },
+    "lib.header-footer-scan": {
+      "hash": "5d6888faeab8a23cc47427b053620e756cdad01b40004e8af5fbaa41f6dd8b51",
+      "number": 1320
+    },
+    "lib.header-left-across": {
+      "hash": "fbf581734b023c2bdc3e6d659f2b94d23be5b3d21bacc943cdeafd972f896c9d",
+      "number": 1329
+    },
+    "lib.header-right-back": {
+      "hash": "44034d9594a4f97e068161919e9cffd00cab0e5dee6a1b00f2a813c33314118b",
+      "number": 1328
+    },
+    "lib.header-right-browse": {
+      "hash": "440007cc0c33e006c0e447585da90658535ad387ee3b5e85b6225baa4869a66f",
+      "number": 1327
+    },
+    "lib.header-right-folders": {
+      "hash": "66c46d3d69793a9c17a11e550b30f2517ea1d266f59122095b0985c32ef9e91f",
+      "number": 1326
+    },
+    "lib.hold-down-repeats": {
+      "hash": "ee4698cfbe346e543eb290657014b97800b9d962042bbf6b190638d2f1930208",
+      "number": 1321
+    },
+    "lib.hold-right-repeats": {
+      "hash": "1affdc52de01a7c969de9fdb371cd92eb8501a3778def45618c8f8e10b680c46",
+      "number": 1322
+    },
+    "lib.home-ring": {
+      "hash": "39a961aef4ba0140c741b58d07500febba787032830c1114609c2753ec829ad4",
+      "number": 1316
+    },
+    "lib.open-screen": {
+      "hash": "9b3d02781b4c6cb535457ebc62eccb2d3ba6fdf0d68255760416be03a47c10ba",
+      "number": 1318
+    },
+    "lib.reach-library": {
+      "hash": "191dfccfbeda28be39a6346ce94dbec497bc156c1ba9dd1edeeb5ee51ee1dc39",
+      "number": 1317
+    },
+    "lib.search-a-opens-keyboard": {
+      "hash": "8c7cf085aa9edf2cce86199013ca5ccc2d1263dde7e38c5204b09a8a1f348588",
+      "number": 1335
+    },
+    "lib.search-b-cancels": {
+      "hash": "4ec56fa6977a37f2d0594033d5e64cd049b410bdac4e308a2142a23a335edc84",
+      "number": 1337
+    },
+    "lib.search-right-folders": {
+      "hash": "226cae7527c95f802d98670b2c2acf575ac318fce77a3c14a29cc550e83cbbc0",
+      "number": 1340
+    },
+    "lib.search-second-cancel-reverts": {
+      "hash": "f17980fa8a5c82846507039ec735b3e4160083e6c358cd59c6a6e28fd4fe3f5c",
+      "number": 1338
+    },
+    "lib.search-sheet-stays": {
+      "hash": "56e5696b408ee531625583aa53de187d4bf52002463dc9362b6b9aaaa08e6d9f",
+      "number": 1339
+    },
+    "lib.search-type-filters": {
+      "hash": "5e5361bc55ddb6a467c9fd98b1fe9afa9d2fe1f31eb782ef9e26c234a299a27b",
+      "number": 1336
+    },
+    "lib.search-y-focuses-field": {
+      "hash": "42b8a8cefa55350c358a3295a6b025a9a83cd2660ce050fba1155529633fb9ec",
+      "number": 1334
+    },
+    "lib.tap-down-steps-once": {
+      "hash": "acafc48050c8a1a2f175e7b49f59a5958ca047c56f8eb00a925208f63acd8d7f",
+      "number": 1323
+    },
+    "lib.up-back-to-row-one": {
+      "hash": "a539a4097be3e6e7e6e76fced304b33c3fc34e41b5fcc5f23671b502b039550a",
+      "number": 1324
+    },
+    "lib.up-enters-header": {
+      "hash": "e9283d602768947c11ff58af326eddabd6fe84de269a11eb492d727f9e716497",
+      "number": 1325
+    }
+  },
+  "parent": 1286
+}
