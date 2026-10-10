@@ -1,6 +1,6 @@
 # ADR-0272: The GUI test hook, the target adapter interface and the versioned script format
 
-- Status: accepted (2026-10-09). The owner answered the three open points in
+- Status: accepted (2026-10-09). Amended 2026-10-09 on the panel ruling: "Docs-only, branch origin/docs/1178-gui-test-hook-adr, push to same branch, no new PR, Refs #1178. In docs/adr/gui/0272-*.md: (1) Item 4 … GUI-layer pad.*/key.* overlay codes at the exit of the static Core/Shared KeyManager::GetPressedKeys() AND KeyManager::IsKeyPressed() … SetKeyState is NOT the pad inject API … (2) 'as §4 states' -> 'as ADR-0157 §2 states'. (3) Define tick in item 3 … (4) static validator (#1179) checks each step names exactly one duration family … runner, at runtime, marks a step whose family mismatches … as failed. (5) Item 6: adapter session.check covers ui.* only; fs.*/log.* are evaluated by the runner." The owner answered the three open points in
   session — "A/A/A (Recommended)" — and all three answers are folded into the
   Decision below (items 6, 5 and 7: P1 into 6, P2 into 5, P3 into 7); the record of what was picked, and of the
   alternatives that were not, is the "Owner's picks" section. Listed as a slice
@@ -54,7 +54,7 @@ do this job, and neither is replaced:
   second binary splits the harness from the shipped application. §3 carries
   over verbatim: the hook's own switch is a runtime flag (item 5), not a
   second build. What §2's input path does **not** carry over is the *layer*: as
-  §4 states, `IInputProvider::SetInput` runs once per emulated frame from
+  ADR-0157 §2 states, `IInputProvider::SetInput` runs once per emulated frame from
   `BaseControlManager::UpdateInputState()` and feeds in-game input only, while
   every GUI navigation consumer in this repository polls the host's pressed-key
   set instead (`InputApi.GetPressedKeys()` → `KeyManager::GetPressedKeys`). The
@@ -100,7 +100,7 @@ snapshot below), `inject` (one action), `capture` (write a PNG of the
 application window to a path the runner names, returning path, size and sha256 —
 never in-band base64, so a line stays small), `quit` (shut the application down
 the way its own Exit does, so settings are written). All five are stateless and
-idempotent except `inject` and `quit`. The hook is not the record: it holds no
+idempotent except `inject`, `quit` and `capture`; `capture` writes a file, so a retry carries the runner's request id and the hook answers a repeated id with the original path, size and sha256 instead of writing again. The hook is not the record: it holds no
 history, no verdicts and no snapshots, so a replay never asks the application to
 rewind.
 
@@ -128,7 +128,8 @@ follow and both are binding: **checks match ids, not display strings** (labels
 change and are localized; a check on "Continuar" breaks on a language change),
 and `text` is carried for humans and for the vision model only, never for a
 check. A control with no id is invisible to the hook. `tick` is the
-application's UI update counter and `frames` the emulated frame counter
+application's UI update counter — one count per Play pad-bridge poll (`PollInterval`
+50 ms, `UI/Windows/PlayPadNavigationWiring.cs:55,68`), counted by the application, never read from host time — and `frames` the emulated frame counter
 (`0` when no game is loaded) — both are application-reported counters, and no
 wait may spend host time (ADR-0157 §1). The navigation decision on PR #1201 widens this snapshot beyond the
 active screen
@@ -141,17 +142,20 @@ There are two input layers in this application and they are fed differently.
 - **The host pressed-key set** is what a physical press reaches, and every
   reader of a press polls it: `InputApi.GetPressedKeys()` →
   `KeyManager::GetPressedKeys` (`InteropDLL/InputApiWrapper.cpp`). Its readers
-  are the GUI (`PlayPadNavigation`, `UI/Logic/PlayPadNavigation.cs:89-110`, fed
-  by the bridge's tick, `UI/Windows/PlayPadNavigationWiring.cs:818`), the
-  shortcuts (`Core/Shared/ShortcutKeyHandler.cpp:79,383`, including the
-  ADR-0251 Select+Start chord), the Controller sheet's capture
-  (`UI/Windows/PlayPadNavigationWiring.cs:741-751`, read while `HasAuthority` is
-  false), the slot grid's Back edge (`PlayPadNavigation.cs:102-110`, asked at
-  `PlayPadNavigationWiring.cs:883`) and the emulated console itself
-  (`Core/Shared/BaseControlDevice.cpp:257`, `SetPressedState`). So `pad.*` and
-  `key.*` **always** go into this set, on every screen and whether or not a game
-  is loaded or paused: the inject layer is keyed by **who reads the press**, not
-  by the screen.
+  are the Play pad bridge (`Tick`, `UI/Windows/PlayPadNavigationWiring.cs`,
+  with `PlayPadNavigation.IsBackEdge` for the slot grid's Back edge), the
+  shortcuts (`Core/Shared/ShortcutKeyHandler.cpp:79` `IsKeyPressed`, `:383`
+  `GetPressedKeys`, including the ADR-0251 Select+Start chord) and the emulated
+  console itself (`Core/Shared/BaseControlDevice.cpp:257`, `SetPressedState`).
+  The GUI layer **overlays** its `pad.*` / `key.*` codes at the exit of the
+  static `Core/Shared` `KeyManager::GetPressedKeys()` **and**
+  `KeyManager::IsKeyPressed()`, behind a runtime flag with no `#ifdef`
+  (ADR-0157 §3), so one overlay feeds `InputApi.GetPressedKeys`, the bridge and
+  `ShortcutKeyHandler` on Windows, macOS and Linux. `SetKeyState` is **not** the
+  pad inject API: macOS and Linux drop codes ≥ 0x205, and pad codes come from
+  live controllers. So `pad.*` and `key.*` **always** go into this set, on
+  every screen and whether or not a game is loaded or paused: the inject layer
+  is keyed by **who reads the press**, not by the screen.
 - **`IInputProvider::SetInput`** is called once per emulated frame from
   `BaseControlManager::UpdateInputState()` (ADR-0157 §2) and feeds the emulated
   console and nothing else; no GUI consumer reads it, and it is not reachable
@@ -162,16 +166,22 @@ There are two input layers in this application and they are fed differently.
 A step's duration unit follows from the layer it drives, and this is binding:
 `frames` / `timeout_frames` (counted as ADR-0157 §1/§2 count them) **only while
 the emulated clock advances** — a game is loaded and not paused — and `ticks` /
-`timeout_ticks` (the hook's own tick, §7) in **every other state**: no game,
+`timeout_ticks` (the tick defined in item 3) in **every other state**: no game,
 paused, the pause overlay, the load card, the picker. Outside a running game
 there is no emulated frame counter to advance, and a step written in `frames`
-would spin on a counter frozen at its last value. The validator/runner treats a
-step whose unit does not match the live state as malformed. So one action is
+would spin on a counter frozen at its last value. Each step names exactly one duration family and its `timeout_*` is the same
+family — the static validator (#1179) checks that; the runner, at runtime,
+marks a step whose family mismatches whether the emulated clock is advancing as
+`failed (unit/state mismatch)`. A wait also has a runner-level liveness
+deadline in host time, as a watchdog only (never a condition a step reads), so
+a frozen counter fails the step instead of hanging the run. So one action is
 written either `{"op":"inject","action":"pad.press","args":{"button":"Right","frames":4}}`
 while the game runs, or `{"op":"inject","action":"pad.press","args":{"button":"Right","ticks":4}}`
-on any other state. Buttons are named by the emulator's own key names
-(`BaseControlDevice::GetKeyNameAssociations()`, as ADR-0157 §2 does), so one name
-drives a NES, GB and SMS pad and the script is console-independent. Both layers
+on any other state. On the GUI layer the script's button name (e.g. `"Right"`) resolves to
+device 0's pad code through the same `PadNavMapping` the bridge reads (backend
+names like `Pad1 ...`, `UI/Logic/PadNaming.cs`); only `"layer":"console"`
+resolves through `BaseControlDevice::GetKeyNameAssociations()` (ADR-0157 §2), so
+one name drives a NES, GB and SMS pad and the script is console-independent. Both layers
 **overlay** physical input rather than replacing it: a pad plugged into the
 machine does not break a run, and no run needs an OS permission. `key.*` arrives
 in the same shape at step 4 of the squad spec; `pointer.*` is deliberately absent
@@ -217,9 +227,10 @@ by the script's `target` id from a registry and implements:
   the application and returns a session. An adapter that cannot load what it
   needs **fails** — it never skips: a green run means the steps executed.
 - `session.inject(action, args)` — one action, acknowledged.
-- `session.check(name, args)` — an objective observation from UI state, a file
-  or a log line. `ui.*` comes from the hook's snapshot; `fs.*` and `log.*` are
-  evaluated by the runner and are therefore adapter-independent. A check never
+- `session.check(name, args)` — an objective observation of UI state. The
+  adapter's `session.check` covers `ui.*` only, from the hook's snapshot;
+  `fs.*` and `log.*` are evaluated by the runner and never call the adapter, so
+  they are adapter-independent. A check never
   calls a model, and a check naming an id the application does not have is
   `failed (unknown id)`, never `false` — a renamed control must break the run
   loudly, not silently change what a case measured.
@@ -264,7 +275,7 @@ the reason — item 7 and the Owner's picks section):
   "format": "gui-test/1",
   "name": "play-pad-only",
   "target": "mesen-gui",
-  "requires": {"actions":["pad.press","window.mode"], "checks":["ui.screen","ui.focused","fs.exists"]},
+  "requires": {"actions":["pad.press"], "checks":["ui.screen","ui.focused","fs.exists"]},
   "variants": {"window.mode": ["windowed","fullscreen"]},
   "fixtures": {"rom": {"path":"<library>/Contra (USA).nes","sha1":"..."}, "settings": {...}},
   "batches": [
@@ -286,11 +297,11 @@ fixtures), batches (a setup, a teardown, an ordered list of steps), and steps (a
 id, a precondition, an action, a wait, an optional objective check, an
 expected-screen description for the vision fallback, the variant values it
 applies to, a severity, and `automated` or `manual`). Names are
-`<namespace>.<verb>` and the namespaces are closed:
+`<namespace>.<verb>` and the namespaces are closed. `window.*` (mode and
+size) is an adapter variant axis, not an action:
 
 - Actions: `pad.*` (hook, step 2), `key.*` (hook, step 4), `text.*` and
-  `pointer.*` (real-window mode, step 7), `window.*` (mode and size, an adapter
-  variant axis), `nav.goal` (the navigation decision's action, restricted to
+  `pointer.*` (real-window mode, step 7), `nav.goal` (the navigation decision's action, restricted to
   preconditions, setup and recovery — rejected as the action of a step under
   test).
 - Checks: `ui.*` from the hook's snapshot, `fs.*` and `log.*` evaluated by the
@@ -300,14 +311,14 @@ applies to, a severity, and `automated` or `manual`). Names are
 - Durations and waits: the unit is keyed by whether the emulated clock advances
   (§4): **`frames` / `timeout_frames` only while a game is loaded and not
   paused**, and **`ticks` / `timeout_ticks` in every other state** (no game,
-  paused, the pause overlay, the load card, the picker). A step whose unit does
-  not match the live state is malformed — the validator and the runner reject it
-  — because the emulated frame counter does not move there and the step would
+  paused, the pause overlay, the load card, the picker). Each step names exactly one family and its `timeout_*` is the same family
+  (static check, #1179); the runner marks a step whose family mismatches the
+  emulated clock `failed (unit/state mismatch)` at runtime, because the emulated frame counter does not move there and the step would
   wait forever on a number that never moves. So the pilot script's Home-screen
   step is `{"name":"pad.press","args":{"button":"Right","ticks":4}}` with
   `{"check":"...","timeout_ticks":120}`, and the same button held in a running
-  game is `{"button":"Right","frames":4}`. Both units are application-reported counters,
-  never host time (ADR-0157 §1). Every `wait` carries its `timeout_*`; a wait may
+  game is `{"button":"Right","frames":4}`. `ticks` are counted as item 3 defines them (one per pad-bridge poll, 50 ms);
+  both units are application-reported counters, never host time (ADR-0157 §1). Every `wait` carries its `timeout_*`; a wait may
   also name a check predicate, and then the timeout applies to it.
 
 A script's `format` is the version of the format, and a validator that does not
