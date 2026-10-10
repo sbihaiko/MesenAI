@@ -22,11 +22,18 @@ namespace Mesen.Tests.TestHook
 			public int Captures;
 			public string? CaptureError;
 
+			//#1282: how many steps the protocol declared. The counts a step's own
+			//check reads restart here, so a run proves the request that started the
+			//step - and only it - is what a `ui.haptics` check measures.
+			public int Steps;
+
 			public JsonObject State() => new JsonObject {
 				["screen"] = "play.home",
 				["focus"] = "play.home.continue",
 				["controls"] = new JsonArray()
 			};
+
+			public void Step() => Steps++;
 
 			public CaptureResult Capture(string path)
 			{
@@ -135,6 +142,23 @@ namespace Mesen.Tests.TestHook
 			Assert.Single(rig.Calls);
 			rig.Keys.Advance();
 			Assert.Equal(new[] { ((ushort)0x1011, true), ((ushort)0x1011, false) }, rig.Calls);
+		}
+
+		//#1282: the counts a `ui.haptics` check reads are "since the last step", and
+		//the step is the request that starts it - an inject, and nothing else. A
+		//state read is what a wait polls (ADR-0272 item 4), so it must never look
+		//like a step boundary: draining there would lose the ticks a step caused.
+		[Fact]
+		public void An_inject_declares_the_step_and_a_state_read_does_not()
+		{
+			Rig rig = new();
+			rig.Ask("{\"id\":7,\"token\":\"secret\",\"op\":\"state\"}");
+			Assert.Equal(0, rig.Target.Steps);
+			rig.Ask("{\"id\":8,\"token\":\"secret\",\"op\":\"inject\",\"action\":\"pad.press\",\"args\":{\"button\":\"Right\",\"ticks\":1}}");
+			Assert.Equal(1, rig.Target.Steps);
+			rig.Ask("{\"id\":9,\"token\":\"secret\",\"op\":\"capture\",\"path\":\"/tmp/x.png\"}");
+			rig.Ask("{\"id\":10,\"token\":\"secret\",\"op\":\"state\"}");
+			Assert.Equal(1, rig.Target.Steps);
 		}
 
 		[Fact]

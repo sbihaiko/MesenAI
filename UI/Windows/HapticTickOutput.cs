@@ -36,7 +36,18 @@ namespace Mesen.Windows
 
 		public static bool IsAimable(uint index) => _isAimable(index);
 
-		public static void Tick(uint index) => _tick(index);
+		//#1282: who else hears a tick. The GUI test hook installs one while it runs
+		//(TestHookWiring.Start) and clears it when it stops, so a run can prove the
+		//menu asked for a tick on the pad in hand without a physical motor: the
+		//count is evidence of the request, never of the vibration. Null the rest of
+		//the time, and the request still leaves for the host exactly as before.
+		public static Action<uint>? Observed { get; set; }
+
+		public static void Tick(uint index)
+		{
+			_tick(index);
+			Observed?.Invoke(index);
+		}
 
 		//Whether the pad in hand can be ticked on its own: what shows the row.
 		public static bool PadInHandAimable() => PadInHand >= 0 && _isAimable((uint)PadInHand);

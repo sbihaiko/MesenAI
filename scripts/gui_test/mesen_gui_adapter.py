@@ -44,7 +44,29 @@ from pathlib import Path
 
 HEADLESS_E2E_CASE = "GuiTestHookTests.GuiTestHook_e2e_a_runner_drives_the_Home_over_the_socket"
 ACTIONS = ["pad.press"]
-CHECKS = ["ui.screen", "ui.focused", "ui.visible", "ui.dialogs"]
+CHECKS = ["ui.screen", "ui.focused", "ui.visible", "ui.dialogs",
+          # #1282: what a player judges by eye, read from the hook's own UI state - the focus ring, the
+          # action bar, the sheet open over the screen, whether the game is paused, the port lamps, the
+          # focused list's entries and the haptic ticks the menu asked for. Every one of them is `ui.*`:
+          # ADR-0272 item 7 closes the check namespaces to `ui|fs|log` (`emu.*` is reserved for the
+          # emulator's RAM and not part of v1, and `pad.*` is the action namespace), so the paused flag,
+          # the lamps and the haptics are read as the application's own UI state they are.
+          "ui.ring", "ui.footer", "ui.surface", "ui.paused", "ui.lamps", "ui.items", "ui.haptics"]
+# The action bar's closed vocabulary (PlayAction -> id, UI/Logic/TestHook/TestHookPlayerState.cs): a check
+# naming anything else is an unknown id, never a bar that happens to lack it.
+FOOTER_IDS = ("move", "confirm", "favorite", "search", "settings", "console-filter", "back")
+# The Play surfaces and overlays a run can stand on (TestHookSurfaces.All), which is where the hook takes
+# `ui.surface` from, plus `none` for the screen itself. Pinned against that file by
+# scripts/test_gui_test_mesen_adapter.py, so the two cannot drift apart silently.
+SURFACES = ("play.quit-game", "play.select-rom", "play.shader", "play.tool", "play.bios",
+            "play.controller-setup", "play.settings.system", "play.settings", "play.controller-sheet",
+            "play.pack-dep", "play.pack-picker", "play.enhancements", "play.pack-detail", "play.cheats",
+            "play.replays", "play.save-states", "play.pause", "play.library", "play.library-browse",
+            "play.library-folders")
+NO_ID = "none"
+# The port lamps' own readings (TestHookLamps): four ports, and a lamp the status line does not draw at all
+# is never read as "dim" (ADR-0261 hides the bar while the game runs unpaused).
+LAMP_STATES = ("lit", "dim", "hidden")
 PROFILES = ["fresh"]
 FIXTURE_KINDS = {"settings", "rom", "files", "note"}
 LISTENING = "test hook listening on"
@@ -405,6 +427,68 @@ class Session:
         if name == "ui.screen":
             observed = state.get("screen")
             return {"passed": observed == args["is"], "observed": observed}
+        if name == "ui.ring":
+            # The ring is drawn on :focus-visible, so "focused without a ring" (the renderer panel, a
+            # host's own Focus()) reads `none` - the state a pad player must never be left in (#824).
+            # This mirrors TestHookRing.Observed (UI/Logic/TestHook/TestHookPlayerState.cs:32-33), the
+            # application's own answer, and not just its happy path: a control that took :focus-visible
+            # without an AutomationId paints a ring with nothing to name, and Observed is `none` for it
+            # (`visible && target is { Length: > 0 }`). Reading the target raw answered None there, which
+            # is neither `none` nor a name a check can match.
+            ring = state.get("ring") or {}
+            target = ring.get("target")
+            named = ring.get("visible") and isinstance(target, str) and target != ""
+            observed = target if named else NO_ID
+            if args["is"] != NO_ID:
+                self._known(ids, args["is"])
+            return {"passed": observed == args["is"], "observed": observed}
+        if name == "ui.surface":
+            observed = state.get("surface", NO_ID)
+            if args["is"] != NO_ID:
+                self._surface(args["is"])
+            return {"passed": observed == args["is"], "observed": observed}
+        if name == "ui.footer":
+            bar = [str(action) for action in state.get("footer", [])]
+            observed = ",".join(bar)
+            if "is" in args:
+                for want in str(args["is"]).split(","):
+                    if want:
+                        self._footer(want)
+                return {"passed": observed == args["is"], "observed": observed}
+            self._footer(args["contains"])
+            return {"passed": args["contains"] in bar, "observed": observed}
+        if name == "ui.items":
+            # The list's own entries, as the list reports them: the ids in the order it draws them, so a
+            # game whose title carries a comma (an id is `<grid>.<name>`) still compares exactly.
+            items = [str(item) for item in state.get("items", [])]
+            if "is" in args:
+                return {"passed": items == list(args["is"]), "observed": items}
+            return {"passed": args["contains"] in items, "observed": items}
+        if name == "ui.paused":
+            observed = bool(state.get("paused"))
+            return {"passed": observed == bool(args["is"]), "observed": observed}
+        if name == "ui.lamps":
+            port = self._port(args["port"])
+            if args["is"] not in LAMP_STATES:
+                raise UnknownId(str(args["is"]))
+            lamps = state.get("lamps") or {}
+            if not lamps.get("shown"):
+                # The status line is hidden (the game runs unpaused, ADR-0261): a lamp that is not drawn is
+                # never read as "dim", so this is `hidden` and the check fails by itself.
+                observed = "hidden"
+            else:
+                lit = [lamp["lit"] for lamp in lamps.get("ports", []) if lamp.get("port") == port]
+                observed = ("lit" if lit[0] else "dim") if lit else "hidden"
+            return {"passed": observed == args["is"], "observed": observed}
+        if name == "ui.haptics":
+            # The ticks the menu asked for on one pad since the last step, recorded at HapticTickOutput
+            # (#1106). Evidence of the request, never of the vibration: no motor is involved.
+            port = self._port(args["pad"], "pad")
+            count = next((entry["count"] for entry in state.get("haptics", [])
+                          if entry.get("pad") == port), 0)
+            if "at_least" in args:
+                return {"passed": count >= args["at_least"], "observed": count}
+            return {"passed": count == args["is"], "observed": count}
         if name == "ui.focused":
             observed = state.get("focus")
             if "within" in args:
@@ -420,6 +504,24 @@ class Session:
     def _known(ids, ident):
         if ident not in ids:
             raise UnknownId(ident)
+
+    @staticmethod
+    def _surface(ident):
+        """A surface the application does not have is an unknown id, never a run standing on nothing."""
+        if ident != NO_ID and ident not in SURFACES:
+            raise UnknownId(ident)
+
+    @staticmethod
+    def _footer(action):
+        if action not in FOOTER_IDS:
+            raise UnknownId(action)
+
+    @staticmethod
+    def _port(value, key="port"):
+        """One of the four ports, 1-based as the lamps label them ("P1"), the way the hook reads them."""
+        if not isinstance(value, int) or isinstance(value, bool) or not 1 <= value <= 4:
+            raise UnknownId(f"{key} {value!r}")
+        return value
 
     def wait(self, condition, timeout_ticks, host_timeout=WAIT_HOST_TIMEOUT):
         """condition None is a tick-only wait: "met" once timeout_ticks have passed. Either way a frozen

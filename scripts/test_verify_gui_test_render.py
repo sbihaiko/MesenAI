@@ -177,10 +177,13 @@ class PilotScriptRules(unittest.TestCase):
             self.assertEqual(recent["check"]["name"], "ui.focused")
             self.assertEqual(recent["check"]["args"]["is"], "play.home.recent")
         else:
-            # `play.home.recent` is not an AutomationId the application declares, so an automated check on it
-            # would be `failed (unknown id)`, never a measurement: the step is manual and names the id.
+            # The shelf's AutomationId exists since #1282, so the step is manual for its state and not for
+            # the id: `home-after-game`'s setup is manual (`nav.goal` is not advertised) and the Home it
+            # asserts needs a game in play history, which the adapter's only `settings.profile` (`fresh`)
+            # does not seed. The step names both the id it would check and the profile it would need.
             self.assertEqual(recent["mode"], "manual")
             self.assertIn("play.home.recent", recent["expect"])
+            self.assertIn("settings.profile=history-one-favorite", recent["expect"])
 
 
 if __name__ == "__main__":

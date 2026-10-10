@@ -7,8 +7,12 @@ using Avalonia.Media.Imaging;
 using Avalonia.Platform;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
+using Mesen.Controls;
 using Mesen.Interop;
+using Mesen.Logic;
 using Mesen.Logic.TestHook;
+using Mesen.Utilities;
+using Mesen.ViewModels;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -27,6 +31,12 @@ namespace Mesen.Windows
 		private static TestHookKeys? _keys;
 		private static TestHookServer? _server;
 		private static readonly List<Window> _windows = new();
+
+		//#1282: the haptic tick requests the menu made, per pad, since the last
+		//step. Recorded at HapticTickOutput's own seam (#1106) and only while a hook
+		//runs - the observer below is installed by Start and cleared by its stopper,
+		//so a released build counts nothing.
+		private static readonly TestHookHaptics _haptics = new();
 
 		//The flag a process started with --test-hook carries. RunningForTest is the
 		//same flag for a test that only needs the window wiring - no socket, no pad
@@ -180,6 +190,10 @@ namespace Mesen.Windows
 			//application shows it: the process stops activating and this window is
 			//shown without activation, so a person typing elsewhere keeps typing.
 			TestHookActivation.Confine(window);
+			//#1282: from here the menu's haptic requests are counted. Installed
+			//before the window is driven and cleared by the stopper below, so the
+			//observation exists exactly while the hook does.
+			HapticTickOutput.Observed = _haptics.Record;
 			WindowTarget target = new(window);
 			TestHookKeys keys = new(InputApi.SetInjectedKey, keyCode ?? InputApi.GetKeyCode, RunningFrames, target.RaiseKey);
 			TestHookProtocol protocol = new(options.Token, target, keys);
@@ -191,6 +205,8 @@ namespace Mesen.Windows
 			return new Stopper(() => {
 				keys.ReleaseAll();
 				server.Dispose();
+				HapticTickOutput.Observed = null;
+				_haptics.Restart();
 				_keys = null;
 				_server = null;
 			});
@@ -214,14 +230,34 @@ namespace Mesen.Windows
 		{
 			private readonly Window _window;
 			private readonly Func<bool> _gameLoaded;
+			private readonly Func<bool> _paused;
+			private readonly Func<WorkspaceShellViewModel?> _shell;
+			private readonly TestHookHaptics _counters;
 
 			//gameLoaded: whether an emulated picture is on screen; the headless suite
-			//passes its own, the way Start takes its own keyCode.
-			public WindowTarget(Window window, Func<bool>? gameLoaded = null)
+			//passes its own, the way Start takes its own keyCode. paused: what
+			//`ui.paused` reads - the window's own model, which the same suite drives.
+			//shell: the status line the lamps come from, for a window whose data
+			//context is not the application's (a headless one). haptics: the recorder
+			//the counts are kept in, which is the one Start installs on the tick seam.
+			public WindowTarget(Window window, Func<bool>? gameLoaded = null, Func<bool>? paused = null,
+				Func<WorkspaceShellViewModel?>? shell = null, TestHookHaptics? haptics = null)
 			{
 				_window = window;
 				_gameLoaded = gameLoaded ?? EmuApi.IsRunning;
+				_paused = paused ?? (() => Model?.IsGamePaused == true);
+				_shell = shell ?? (() => Model?.Shell);
+				_counters = haptics ?? _haptics;
 			}
+
+			private MainWindowViewModel? Model => _window.DataContext as MainWindowViewModel;
+
+			//#1282: what the player sees on the surface he is standing on - the focus
+			//ring, the action bar, the sheet open over the screen, whether the game is
+			//paused, the port lamps, the focused list's entries and the haptic ticks
+			//the menu asked for. All of it is UI state (ADR-0271), never a pixel and
+			//never display text (ADR-0272 item 3).
+			public void Step() => _counters.Restart();
 
 			public JsonObject State()
 			{
@@ -295,8 +331,81 @@ namespace Mesen.Windows
 						["primaryBounds"] = AreaOf(PrimaryDisplayForTest(_window).Bounds),
 						["primaryWorkingArea"] = AreaOf(PrimaryDisplayForTest(_window).WorkingArea)
 					},
-					["windows"] = new JsonArray(ReportedWindows().Select(w => (JsonNode)WindowEntry(w.Window, w.Id)).ToArray())
+					["windows"] = new JsonArray(ReportedWindows().Select(w => (JsonNode)WindowEntry(w.Window, w.Id)).ToArray()),
+					//#1282: what a player judges by eye, as UI state.
+					["ring"] = Ring(),
+					["footer"] = TestHookFooter.Of(PlayFocusOnOpen.Of(_window)?.Declared()),
+					["surface"] = TestHookSurfaces.Observed(PlayFocusOnOpen.Of(_window)?.TopmostSurfaceId()),
+					["paused"] = _paused(),
+					["lamps"] = Lamps(),
+					["items"] = TestHookItems.Of(ItemIds()),
+					["haptics"] = _counters.Take()
 				};
+			}
+
+			//The focus ring: PlayerTheme paints it on :focus-visible, which is the
+			//focus PlayFocusOnOpen.Enter takes (NavigationMethod.Directional). A
+			//control focused without it - the renderer panel, a host's own Focus() -
+			//is focused with no ring, the state a pad player must never be left in
+			//(#824, #1232).
+			private JsonObject Ring()
+			{
+				Visual? focused = _window.FocusManager?.GetFocusedElement() as Visual;
+				bool visible = focused is Control control && control.Classes.Contains(":focus-visible");
+				return TestHookRing.Of(visible, FocusedId());
+			}
+
+			//The shell's own strip (ADR-0249/ADR-0255) and whether the status line
+			//draws it at all: while the game runs unpaused the bar is hidden
+			//(ADR-0261), and a lamp that is not drawn is never read as "dim". A
+			//window with no model (a headless window) shows no strip at all.
+			private JsonObject Lamps()
+			{
+				WorkspaceShellViewModel? shell = _shell();
+				return shell is null
+					? TestHookLamps.Of(PadPortLamps.Empty, false)
+					: TestHookLamps.Of(shell.PadPorts, shell.IsBarVisible);
+			}
+
+			//The entries of the list the focus is in - the realized ones, in the
+			//order it draws them. The walk starts at the focused element and takes
+			//the nearest StateGrid (the Favorites and Recent shelves, the slot sheet,
+			//which builds its tiles itself) or ItemsControl (the library grid, the
+			//folder lists); an entry with no AutomationId is invisible to the hook,
+			//exactly as a control without one is (ADR-0272 item 3).
+			private IEnumerable<string?> ItemIds()
+			{
+				Visual? at = _window.FocusManager?.GetFocusedElement() as Visual;
+				while(at is not null) {
+					if(at is StateGrid grid) {
+						return grid.GetVisualDescendants().OfType<StateGridEntry>()
+							.Select(entry => AutomationProperties.GetAutomationId(entry));
+					}
+					if(at is ItemsControl list) {
+						return ContainerIds(list);
+					}
+					at = at.GetVisualParent();
+				}
+				return Array.Empty<string?>();
+			}
+
+			private static IEnumerable<string?> ContainerIds(ItemsControl list)
+			{
+				List<string?> ids = new(list.ItemCount);
+				for(int i = 0; i < list.ItemCount; i++) {
+					if(list.ContainerFromIndex(i) is not Visual container) {
+						continue;
+					}
+					//The container's own id, or the nearest one below it: a list whose
+					//item template names its row reports that name, the same way a
+					//control's own id is read.
+					ids.Add(container is Control named && AutomationProperties.GetAutomationId(named) is { Length: > 0 } own
+						? own
+						: container.GetVisualDescendants().OfType<Control>()
+							.Select(child => AutomationProperties.GetAutomationId(child))
+							.FirstOrDefault(id => id is { Length: > 0 }));
+				}
+				return ids;
 			}
 
 			private int[] MainRect => WindowRect(_window);
