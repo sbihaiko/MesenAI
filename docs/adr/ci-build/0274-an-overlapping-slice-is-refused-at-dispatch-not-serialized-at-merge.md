@@ -1,6 +1,6 @@
 # ADR-0274: An overlapping slice is refused at dispatch, not serialized at merge
 
-- Status: proposed (not yet accepted: no verbatim human go-ahead is recorded; per CLAUDE.md it stays `proposed` until a human picks, and implementing #1400 waits for that)
+- Status: accepted (2026-10-10, by the user: "Porta no dispatch (recomendado)"; implementation = #1400, not yet built)
 - Date: 2026-10-10
 - Related: ADR-0273 (the two-level review verdict this completes the other half of; its Context and Consequences put GitHub's native merge queue out of scope)
 
@@ -55,8 +55,8 @@ The gate is calibrated narrow, deliberately:
   child told to avoid a file it needs has no honest way to comply.
 
 GitHub's merge queue is **not enabled**. The question ADR-0273 left open (its
-Context non-goals and Consequences) is closed by this decision once accepted,
-rather than left open.
+Context non-goals and Consequences) is closed by this decision rather than left
+open.
 
 ## Consequences
 
