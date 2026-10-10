@@ -40,6 +40,13 @@ class FakeHook:
         self.frozen = False  # a stalled UI thread: the hook answers but the tick never moves
         self.unknown_presses = 0  # the first N presses answer like a key manager that is not up yet
         self.extra_controls = []  # controls appended after `known`, e.g. a hidden twin of an id
+        #1255: where the run's windows are, and the display they must stay inside. The
+        #env knobs let a launched stand-in app report a window the adapter must refuse.
+        self.window_position = [int(os.environ.get("FAKE_WINDOW_X", 40)), int(os.environ.get("FAKE_WINDOW_Y", 60))]
+        self.window_size = [1100, 700]
+        self.primary_bounds = [0, 0, 1512, 982]
+        self.primary_working_area = [0, 25, 1512, 945]
+        self.windows = []  # dialogs and secondary windows opened during the run
         self.quit = threading.Event()
         self.server = socket.socket(socket.AF_UNIX)
         self.server.bind(str(path))
@@ -71,6 +78,11 @@ class FakeHook:
             out.update(
                 screen="play.home", dialogs=[], focus=self.focus, tick=self.tick, frames=0,
                 controls=[{"id": i, "enabled": True, "visible": True, "focused": i == self.focus} for i in self.known] + self.extra_controls,
+                window={
+                    "mode": "windowed", "size": self.window_size, "position": self.window_position, "maximized": False,
+                    "primaryBounds": self.primary_bounds, "primaryWorkingArea": self.primary_working_area,
+                },
+                windows=[{"id": "main", "position": self.window_position, "size": self.window_size}] + self.windows,
             )
         elif op == "inject":
             if req["action"] != "pad.press":
@@ -196,6 +208,91 @@ class AdapterContract(Base):
         self.assertTrue(self.hook.quit.wait(5))
 
 
+class WindowMode(unittest.TestCase):
+    """#1255: a run's window opens on the primary (built-in) display unless the operator says otherwise."""
+
+    def test_unset_value_declared_as_any_or_empty_are_the_primary_display_only(self):
+        self.assertEqual(adapter.window_mode({}), "primary")
+        self.assertEqual(adapter.window_mode({"MESEN_GUI_WINDOW": "primary"}), "primary")
+        self.assertEqual(adapter.window_mode({"MESEN_GUI_WINDOW": ""}), "primary")
+
+    def test_the_documented_escape_hatch_is_any(self):
+        self.assertEqual(adapter.window_mode({"MESEN_GUI_WINDOW": "any"}), "any")
+
+    def test_a_typo_is_an_error_not_the_permissive_mode(self):
+        with self.assertRaises(adapter.AdapterError) as ctx:
+            adapter.window_mode({"MESEN_GUI_WINDOW": "off"})
+        self.assertIn("MESEN_GUI_WINDOW", str(ctx.exception))
+        self.assertIn("off", str(ctx.exception))
+
+    def test_the_module_docstring_documents_the_switch(self):
+        self.assertIn("MESEN_GUI_WINDOW", adapter.__doc__)
+
+
+class WindowPlacement(Base):
+    """#1255: no window of the run may sit outside the primary display, and the step that opens one there fails."""
+
+    def test_a_window_inside_the_primary_display_is_a_pass(self):
+        self.assertTrue(self.session.check("ui.screen", {"is": "play.home"})["passed"])
+
+    #An external monitor left of the built-in one: x is negative, so a window the OS
+    #put there is outside the primary display's bounds.
+    def test_the_main_window_on_an_external_display_fails_the_read(self):
+        self.hook.window_position = [-1200, 60]
+        with self.assertRaises(adapter.AdapterError) as ctx:
+            self.session.check("ui.screen", {"is": "play.home"})
+        self.assertIn("primary display", str(ctx.exception))
+        self.assertIn("-1200", str(ctx.exception))
+
+    def test_a_window_half_off_the_right_edge_fails_the_read(self):
+        self.hook.window_position = [900, 60]  # 900 + 1100 > 1512
+        with self.assertRaises(adapter.AdapterError):
+            self.session.check("ui.screen", {"is": "play.home"})
+
+    def test_a_dialog_opened_off_the_primary_display_fails_the_step(self):
+        self.session.check("ui.screen", {"is": "play.home"})
+        self.hook.windows.append({"id": "play.controller-sheet", "position": [1600, 100], "size": [800, 600]})
+        with self.assertRaises(adapter.AdapterError) as ctx:
+            self.session.wait("ui.screen == play.home", 8)
+        self.assertIn("play.controller-sheet", str(ctx.exception))
+
+    def test_a_dialog_that_stays_on_the_primary_display_does_not_fail_the_step(self):
+        self.hook.windows.append({"id": "play.controller-sheet", "position": [200, 120], "size": [800, 600]})
+        self.assertEqual(self.session.wait("ui.screen == play.home", 8), "met")
+
+    def test_the_escape_hatch_lets_a_window_sit_anywhere(self):
+        self.session.window_mode = "any"
+        self.hook.window_position = [-1200, 60]
+        self.assertTrue(self.session.check("ui.screen", {"is": "play.home"})["passed"])
+
+    def test_a_hook_that_reports_no_primary_display_is_an_error_not_a_pass(self):
+        self.hook.primary_bounds = None
+        with self.assertRaises(adapter.AdapterError) as ctx:
+            self.session.check("ui.screen", {"is": "play.home"})
+        self.assertIn("primary", str(ctx.exception))
+
+
+class WindowVariablePassThrough(unittest.TestCase):
+    """#1255: the adapter reads MESEN_GUI_WINDOW itself, so a runner only has to not swallow it."""
+
+    def test_the_runner_passes_the_variable_to_the_dotnet_process(self):
+        calls = []
+        real = runner.subprocess.Popen
+
+        class Fake:
+            def __init__(self, argv, **kwargs):
+                calls.append(kwargs.get("env") or {})
+                raise SystemExit  # the run never reaches a real dotnet
+
+        os.environ["MESEN_GUI_WINDOW"] = "any"
+        self.addCleanup(lambda: os.environ.pop("MESEN_GUI_WINDOW", None))
+        runner.subprocess.Popen = Fake
+        self.addCleanup(lambda: setattr(runner.subprocess, "Popen", real))
+        with self.assertRaises(SystemExit):
+            runner.run("osx-arm64", "/nonexistent/MesenCore.dylib")
+        self.assertTrue(calls and calls[0].get("MESEN_GUI_WINDOW") == "any", calls)
+
+
 FAKE_APP = textwrap.dedent('''\
     #!{python}
     import sys
@@ -291,10 +388,59 @@ class AdapterE2E(unittest.TestCase):
             # HOME does not isolate the app; the fresh profile is a settings.json next to the cloned binary.
             clone = Path(session.argv[0])
             self.assertEqual(clone.parent, self.tmp / "run" / "app")
-            self.assertEqual(json.loads((clone.parent / "settings.json").read_text()), {"Preferences": {"UiMode": "Player", "SingleInstance": False}})
+            settings = json.loads((clone.parent / "settings.json").read_text())
+            self.assertEqual(settings["Preferences"], {"UiMode": "Player", "SingleInstance": False})
+            #1255: every launch pins the main window, so the OS cannot open the run
+            #on an external monitor before the hook can say where it landed.
+            self.assertEqual(settings["MainWindow"], {
+                "WindowSize": {"Width": 1100, "Height": 700},
+                "WindowLocation": {"X": 40, "Y": 60},
+                "WindowIsMaximized": False,
+            })
             self.assertTrue(session.log_text().startswith("test hook listening on"))
         finally:
             session.teardown()
+
+    def env(self, **values):
+        old = {k: os.environ.get(k) for k in values}
+        os.environ.update(values)
+
+        def restore():
+            for key, value in old.items():
+                os.environ.pop(key, None) if value is None else os.environ.__setitem__(key, value)
+
+        self.addCleanup(restore)
+
+    #1255: the adapter reads the variable itself, so it only has to reach the launched process unchanged.
+    def test_the_window_variable_reaches_the_launched_process_unchanged(self):
+        self.env(MESEN_GUI_WINDOW="any")
+        session = self.launch()
+        try:
+            self.assertEqual(session.env.get("MESEN_GUI_WINDOW"), "any")
+        finally:
+            session.teardown()
+
+    def test_a_window_off_the_primary_display_fails_the_launch(self):
+        self.env(FAKE_WINDOW_X="-1200")
+        with self.assertRaises(adapter.AdapterError) as ctx:
+            self.launch()
+        self.assertIn("primary display", str(ctx.exception))
+
+    def test_the_escape_hatch_lets_a_run_on_another_monitor_start(self):
+        self.env(MESEN_GUI_WINDOW="any", FAKE_WINDOW_X="-1200")
+        session = self.launch()
+        try:
+            self.assertTrue(session.check("ui.screen", {"is": "play.home"})["passed"])
+        finally:
+            self.assertEqual(session.teardown(), [])
+
+    def test_an_invalid_window_value_fails_the_launch_before_anything_starts(self):
+        self.env(MESEN_GUI_WINDOW="off")
+        with self.assertRaises(adapter.AdapterError) as ctx:
+            self.launch()
+        self.assertIn("MESEN_GUI_WINDOW", str(ctx.exception))
+        self.assertFalse((self.tmp / "run" / "app").exists(), "the app was cloned before the switch was read")
+        self.assertFalse((self.tmp / "run" / "hook.sock").exists())
 
     def test_a_missing_rom_fails_launch_and_starts_nothing(self):
         self.rom.unlink()
