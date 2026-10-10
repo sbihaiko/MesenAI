@@ -113,6 +113,11 @@ public class PlayHomeViewTests : IDisposable
 		Button open = Assert.Single(ButtonsOnScreen(firstRun));
 		Assert.Same(window.FindNamed<Button>("PlayHomeOpenRomPrimary"), open);
 		Assert.True(open.IsFocused);
+		//#1183: the GUI test hook names the first-run action like the populated
+		//home's Open a ROM… card, so a script's `ui.focused == play.home.open-rom`
+		//holds on a fresh install too (a check on an id the window lacks is "unknown id").
+		Assert.Equal("play.home.open-rom", Avalonia.Automation.AutomationProperties.GetAutomationId(open));
+		Assert.Equal("play.home.open-rom", new TestHookWiring.WindowTarget(window).State()["focus"]?.GetValue<string>());
 		//Rule 10: the sentence says what happens next.
 		Assert.Contains("community pack", window.FindNamed<TextBlock>("PlayHomeOrientation").Text);
 	}
