@@ -12,7 +12,7 @@
 
 ```json
 {
-  "note": "no `rom`, `rom-second`, `rom-zip`, `rom-fds`, `rom-library-large`, `pack` or `pack-multi` fixture is committed: a `rom` fixture needs an absolute path to a real ROM and its No-Intro sha1 (ADR-0003), which a script in this repository cannot carry, and mesen-gui places no file it was not given. The steps that need one are `manual` - they name the fixture they need in their own text.",
+  "note": "no `rom`, `rom-second`, `rom-zip`, `rom-fds`, `rom-library-large`, `pack` or `pack-multi` fixture is committed: a `rom` fixture needs an absolute path to a real ROM and its No-Intro sha1 (ADR-0003), which a script in this repository cannot carry, and mesen-gui places no file it was not given. The steps that need one are `manual` - they name the fixture they need in their own text. `settings.profile` is not a scripting convention: `scripts/gui_test/mesen_gui_adapter.py` `resolve_fixtures()` reads the `profile` key of the `settings` fixture against its own `PROFILES` list (default `fresh`), and `fresh` is that list's only entry - the seeded portable settings.json beside the cloned app folder.",
   "settings": {
     "profile": "fresh",
     "profiles": {
@@ -90,6 +90,7 @@ Setup:
 
 | ID | Role | Precondition | Action | Wait | Check | Expected | Variants | Severity | Mode |
 |---|---|---|---|---|---|---|---|---|---|
+| `lib.home-ring` | setup | `the application has just launched on a fresh settings folder` | — | `ui.focused == play.home.open-rom` within 120 ticks | `ui.focused(is="play.home.open-rom")` | HOME-01 - the batch opens on a settled home before it presses anything; the ring is not up yet at a fresh launch, so a press sent first is dropped and the step below reads None (#1232). | all | major | automated |
 | `lib.reach-library` | setup | `ui.screen == play.home and ui.focused == play.home.open-rom` | `pad.press(button="A", ticks=4)` | `ui.screen == play.library` within 120 ticks | `ui.screen(is="play.library")` | LIB-01 - A on the Home's focused Open a ROM opens the Library W-P19 by pad alone, on a fresh settings folder | all | major | automated |
 
 Steps:
@@ -543,7 +544,7 @@ Steps:
 | `FS-01` | under-test | `W-P4 > Settings > Display, windowed` | — | — | — | A on the Fullscreen switch goes full screen and the ring stays on the switch; the mouse cursor is hidden over the game (needs variant window.mode=fullscreen, which mesen-gui does not advertise) | all | major | manual |
 | `FS-02` | under-test | `Full screen, W-P4 > Settings > Display` | — | — | — | Left from Done to Exit full screen (its own row, visible only in full screen, #910), A: back to a window with the ring on Done (needs variant window.mode=fullscreen, which mesen-gui does not advertise) | all | major | manual |
 | `FS-03` | under-test | `Full screen, game running` | — | — | — | Chord, walk W-P4, open Settings, B, B: the [F] column of P4-01..SET-07, recorded only where it differs (needs variant window.mode=fullscreen, which mesen-gui does not advertise; needs action pad.chord, which mesen-gui does not advertise) | all | major | manual |
-| `FS-04` | under-test | `Windowed` | — | — | — | Shrink the window to its minimum by pad: BLOCKED by design; record only whether the default window is below 1024x640 (ADR-0269 Decision 6) (needs variant window.mode=fullscreen, which mesen-gui does not advertise) | all | major | manual |
+| `FS-04` | under-test | `Windowed` | — | — | — | Shrink the window to its minimum by pad: BLOCKED by design; record only whether the default window is below 1024x640 (ADR-0269 Decision 6). (manual: by design, not automatable - the pad cannot shrink the window, and the case asks a person to read the default window size, which no action or check the adapter advertises expresses) | all | major | manual |
 | `FS-05` | under-test | `Full screen, Interface size Extra large` | — | — | — | Open the library, Cheats and the Controller sheet: nothing clipped, every Done/Back reachable (ADR-0269 Decision 6 names them; needs variant window.mode=fullscreen, which mesen-gui does not advertise) | all | major | manual |
 
 ## Batch `feel`

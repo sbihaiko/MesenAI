@@ -83,7 +83,15 @@ class VerifyGuiTestRender(unittest.TestCase):
 
 
 class PilotScriptRules(unittest.TestCase):
-    """Conversion rules the pilot script must keep (ADR-0268 D6, ADR-0271 D3, ADR-0272 item 7)."""
+    """Conversion rules the pilot script must keep (ADR-0268 D6, ADR-0271 D3, ADR-0272 item 7).
+
+    #1242 narrowed the pilot to what `mesen-gui` advertises: a step the adapter cannot be asked to run is
+    `manual` and carries no `action`/`wait`/`check` (ADR-0272 item 7, and the format validator refuses an
+    unadvertised action wherever it appears), so a rule that reads a press or a check reads it off the steps
+    that still run, and asserts over the step itself what the narrowing has to keep: it is still there, and it
+    says which capability it is missing. `verify_gui_test_scenario_coverage.py` keeps the case, this keeps the
+    rule.
+    """
 
     @classmethod
     def setUpClass(cls):
@@ -108,21 +116,40 @@ class PilotScriptRules(unittest.TestCase):
         self.assertTrue(any(i.startswith("after-game.contained-up") for i in ids))
         self.assertTrue(any(i.startswith("after-game.contained-sideways") for i in ids))
         self.assertFalse([i for i in self.batches["home"]["steps"] if i["id"].startswith("home.contained")])
-        presses = {s["action"]["args"]["button"] for s in self.batches["home-after-game"]["steps"]
-                   if s["id"].startswith("after-game.contained-sideways")}
-        self.assertEqual(presses, {"Left", "Right"})
+        for sid in ("after-game.contained-sideways-left", "after-game.contained-sideways-right"):
+            self.assertIn(sid, self.steps, f"the case must survive the narrowing: {sid}")
+        sideways = [s for s in self.batches["home-after-game"]["steps"]
+                    if s["id"].startswith("after-game.contained-sideways")]
+        for s in sideways:
+            if "action" in s:
+                self.assertIn(s["action"]["args"]["button"], {"Left", "Right"}, s["id"])
+            else:
+                self.assertEqual(s["mode"], "manual", s["id"])
 
-    def test_goal_is_a_check_predicate(self):
+    def test_navigation_is_setup_and_the_goal_it_needs_is_named(self):
+        """ADR-0271 section 3: navigation is setup, never the behavior under test.
+
+        `mesen-gui` advertises no `nav.goal`, so the batch whose entry was a goal cannot run its own setup
+        and is `manual` here - the setup still says which action it would have run."""
+        for s in self.steps.values():
+            self.assertNotEqual((s.get("action") or {}).get("name"), "nav.goal", s["id"])
         setup = self.batches["home-after-game"]["setup"][0]
-        self.assertEqual(setup["action"]["args"]["goal"], "ui.screen == play.home")
+        self.assertEqual(setup["mode"], "manual")
+        self.assertIn("needs action nav.goal", setup["expect"])
         self.assertNotEqual(setup["precondition"], "game == loaded")
 
     def test_recent_is_reached_through_favorites(self):
         ids = [s["id"] for s in self.batches["home-after-game"]["steps"]]
         self.assertLess(ids.index("after-game.order-favorites"), ids.index("after-game.order-recent"))
         recent = self.steps["after-game.order-recent"]
-        self.assertEqual(recent["check"]["name"], "ui.focused")
-        self.assertEqual(recent["check"]["args"]["is"], "play.home.recent")
+        if "check" in recent:
+            self.assertEqual(recent["check"]["name"], "ui.focused")
+            self.assertEqual(recent["check"]["args"]["is"], "play.home.recent")
+        else:
+            # `play.home.recent` is not an AutomationId the application declares, so an automated check on it
+            # would be `failed (unknown id)`, never a measurement: the step is manual and names the id.
+            self.assertEqual(recent["mode"], "manual")
+            self.assertIn("play.home.recent", recent["expect"])
 
 
 if __name__ == "__main__":

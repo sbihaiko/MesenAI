@@ -383,6 +383,12 @@ doc-checks-1: check-manifest
 	# The script's requires.actions equals the actions its steps use, and no
 	# under-test step runs nav.goal (ADR-0271 section 3).
 	python3 scripts/checks/verify_gui_test_actions.py
+	# #1242 criterion 1: every automated step of a committed script names an
+	# action, check, variant, fixture and control id the adapter and the
+	# application really have, and every `manual` step's claim about what it is
+	# missing is still true - so the narrowed script cannot go stale from here.
+	python3 scripts/checks/verify_gui_test_adapter_surface.py
+	python3 scripts/test_verify_gui_test_adapter_surface.py
 	# #1242: no case of the manual scenario beside a script is lost by it - the
 	# 53 steps the adapter cannot be asked to run became `manual`, never dropped.
 	python3 scripts/checks/verify_gui_test_scenario_coverage.py
