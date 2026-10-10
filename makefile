@@ -380,6 +380,9 @@ doc-checks-1: check-manifest
 	# Markdown view equals its render by the vendored agent-squad renderer. Fails,
 	# never skips, when the vendored file, its sha256 or a view is wrong.
 	python3 scripts/checks/verify_gui_test_render.py
+	# The script's requires.actions equals the actions its steps use, and no
+	# under-test step runs nav.goal (ADR-0271 section 3).
+	python3 scripts/checks/verify_gui_test_actions.py
 	./scripts/checks/verify_core_no_http_client.sh
 	./scripts/checks/verify_fetcher_no_filesystem_allowlist_load.sh
 	./scripts/checks/verify_no_ptbr_usage_strings.sh
