@@ -73,7 +73,8 @@ def resolve_fixtures(fixtures, workdir, binary):
     HOME does not isolate the app (.NET resolves ApplicationData natively on
     macOS); the one override is a settings.json next to the executable
     (ConfigManager.DefaultPortableFolder), so the session runs from a clone of
-    the app folder seeded with a fresh one, and `files` land in that folder."""
+    the app folder seeded with a fresh one, and `files` land in that folder. A `rom`
+    lands in `<clone>/library/`, which the seeded settings.json names as LibraryFolders."""
     unknown = sorted(set(fixtures) - FIXTURE_KINDS)
     if unknown:
         raise FixtureError("fixture kind not supported by mesen-gui: " + ", ".join(unknown))
@@ -91,11 +92,16 @@ def resolve_fixtures(fixtures, workdir, binary):
         have = _sha1_of_rom(path)
         if have != want:
             raise FixtureError(f"rom fixture {path} sha1 {have} is not the expected {want}")
-        # Checked but not handed to the app would be ignored-rather-than-failed (ADR-0272 item 6).
-        raise FixtureError("rom fixture not yet placeable: the hook has no way to open a ROM yet")
     launched = _clone_app_folder(binary, Path(workdir) / "app")
     home = launched.parent
-    (home / "settings.json").write_text("{}\n")  # portable mode, fresh profile
+    settings = {}  # portable mode, fresh profile: LibraryFolders stays absent so the first run starts at Home
+    if rom is not None:
+        # Only through the profile, never argv (ADR-0272 item 6): the ROM is a library tile.
+        library = home / "library"
+        library.mkdir(parents=True, exist_ok=True)
+        (library / path.name).write_bytes(path.read_bytes())
+        settings["Preferences"] = {"LibraryFolders": [str(library)]}  # PreferencesConfig.LibraryFolders, PascalCase keys
+    (home / "settings.json").write_text(json.dumps(settings, indent=2) + "\n" if settings else "{}\n")
     for item in fixtures.get("files") or []:
         src = Path(item.get("src", ""))
         if not src.is_file():

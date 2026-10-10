@@ -177,8 +177,7 @@ class AdapterE2E(unittest.TestCase):
         self.app.chmod(self.app.stat().st_mode | stat.S_IXUSR)
         self.rom = self.tmp / "Contra (USA).nes"
         self.rom.write_bytes(b"rom")
-        # No rom fixture: the adapter refuses one until the hook can open a ROM; tests that
-        # need a launch must not pass it (refusal is covered by test_rom_fixture_is_refused_not_ignored).
+        # A fresh profile has no rom fixture; the rom tests add self.rom_fixture themselves.
         self.fixtures = {"settings": {"profile": "fresh"}}
         self.rom_fixture = {"path": str(self.rom), "sha1": hashlib.sha1(b"rom").hexdigest()}
 
@@ -220,6 +219,27 @@ class AdapterE2E(unittest.TestCase):
             self.launch()
         self.assertIn("rom", str(ctx.exception))
         self.assertFalse((self.tmp / "run" / "hook.sock").exists())
+
+    def test_a_rom_fixture_is_placed_in_the_clone_and_written_as_the_library_folder(self):
+        self.fixtures["rom"] = self.rom_fixture
+        session = self.launch()
+        try:
+            home = Path(session.argv[0]).parent
+            self.assertEqual((home / "library" / self.rom.name).read_bytes(), b"rom")
+            settings = json.loads((home / "settings.json").read_text())
+            self.assertEqual(settings["Preferences"]["LibraryFolders"], [str(home / "library")])
+            self.assertFalse(any("rom" in a.lower() or ".nes" in a for a in session.argv[1:]))
+        finally:
+            session.teardown()
+
+    def test_no_rom_fixture_leaves_library_folders_absent(self):
+        session = self.launch()
+        try:
+            home = Path(session.argv[0]).parent
+            self.assertFalse((home / "library").exists())
+            self.assertNotIn("LibraryFolders", (home / "settings.json").read_text())
+        finally:
+            session.teardown()
 
     def test_a_rom_with_the_wrong_sha1_fails_launch(self):
         self.fixtures["rom"] = {**self.rom_fixture, "sha1": "0" * 40}

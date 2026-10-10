@@ -4,9 +4,11 @@
 The app resolves its home from a settings.json next to its executable
 (ConfigManager.DefaultPortableFolder); HOME is ignored on macOS. So a session
 must launch a cloned binary folder seeded with the run's settings.json, and
-`files` fixtures must land under that folder. A `rom` fixture the app cannot be
-handed is a FixtureError, never silently ignored (ADR-0272 item 6)."""
+`files` fixtures must land under that folder. A `rom` fixture reaches the app
+only through the profile: copied into `<clone>/library/` and written as
+`Preferences.LibraryFolders`, never on argv (ADR-0272 item 6)."""
 import hashlib
+import json
 import os
 import stat
 import sys
@@ -52,12 +54,26 @@ class PlaceFixtures(unittest.TestCase):
         launched = adapter.resolve_fixtures({"files": [{"src": str(src), "dest": "Saves/a.txt"}]}, self.work, self.exe)
         self.assertEqual((launched.parent / "Saves" / "a.txt").read_text(), "x")
 
-    def test_rom_fixture_is_refused_not_ignored(self):
+    def test_rom_fixture_is_placed_as_a_library_folder(self):
         rom = self.root / "g.nes"
         rom.write_bytes(b"NES\x1a" + b"\0" * 12 + b"abc")
         sha = hashlib.sha1(b"abc").hexdigest()
-        with self.assertRaisesRegex(adapter.FixtureError, "not yet placeable"):
-            adapter.resolve_fixtures({"rom": {"path": str(rom), "sha1": sha}}, self.work, self.exe)
+        launched = adapter.resolve_fixtures({"rom": {"path": str(rom), "sha1": sha}}, self.work, self.exe)
+        library = launched.parent / "library"
+        self.assertEqual((library / "g.nes").read_bytes(), rom.read_bytes())
+        settings = json.loads((launched.parent / "settings.json").read_text())
+        self.assertEqual(settings["Preferences"]["LibraryFolders"], [str(library)])
+
+    def test_no_rom_fixture_keeps_library_folders_absent(self):
+        launched = adapter.resolve_fixtures({}, self.work, self.exe)
+        self.assertNotIn("LibraryFolders", (launched.parent / "settings.json").read_text())
+
+    def test_rom_fixture_with_the_wrong_sha1_is_refused(self):
+        rom = self.root / "g.nes"
+        rom.write_bytes(b"abc")
+        with self.assertRaises(adapter.FixtureError):
+            adapter.resolve_fixtures({"rom": {"path": str(rom), "sha1": "0" * 40}}, self.work, self.exe)
+        self.assertFalse((self.work / "app" / "library").exists())
 
     def test_launch_runs_from_the_clone_even_when_the_app_dies(self):
         a = adapter.MesenGuiAdapter(binary=str(self.exe), workdir=self.work, connect_timeout=1)
