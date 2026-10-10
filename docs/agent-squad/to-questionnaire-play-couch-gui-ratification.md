@@ -1,12 +1,12 @@
 # Play couch GUI: ratifying the autonomy panel's decisions
 
-**Purpose:** While the owner was away, an AI "autonomy panel" (Claude Opus 5.5 acting as human proxy) and the coordinating agent made 7 judgment calls on the couch-ready Play GUI work (spec #1102, issues #1103–#1107, #1111, #1134). Each is labelled `needs-ratification`. The owner needs an engineer's verdict on each: keep the choice that shipped, or pick a different alternative.
+**Purpose:** While the owner was away, an AI "autonomy panel" (Claude Opus 5.5 acting as human proxy) and the coordinating agent made 8 judgment calls on the couch-ready Play GUI work (spec #1102, issues #1103–#1107, #1111, #1134). Each is labelled `needs-ratification`. The owner needs an engineer's verdict on each: keep the choice that shipped, or pick a different alternative.
 
 **From:** the owner (sbihaiko), **To:** tech lead / architect, **How your answers will be used:** each answer is recorded on its issue (quoted as the ratification), and any "change it" answer becomes a follow-up issue before the work is considered final.
 
 ## Context
 
-The spec #1102 was split into slices; every slice shipped to `main` (e2e `UI.Tests` green, 0 failures on the latest main). Several slices hit the circuit breaker (4–5 review rounds, each finding a new class of defect), so the panel picked an option instead of continuing to iterate. Those picks are provisional: they were cheapest to reverse, not necessarily best. Nothing here needs you to run code; the references (issue numbers, PRs, ADR-0268/0269/0270) show what was decided and where.
+The spec #1102 was split into slices; every slice merged to `main` and its issue (#1103–#1107, #1111, #1134) was closed by 2026-10-09; each issue carries its PR and CI record. Several slices hit the circuit breaker (4–5 review rounds, each finding a new class of defect), so the panel picked an option instead of continuing to iterate. Those picks are provisional: they were cheapest to reverse, not necessarily best. Nothing here needs you to run code; the references (issue numbers, PRs, ADR-0268/0269/0270) show what was decided and where.
 
 ## How to answer
 
