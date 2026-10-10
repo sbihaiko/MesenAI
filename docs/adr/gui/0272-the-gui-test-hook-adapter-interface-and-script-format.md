@@ -8,16 +8,14 @@
   T.0, tickets #1178, #1179, #1181, #1182, #1183). The implementation tickets
   read this as binding. Not implemented.
 - Date: 2026-10-09
-- Related: the navigation decision on PR #1201 (Jev drives pad/keyboard
-  navigation from the hook's state; its option A is the one this ADR is the
-  surface of). It is accepted but not in `main` yet, so this file cites it by
-  PR; the Jev navigation ADR on PR #1201 gets its number cited here once both
-  are on main. The squad spec travels with the same PR. Prior art: ADR-0157 §1–§3 and
+- Related: ADR-0271 (Jev drives pad/keyboard navigation from the hook's
+  state; its option A is the one this ADR is the surface of) and the squad
+  spec `docs/agent-squad/to-spec-gui-test-squad.md`. Prior art: ADR-0157 §1–§3 and
   §6, ADR-0150, ADR-0167 (superseded — folded into ADR-0157, which carries it),
   ADR-0249, ADR-0238, ADR-0123, ADR-0137, ADR-0003, ADR-0250, ADR-0255,
   ADR-0262.
 - Supersedes / amends: none. This is the hook/adapter/format half of the squad
-  spec's step 0 and step 2; the navigation half is the PR #1201 ADR named above.
+  spec's step 0 and step 2; the navigation half is ADR-0271.
 
 ## Context
 
@@ -131,7 +129,7 @@ check. A control with no id is invisible to the hook. `tick` is the
 application's UI update counter — one count per Play pad-bridge poll (`PollInterval`
 50 ms, `UI/Windows/PlayPadNavigationWiring.cs:55,68`), counted by the application, never read from host time — and `frames` the emulated frame counter
 (`0` when no game is loaded) — both are application-reported counters, and no
-wait may spend host time (ADR-0157 §1). The navigation decision on PR #1201 widens this snapshot beyond the
+wait may spend host time (ADR-0157 §1). ADR-0271 widens this snapshot beyond the
 active screen
 and the focused control to **visible controls and menu options**, which is what
 items 3 and 4 of that decision need; this ADR is that surface.
