@@ -430,16 +430,21 @@ public class GuiTestHookTests : IDisposable
 		}
 	}
 
-	//#1242 acceptance criterion 3: every automated step the pad-only script's Home and
-	//Library batches name, driven over the socket and on the profile the script's
-	//`fresh` fixture seeds - no play history, so the home's ring is on its one action
-	//from launch (`home.first-focus`, and the `lib.home-ring` setup step the library
-	//batch opens with), A on it opens the library sheet (`home.open-library`,
-	//`lib.reach-library`, whose `lib.open-screen` is the same wait's screen), and B
-	//returns to the home with the ring back on the control that opened the sheet
-	//(`lib.back-to-home`, `lib.back-ring-on-opener`). The issue warns the press may open
-	//a picker instead of the library; the state's `dialogs` is what would say so, so it
-	//is asserted empty too.
+	//#1242 acceptance criterion 3: the pad-only script's Home batch and then its
+	//Library batch, every automated step of each driven over the socket, in the
+	//batch's own order, on the profile the script's `fresh` fixture seeds - no play
+	//history, so the home's ring is on its one action from launch, A on it opens the
+	//library sheet, and B returns to the home with the ring back on the control that
+	//opened the sheet. The issue warns the press may open a picker instead of the
+	//library; the state's `dialogs` is what would say so, so it is asserted empty too.
+	//
+	//Every value comes out of `docs/validation/process/play-pad-only.gui-test.json`
+	//(PadOnlyScript): the ids, the `wait.check` and its `timeout_ticks`, the action's
+	//button and tick count, and each step's precondition, which is evaluated before
+	//the step exactly as the supervised runner evaluates it. Nothing here restates a
+	//value the script owns, so a drift in the script's ids, ticks or preconditions
+	//fails this case instead of passing behind it - which is what the review of the
+	//first version of this case asked for.
 	[AvaloniaFact]
 	public void GuiTestHook_e2e_A_on_the_fresh_home_opens_the_library_over_the_socket()
 	{
@@ -447,6 +452,31 @@ public class GuiTestHookTests : IDisposable
 		if(OperatingSystem.IsWindows()) {
 			Assert.Skip("the e2e case speaks the Unix socket; the Windows named pipe has no headless case yet");
 		}
+		//Each batch is its own fresh launch, the way `run_supervised` runs one
+		//(squad/gui_test_supervise.py: one adapter process and one `launch` per
+		//batch): the library batch's first press is the first press of its home,
+		//never a second press on a home the batch before it already used.
+		(List<JsonObject> Answers, Dictionary<string, JsonObject> States, List<string> Failures) home =
+			DriveBatch(new[] { "home.first-focus", "home.open-library", "home.back-to-home" });
+		(List<JsonObject> Answers, Dictionary<string, JsonObject> States, List<string> Failures) library =
+			DriveBatch(new[] { "lib.home-ring", "lib.reach-library", "lib.open-screen", "lib.back-to-home", "lib.back-ring-on-opener" });
+
+		Assert.All(home.Answers.Concat(library.Answers), a => Assert.True(a["ok"]!.GetValue<bool>(), a.ToJsonString()));
+		Assert.Empty(home.Failures);
+		Assert.Empty(library.Failures);
+		//The step the issue warns about (a picker instead of the library): the state
+		//`lib.open-screen` decided on is the one read while the sheet is up, and its
+		//`dialogs` is what says whether a modal opened over it.
+		Assert.Empty(library.States["lib.open-screen"]["dialogs"]!.AsArray());
+	}
+
+	//One batch of the pad-only script, driven over the hook's socket on a fresh home,
+	//on a window of its own. Every value - the ring's check, the press's button and
+	//tick count, the wait's check and its `timeout_ticks`, the precondition evaluated
+	//before each step - is the script's (PadOnlyScript), so a drift in the script's
+	//ids, ticks or preconditions fails this case instead of passing behind it.
+	private (List<JsonObject> Answers, Dictionary<string, JsonObject> States, List<string> Failures) DriveBatch(string[] steps)
+	{
 		(MainWindow window, MainWindowViewModel model) = ShowFreshHome();
 		string endpoint = Path.Combine("/tmp", "m1242-" + Guid.NewGuid().ToString("N").Substring(0, 8), "hook.sock");
 		window.ReleaseCore = () => { };
@@ -458,7 +488,7 @@ public class GuiTestHookTests : IDisposable
 		//Torn down in `finally`, like the case above: a failing assert must not leave
 		//the test key lookups installed for the next case, nor the socket folder.
 		try {
-			Task<(List<JsonObject> Answers, JsonObject Ring, JsonObject Library, JsonObject BackHome)> runner = Task.Run(() => {
+			Task<(List<JsonObject> Answers, Dictionary<string, JsonObject> States, List<string> Failures)> runner = Task.Run(() => {
 				List<JsonObject> answers = new();
 				using Socket client = new(AddressFamily.Unix, SocketType.Stream, ProtocolType.Unspecified);
 				client.Connect(new UnixDomainSocketEndPoint(endpoint));
@@ -472,31 +502,67 @@ public class GuiTestHookTests : IDisposable
 					answers.Add(answer);
 					return answer;
 				}
-				//The wait a step's `wait.check` is: poll the state in ticks until the
-				//check holds, the way the supervised runner polls the hook.
-				JsonObject Wait(Func<JsonObject, bool> until)
+				//A step's precondition, the way the runner reads it: a check only when
+				//it has ` == ` in it, evaluated once with no wait, before the step.
+				void Precondition(PadOnlyStep step, List<string> failures)
 				{
+					(string name, string value)? wanted = PadOnlyScript.Comparison(step.Precondition);
+					if(wanted is null) {
+						return;
+					}
+					JsonObject state = Ask("\"op\":\"state\"");
+					string? observed = state[PadOnlyScript.StateField(wanted.Value.name)]?.GetValue<string>();
+					if(observed != wanted.Value.value) {
+						failures.Add($"{step.Id}: precondition {step.Precondition} does not hold (observed {observed})");
+					}
+				}
+				//A step's `wait`: poll the state in the hook's own ticks until the check
+				//holds, for no longer than the script's `timeout_ticks` - the runner's
+				//own wait, in the runner's own units.
+				JsonObject Wait(PadOnlyStep step, List<string> failures)
+				{
+					(string name, string value)? wanted = PadOnlyScript.Comparison(step.WaitCheck);
+					if(wanted is null || step.WaitTimeoutTicks <= 0) {
+						throw new InvalidOperationException($"{step.Id} waits on nothing: no wait.check/timeout_ticks in {PadOnlyScript.RelativePath}");
+					}
+					string field = PadOnlyScript.StateField(wanted.Value.name);
 					JsonObject now = Ask("\"op\":\"state\"");
 					long start = now["tick"]!.GetValue<long>();
-					while(!until(now) && now["tick"]!.GetValue<long>() < start + 120) {
+					string? observed = now[field]?.GetValue<string>();
+					while(observed != wanted.Value.value && now["tick"]!.GetValue<long>() < start + step.WaitTimeoutTicks) {
 						Thread.Sleep(20);
 						now = Ask("\"op\":\"state\"");
+						observed = now[field]?.GetValue<string>();
+					}
+					if(observed != wanted.Value.value) {
+						failures.Add($"{step.Id}: timeout waiting for {step.WaitCheck} after {step.WaitTimeoutTicks} ticks (observed {observed})");
+					}
+					//The step's own check is its verdict; the runner reads both, so the
+					//script disagreeing with itself is a failure and not a silent pass.
+					(string name, string value)? decided = PadOnlyScript.Comparison(step.Check);
+					if(decided is not null && (decided.Value.name != wanted.Value.name || decided.Value.value != wanted.Value.value)) {
+						failures.Add($"{step.Id}: check {step.Check} is not the wait's check {step.WaitCheck}");
 					}
 					return now;
 				}
+				//The step's action, as the script spells it.
+				void Act(PadOnlyStep step)
+				{
+					foreach(PadOnlyAction action in step.Actions) {
+						Ask("\"op\":\"inject\",\"action\":" + JsonValue.Create(action.Name)!.ToJsonString() + ",\"args\":" + action.Args.ToJsonString());
+					}
+				}
+				List<string> failures = new();
+				Dictionary<string, JsonObject> states = new();
 				Ask("\"op\":\"hello\"");
-				//home.first-focus, lib.home-ring: the ring at a fresh launch.
-				JsonObject ring = Wait(s => s["focus"]?.GetValue<string>() == "play.home.open-rom");
-				//home.open-library, lib.reach-library: A on the focused Open a ROM.
-				Ask("\"op\":\"inject\",\"action\":\"pad.press\",\"args\":{\"button\":\"A\",\"ticks\":4}");
-				//lib.open-screen: the sheet's own screen, not a picker.
-				JsonObject library = Wait(s => s["screen"]?.GetValue<string>() == "play.library");
-				//lib.back-to-home, lib.back-ring-on-opener: B out of the sheet.
-				Ask("\"op\":\"inject\",\"action\":\"pad.press\",\"args\":{\"button\":\"B\",\"ticks\":4}");
-				JsonObject backHome = Wait(s => s["screen"]?.GetValue<string>() == "play.home"
-					&& s["focus"]?.GetValue<string>() == "play.home.open-rom");
+				foreach(string id in steps) {
+					PadOnlyStep step = PadOnlyScript.Step(id);
+					Precondition(step, failures);
+					Act(step);
+					states[id] = Wait(step, failures);
+				}
 				Ask("\"op\":\"quit\"");
-				return (answers, ring, library, backHome);
+				return (answers, states, failures);
 			});
 
 			Stopwatch clock = Stopwatch.StartNew();
@@ -507,20 +573,9 @@ public class GuiTestHookTests : IDisposable
 				Pump();
 				Thread.Sleep(20);
 			}
-			(List<JsonObject> answers, JsonObject ring, JsonObject library, JsonObject backHome) = runner.GetAwaiter().GetResult();
-
-			Assert.All(answers, a => Assert.True(a["ok"]!.GetValue<bool>(), a.ToJsonString()));
-			Assert.True(ring["focus"]?.GetValue<string>() == "play.home.open-rom",
-				"home.first-focus/lib.home-ring: " + ring.ToJsonString());
-			Assert.True(ring["screen"]?.GetValue<string>() == "play.home", ring.ToJsonString());
-			Assert.True(library["screen"]?.GetValue<string>() == "play.library",
-				"home.open-library/lib.reach-library/lib.open-screen: " + library.ToJsonString());
-			Assert.Empty(library["dialogs"]!.AsArray());
-			Assert.True(backHome["screen"]?.GetValue<string>() == "play.home",
-				"lib.back-to-home: " + backHome.ToJsonString());
-			Assert.True(backHome["focus"]?.GetValue<string>() == "play.home.open-rom",
-				"lib.back-ring-on-opener: " + backHome.ToJsonString());
+			(List<JsonObject> answers, Dictionary<string, JsonObject> states, List<string> failures) = runner.GetAwaiter().GetResult();
 			hook!.Dispose();
+			return (answers, states, failures);
 		} finally {
 			PlayPadNavigationWiring.SetKeyLookupsForTest(null, null);
 			Directory.Delete(Path.GetDirectoryName(endpoint)!, true);
