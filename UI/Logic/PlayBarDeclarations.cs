@@ -115,6 +115,15 @@ public static class PlayBarDeclarations
 	//reading Favorite on an unfavorited cover and Unfavorite on a favorited one.
 	//The surface's own list is never edited: an entry it already carries for X is
 	//replaced, so the bar names X once.
+	//#1177: the home's bar with Start named as Settings - the pad's way in while
+	//no game is loaded, without a button on the home (ADR-0241).
+	public static IReadOnlyList<PlayBarEntry> WithSettings(IReadOnlyList<PlayBarEntry> declared)
+	{
+		return declared.Where(e => e.Action != PlayAction.Settings)
+			.Append(new PlayBarEntry(PlayAction.Settings, "BarSettings"))
+			.ToList();
+	}
+
 	public static IReadOnlyList<PlayBarEntry> WithFavorite(IReadOnlyList<PlayBarEntry> declared, bool favorited)
 	{
 		return declared.Where(e => e.Action != PlayAction.Favorite)

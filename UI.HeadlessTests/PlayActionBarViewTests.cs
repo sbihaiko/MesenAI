@@ -247,18 +247,18 @@ public class PlayActionBarViewTests : IDisposable
 		//Home: A starts Continue; there is nothing to search or filter and B
 		//leaves nothing, so the bar says only that.
 		Press(window, "Down");
-		Assert.Equal("A Play", Bar(window));
+		Assert.Equal("A Play     Start Settings", Bar(window));
 		foreach(string button in new[] { "X", "Y", "L1", "R1" }) {
 			Press(window, button);
 		}
-		Assert.Equal("A Play", Bar(window));
+		Assert.Equal("A Play     Start Settings", Bar(window));
 		Press(window, "Up");
 		Assert.Equal("PlayHomeContinueButton", Focused(window));
 
 		//Up again reaches Open a game…, and A on it opens the sheet.
 		Press(window, "Up");
 		Assert.Equal("PlayHomeOpenRomSecondary", Focused(window));
-		Assert.Equal("A Open a game", Bar(window));
+		Assert.Equal("A Open a game     Start Settings", Bar(window));
 		Press(window, "A");
 		WaitFor(() => model.RomPicker.IsVisible, "A on Open a game… did not open the sheet");
 		Assert.Equal("A Library folders     Y Search     LB / RB Console     B Back", Bar(window));
@@ -275,7 +275,28 @@ public class PlayActionBarViewTests : IDisposable
 		//B leaves the sheet and the home's bar is back.
 		Press(window, "B");
 		WaitFor(() => !model.RomPicker.IsVisible, "B did not leave the Open a game sheet");
-		Assert.Equal("A Play", Bar(window));
+		Assert.Equal("A Play     Start Settings", Bar(window));
+	}
+
+	//#1177: the home has no Settings button (ADR-0241), so a pad with no game
+	//loaded reaches Settings by Start, and the bar names it.
+	[AvaloniaTheory]
+	[InlineData(false)]
+	[InlineData(true)]
+	public void Start_on_the_home_opens_Settings_and_the_bar_names_it(bool withRecents)
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		if(withRecents) {
+			SeedRecents("Contra", "Zelda", "Metroid");
+		}
+		(MainWindow window, MainWindowViewModel model) = ShowPlay();
+		model.RecentGames.Init(GameScreenMode.RecentGames);
+		WaitFor(() => Focused(window) == (withRecents ? "PlayHomeContinueButton" : "PlayHomeOpenRomPrimary"), "the home opened without its primary action focused");
+		//A press first: the bar names buttons once the pad in hand is known.
+		Press(window, "Y");
+		Assert.EndsWith("Start Settings", Bar(window));
+		Press(window, "Start");
+		WaitFor(() => model.IsPlayerSettingsVisible, "Start on the home did not open Settings");
 	}
 
 	//The empty library parks the ring on Library folders…, and A there opens the

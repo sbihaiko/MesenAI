@@ -52,7 +52,7 @@ Steps:
 | `home.back-focus-restored` | under-test | `ui.screen == play.home` | `pad.release(ticks=1)` | `ui.focused == play.home.open-rom` within 4 ticks | `ui.focused(is="play.home.open-rom")` | The ring is back on Open a ROM after B. | all | major | automated |
 | `home.chord-opens-nothing` | under-test | `ui.screen == play.home` | `pad.chord(buttons=["Select", "Start"], ticks=4)` | within 4 ticks | `ui.dialogs(is=[])` | The chord with no game loaded opens no overlay. | all | major | automated |
 | `home.chord-focus-unchanged` | under-test | `ui.screen == play.home` | `pad.release(ticks=1)` | within 1 ticks | `ui.focused(is="play.home.open-rom")` | Focus is unchanged after the chord. | all | minor | automated |
-| `home.settings-by-pad-gap` | under-test | `ui.screen == play.home` | — | — | — | KNOWN GAP (P0-2, bug #1177): Settings cannot be reached by pad with no game loaded. Expected FAIL; record exactly what was tried. | all | major | manual |
+| `home.settings-by-pad` | under-test | `ui.screen == play.home` | — | — | — | Start (Options on a DualShock) opens Settings from the home with no game loaded; the bar reads Start Settings; Home's layout is unchanged (W-P1 one control, W-P2 two besides the tiles, ADR-0241). Bug #1177. | all | major | manual |
 
 ## Batch `home-after-game`
 

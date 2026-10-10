@@ -90,7 +90,6 @@
 			<Control ID="lblPlayHomeDropTitle">Drop a game here</Control>
 			<Control ID="lblPlayHomeDropSubtitle">or open one.</Control>
 			<Control ID="btnPlayHomeOpenRom">Open a ROM…</Control>
-			<Control ID="btnPlayHomeSettings">Settings</Control>
 			<Control ID="lblPlayHomeContinueHeader">Continue playing</Control>
 			<Control ID="btnPlayHomeContinue">Continue</Control>
 			<Control ID="lblPlayHomeRecentHeader">Recent</Control>
@@ -2258,6 +2257,7 @@
 		<!--#1104: the shared action bar's labels (UI/Logic/PlayBarDeclarations); the control is named by PlayActionBar.-->
 		<Message ID="BarPlay">Play</Message>
 		<Message ID="BarOpenGame">Open a game</Message>
+		<Message ID="BarSettings">Settings</Message>
 		<Message ID="BarSelect">Select</Message>
 		<Message ID="BarResume">Resume</Message>
 		<Message ID="BarBack">Back</Message>
