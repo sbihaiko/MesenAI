@@ -4,6 +4,7 @@ using Avalonia.Controls.Primitives;
 using Avalonia.Media;
 using Avalonia.VisualTree;
 using Mesen.Config;
+using Mesen.Windows;
 using System;
 
 namespace Mesen;
@@ -24,6 +25,19 @@ public class MesenWindow : Window
 		base.OnInitialized();
 		Focusable = true;
 		SetTextRenderingMode(this);
+		//#1255: while a GUI test hook runs this window is shown without activating -
+		//ShowActivated is read when the platform window comes up, so it is set here,
+		//before anything shows it. Inert without --test-hook.
+		TestHookWiring.WindowCreated(this);
+	}
+
+	protected override void OnOpened(EventArgs e)
+	{
+		base.OnOpened(e);
+		//#1255: a window that has just opened is kept inside the primary display's
+		//working area, so a run never leaves one on an external monitor. Inert
+		//without --test-hook.
+		TestHookWiring.WindowOpened(this);
 	}
 
 	private static void SetTextRenderingMode(Visual v)

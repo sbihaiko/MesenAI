@@ -10,7 +10,25 @@ snapshot, and capabilities() advertises exactly that.
 Contract, per ADR-0272 item 6: launch() resolves fixtures first and FAILS on a
 missing one, never skips; check() is an objective read of the hook's snapshot and
 an unknown id is UnknownId, never False; wait() returns "met" or "timeout" and
-counts the hook's ticks; teardown() reports what it could not restore."""
+counts the hook's ticks; teardown() reports what it could not restore.
+
+Window placement (#1255): a run's window belongs on the PRIMARY display - the
+built-in one on a laptop - never on an external monitor, and a run never takes
+the keyboard focus from whoever is using the machine. Every launch writes a
+`MainWindow` entry (1100x700 at 40,60, not maximized) into the clone's
+settings.json beside `Preferences`, the application opens its windows without
+activating, and after the hook connects this adapter reads the window's own
+frame from the hook's state (`window` and `windows`) and FAILS the launch while
+any of them sits outside the primary display's working area; a step that opens a
+window off the primary display fails its own state read the same way.
+The one escape hatch is the environment variable `MESEN_GUI_WINDOW`: the exact
+value `any` means "do not enforce placement", for a CI, Linux or headless runner
+where there is no primary-display notion. This adapter reads it, and so does the
+application; unset (or `primary`) means primary-display placement, and any other
+value is an error rather than a silent fallback on both sides - this adapter
+refuses it before a clone, a process or a socket exists, and a run started
+without the adapter has it refused at hook startup (TestHookWiring.Start, exit
+2). Whatever starts a run only has to pass the variable through unchanged."""
 import hashlib
 import json
 import os
@@ -31,6 +49,11 @@ LISTENING = "test hook listening on"
 ASK_TIMEOUT = 30  # seconds a single hook answer may take before the step fails (ADR-0272 item 4: no wait may hang the run)
 WAIT_HOST_TIMEOUT = 60  # host-time watchdog of a wait(), whatever the tick counter does
 PRESS_GRACE = 10  # the key manager registers a moment after the window opens: a first press may see "unknown button"
+WINDOW_ENV = "MESEN_GUI_WINDOW"
+WINDOW_MODES = ("primary", "any")
+# The window every launch pins into the clone's settings.json (MainWindowConfig, UI/Config/BaseWindowConfig.cs).
+MAIN_WINDOW_SIZE = {"Width": 1100, "Height": 700}
+MAIN_WINDOW_LOCATION = {"X": 40, "Y": 60}
 
 
 class AdapterError(Exception):
@@ -47,6 +70,29 @@ class Unavailable(AdapterError):
 
 class UnknownId(AdapterError):
     """A check named an id the application does not have: failed (unknown id)."""
+
+
+def window_mode(env=None):
+    """The window mode of a run: "primary" (the default) or "any".
+
+    Unset and the explicit "primary" both mean primary-display placement. "any"
+    is the documented escape hatch for a runner with no primary display. Anything
+    else is an error, never a silent fallback: a typo must not read as the
+    permissive mode, and a run started without this adapter has the same value
+    refused by the application at hook startup (TestHookWiring.Start)."""
+    value = (os.environ if env is None else env).get(WINDOW_ENV)
+    if value in (None, "", "primary"):
+        return "primary"
+    if value == "any":
+        return "any"
+    raise AdapterError(f"{WINDOW_ENV}={value!r} is not a window mode (expected one of: {', '.join(WINDOW_MODES)})")
+
+
+def contained_in(area, rect):
+    """True when rect [x, y, w, h] sits entirely inside area [x, y, w, h]."""
+    return (rect[0] >= area[0] and rect[1] >= area[1]
+            and rect[0] + rect[2] <= area[0] + area[2]
+            and rect[1] + rect[3] <= area[1] + area[3])
 
 
 def _sha1_of_rom(path):
@@ -102,7 +148,18 @@ def resolve_fixtures(fixtures, workdir, binary):
     # LibraryFolders stays absent without a rom, so the first run starts at Home.
     # SingleInstance (PreferencesConfig.SingleInstance, default true) takes a machine-wide mutex: beside any other Mesen a
     # launch would hand its arguments over and exit 0 before the hook comes up (#1220), so a test launch turns it off.
-    settings = {"Preferences": {"UiMode": "Player", "SingleInstance": False}}
+    # MainWindow (MainWindowConfig -> BaseWindowConfig) pins the run's window at a
+    # known size and position before the application opens it (#1255): a window the
+    # window manager would otherwise place on an external monitor starts at 40,60,
+    # whose whole 1100x700 is inside a laptop's working area.
+    settings = {
+        "Preferences": {"UiMode": "Player", "SingleInstance": False},
+        "MainWindow": {
+            "WindowSize": dict(MAIN_WINDOW_SIZE),
+            "WindowLocation": dict(MAIN_WINDOW_LOCATION),
+            "WindowIsMaximized": False,
+        },
+    }
     if rom is not None:
         # Only through the profile, never argv (ADR-0272 item 6): the ROM is a library tile.
         library = home / "library"
@@ -135,6 +192,7 @@ class MesenGuiAdapter:
         return {"actions": list(ACTIONS), "checks": list(CHECKS), "input_families": ["pad"], "variants": {"window.mode": ["windowed"]}}
 
     def launch(self, fixtures):
+        mode = window_mode()  # a bad value fails before a clone, a process or a socket exists
         if sys.platform == "win32":
             raise Unavailable("the hook's Windows named pipe has no adapter transport yet")
         if not self.binary:
@@ -150,9 +208,10 @@ class MesenGuiAdapter:
         env = dict(os.environ)
         log = open(workdir / "app.log", "wb")
         proc = subprocess.Popen(argv, env=env, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
-        session = Session(endpoint, token, proc, workdir, argv=argv, env=env, log=log)
+        session = Session(endpoint, token, proc, workdir, argv=argv, env=env, log=log, window_mode=mode)
         try:
             session.connect(self.connect_timeout)
+            session.require_placement()
         except BaseException:
             session.close()
             raise
@@ -160,8 +219,9 @@ class MesenGuiAdapter:
 
 
 class Session:
-    def __init__(self, endpoint, token, process, workdir, argv=None, env=None, log=None):
+    def __init__(self, endpoint, token, process, workdir, argv=None, env=None, log=None, window_mode="primary"):
         self.endpoint = endpoint
+        self.window_mode = window_mode
         self.token = token
         self.process = process
         self.workdir = Path(workdir)
@@ -195,6 +255,59 @@ class Session:
         hello = self._ask("hello")
         if hello.get("hook") != 1:
             raise Unavailable(f"unsupported hook version {hello.get('hook')!r}")
+
+    def require_placement(self):
+        """Fail the launch when an application window's frame is not fully inside the primary display's working area (#1255)."""
+        self._refuse_off_primary(self._ask("state"))
+
+    def placement_error(self, state):
+        """The message for the first window outside the primary display, or None.
+
+        The application opens its windows without activating and pins the main one
+        at 40,60, but the window manager still decides where a window lands when
+        the run is not the one it thinks about; this is where a run on an external
+        monitor is refused instead of being measured. A hook that reports no
+        primary display at all (a runner where the notion does not apply) is an
+        error rather than a pass: silence must not read as "inside".
+
+        Two measurements, both taken from the hook rather than assumed here:
+
+        - The area is the primary display's WORKING area - the display without the
+          menu bar - which is what the application places a window inside
+          (UI/Windows/TestHookWiring.KeepOnPrimaryDisplay). Checking against the
+          full bounds would be looser than the placement it polices: a window the
+          application itself would have pulled back down would read as "inside".
+          The bounds are the fallback for a hook that reports no working area.
+        - The rectangle is the window's FRAME - title bar and borders included -
+          which is what the window manager puts on the display and what has to fit
+          on it. The position and size the hook also reports are the client area,
+          and they are the fallback for a platform that reports no frame."""
+        if self.window_mode != "primary":
+            return None
+        window = state.get("window") or {}
+        area = window.get("primaryWorkingArea") or window.get("primaryBounds")
+        if not area:
+            return (f"the hook reported no primary display (state.window.primaryWorkingArea / primaryBounds): "
+                    f"set {WINDOW_ENV}=any on a runner where no primary display applies")
+        entries = state.get("windows") or [{"id": "main", "position": window.get("position"), "size": window.get("size"),
+                                            "frame": window.get("frame")}]
+        for entry in entries:
+            rect = entry.get("frame")
+            if rect is None:
+                position, size = entry.get("position"), entry.get("size")
+                if position is None or size is None:
+                    return f"the hook reported no position/size for window {entry.get('id')!r} (state.windows)"
+                rect = [position[0], position[1], size[0], size[1]]
+            if not contained_in(area, rect):
+                return (f"window {entry.get('id')!r} at ({rect[0]},{rect[1]}) size {rect[2]}x{rect[3]} is not fully inside "
+                        f"the primary display {area}: a GUI test run opens its windows on the primary (built-in) display "
+                        f"only; set {WINDOW_ENV}=any for a runner where no primary display applies")
+        return None
+
+    def _refuse_off_primary(self, state):
+        error = self.placement_error(state)
+        if error is not None:
+            raise AdapterError(error)
 
     def log_text(self):
         try:
@@ -235,6 +348,7 @@ class Session:
         if name not in CHECKS:
             raise AdapterError(f"check {name!r} is not advertised by mesen-gui")
         state = self._ask("state")
+        self._refuse_off_primary(state)  # a dialog opened off the primary display fails the step that opened it
         ids = {}
         for c in state.get("controls", []):  # an id can sit on several controls (first-run vs recents Open ROM): any visible copy counts
             seen = ids.get(c["id"])
@@ -275,6 +389,7 @@ class Session:
         start = None
         while True:
             state = self._ask("state")
+            self._refuse_off_primary(state)
             if key is not None and state.get(key) == want:
                 return "met"
             if start is None:
