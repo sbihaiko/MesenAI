@@ -129,7 +129,26 @@
     },
     {
       "id": "home",
-      "setup": [],
+      "setup": [
+        {
+          "id": "home.ring-at-launch",
+          "role": "setup",
+          "precondition": "fixture settings.profiles.fresh",
+          "wait": {
+            "check": "ui.focused == play.home.open-rom",
+            "timeout_ticks": 120
+          },
+          "check": {
+            "name": "ui.focused",
+            "args": {
+              "is": "play.home.open-rom"
+            }
+          },
+          "expect": "The home has settled with the ring on its one action before the batch presses anything: at a fresh launch the ring is not up yet (measured 8-16 ticks on the real app), so a press sent first is dropped and the holds steps below then read None (#1232).",
+          "severity": "major",
+          "mode": "automated"
+        }
+      ],
       "teardown": [],
       "steps": [
         {
