@@ -212,6 +212,43 @@ FAKE_APP = textwrap.dedent('''\
 ''')
 
 
+# A fake app that models UI/Utilities/SingleInstance: a machine-wide lock that a second process hands its
+# arguments to and then exits 0, unless the settings.json next to the executable turns Preferences.SingleInstance off.
+SINGLE_INSTANCE_APP = FAKE_APP.replace("hook = t.FakeHook", textwrap.dedent("""\
+    import fcntl, json, os
+    settings = json.loads((Path(sys.argv[0]).resolve().parent / "settings.json").read_text())
+    if settings.get("Preferences", dict()).get("SingleInstance", True):
+        lock = open(os.environ["FAKE_MUTEX"], "w")
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:
+            sys.exit(0)
+    hook = t.FakeHook"""))
+
+
+class ConcurrentLaunch(unittest.TestCase):
+    """#1220: a test launch never depends on being the only emulator instance on the machine."""
+
+    def test_two_hook_enabled_instances_both_open_their_hook(self):
+        tmp = Path(tempfile.mkdtemp(prefix="g1220-", dir="/tmp"))
+        self.addCleanup(lambda: __import__("shutil").rmtree(tmp, True))
+        (tmp / "appdir").mkdir()
+        app = tmp / "appdir" / "fake-app"
+        app.write_text(SINGLE_INSTANCE_APP.format(python=sys.executable, tests=str(ROOT / "scripts")))
+        app.chmod(app.stat().st_mode | stat.S_IXUSR)
+        old = os.environ.get("FAKE_MUTEX")
+        os.environ["FAKE_MUTEX"] = str(tmp / "mutex")
+        self.addCleanup(lambda: os.environ.pop("FAKE_MUTEX") if old is None else os.environ.__setitem__("FAKE_MUTEX", old))
+        sessions = []
+        try:
+            for name in ("a", "b"):
+                sessions.append(adapter.MesenGuiAdapter(binary=str(app), workdir=tmp / name, connect_timeout=10).launch({}))
+            self.assertEqual(len(sessions), 2)
+        finally:
+            for session in sessions:
+                session.teardown()
+
+
 class AdapterE2E(unittest.TestCase):
     """launch -> inject -> wait -> check -> capture -> teardown against a real child process."""
 
@@ -254,7 +291,7 @@ class AdapterE2E(unittest.TestCase):
             # HOME does not isolate the app; the fresh profile is a settings.json next to the cloned binary.
             clone = Path(session.argv[0])
             self.assertEqual(clone.parent, self.tmp / "run" / "app")
-            self.assertEqual(json.loads((clone.parent / "settings.json").read_text()), {"Preferences": {"UiMode": "Player"}})
+            self.assertEqual(json.loads((clone.parent / "settings.json").read_text()), {"Preferences": {"UiMode": "Player", "SingleInstance": False}})
             self.assertTrue(session.log_text().startswith("test hook listening on"))
         finally:
             session.teardown()
