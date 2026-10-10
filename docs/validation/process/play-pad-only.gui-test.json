@@ -28,7 +28,7 @@
         "fresh": "no play history, no favorites",
         "history-one-favorite": "one game in play history (so Continue and Recent exist) and that game favorited (so Favorites exists, ADR-0268 Decision 4)",
         "history-no-favorite": "one game in play history (so Continue and Recent exist) and no favorites (FAV-01 starts from an empty Favorites shelf)",
-        "history-two-favorites": "two games in play history (so Continue and Recent exist) and both favorited, so unfavoriting one favorite via X leaves the Favorites shelf visible (ADR-0268 Decision 4)"
+        "history-two-favorites": "two games in play history (so Continue and Recent exist) and both favorited, with the Continue game (the most recently played, fixture rom) as the newest favorite and so the first Favorites tile (ADR-0268 Decision 3), and the older game (fixture rom-second) as the other favorite; unfavoriting the Continue game via X leaves the Favorites shelf visible (ADR-0268 Decision 4)"
       }
     },
     "rom": {
@@ -36,6 +36,10 @@
       "sha1": "<no-intro sha1 per ADR-0003, filled when the adapter lands>"
     },
     "note": "Control ids are provisional until the in-app AutomationIds land (#1182); steps use the HOME-01..06 wording of the manual script. Library, Favorites and Game batches (#1193) follow LIB-01..09, FAV-01..02, GAME-01..04; ids under play.library.*, play.keyboard, play.select-rom, play.bios and play.game are provisional the same way.",
+    "rom-second": {
+      "path": "<library>/Mega Man 2 (USA).nes",
+      "note": "the second game in the history-two-favorites profile, played before fixture rom (FAV-02)"
+    },
     "rom-zip": {
       "path": "<library>/Multi ROM Pack.zip",
       "note": "an archive holding several ROMs (GAME-03)"
@@ -899,7 +903,7 @@
         {
           "id": "lib.header-down-grid",
           "role": "under-test",
-          "precondition": "ui.focused == play.library.back",
+          "precondition": "ui.focused == play.library.browse",
           "action": {
             "name": "pad.press",
             "args": {
@@ -1507,7 +1511,7 @@
         {
           "id": "fav2.reach-favorite-tile",
           "role": "setup",
-          "precondition": "fixture rom and fixture settings.profiles.history-two-favorites",
+          "precondition": "fixture rom, fixture rom-second and fixture settings.profiles.history-two-favorites",
           "action": {
             "name": "nav.goal",
             "args": {

@@ -25,6 +25,10 @@
     "note": "a folder with 100+ ROMs (LIB-02)",
     "path": "<library-large>"
   },
+  "rom-second": {
+    "note": "the second game in the history-two-favorites profile, played before fixture rom (FAV-02)",
+    "path": "<library>/Mega Man 2 (USA).nes"
+  },
   "rom-zip": {
     "note": "an archive holding several ROMs (GAME-03)",
     "path": "<library>/Multi ROM Pack.zip"
@@ -34,7 +38,7 @@
       "fresh": "no play history, no favorites",
       "history-no-favorite": "one game in play history (so Continue and Recent exist) and no favorites (FAV-01 starts from an empty Favorites shelf)",
       "history-one-favorite": "one game in play history (so Continue and Recent exist) and that game favorited (so Favorites exists, ADR-0268 Decision 4)",
-      "history-two-favorites": "two games in play history (so Continue and Recent exist) and both favorited, so unfavoriting one favorite via X leaves the Favorites shelf visible (ADR-0268 Decision 4)"
+      "history-two-favorites": "two games in play history (so Continue and Recent exist) and both favorited, with the Continue game (the most recently played, fixture rom) as the newest favorite and so the first Favorites tile (ADR-0268 Decision 3), and the older game (fixture rom-second) as the other favorite; unfavoriting the Continue game via X leaves the Favorites shelf visible (ADR-0268 Decision 4)"
     }
   }
 }
@@ -117,7 +121,7 @@ Steps:
 | `lib.header-right-browse` | under-test | `ui.focused == play.library.folders` | `pad.press(button="Right", ticks=4)` | `ui.focused == play.library.browse` within 120 ticks | `ui.focused(is="play.library.browse")` | LIB-03: Right moves to Browse a file. | all | major | automated |
 | `lib.header-right-back` | under-test | `ui.focused == play.library.browse` | `pad.press(button="Right", ticks=4)` | `ui.focused == play.library.back` within 120 ticks | `ui.focused(is="play.library.back")` | LIB-03: Right moves to Back. | all | major | automated |
 | `lib.header-left-across` | under-test | `ui.focused == play.library.back` | `pad.press(button="Left", ticks=4)` | `ui.focused == play.library.browse` within 120 ticks | `ui.focused(is="play.library.browse")` | LIB-03: Left walks back across the header row (Back -> Browse), mirroring the Right walk. | all | major | automated |
-| `lib.header-down-grid` | under-test | `ui.focused == play.library.back` | `pad.press(button="Down", ticks=4)` | `ui.focused == play.library.tile` within 120 ticks | `ui.focused(is="play.library.tile")` | LIB-03: Down from the header returns to the grid. | all | major | automated |
+| `lib.header-down-grid` | under-test | `ui.focused == play.library.browse` | `pad.press(button="Down", ticks=4)` | `ui.focused == play.library.tile` within 120 ticks | `ui.focused(is="play.library.tile")` | LIB-03: Down from the header returns to the grid. | all | major | automated |
 | `lib.filter-rb-wraps` | under-test | `ui.screen == play.library and two consoles in the library` | — | — | — | LIB-04: RB steps All -> each console present -> All, wrapping; the grid narrows; never an empty filter (PlayerRomPickerViewModel.ConsoleFilter.cs). The filter is not a named control the hook reads. | all | minor | manual |
 | `lib.filter-lb-backwards` | under-test | `ui.screen == play.library and two consoles in the library` | — | — | — | LIB-04: LB walks the same ring backwards, wrapping at both ends. | all | minor | manual |
 | `lib.filter-chips-not-focusable` | under-test | `ui.screen == play.library` | — | — | — | KNOWN GAP: LIB-04 (#1134, KnownChipGaps = "Library"): the console chips cannot take focus; LB/RB is the only pad route. Record whether the current chip is obvious at couch distance. | all | major | manual |
@@ -168,7 +172,7 @@ Setup:
 
 | ID | Role | Precondition | Action | Wait | Check | Expected | Variants | Severity | Mode |
 |---|---|---|---|---|---|---|---|---|---|
-| `fav2.reach-favorite-tile` | setup | `fixture rom and fixture settings.profiles.history-two-favorites` | `nav.goal(goal="ui.focused == play.home.favorite")` | `ui.focused == play.home.favorite` within 600 ticks | — | Home W-P2 with a Favorites shelf and the ring on a favorite tile (the FAV-02 precondition). | all | major | automated |
+| `fav2.reach-favorite-tile` | setup | `fixture rom, fixture rom-second and fixture settings.profiles.history-two-favorites` | `nav.goal(goal="ui.focused == play.home.favorite")` | `ui.focused == play.home.favorite` within 600 ticks | — | Home W-P2 with a Favorites shelf and the ring on a favorite tile (the FAV-02 precondition). | all | major | automated |
 
 Steps:
 
