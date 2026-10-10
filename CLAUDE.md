@@ -233,9 +233,12 @@ rules are summarized in `docs/squad/README.md`.
 - **Caps**: `docs/squad/workflows/dynamic.graph.json` — `max_parallel` 10,
   `max_children` 20, `spend_cap` 168. Give each child a disjoint file slice.
 - **Every coding request states**: base `origin/main`; open the PR yourself;
-  `Refs #N`, never `Closes`; `GitHub issue #N`; coding model
-  `claude-deepseek-v4-flash` (no `[1m]` suffix), fallback `claude-sonnet-5-5`;
-  en-US; no `Co-Authored-By` and no "Generated with Claude Code" line.
+  `Refs #N`, never `Closes`; `GitHub issue #N`; the coding model is the
+  first entry of `coding_models` in
+  `~/.claude/skills/squad-goal/scripts/models.json` (edited from the hub's
+  "squad models" panel; no `[1m]` suffix), the next entry its fallback —
+  never a model typed from memory (`launch.py` refuses a request that does not
+  name it); en-US; no `Co-Authored-By` and no "Generated with Claude Code" line.
 - **Fix runs** on an existing PR: check out `origin/<branch>`, push to the same
   branch, no new PR.
 - **Review chain**: GPT Terra (fast) → GPT 6.1 Sol → Claude Opus 5.5.
