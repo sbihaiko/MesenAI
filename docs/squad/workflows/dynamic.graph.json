@@ -41,10 +41,10 @@
       ]
     }
   ],
-  "root": "main",
+  "root": "mesenai",
   "nodes": [
     {
-      "name": "main",
+      "name": "mesenai",
       "kind": "loop",
       "max": {
         "value": 1,

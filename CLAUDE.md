@@ -214,8 +214,19 @@ rules are summarized in `docs/squad/README.md`.
 
 - **Launch**: write the request to `~/.cache/squad-goal/req/<name>.txt`, then
   run `python3 ~/.claude/skills/squad-goal/scripts/launch.py <file>` from the
-  checkout. Launch detached (`Popen(start_new_session=True)`); never
-  `nohup … &` with `disown`, which dies when the tool's task ends.
+  main checkout (`launch.py` refuses another directory). Launch detached
+  (`Popen(start_new_session=True)`); never `nohup … &` with `disown`, and never
+  `squad start` in the Bash tool, both of which die when the tool's task ends.
+  `/agent-squad:work` inside a goal means `launch.py`.
+- **Graph root**: the workflow's root node is `mesenai` (`"root"` and the
+  node's `"name"` together); `launch.py` checks and validates it.
+- **Goal mode**: never end a turn with work dispatched and no background task
+  alive; keep a Monitor on `~/.claude/skills/squad-goal/scripts/watchtail.sh`.
+  A scheduled wakeup does not count. When the goal's Stop hook blocks and
+  nothing changed, reply with one short line once, never a repeated status.
+  Don't run the loop on a Haiku session model.
+- **Owner questions**: ask every pending owner decision once, at the start of
+  the execution, then run to the end.
 - **One panel per frontier**: every startable issue goes in one `squad start`
   request, one child and one PR each. A separate run only for a fix on an
   existing PR branch or work that cannot join the panel.
