@@ -225,12 +225,26 @@ public class GuiTestHookTests : IDisposable
 	}
 
 	[AvaloniaFact]
+	public void A_capture_with_a_game_loaded_is_refused_not_a_black_game_area()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model) = ShowHome();
+		TestHookProtocol hook = new("t", new TestHookWiring.WindowTarget(window, () => true), NewKeys());
+		string path = Path.Combine(_folder, "shots", "game.png");
+
+		JsonObject answer = JsonNode.Parse(hook.Handle("{\"id\":4,\"token\":\"t\",\"op\":\"capture\",\"path\":" + JsonValue.Create(path)!.ToJsonString() + "}"))!.AsObject();
+		Assert.False(answer["ok"]!.GetValue<bool>(), answer.ToJsonString());
+		Assert.Contains("game is loaded", answer["error"]!.GetValue<string>());
+		Assert.False(File.Exists(path));
+	}
+
+	[AvaloniaFact]
 	public void A_capture_is_the_application_window_and_nothing_else()
 	{
 		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
 		(MainWindow window, MainWindowViewModel model) = ShowHome();
 		TestHookKeys keys = NewKeys();
-		TestHookProtocol hook = new("t", new TestHookWiring.WindowTarget(window), keys);
+		TestHookProtocol hook = new("t", new TestHookWiring.WindowTarget(window, () => false), keys);
 		string path = Path.Combine(_folder, "shots", "home.png");
 
 		JsonObject answer = JsonNode.Parse(hook.Handle("{\"id\":3,\"token\":\"t\",\"op\":\"capture\",\"path\":" + JsonValue.Create(path)!.ToJsonString() + "}"))!.AsObject();

@@ -39,6 +39,27 @@ public sealed record TestHookOptions(string Endpoint, string Token)
 		return new TestHookOptions(endpoint, token);
 	}
 
+	//The command line the emulator itself reads: the hook's two flags, and the
+	//value after either in its space form, are gone. Left in, ConfigManager.ProcessSwitch
+	//rejects them and the OSD would show the token in an "invalid argument" message.
+	public static string[] WithoutHookArgs(IReadOnlyList<string> args)
+	{
+		List<string> rest = new();
+		for(int i = 0; i < args.Count; i++) {
+			string arg = args[i];
+			if(IsHookFlag(arg, Flag) || IsHookFlag(arg, TokenFlag)) {
+				if(arg.IndexOf('=') < 0) {
+					i++;
+				}
+				continue;
+			}
+			rest.Add(arg);
+		}
+		return rest.ToArray();
+	}
+
+	private static bool IsHookFlag(string arg, string flag) => arg == flag || arg.StartsWith(flag + "=", StringComparison.Ordinal);
+
 	private static string ValueOf(IReadOnlyList<string> args, ref int i, string flag)
 	{
 		string arg = args[i];

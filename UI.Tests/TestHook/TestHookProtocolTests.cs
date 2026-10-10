@@ -20,6 +20,7 @@ namespace Mesen.Tests.TestHook
 			public bool Quit_;
 			public string? CapturedTo;
 			public int Captures;
+			public string? CaptureError;
 
 			public JsonObject State() => new JsonObject {
 				["screen"] = "play.home",
@@ -29,6 +30,9 @@ namespace Mesen.Tests.TestHook
 
 			public CaptureResult Capture(string path)
 			{
+				if(CaptureError is not null) {
+					throw new InvalidOperationException(CaptureError);
+				}
 				CapturedTo = path;
 				Captures++;
 				return new CaptureResult(path, 10, 20, "abc");
@@ -226,7 +230,7 @@ namespace Mesen.Tests.TestHook
 			if(OperatingSystem.IsWindows()) {
 				return;
 			}
-			string folder = Path.Combine(Path.GetTempPath(), "hook-shared-" + Guid.NewGuid().ToString("N"));
+			string folder = Path.Combine(Path.GetTempPath(), "hook-sh-" + Guid.NewGuid().ToString("N").Substring(0, 12));
 			UnixFileMode shared = UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute | UnixFileMode.GroupRead | UnixFileMode.GroupExecute | UnixFileMode.OtherRead | UnixFileMode.OtherExecute;
 			Directory.CreateDirectory(folder);
 			File.SetUnixFileMode(folder, shared);
@@ -325,6 +329,95 @@ namespace Mesen.Tests.TestHook
 			} finally {
 				server.Dispose();
 				Directory.Delete(folder, true);
+			}
+		}
+
+		[Theory]
+		[InlineData("--test-hook=/tmp/h.sock", "--test-hook-token=s3cret")]
+		[InlineData("--test-hook", "/tmp/h.sock", "--test-hook-token", "s3cret")]
+		public void The_hook_flags_are_consumed_before_the_emulator_reads_its_command_line(params string[] hookArgs)
+		{
+			//CommandLineHelper feeds every argument it does not consume to
+			//ConfigManager.ProcessSwitch (an error message, shown by OSD, quoting the
+			//argument - the token) or to FilesToLoad.
+			string[] args = new[] { "--fullscreen" }.Concat(hookArgs).Concat(new[] { "game.nes" }).ToArray();
+			Assert.Equal(new[] { "--fullscreen", "game.nes" }, TestHookOptions.WithoutHookArgs(args));
+		}
+
+		[Fact]
+		public void A_button_name_resolves_through_the_pad_navigation_names_first_non_zero()
+		{
+			List<(ushort Code, bool Down)> calls = new();
+			//Only the DirectInput spelling exists on this backend.
+			TestHookKeys keys = new((code, down) => calls.Add((code, down)), name => name == "Joy1 DPad Up" ? (ushort)0x2001 : name == "Joy1 But2" ? (ushort)0x2002 : name == "Joy1 But3" ? (ushort)0x2003 : (ushort)0, () => null);
+			Assert.Null(keys.Press(1, "Up", 1, null));
+			Assert.Null(keys.Press(1, "Confirm", 1, null));
+			Assert.Null(keys.Press(1, "Back", 1, null));
+			Assert.Equal(new ushort[] { 0x2001, 0x2002, 0x2003 }, calls.Select(c => c.Code));
+			Assert.NotNull(keys.Press(1, "Nonsense", 1, null));
+		}
+
+		[Fact]
+		public void A_frames_hold_lets_go_when_the_clock_stops_mid_hold()
+		{
+			Rig rig = new();
+			rig.Frames = 100;
+			Assert.Null(rig.Keys.Press(1, "Right", null, 10));
+			rig.Frames = null;
+			rig.Keys.Advance();
+			Assert.Equal(new[] { ((ushort)0x1011, true), ((ushort)0x1011, false) }, rig.Calls);
+		}
+
+		[Fact]
+		public void A_frames_hold_lets_go_when_the_frame_counter_resets_below_where_it_started()
+		{
+			Rig rig = new();
+			rig.Frames = 5000;
+			Assert.Null(rig.Keys.Press(1, "Right", null, 10));
+			rig.Frames = 3;
+			rig.Keys.Advance();
+			Assert.Equal(new[] { ((ushort)0x1011, true), ((ushort)0x1011, false) }, rig.Calls);
+		}
+
+		[Fact]
+		public void A_capture_the_target_refuses_comes_back_as_a_failure_not_a_picture()
+		{
+			Rig rig = new();
+			rig.Target.CaptureError = "capture is not available while a game is loaded";
+			JsonObject answer = rig.Ask("{\"id\":9,\"token\":\"secret\",\"op\":\"capture\",\"path\":\"/tmp/x.png\"}");
+			Assert.False(answer["ok"]!.GetValue<bool>());
+			Assert.Contains("game is loaded", answer["error"]!.GetValue<string>());
+		}
+
+		[Fact]
+		public void The_socket_is_never_bound_in_a_folder_other_users_can_reach()
+		{
+			if(OperatingSystem.IsWindows()) {
+				return;
+			}
+			//The folder exists and is shared; the socket lives in a private 0700
+			//folder the hook makes, so there is no moment a 0644 socket is reachable.
+			string parent = Path.Combine(Path.GetTempPath(), "hook-" + Guid.NewGuid().ToString("N"));
+			Directory.CreateDirectory(parent);
+			string endpoint = Path.Combine(parent, "hook.sock");
+			try {
+				string? boundIn = null;
+				UnixFileMode? folderMode = null;
+				//Called the moment after Bind, before the socket is locked to 0600.
+				using TestHookServer server = TestHookServer.Start(endpoint, line => line, bound => {
+					boundIn = Path.GetDirectoryName(bound);
+					if(!OperatingSystem.IsWindows()) {
+						folderMode = File.GetUnixFileMode(boundIn!);
+					}
+				});
+				Assert.NotEqual(Path.GetFullPath(parent), boundIn);
+				Assert.Equal(UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute, folderMode);
+				Assert.True(File.Exists(endpoint));
+				Assert.Equal(new[] { endpoint }, Directory.GetFileSystemEntries(parent));
+				using Socket client = new(AddressFamily.Unix, SocketType.Stream, ProtocolType.Unspecified);
+				client.Connect(new UnixDomainSocketEndPoint(endpoint));
+			} finally {
+				Directory.Delete(parent, true);
 			}
 		}
 	}

@@ -20,7 +20,7 @@ public sealed class TestHookServer : IDisposable
 	private readonly string _endpoint;
 	private readonly Socket? _listener;
 
-	private TestHookServer(string endpoint, Func<string, string> handler)
+	private TestHookServer(string endpoint, Func<string, string> handler, Action<string>? afterBind)
 	{
 		_endpoint = endpoint;
 		_handler = handler;
@@ -39,16 +39,28 @@ public sealed class TestHookServer : IDisposable
 		if(File.Exists(endpoint)) {
 			File.Delete(endpoint);
 		}
-		_listener = new Socket(AddressFamily.Unix, SocketType.Stream, ProtocolType.Unspecified);
-		_listener.Bind(new UnixDomainSocketEndPoint(endpoint));
-		File.SetUnixFileMode(endpoint, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+		//Bound in a short-named (sun_path is about 104 bytes) 0700 directory of its own, then locked to 0600 and moved to the
+		//endpoint: Bind creates the socket with the process umask, so bound in the
+		//runner's folder it would be reachable by others until the chmod below.
+		string privateFolder = Path.Combine(folder, ".h" + Guid.NewGuid().ToString("N").Substring(0, 6));
+		Directory.CreateDirectory(privateFolder, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+		try {
+			string bound = Path.Combine(privateFolder, "s");
+			_listener = new Socket(AddressFamily.Unix, SocketType.Stream, ProtocolType.Unspecified);
+			_listener.Bind(new UnixDomainSocketEndPoint(bound));
+			afterBind?.Invoke(bound);
+			File.SetUnixFileMode(bound, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+			File.Move(bound, endpoint);
+		} finally {
+			Directory.Delete(privateFolder, true);
+		}
 		_listener.Listen(4);
 		Task.Run(() => AcceptSockets());
 	}
 
 	//Throws when the endpoint cannot be created: a startup failure, never a run
 	//that proceeds without the hook.
-	public static TestHookServer Start(string endpoint, Func<string, string> handler) => new(endpoint, handler);
+	public static TestHookServer Start(string endpoint, Func<string, string> handler, Action<string>? afterBind = null) => new(endpoint, handler, afterBind);
 
 	private async Task AcceptSockets()
 	{

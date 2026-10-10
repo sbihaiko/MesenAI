@@ -80,10 +80,14 @@ namespace Mesen.Windows
 		public sealed class WindowTarget : ITestHookTarget
 		{
 			private readonly Window _window;
+			private readonly Func<bool> _gameLoaded;
 
-			public WindowTarget(Window window)
+			//gameLoaded: whether an emulated picture is on screen; the headless suite
+			//passes its own, the way Start takes its own keyCode.
+			public WindowTarget(Window window, Func<bool>? gameLoaded = null)
 			{
 				_window = window;
+				_gameLoaded = gameLoaded ?? EmuApi.IsRunning;
 			}
 
 			public JsonObject State()
@@ -132,9 +136,15 @@ namespace Mesen.Windows
 			}
 
 			//Rendered from the window's own visual tree, so the desktop and every
-			//other application stay out of it by construction.
+			//other application stay out of it by construction. The game picture is the
+			//native renderer's, not a visual in this tree (ADR-0167, ADR-0157 section
+			//6), so a render of the window with a game loaded would be a black game
+			//area passed off as a screenshot: it is refused instead (ADR-0272 item 2).
 			public CaptureResult Capture(string path)
 			{
+				if(_gameLoaded()) {
+					throw new InvalidOperationException("capture is not available while a game is loaded: the emulated picture is drawn by the native renderer and is not in the window's own render");
+				}
 				int width = Math.Max(1, (int)Math.Ceiling(_window.Bounds.Width * _window.RenderScaling));
 				int height = Math.Max(1, (int)Math.Ceiling(_window.Bounds.Height * _window.RenderScaling));
 				using RenderTargetBitmap bitmap = new(new PixelSize(width, height), new Vector(96 * _window.RenderScaling, 96 * _window.RenderScaling));
