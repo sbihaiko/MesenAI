@@ -383,6 +383,10 @@ doc-checks-1: check-manifest
 	# The script's requires.actions equals the actions its steps use, and no
 	# under-test step runs nav.goal (ADR-0271 section 3).
 	python3 scripts/checks/verify_gui_test_actions.py
+	# #1242: no case of the manual scenario beside a script is lost by it - the
+	# 53 steps the adapter cannot be asked to run became `manual`, never dropped.
+	python3 scripts/checks/verify_gui_test_scenario_coverage.py
+	python3 scripts/test_verify_gui_test_scenario_coverage.py
 	./scripts/checks/verify_core_no_http_client.sh
 	./scripts/checks/verify_fetcher_no_filesystem_allowlist_load.sh
 	./scripts/checks/verify_no_ptbr_usage_strings.sh
