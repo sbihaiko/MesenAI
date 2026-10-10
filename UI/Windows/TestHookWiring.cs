@@ -9,6 +9,7 @@ using Avalonia.VisualTree;
 using Mesen.Interop;
 using Mesen.Logic.TestHook;
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
@@ -98,14 +99,11 @@ namespace Mesen.Windows
 				JsonArray controls = new();
 				JsonArray visible = new();
 				JsonArray options = new();
-				string? screen = null;
+				List<string> visibleIds = new();
 				foreach(Control control in _window.GetVisualDescendants().OfType<Control>()) {
 					string? id = AutomationProperties.GetAutomationId(control);
 					if(id is null || id.Length == 0) {
 						continue;
-					}
-					if(control.IsEffectivelyVisible && id == "play.home") {
-						screen = id;
 					}
 					controls.Add(new JsonObject {
 						["id"] = id,
@@ -115,6 +113,7 @@ namespace Mesen.Windows
 					});
 					if(control.IsEffectivelyVisible) {
 						visible.Add((JsonNode?)JsonValue.Create(id));
+						visibleIds.Add(id);
 					}
 				}
 				//Menu entries and list choices are the options a pad or key can pick
@@ -139,7 +138,10 @@ namespace Mesen.Windows
 					}
 				}
 				return new JsonObject {
-					["screen"] = screen,
+					//#1228: the topmost surface that is up, off the ids the loop
+					//above collected - never a single hardcoded id, which is how
+					//the library sheet came to read as the home behind it.
+					["screen"] = TestHookScreens.Resolve(visibleIds),
 					["dialogs"] = new JsonArray(),
 					["focus"] = FocusedId(),
 					["controls"] = controls,
