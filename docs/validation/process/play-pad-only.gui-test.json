@@ -4922,9 +4922,27 @@
       "id": "controller",
       "setup": [
         {
-          "id": "ctl.reach-more-in-options",
+          "id": "ctl.reach-controls-tab",
           "role": "setup",
           "precondition": "fixture rom and fixture settings.profiles.fresh",
+          "action": {
+            "name": "nav.goal",
+            "args": {
+              "goal": "ui.focused == play.settings.tab-controls"
+            }
+          },
+          "wait": {
+            "check": "ui.focused == play.settings.tab-controls",
+            "timeout_ticks": 600
+          },
+          "expect": "Settings is open with the Controls tab focused; More in Options exists on both Audio and Controls, so the Controls tab is pinned first.",
+          "severity": "major",
+          "mode": "automated"
+        },
+        {
+          "id": "ctl.reach-more-in-options",
+          "role": "setup",
+          "precondition": "ui.focused == play.settings.tab-controls",
           "action": {
             "name": "nav.goal",
             "args": {
@@ -4935,7 +4953,7 @@
             "check": "ui.focused == play.settings.more-in-options",
             "timeout_ticks": 600
           },
-          "expect": "Settings is open on the Controls tab with More in Options focused (the CTL-01 precondition: SET-01, Controls tab, game loaded).",
+          "expect": "Settings is open on the Controls tab with More in Options focused (the CTL-01 precondition: SET-01, Controls tab, game loaded); reached from the Controls tab so the goal cannot stop on Audio's identical button.",
           "severity": "major",
           "mode": "automated"
         }
@@ -4990,6 +5008,24 @@
           "expect": "CTL-01: the live pad drawing lights the buttons you press; the hook does not read the drawing, judged by eye on a real pad.",
           "severity": "minor",
           "mode": "manual"
+        },
+        {
+          "id": "ctl.reach-first-row",
+          "role": "setup",
+          "precondition": "ui.screen == play.controller",
+          "action": {
+            "name": "nav.goal",
+            "args": {
+              "goal": "ui.focused == play.controller.row-first"
+            }
+          },
+          "wait": {
+            "check": "ui.focused == play.controller.row-first",
+            "timeout_ticks": 600
+          },
+          "expect": "The first console-control row of the Controller sheet is focused (the CTL-02 precondition).",
+          "severity": "major",
+          "mode": "automated"
         },
         {
           "id": "ctl.arm-row",
@@ -5177,9 +5213,27 @@
           "mode": "automated"
         },
         {
+          "id": "controller-done.reach-settings-row",
+          "role": "setup",
+          "precondition": "ui.screen == play.pause",
+          "action": {
+            "name": "nav.goal",
+            "args": {
+              "goal": "ui.focused == play.pause.settings"
+            }
+          },
+          "wait": {
+            "check": "ui.focused == play.pause.settings",
+            "timeout_ticks": 120
+          },
+          "expect": "W-P4 is open with the Settings row focused (reopen does not restore a row, so the row is pinned before the Down press).",
+          "severity": "major",
+          "mode": "automated"
+        },
+        {
           "id": "controller-done.pad-still-moves",
           "role": "under-test",
-          "precondition": "ui.screen == play.pause",
+          "precondition": "ui.focused == play.pause.settings",
           "action": {
             "name": "pad.press",
             "args": {
@@ -5253,9 +5307,27 @@
           "mode": "automated"
         },
         {
+          "id": "controller-b.reach-settings-row",
+          "role": "setup",
+          "precondition": "ui.screen == play.pause",
+          "action": {
+            "name": "nav.goal",
+            "args": {
+              "goal": "ui.focused == play.pause.settings"
+            }
+          },
+          "wait": {
+            "check": "ui.focused == play.pause.settings",
+            "timeout_ticks": 120
+          },
+          "expect": "W-P4 is open with the Settings row focused (reopen does not restore a row, so the row is pinned before the Down press).",
+          "severity": "major",
+          "mode": "automated"
+        },
+        {
           "id": "controller-b.pad-still-moves",
           "role": "under-test",
-          "precondition": "ui.screen == play.pause",
+          "precondition": "ui.focused == play.pause.settings",
           "action": {
             "name": "pad.press",
             "args": {
@@ -5380,23 +5452,6 @@
       ],
       "steps": [
         {
-          "id": "lamp.game-unpaused",
-          "role": "under-test",
-          "precondition": "ui.screen == play.game",
-          "wait": {
-            "timeout_ticks": 4
-          },
-          "check": {
-            "name": "ui.screen",
-            "args": {
-              "is": "play.game"
-            }
-          },
-          "expect": "LAMP-03: the game runs unpaused, the state in which the status line and lamps must be hidden.",
-          "severity": "minor",
-          "mode": "automated"
-        },
-        {
           "id": "lamp.bar-hidden-in-game",
           "role": "under-test",
           "precondition": "ui.screen == play.game",
@@ -5449,8 +5504,8 @@
         {
           "id": "loss.pad-off-mid-menu",
           "role": "under-test",
-          "precondition": "ui.screen == play.pause",
-          "expect": "LOSS-03 (pass 3): with W-P4 open and a Bluetooth second pad, power it off, on again, press a direction: no second pause (already paused); on return the pad drives focus again and the footer names the right control.",
+          "precondition": "ui.screen == play.game",
+          "expect": "LOSS-03 (pass 3): the tester opens W-P4 first (pause the running game); then, with a Bluetooth second pad, power it off, on again, press a direction: no second pause (already paused); on return the pad drives focus again and the footer names the right control.",
           "severity": "minor",
           "mode": "manual"
         },
