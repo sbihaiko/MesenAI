@@ -1142,7 +1142,21 @@ namespace Mesen.Windows
 					EmuApi.ExecuteShortcut(new ExecuteShortcutParams() { Shortcut = EmulatorShortcut.ToggleOverlay });
 					return;
 				}
+				//#1235: a press that finds NO control holding the focus. That is the
+				//state the real app boots in - measured through the mesen-gui adapter,
+				//the home is already drawn while `ui.focused` reads None for the first
+				//second - and it is reproducible at any time by taking the ring away.
+				//There is nothing here to move, and returning left the screen that way
+				//for good: the player pressed and the home stayed without a ring, on
+				//the screen a cabinet boots into. ADR-0256 Decision 3 is "one focusable
+				//control at a time, WITH the focus drawn" - a cabinet has no cursor to
+				//fall back on - so the press asks the ONE place that decides who holds
+				//the focus for a decision, instead of deciding here (which would be a
+				//second copy of the rule) or giving up. The arbiter answers from the
+				//same claims and content area every other decision is read from, so a
+				//press cannot land on a surface the screen is not showing.
 				if(_window.FocusManager?.GetFocusedElement() is not Control focused) {
+					PlayFocusOnOpen.Of(_window)?.Refresh();
 					return;
 				}
 				if(focused.DataContext is PlayerLibraryTile) {

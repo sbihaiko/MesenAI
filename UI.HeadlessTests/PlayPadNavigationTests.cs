@@ -1075,6 +1075,80 @@ public class PlayPadNavigationTests : IDisposable
 			$"Up did not bring the ring back to the card (now {FocusedName(window) ?? "<nothing>"}; {Focused(window, model)})");
 	}
 
+	//#1235 (the GUI test `play-pad-only`, step `home.focus-holds-up`): the
+	//first-run home is the one-control screen the comment above names - Open a
+	//ROM, and nothing else - so a D-pad press has nowhere to go and the ring has
+	//to stay where it is. It is asserted rather than tolerated because of
+	//ADR-0256 Decision 3: an arcade cabinet has no cursor to fall back on, so a
+	//press that took the focus off the button would leave the player looking at
+	//a screen with nothing drawn as focused, and each of the four directions
+	//would be a way to get lost on the screen a cabinet boots into. Reported
+	//against the real app through the mesen-gui adapter, the Up press read
+	//`focus=None` - the ring was gone, and the step after it (A opens the
+	//library) had nothing left to activate.
+	[AvaloniaFact]
+	public void A_direction_press_on_the_first_run_home_keeps_its_one_action_focused()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		ClearRecents();
+		(MainWindow window, MainWindowViewModel model) = ShowPlay();
+		model.RecentGames.Init(GameScreenMode.RecentGames);
+		Pump();
+		Assert.True(model.RecentGames.ShowFirstRunHome, "the home is not the first-run one, so this case would prove nothing");
+		WaitFor(() => FocusedName(window) == "PlayHomeOpenRomPrimary",
+			() => $"the first-run home opened without its one action focused ({Focused(window, model)})");
+
+		//The press is the batch's own: held for four of the bridge's ticks, which
+		//is what the GUI test's `pad.press` does, and read while it is still down
+		//as well as after the release - the step's check runs before the key comes
+		//up, so both readings have to hold the ring.
+		foreach(PadNavAction direction in Directions) {
+			Release(window);
+			for(int tick = 0; tick < 4; tick++) {
+				Feed(window, direction);
+			}
+			Pump();
+			Assert.True(FocusedName(window) == "PlayHomeOpenRomPrimary",
+				$"{direction} took the ring off the first-run home's one action while it was held ({Focused(window, model)})");
+			Release(window);
+			Pump();
+			Assert.True(FocusedName(window) == "PlayHomeOpenRomPrimary",
+				$"{direction} did not leave the ring on the first-run home's one action after the release ({Focused(window, model)})");
+		}
+	}
+
+	//The other half of the same step, and the one the run actually reported: the
+	//press arrives while the home is on screen and NO control holds the focus -
+	//what the real app looks like for the first second after a launch (measured
+	//through the mesen-gui adapter: `ui.focused` reads None from tick 0 while the
+	//home is already drawn). A pad press there has nothing to move, and until
+	//this case existed nothing put the ring back either: ADR-0256 Decision 3 is
+	//"one focusable control at a time, WITH THE FOCUS DRAWN", and the player a
+	//cabinet boots for has no cursor to fall back on.
+	[AvaloniaFact]
+	public void A_direction_press_on_the_first_run_home_puts_the_ring_back_when_nothing_holds_it()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		ClearRecents();
+		(MainWindow window, MainWindowViewModel model) = ShowPlay();
+		model.RecentGames.Init(GameScreenMode.RecentGames);
+		Assert.True(model.RecentGames.ShowFirstRunHome, "the home is not the first-run one, so this case would prove nothing");
+		WaitFor(() => FocusedName(window) == "PlayHomeOpenRomPrimary",
+			() => $"the first-run home opened without its one action focused ({Focused(window, model)})");
+
+		//The state the app boots in, reproduced deliberately: the home is up and
+		//the focus is on nothing.
+		window.FocusManager?.Focus(null, NavigationMethod.Directional, KeyModifiers.None);
+		Pump();
+		Assert.Null(FocusedName(window));
+
+		Release(window);
+		Feed(window, PadNavAction.Up);
+		Pump();
+		WaitFor(() => FocusedName(window) == "PlayHomeOpenRomPrimary",
+			() => $"a press with no ring left the home with no ring either ({Focused(window, model)})");
+	}
+
 	//The recents the home reads are `.rgd` files in the app's own folder, and the
 	//first-run/recents split is decided by how many of them there are (PlayHome's
 	//own rule), so seeding them is what reaches this layout. An empty file is
