@@ -13,6 +13,7 @@ using Mesen.ViewModels;
 using System;
 using System.Collections.Generic;
 using System.Reflection;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using System.Windows.Input;
 
@@ -31,6 +32,20 @@ namespace Mesen.Debugger.Utilities
 		{
 			foreach(ActionType value in Enum.GetValues<ActionType>()) {
 				_iconCache[value] = typeof(ActionType).GetMember(value.ToString())[0].GetCustomAttribute<IconFileAttribute>()?.Icon;
+			}
+		}
+
+		//The id the GUI test hook lists this menu entry under (ADR-0271/0272):
+		//"menu." + the action in kebab-case. Entries that are not one action
+		//(custom text, separators, hints) have none.
+		public string? AutomationId
+		{
+			get
+			{
+				if(ActionType == ActionType.Custom || this is ContextMenuSeparator || this is ContextMenuHint) {
+					return null;
+				}
+				return "menu." + Regex.Replace(ActionType.ToString(), "(?<!^)([A-Z])", "-$1").ToLowerInvariant();
 			}
 		}
 

@@ -2,6 +2,7 @@ using Avalonia;
 using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Input;
+using Avalonia.LogicalTree;
 using Avalonia.Media.Imaging;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
@@ -95,6 +96,8 @@ namespace Mesen.Windows
 			public JsonObject State()
 			{
 				JsonArray controls = new();
+				JsonArray visible = new();
+				JsonArray options = new();
 				string? screen = null;
 				foreach(Control control in _window.GetVisualDescendants().OfType<Control>()) {
 					string? id = AutomationProperties.GetAutomationId(control);
@@ -110,13 +113,38 @@ namespace Mesen.Windows
 						["visible"] = control.IsEffectivelyVisible,
 						["focused"] = control.IsFocused
 					});
+					if(control.IsEffectivelyVisible) {
+						visible.Add((JsonNode?)JsonValue.Create(id));
+					}
+				}
+				//Menu entries and list choices are the options a pad or key can pick
+				//(ADR-0271), each with its visible text (ADR-0272 §3). Submenu items
+				//live in the logical tree until their menu opens, and count as visible
+				//only while every menu above them is open.
+				foreach(Control control in _window.GetLogicalDescendants().OfType<Control>()) {
+					string? id = AutomationProperties.GetAutomationId(control);
+					if(id is { Length: > 0 } && control is MenuItem or ComboBoxItem or ListBoxItem) {
+						bool menuOpen = control.GetLogicalAncestors().OfType<MenuItem>().All(m => m.IsSubMenuOpen);
+						string? text = control switch {
+							MenuItem item => item.Header as string,
+							ContentControl item => item.Content as string,
+							_ => null
+						};
+						options.Add(new JsonObject {
+							["id"] = id,
+							["text"] = text,
+							["enabled"] = control.IsEffectivelyEnabled,
+							["visible"] = control.IsEffectivelyVisible && menuOpen
+						});
+					}
 				}
 				return new JsonObject {
 					["screen"] = screen,
 					["dialogs"] = new JsonArray(),
 					["focus"] = FocusedId(),
 					["controls"] = controls,
-					["options"] = new JsonArray(),
+					["visible"] = visible,
+					["options"] = options,
 					["window"] = new JsonObject {
 						["mode"] = _window.WindowState == WindowState.FullScreen ? "fullscreen" : "windowed",
 						["size"] = new JsonArray((int)_window.Bounds.Width, (int)_window.Bounds.Height)

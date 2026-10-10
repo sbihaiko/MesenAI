@@ -18,14 +18,14 @@
 
 	<DockPanel Background="{DynamicResource MesenMenuBackground}">
 		<c:MesenMenu Name="ActionMenu" DockPanel.Dock="Left">
-			<MenuItem Header="{l:Translate mnuFile}" ItemsSource="{Binding FileMenuItems}" />
-			<MenuItem Header="{l:Translate mnuGame}" ItemsSource="{Binding GameMenuItems}" />
-			<MenuItem Header="{l:Translate mnuOptions}" ItemsSource="{Binding OptionsMenuItems}" />
-			<MenuItem Header="{l:Translate mnuTools}" ItemsSource="{Binding ToolsMenuItems}" SubmenuOpened="MnuTools_Opened" />
-			<MenuItem Header="{l:Translate mnuDebug}" ItemsSource="{Binding DebugMenuItems}" />
-			<MenuItem Header="{l:Translate mnuHelp}" ItemsSource="{Binding HelpMenuItems}" />
+			<MenuItem AutomationProperties.AutomationId="menu.file" Header="{l:Translate mnuFile}" ItemsSource="{Binding FileMenuItems}" />
+			<MenuItem AutomationProperties.AutomationId="menu.game" Header="{l:Translate mnuGame}" ItemsSource="{Binding GameMenuItems}" />
+			<MenuItem AutomationProperties.AutomationId="menu.options" Header="{l:Translate mnuOptions}" ItemsSource="{Binding OptionsMenuItems}" />
+			<MenuItem AutomationProperties.AutomationId="menu.tools" Header="{l:Translate mnuTools}" ItemsSource="{Binding ToolsMenuItems}" SubmenuOpened="MnuTools_Opened" />
+			<MenuItem AutomationProperties.AutomationId="menu.debug" Header="{l:Translate mnuDebug}" ItemsSource="{Binding DebugMenuItems}" />
+			<MenuItem AutomationProperties.AutomationId="menu.help" Header="{l:Translate mnuHelp}" ItemsSource="{Binding HelpMenuItems}" />
 			<!--ADR-0250: Classic has no shell bar; the switcher is this menu.-->
-			<MenuItem Name="WorkspaceMenu" Header="{l:Translate mnuWorkspace}" ItemsSource="{Binding WorkspaceMenuItems}" />
+			<MenuItem Name="WorkspaceMenu" AutomationProperties.AutomationId="menu.workspace" Header="{l:Translate mnuWorkspace}" ItemsSource="{Binding WorkspaceMenuItems}" />
 		</c:MesenMenu>
 		<Panel Name="MenuPanel" />
 	</DockPanel>
