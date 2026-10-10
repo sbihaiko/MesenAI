@@ -18,7 +18,7 @@ public sealed class TestHookKeys
 	private readonly Action<ushort, bool> _setKey;
 	private readonly Func<string, ushort> _codeOf;
 	private readonly Func<long?> _frames;
-	private readonly Action<string, bool>? _raise;
+	private readonly Action<ushort, bool>? _raise;
 	private readonly List<Hold> _holds = new();
 
 	public long Tick { get; private set; }
@@ -26,9 +26,9 @@ public sealed class TestHookKeys
 	//setKey: put a code in / take it out of the host set. codeOf: the backend's
 	//key-name lookup (0 = unknown). frames: the emulated frame counter while the
 	//clock advances (a game loaded and not paused), null in every other state.
-	//raise: delivers a literal key (by name) to the GUI as KeyDown / KeyUp, because
+	//raise: delivers a literal key (by its backend code) to the GUI as KeyDown / KeyUp, because
 	//the GUI keyboard reads Avalonia key events, not the pressed set; null = set only.
-	public TestHookKeys(Action<ushort, bool> setKey, Func<string, ushort> codeOf, Func<long?> frames, Action<string, bool>? raise = null)
+	public TestHookKeys(Action<ushort, bool> setKey, Func<string, ushort> codeOf, Func<long?> frames, Action<ushort, bool>? raise = null)
 	{
 		_setKey = setKey;
 		_codeOf = codeOf;
@@ -69,7 +69,7 @@ public sealed class TestHookKeys
 		}
 		_setKey(code, true);
 		if(key is not null) {
-			_raise?.Invoke(key, true);
+			_raise?.Invoke(code, true);
 		}
 		return null;
 	}
@@ -132,7 +132,7 @@ public sealed class TestHookKeys
 	private void Release(Hold hold)
 	{
 		if(hold.Key is not null) {
-			_raise?.Invoke(hold.Key, false);
+			_raise?.Invoke(hold.Code, false);
 		}
 	}
 }

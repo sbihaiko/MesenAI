@@ -49,9 +49,9 @@ namespace Mesen.Tests.TestHook
 			public readonly TestHookKeys Keys;
 			public readonly TestHookProtocol Protocol;
 
-			public Rig(List<(string Key, bool Down)>? raised = null)
+			public Rig(List<(ushort Key, bool Down)>? raised = null)
 			{
-				Keys = new TestHookKeys((code, down) => Calls.Add((code, down)), name => name switch { "Pad1 Right" => (ushort)0x1011, "Enter" => (ushort)0x0D, _ => (ushort)0 }, () => Frames, raised is null ? null : (key, down) => raised.Add((key, down)));
+				Keys = new TestHookKeys((code, down) => Calls.Add((code, down)), name => name switch { "Pad1 Right" => (ushort)0x1011, "Enter" => (ushort)0x0D, "Up Arrow" => (ushort)24, "1" => (ushort)35, _ => (ushort)0 }, () => Frames, raised is null ? null : (key, down) => raised.Add((key, down)));
 				Protocol = new TestHookProtocol("secret", Target, Keys);
 			}
 
@@ -170,12 +170,18 @@ namespace Mesen.Tests.TestHook
 		[Fact]
 		public void A_key_press_raises_the_key_on_the_GUI_when_it_starts_and_ends_but_a_pad_press_does_not()
 		{
-			List<(string Key, bool Down)> raised = new();
+			List<(ushort Key, bool Down)> raised = new();
 			Rig rig = new(raised);
 			rig.Ask("{\"id\":16,\"token\":\"secret\",\"op\":\"inject\",\"action\":\"key.press\",\"args\":{\"key\":\"Enter\",\"ticks\":1}}");
-			Assert.Equal(new[] { ("Enter", true) }, raised);
+			Assert.Equal(new[] { ((ushort)0x0D, true) }, raised);
 			rig.Keys.Advance();
-			Assert.Equal(new[] { ("Enter", true), ("Enter", false) }, raised);
+			Assert.Equal(new[] { ((ushort)0x0D, true), ((ushort)0x0D, false) }, raised);
+			raised.Clear();
+			//The code goes through, not the name: "Up Arrow" and "1" are not Avalonia names.
+			rig.Ask("{\"id\":18,\"token\":\"secret\",\"op\":\"inject\",\"action\":\"key.press\",\"args\":{\"key\":\"Up Arrow\",\"ticks\":1}}");
+			rig.Ask("{\"id\":19,\"token\":\"secret\",\"op\":\"inject\",\"action\":\"key.press\",\"args\":{\"key\":\"1\",\"ticks\":1}}");
+			Assert.Equal(new[] { ((ushort)24, true), ((ushort)35, true) }, raised);
+			rig.Keys.Advance();
 			raised.Clear();
 			rig.Ask("{\"id\":17,\"token\":\"secret\",\"op\":\"inject\",\"action\":\"pad.press\",\"args\":{\"button\":\"Right\",\"ticks\":1}}");
 			rig.Keys.Advance();

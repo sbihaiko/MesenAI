@@ -158,11 +158,14 @@ namespace Mesen.Windows
 
 			//KeyDown / KeyUp of a literal key on the focused element (the window when
 			//nothing has focus), so the GUI keyboard - OnPreviewKeyDown, the
-			//keyboard navigation - sees the press as it sees a person's. A name that
-			//is no Avalonia key reaches the pressed set only.
-			public void RaiseKey(string name, bool down)
+			//keyboard navigation - sees the press as it sees a person's. The backend's
+			//keyboard codes ARE Avalonia Key values (KeyDefinitions.h: Enter = 6,
+			//Esc = 13, Up Arrow = 24); pad, joystick and mouse codes (0x1FF and up)
+			//reach the pressed set only.
+			public void RaiseKey(ushort code, bool down)
 			{
-				if(!Enum.TryParse(name, true, out Key key) || key == Key.None) {
+				Key key = (Key)code;
+				if(code == 0 || code >= 0x1FF || !Enum.IsDefined(key)) {
 					return;
 				}
 				InputElement target = _window.FocusManager?.GetFocusedElement() as InputElement ?? _window;

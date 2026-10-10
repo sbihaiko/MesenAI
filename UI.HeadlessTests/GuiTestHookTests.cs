@@ -53,6 +53,10 @@ public class GuiTestHookTests : IDisposable
 	private static readonly Dictionary<ushort, string> Backend = ButtonNames.Select((name, i) => (Code: (ushort)(0x1000 + i), Name: "Pad1 " + name)).ToDictionary(p => p.Code, p => p.Name);
 	private static readonly Dictionary<string, ushort> BackendCodes = Backend.ToDictionary(p => p.Value, p => p.Key);
 
+	//The backend's real keyboard names and codes (Core/Shared/KeyDefinitions.h).
+	private static readonly Dictionary<string, ushort> KeyboardCodes = new() { { "Up Arrow", 24 }, { "Down Arrow", 26 }, { "Enter", 6 }, { "Esc", 13 }, { "1", 35 } };
+	private static ushort KeyboardCode(string name) => KeyboardCodes.TryGetValue(name, out ushort code) ? code : BackendCode(name);
+
 	private static string BackendName(ushort code) => Backend.TryGetValue(code, out string? name) ? name : "";
 	private static ushort BackendCode(string name) => BackendCodes.TryGetValue(name, out ushort code) ? code : (ushort)0;
 
@@ -191,10 +195,10 @@ public class GuiTestHookTests : IDisposable
 		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
 		(MainWindow window, MainWindowViewModel model) = ShowHome();
 		TestHookWiring.WindowTarget target = new(window);
-		TestHookKeys keys = new(InputApi.SetInjectedKey, name => name == "Up" ? (ushort)0x2001 : BackendCode(name), () => null, target.RaiseKey);
+		TestHookKeys keys = new(InputApi.SetInjectedKey, KeyboardCode, () => null, target.RaiseKey);
 		TestHookProtocol hook = new("t", target, keys);
 		try {
-			JsonObject answer = JsonNode.Parse(hook.Handle("{\"id\":1,\"token\":\"t\",\"op\":\"inject\",\"action\":\"key.press\",\"args\":{\"key\":\"Up\",\"ticks\":1}}"))!.AsObject();
+			JsonObject answer = JsonNode.Parse(hook.Handle("{\"id\":1,\"token\":\"t\",\"op\":\"inject\",\"action\":\"key.press\",\"args\":{\"key\":\"Up Arrow\",\"ticks\":1}}"))!.AsObject();
 			Assert.True(answer["ok"]!.GetValue<bool>(), answer.ToJsonString());
 			Pump();
 			Tick(window, keys);
