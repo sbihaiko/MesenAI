@@ -126,8 +126,8 @@ namespace Mesen.Tests.Play
 		{
 			string Bar(bool favorited) => PlayActionBar.Text(PlayBarDeclarations.WithFavorite(PlayBarDeclarations.Home, favorited),
 				PlayInputDevice.Controller, PadFamily.Xbox, false, key => key);
-			Assert.Equal("A BarPlay     X BarFavorite", Bar(false));
-			Assert.Equal("A BarPlay     X BarUnfavorite", Bar(true));
+			Assert.Equal("A BarPlay     X BarFavorite     Y BarSettings", Bar(false));
+			Assert.Equal("A BarPlay     X BarUnfavorite     Y BarSettings", Bar(true));
 		}
 
 		[Fact]

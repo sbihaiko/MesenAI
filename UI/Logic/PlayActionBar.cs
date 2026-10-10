@@ -19,6 +19,8 @@ public enum PlayAction
 	Confirm,
 	Favorite,
 	Search,
+	//#1177: Y on the Play home with no game loaded (W-P8); it never shares a surface with Search.
+	Settings,
 	ConsoleFilter,
 	Back
 }
@@ -77,7 +79,7 @@ public static class PlayActionBar
 				PlayAction.Move => "D-pad",
 				PlayAction.Confirm => "A",
 				PlayAction.Favorite => "X",
-				PlayAction.Search => "Y",
+				PlayAction.Search or PlayAction.Settings => "Y",
 				PlayAction.ConsoleFilter => "LB / RB",
 				_ => "B"
 			},
@@ -85,7 +87,7 @@ public static class PlayActionBar
 				PlayAction.Move => "D-pad",
 				PlayAction.Confirm => "Cross",
 				PlayAction.Favorite => "Square",
-				PlayAction.Search => "Triangle",
+				PlayAction.Search or PlayAction.Settings => "Triangle",
 				PlayAction.ConsoleFilter => "L1 / R1",
 				_ => "Circle"
 			},

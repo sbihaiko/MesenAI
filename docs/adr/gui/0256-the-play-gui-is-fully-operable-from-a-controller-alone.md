@@ -67,6 +67,17 @@
   this my games folder* action row, which also stays where it is. What is
   retired is the folder walk as the sheet's opening shape. Decision 9's text
   above stands unchanged as the record of what was decided on 2026-10-05.
+  **Amended: 2026-10-10** (#1177), under the Fable proxy's decision (the owner
+  is asleep; this is not an owner quote), quoted verbatim: **"PICK: 2 — On Play
+  Home (W-P1 and W-P2, no game loaded) the pad's Y opens the Settings sheet via
+  the existing OpenPlayerSettingsSheet(), and the footer bar names it (\"Y
+  Settings\"); no new visible home control, header stays unpadded."** With no
+  game loaded, Y on the Play home opens the Settings sheet (W-P8); the bar names
+  it. Y keeps its library meaning (ADR-0264 Decision 3); the chord stays the only
+  way into W-P4. B from the sheet returns home through the Esc router the pad's B
+  shares. The header stays unpadded, which is the #1137 containment decision
+  (the home host holds the walk) read unchanged; ADR-0241 and the W-P1/W-P2
+  renders are untouched.
 - Date: 2026-10-04
 - Related: ADR-0241 (Play's home and the W-P4 pause overlay), ADR-0249 (the
   rendered wireframes as the visual spec), ADR-0250 (every menu entry has one
