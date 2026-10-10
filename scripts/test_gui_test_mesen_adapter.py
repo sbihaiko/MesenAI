@@ -66,7 +66,7 @@ class FakeHook:
         self.bar_shown = True
         self.lit_ports = [1]
         self.items = ["play.home.recent.Contra (USA).nes"]
-        self.haptics = [{"pad": 1, "count": 1}]
+        self.haptics = [{"pad": 0, "count": 1}]
         self.quit = threading.Event()
         self.server = socket.socket(socket.AF_UNIX)
         self.server.bind(str(path))
@@ -92,7 +92,7 @@ class FakeHook:
         out = {"id": req["id"], "ok": True}
         op = req["op"]
         if op == "hello":
-            out.update(hook=1, ops=["hello", "state", "inject", "capture", "quit"], namespaces=["pad", "key", "text", "ui"])
+            out.update(hook=1, ops=["hello", "state", "inject", "capture", "quit"], namespaces=["pad", "key", "ui"])
         elif op == "state":
             self.tick += 0 if self.frozen else 3
             out.update(
@@ -207,7 +207,7 @@ class AdapterContract(Base):
         self.assertTrue(self.session.check("ui.paused", {"is": False})["passed"])
         self.assertTrue(self.session.check("ui.lamps", {"port": 1, "is": "lit"})["passed"])
         self.assertTrue(self.session.check("ui.items", {"contains": "play.home.recent.Contra (USA).nes"})["passed"])
-        self.assertTrue(self.session.check("ui.haptics", {"pad": 1, "at_least": 1})["passed"])
+        self.assertTrue(self.session.check("ui.haptics", {"pad": 0, "at_least": 1})["passed"])
 
     def test_a_duplicated_id_is_visible_when_any_copy_is_visible(self):
         # First-run Home: the Primary Open ROM is on screen, the hidden Secondary (PlayHomeWithRecents) comes later in the tree.
@@ -317,6 +317,7 @@ class PlayerVisibleChecks(Base):
         for bad in (0, 5, "1", True):
             with self.assertRaises(adapter.UnknownId):
                 self.session.check("ui.lamps", {"port": bad, "is": "lit"})
+        for bad in (-1, 4, "0", True):
             with self.assertRaises(adapter.UnknownId):
                 self.session.check("ui.haptics", {"pad": bad, "is": 1})
         with self.assertRaises(adapter.UnknownId):
@@ -332,12 +333,12 @@ class PlayerVisibleChecks(Base):
         self.assertEqual(self.session.check("ui.items", {"is": []})["observed"], self.hook.items)
 
     def test_the_haptics_are_the_ticks_the_menu_asked_for_on_one_pad(self):
-        self.hook.haptics = [{"pad": 1, "count": 3}, {"pad": 2, "count": 1}]
-        self.assertEqual(self.session.check("ui.haptics", {"pad": 1, "is": 3})["observed"], 3)
-        self.assertTrue(self.session.check("ui.haptics", {"pad": 2, "at_least": 1})["passed"])
-        self.assertFalse(self.session.check("ui.haptics", {"pad": 1, "at_least": 4})["passed"])
+        self.hook.haptics = [{"pad": 0, "count": 3}, {"pad": 1, "count": 1}]
+        self.assertEqual(self.session.check("ui.haptics", {"pad": 0, "is": 3})["observed"], 3)
+        self.assertTrue(self.session.check("ui.haptics", {"pad": 1, "at_least": 1})["passed"])
+        self.assertFalse(self.session.check("ui.haptics", {"pad": 0, "at_least": 4})["passed"])
         # A pad the menu never ticked reads zero, which is a failed check and not a missing answer.
-        self.assertEqual(self.session.check("ui.haptics", {"pad": 4, "at_least": 1})["observed"], 0)
+        self.assertEqual(self.session.check("ui.haptics", {"pad": 3, "at_least": 1})["observed"], 0)
 
     def test_wait_is_met_when_the_condition_holds_in_ticks(self):
         self.session.inject("pad.press", {"button": "Up", "ticks": 2})

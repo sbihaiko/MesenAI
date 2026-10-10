@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Text.Json.Nodes;
 
 namespace Mesen.Logic.TestHook;
@@ -87,11 +88,16 @@ public sealed class TestHookProtocol
 	//- 0 is the pad in the hand, 1 the second pad, ADR-0272 section 4's "device 0" -
 	//and it is the index TestHookKeys takes too, so one number names one pad from a
 	//script's step down to the backend's own "Pad1 A" lookup.
+	private static readonly HashSet<string> Actions = new() { "pad.press", "pad.hold", "pad.release", "key.press", "pad.connect", "pad.disconnect" };
+
 	private JsonObject Inject(JsonObject request)
 	{
 		string action = request["action"]?.GetValue<string>() ?? "";
-		//#1282: the request that starts a step is the one that counts from now on.
-		_target.Step();
+		//A refused request is not a step: validate before Step(), which restarts the
+		//since-last-step counts (#1282), so a retry after a refusal reads them intact.
+		if(!Actions.Contains(action)) {
+			throw new ArgumentException("unknown action " + action);
+		}
 		JsonObject args = request["args"]?.AsObject() ?? new JsonObject();
 		int? ticks = args["ticks"]?.GetValue<int>();
 		int? frames = args["frames"]?.GetValue<int>();
@@ -99,6 +105,8 @@ public sealed class TestHookProtocol
 		if(pad < 0) {
 			throw new ArgumentException("pad is a pad index: 0 is the pad in the hand, 1 the second pad");
 		}
+		//#1282: the request that starts a step is the one that counts from now on.
+		_target.Step();
 		string button = args["button"]?.GetValue<string>() ?? "";
 		string? error = action switch {
 			"pad.press" => _keys.Press(pad, button, ticks, frames),

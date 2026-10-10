@@ -119,15 +119,15 @@ namespace Mesen.Tests.TestHook
 
 			JsonArray since = haptics.Take();
 			Assert.Equal(2, since.Count);
-			Assert.Equal(1, since[0]!["pad"]!.GetValue<int>());
+			Assert.Equal(0, since[0]!["pad"]!.GetValue<int>());
 			Assert.Equal(2, since[0]!["count"]!.GetValue<int>());
-			Assert.Equal(3, since[1]!["pad"]!.GetValue<int>());
+			Assert.Equal(2, since[1]!["pad"]!.GetValue<int>());
 			Assert.Equal(1, since[1]!["count"]!.GetValue<int>());
-			Assert.Equal(2, haptics.Count(1));
+			Assert.Equal(2, haptics.Count(0));
 
 			haptics.Restart();
 			Assert.Empty(haptics.Take());
-			Assert.Equal(0, haptics.Count(1));
+			Assert.Equal(0, haptics.Count(0));
 		}
 
 		//The surfaces a run can be standing on, and the one on top: the stack is the

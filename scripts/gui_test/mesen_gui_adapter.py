@@ -547,9 +547,9 @@ class Session:
         if name == "ui.haptics":
             # The ticks the menu asked for on one pad since the last step, recorded at HapticTickOutput
             # (#1106). Evidence of the request, never of the vibration: no motor is involved.
-            port = self._port(args["pad"], "pad")
+            pad = self._pad(args["pad"])
             count = next((entry["count"] for entry in state.get("haptics", [])
-                          if entry.get("pad") == port), 0)
+                          if entry.get("pad") == pad), 0)
             if "at_least" in args:
                 return {"passed": count >= args["at_least"], "observed": count}
             return {"passed": count == args["is"], "observed": count}
@@ -585,6 +585,13 @@ class Session:
         """One of the four ports, 1-based as the lamps label them ("P1"), the way the hook reads them."""
         if not isinstance(value, int) or isinstance(value, bool) or not 1 <= value <= 4:
             raise UnknownId(f"{key} {value!r}")
+        return value
+
+    @staticmethod
+    def _pad(value):
+        """A pad index, 0-based like every `pad` field of the input actions (0 is the pad in the hand)."""
+        if not isinstance(value, int) or isinstance(value, bool) or not 0 <= value <= 3:
+            raise UnknownId(f"pad {value!r}")
         return value
 
     def wait(self, condition, timeout_ticks, host_timeout=WAIT_HOST_TIMEOUT):

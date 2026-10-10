@@ -167,6 +167,33 @@ namespace Mesen.Tests.TestHook
 			Assert.Equal(1, rig.Target.Steps);
 		}
 
+		//A refused request is not a step: Step() restarts the since-last-step counts
+		//(#1282), so a runner retrying after a refusal must still read the press's tick.
+		[Theory]
+		[InlineData("{\"id\":9,\"token\":\"secret\",\"op\":\"inject\",\"action\":\"text.type\",\"args\":{\"text\":\"a\"}}")]
+		[InlineData("{\"id\":9,\"token\":\"secret\",\"op\":\"inject\",\"action\":\"pad.pres\",\"args\":{\"button\":\"Right\",\"ticks\":1}}")]
+		[InlineData("{\"id\":9,\"token\":\"secret\",\"op\":\"inject\",\"action\":\"pad.press\",\"args\":{\"pad\":-1,\"button\":\"Right\",\"ticks\":1}}")]
+		public void A_refused_inject_does_not_declare_a_step(string refused)
+		{
+			Rig rig = new();
+			Assert.True(rig.Ask("{\"id\":8,\"token\":\"secret\",\"op\":\"inject\",\"action\":\"pad.press\",\"args\":{\"button\":\"Right\",\"ticks\":1}}")["ok"]!.GetValue<bool>());
+			Assert.Equal(1, rig.Target.Steps);
+			Assert.False(rig.Ask(refused)["ok"]!.GetValue<bool>());
+			Assert.Equal(1, rig.Target.Steps);
+		}
+
+		//One number names one pad: the index a press takes is the index ui.haptics reads.
+		[Fact]
+		public void A_press_and_the_haptics_name_the_same_pad_index()
+		{
+			TestHookHaptics haptics = new();
+			Rig rig = new();
+			Assert.True(rig.Ask("{\"id\":8,\"token\":\"secret\",\"op\":\"inject\",\"action\":\"pad.press\",\"args\":{\"pad\":0,\"button\":\"Right\",\"ticks\":1}}")["ok"]!.GetValue<bool>());
+			haptics.Record(0);
+			Assert.Equal(1, haptics.Count(0));
+			Assert.Equal(0, haptics.Take()[0]!["pad"]!.GetValue<int>());
+		}
+
 		[Fact]
 		public void A_press_in_frames_is_counted_by_the_emulated_clock_not_the_ticks()
 		{

@@ -92,7 +92,12 @@ fails the run loudly rather than answering `false`.
 | `ui.paused` | `{"is":true}` | the application's own paused flag. |
 | `ui.lamps` | `{"port":1,"is":"lit"\|"dim"\|"hidden"}` | one port of the status line's four lamps (ADR-0249/ADR-0255). `hidden` is the bar not being drawn at all - the game running unpaused (ADR-0261) - and a lamp that is not drawn is never read as `dim`. A port outside 1-4 is `unknown id`. |
 | `ui.items` | `{"is":[<ids>]}` / `{"contains":"<id>"}` | the entries of the list the focus is in, in the order it draws them. The whole list compares as ids, never as one joined string: a game title can carry a comma. |
-| `ui.haptics` | `{"pad":1,"is":2}` / `{"pad":1,"at_least":1}` | the haptic tick requests the menu made on that pad since the last step, recorded at `HapticTickOutput` (#1106) while a hook runs. It is evidence of the request, never of a vibration: no motor is involved. A pad the menu never ticked reads `0`. |
+| `ui.haptics` | `{"pad":0,"is":2}` / `{"pad":0,"at_least":1}` | the haptic tick requests the menu made on that pad (0-based, 0 is the pad in the hand, 0-3) since the last step, recorded at `HapticTickOutput` (#1106) while a hook runs. It is evidence of the request, never of a vibration: no motor is involved. A pad the menu never ticked reads `0`. |
+
+Every `pad` field - the input actions' and `ui.haptics`' - is one 0-based index
+(ADR-0272 item 4's "device 0"), so `pad.press {"pad":0}` followed by
+`ui.haptics {"pad":0}` names the same pad. `ui.lamps` keeps its `port` field,
+1-based as the lamps label them ("P1").
 
 A step's own `inject` is what starts a step, so a `ui.haptics` check reads what
 that step caused and the state reads of a `wait` in between consume nothing.
