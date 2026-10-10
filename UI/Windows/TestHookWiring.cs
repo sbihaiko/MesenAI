@@ -118,14 +118,21 @@ namespace Mesen.Windows
 					}
 				}
 				//Menu entries and list choices are the options a pad or key can pick
-				//(ADR-0271). Submenu items live in the logical tree until their menu
-				//opens, and count as visible only while it is open.
+				//(ADR-0271), each with its visible text (ADR-0272 §3). Submenu items
+				//live in the logical tree until their menu opens, and count as visible
+				//only while every menu above them is open.
 				foreach(Control control in _window.GetLogicalDescendants().OfType<Control>()) {
 					string? id = AutomationProperties.GetAutomationId(control);
 					if(id is { Length: > 0 } && control is MenuItem or ComboBoxItem or ListBoxItem) {
-						bool menuOpen = control.Parent is not MenuItem parent || parent.IsSubMenuOpen;
+						bool menuOpen = control.GetLogicalAncestors().OfType<MenuItem>().All(m => m.IsSubMenuOpen);
+						string? text = control switch {
+							MenuItem item => item.Header as string,
+							ContentControl item => item.Content as string,
+							_ => null
+						};
 						options.Add(new JsonObject {
 							["id"] = id,
+							["text"] = text,
 							["enabled"] = control.IsEffectivelyEnabled,
 							["visible"] = control.IsEffectivelyVisible && menuOpen
 						});

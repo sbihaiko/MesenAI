@@ -160,6 +160,7 @@
 	</Style>
 
 	<Style Selector="Menu#ActionMenu MenuItem MenuItem, ContextMenu#ActionMenu MenuItem">
+		<Setter Property="(AutomationProperties.AutomationId)" Value="{Binding AutomationId, DataType={x:Type du:BaseMenuAction}}" />
 		<Setter Property="Header" Value="{Binding ActionName, DataType={x:Type du:BaseMenuAction}}" />
 		<Setter Property="Icon" Value="{Binding ActionIcon, DataType={x:Type du:BaseMenuAction}}" />
 		<Setter Property="IsVisible" Value="{Binding Visible, DataType={x:Type du:BaseMenuAction}}" />
@@ -176,6 +177,7 @@
 	action shared with the classic bar cannot be hosted twice. The template
 	builds a fresh Image per MenuItem over the same bitmap.-->
 	<Style Selector="Menu#ToolsMenu MenuItem MenuItem">
+		<Setter Property="(AutomationProperties.AutomationId)" Value="{Binding AutomationId, DataType={x:Type du:BaseMenuAction}}" />
 		<Setter Property="Header" Value="{Binding ActionName, DataType={x:Type du:BaseMenuAction}}" />
 		<Setter Property="Icon">
 			<Template>
