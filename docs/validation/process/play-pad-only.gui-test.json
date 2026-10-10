@@ -2956,7 +2956,7 @@
               "is": "play.pack"
             }
           },
-          "expect": "P4-06: A on Pack opens pack detail (W-P6) with one pack or the picker (W-P5) with 2+.",
+          "expect": "P4-06: with one pack, A on Pack opens the pack detail (W-P6).",
           "severity": "major",
           "mode": "automated"
         },
@@ -2964,7 +2964,7 @@
           "id": "pause.pack-detail-controls",
           "role": "under-test",
           "precondition": "ui.visible == play.pack",
-          "expect": "P4-06: with one pack the detail shows Done, Show pack folder, Details; with 2+ the picker has radios by D-pad, Use This Pack and Cancel.",
+          "expect": "P4-06: with one pack the detail (W-P6) shows Done, Show pack folder, Details.",
           "severity": "minor",
           "mode": "manual"
         },
@@ -3503,7 +3503,7 @@
               "is": "play.settings.done"
             }
           },
-          "expect": "SET-01: Done is reachable on the display page.",
+          "expect": "SET-01: Done is reachable on the display page. Premise: held Down repeats at 400 ms then every 100 ms (~17 moves in 40 ticks), the Settings vertical chain does not wrap, and Done is its last row.",
           "severity": "major",
           "mode": "automated"
         },
@@ -3675,7 +3675,7 @@
               "is": "play.settings.done"
             }
           },
-          "expect": "SET-01: Done is reachable on the look page.",
+          "expect": "SET-01: Done is reachable on the look page. Premise: held Down repeats at 400 ms then every 100 ms (~17 moves in 40 ticks), the Settings vertical chain does not wrap, and Done is its last row.",
           "severity": "major",
           "mode": "automated"
         },
@@ -3797,7 +3797,7 @@
               "is": "play.settings.done"
             }
           },
-          "expect": "SET-01: Done is reachable on the audio page.",
+          "expect": "SET-01: Done is reachable on the audio page. Premise: held Down repeats at 400 ms then every 100 ms (~17 moves in 40 ticks), the Settings vertical chain does not wrap, and Done is its last row.",
           "severity": "major",
           "mode": "automated"
         },
@@ -3944,7 +3944,7 @@
               "is": "play.settings.done"
             }
           },
-          "expect": "SET-01: Done is reachable on the controls page.",
+          "expect": "SET-01: Done is reachable on the controls page. Premise: held Down repeats at 400 ms then every 100 ms (~17 moves in 40 ticks), the Settings vertical chain does not wrap, and Done is its last row.",
           "severity": "major",
           "mode": "automated"
         },
@@ -4091,7 +4091,7 @@
               "is": "play.settings.done"
             }
           },
-          "expect": "SET-01: Done is reachable on the system page.",
+          "expect": "SET-01: Done is reachable on the system page. Premise: held Down repeats at 400 ms then every 100 ms (~17 moves in 40 ticks), the Settings vertical chain does not wrap, and Done is its last row.",
           "severity": "major",
           "mode": "automated"
         },
@@ -4277,7 +4277,7 @@
             "name": "pad.press",
             "args": {
               "button": "Down",
-              "ticks": 40
+              "ticks": 60
             }
           },
           "wait": {
@@ -4290,7 +4290,7 @@
               "is": "play.settings.done"
             }
           },
-          "expect": "SET-02: at Extra large Done stays pinned and reachable (ADR-0269 Decision 6).",
+          "expect": "SET-02: at Extra large Done stays pinned and reachable (ADR-0269 Decision 6). Premise: held Down repeats at 400 ms then every 100 ms (~17 moves in 40 ticks, so this step holds 60 ticks for the taller Extra large chain), the Settings vertical chain does not wrap, and Done is its last row.",
           "severity": "major",
           "mode": "automated"
         },
@@ -4389,7 +4389,7 @@
               "is": "play.settings.done"
             }
           },
-          "expect": "SET-02: at Standard Done is reachable.",
+          "expect": "SET-02: at Standard Done is reachable. Premise: held Down repeats at 400 ms then every 100 ms (~17 moves in 40 ticks), the Settings vertical chain does not wrap, and Done is its last row.",
           "severity": "major",
           "mode": "automated"
         },
@@ -4407,63 +4407,6 @@
           "precondition": "ui.screen == play.settings",
           "expect": "SET-03: Menu sounds is visible when the host audio path exists (ADR-0270, #1126) and hidden otherwise; record which.",
           "severity": "minor",
-          "mode": "manual"
-        },
-        {
-          "id": "settings.menu-sounds-focus",
-          "role": "setup",
-          "precondition": "ui.screen == play.settings and ui.visible == play.settings.menu-sounds",
-          "action": {
-            "name": "nav.goal",
-            "args": {
-              "goal": "ui.focused == play.settings.menu-sounds"
-            }
-          },
-          "wait": {
-            "check": "ui.focused == play.settings.menu-sounds",
-            "timeout_ticks": 120
-          },
-          "check": {
-            "name": "ui.focused",
-            "args": {
-              "is": "play.settings.menu-sounds"
-            }
-          },
-          "expect": "SET-03 (setup): focus Menu sounds on the Audio tab.",
-          "severity": "major",
-          "mode": "automated"
-        },
-        {
-          "id": "settings.menu-sounds-toggle",
-          "role": "under-test",
-          "precondition": "ui.focused == play.settings.menu-sounds",
-          "action": {
-            "name": "pad.press",
-            "args": {
-              "button": "A",
-              "ticks": 4
-            }
-          },
-          "wait": {
-            "check": "ui.focused == play.settings.menu-sounds",
-            "timeout_ticks": 8
-          },
-          "check": {
-            "name": "ui.focused",
-            "args": {
-              "is": "play.settings.menu-sounds"
-            }
-          },
-          "expect": "SET-03: A toggles Menu sounds on; the focus stays on the row.",
-          "severity": "major",
-          "mode": "automated"
-        },
-        {
-          "id": "settings.menu-sounds-blips",
-          "role": "under-test",
-          "precondition": "ui.focused == play.settings.menu-sounds",
-          "expect": "SET-03: a soft blip on move, confirm and back at a fixed low level, never while a game runs unpaused (MenuSounds.ShouldPlay); the game's own audio is unaffected (ADR-0270). Judged by ear.",
-          "severity": "major",
           "mode": "manual"
         },
         {
@@ -4754,6 +4697,225 @@
           "mode": "manual"
         }
       ]
+    },
+    {
+      "id": "pause-pack-multi",
+      "setup": [
+        {
+          "id": "pause-pack-multi.reach-game",
+          "role": "setup",
+          "precondition": "fixture rom, fixture pack-multi and fixture settings.profiles.fresh",
+          "action": {
+            "name": "nav.goal",
+            "args": {
+              "goal": "ui.screen == play.game"
+            }
+          },
+          "wait": {
+            "check": "ui.screen == play.game",
+            "timeout_ticks": 600
+          },
+          "expect": "A game is running (the P4-01 precondition).",
+          "severity": "major",
+          "mode": "automated"
+        },
+        {
+          "id": "pause-pack-multi.chord-opens",
+          "role": "setup",
+          "precondition": "ui.screen == play.game",
+          "action": {
+            "name": "pad.chord",
+            "args": {
+              "buttons": [
+                "Select",
+                "Start"
+              ],
+              "frames": 4
+            }
+          },
+          "wait": {
+            "check": "ui.screen == play.pause",
+            "timeout_frames": 120
+          },
+          "check": {
+            "name": "ui.screen",
+            "args": {
+              "is": "play.pause"
+            }
+          },
+          "expect": "W-P4 is open over the running game (setup, from P4-01).",
+          "severity": "major",
+          "mode": "automated"
+        },
+        {
+          "id": "pause-pack-multi.pack-focus",
+          "role": "setup",
+          "precondition": "ui.screen == play.pause and fixture pack-multi",
+          "action": {
+            "name": "nav.goal",
+            "args": {
+              "goal": "ui.focused == play.pause.pack"
+            }
+          },
+          "wait": {
+            "check": "ui.focused == play.pause.pack",
+            "timeout_ticks": 8
+          },
+          "check": {
+            "name": "ui.focused",
+            "args": {
+              "is": "play.pause.pack"
+            }
+          },
+          "expect": "P4-06 (setup): focus Pack with 2+ installed packs.",
+          "severity": "major",
+          "mode": "automated"
+        }
+      ],
+      "steps": [
+        {
+          "id": "pause-pack-multi.pack-picker-opens",
+          "role": "under-test",
+          "precondition": "ui.focused == play.pause.pack and fixture pack-multi",
+          "action": {
+            "name": "pad.press",
+            "args": {
+              "button": "A",
+              "ticks": 4
+            }
+          },
+          "wait": {
+            "check": "ui.visible == play.pack",
+            "timeout_ticks": 120
+          },
+          "check": {
+            "name": "ui.visible",
+            "args": {
+              "is": "play.pack"
+            }
+          },
+          "expect": "P4-06: with 2+ packs A on Pack opens the picker W-P5.",
+          "severity": "major",
+          "mode": "automated"
+        },
+        {
+          "id": "pause-pack-multi.pack-picker-controls",
+          "role": "under-test",
+          "precondition": "ui.visible == play.pack",
+          "expect": "P4-06: the picker (W-P5) has radios by D-pad, Use This Pack and Cancel.",
+          "severity": "minor",
+          "mode": "manual"
+        },
+        {
+          "id": "pause-pack-multi.pack-picker-b-to-pause",
+          "role": "under-test",
+          "precondition": "ui.visible == play.pack",
+          "action": {
+            "name": "pad.press",
+            "args": {
+              "button": "B",
+              "ticks": 4
+            }
+          },
+          "wait": {
+            "check": "ui.focused == play.pause.pack",
+            "timeout_ticks": 120
+          },
+          "check": {
+            "name": "ui.focused",
+            "args": {
+              "is": "play.pause.pack"
+            }
+          },
+          "expect": "P4-06: B closes the picker back to W-P4; focus returns to play.pause.pack.",
+          "severity": "major",
+          "mode": "automated"
+        }
+      ],
+      "teardown": []
+    },
+    {
+      "id": "settings-menu-sounds",
+      "setup": [
+        {
+          "id": "settings-menu-sounds.reach-audio",
+          "role": "setup",
+          "precondition": "fixture rom and fixture settings.profiles.fresh",
+          "action": {
+            "name": "nav.goal",
+            "args": {
+              "goal": "ui.focused == play.settings.tab-audio"
+            }
+          },
+          "wait": {
+            "check": "ui.focused == play.settings.tab-audio",
+            "timeout_ticks": 600
+          },
+          "expect": "Settings is open on the Audio tab (the SET-03 precondition).",
+          "severity": "major",
+          "mode": "automated"
+        }
+      ],
+      "steps": [
+        {
+          "id": "settings.menu-sounds-focus",
+          "role": "under-test",
+          "precondition": "ui.screen == play.settings and ui.visible == play.settings.menu-sounds",
+          "action": {
+            "name": "nav.goal",
+            "args": {
+              "goal": "ui.focused == play.settings.menu-sounds"
+            }
+          },
+          "wait": {
+            "check": "ui.focused == play.settings.menu-sounds",
+            "timeout_ticks": 120
+          },
+          "check": {
+            "name": "ui.focused",
+            "args": {
+              "is": "play.settings.menu-sounds"
+            }
+          },
+          "expect": "SET-03: focus Menu sounds on the Audio tab; if the host has no Menu sounds row this step fails and stops only this batch.",
+          "severity": "major",
+          "mode": "automated"
+        },
+        {
+          "id": "settings.menu-sounds-toggle",
+          "role": "under-test",
+          "precondition": "ui.focused == play.settings.menu-sounds",
+          "action": {
+            "name": "pad.press",
+            "args": {
+              "button": "A",
+              "ticks": 4
+            }
+          },
+          "wait": {
+            "check": "ui.focused == play.settings.menu-sounds",
+            "timeout_ticks": 8
+          },
+          "check": {
+            "name": "ui.focused",
+            "args": {
+              "is": "play.settings.menu-sounds"
+            }
+          },
+          "expect": "SET-03: A toggles Menu sounds on; the focus stays on the row.",
+          "severity": "major",
+          "mode": "automated"
+        },
+        {
+          "id": "settings.menu-sounds-blips",
+          "role": "under-test",
+          "precondition": "ui.focused == play.settings.menu-sounds",
+          "expect": "SET-03: a soft blip on move, confirm and back at a fixed low level, never while a game runs unpaused (MenuSounds.ShouldPlay); the game's own audio is unaffected (ADR-0270). Judged by ear.",
+          "severity": "major",
+          "mode": "manual"
+        }
+      ],
+      "teardown": []
     }
   ]
 }
