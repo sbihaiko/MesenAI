@@ -26,14 +26,36 @@
     "settings": {
       "profiles": {
         "fresh": "no play history, no favorites",
-        "history-one-favorite": "one game in play history (so Continue and Recent exist) and that game favorited (so Favorites exists, ADR-0268 Decision 4)"
+        "history-one-favorite": "one game in play history (so Continue and Recent exist) and that game favorited (so Favorites exists, ADR-0268 Decision 4)",
+        "history-no-favorite": "one game in play history (so Continue and Recent exist) and no favorites (FAV-01 starts from an empty Favorites shelf)",
+        "history-two-favorites": "two games in play history (so Continue and Recent exist) and both favorited, with the Continue game (the most recently played, fixture rom) as the newest favorite and so the first Favorites tile (ADR-0268 Decision 3), and the older game (fixture rom-second) as the other favorite; unfavoriting the Continue game via X leaves the Favorites shelf visible (ADR-0268 Decision 4)"
       }
     },
     "rom": {
       "path": "<library>/Contra (USA).nes",
       "sha1": "<no-intro sha1 per ADR-0003, filled when the adapter lands>"
     },
-    "note": "Control ids are provisional until the in-app AutomationIds land (#1182); steps use the HOME-01..06 wording of the manual script."
+    "note": "Control ids are provisional until the in-app AutomationIds land (#1182); steps use the HOME-01..06 wording of the manual script. Library, Favorites and Game batches (#1193) follow LIB-01..09, FAV-01..02, GAME-01..04; ids under play.library.*, play.keyboard, play.select-rom, play.bios and play.game are provisional the same way.",
+    "rom-second": {
+      "path": "<library>/Mega Man 2 (USA).nes",
+      "sha1": "<no-intro sha1 per ADR-0003, filled when the adapter lands>",
+      "note": "the second game in the history-two-favorites profile, played before fixture rom (FAV-02)"
+    },
+    "rom-zip": {
+      "path": "<library>/Multi ROM Pack.zip",
+      "sha1": "<no-intro sha1 per ADR-0003, filled when the adapter lands>",
+      "note": "an archive holding several ROMs (GAME-03)"
+    },
+    "rom-fds": {
+      "path": "<library>/Disk System Game.fds",
+      "sha1": "<no-intro sha1 per ADR-0003, filled when the adapter lands>",
+      "note": "an FDS image with disksys.rom not installed (GAME-04)"
+    },
+    "rom-library-large": {
+      "path": "<library-large>",
+      "sha1": "<no-intro sha1 per ADR-0003, filled when the adapter lands>",
+      "note": "a folder with 100+ ROMs (LIB-02)"
+    }
   },
   "batches": [
     {
@@ -623,6 +645,1406 @@
           "mode": "manual"
         }
       ]
+    },
+    {
+      "id": "library",
+      "setup": [
+        {
+          "id": "lib.reach-library",
+          "role": "setup",
+          "precondition": "fixture rom-library-large and fixture settings.profiles.fresh",
+          "action": {
+            "name": "nav.goal",
+            "args": {
+              "goal": "ui.screen == play.library"
+            }
+          },
+          "wait": {
+            "check": "ui.screen == play.library",
+            "timeout_ticks": 600
+          },
+          "expect": "The library sheet (W-P19) is open with a focused tile (the LIB-01 precondition).",
+          "severity": "major",
+          "mode": "automated"
+        }
+      ],
+      "steps": [
+        {
+          "id": "lib.open-screen",
+          "role": "under-test",
+          "precondition": "ui.screen == play.library",
+          "wait": {
+            "check": "ui.screen == play.library",
+            "timeout_ticks": 120
+          },
+          "check": {
+            "name": "ui.screen",
+            "args": {
+              "is": "play.library"
+            }
+          },
+          "expect": "LIB-01: the flat library grid is open.",
+          "severity": "major",
+          "mode": "automated"
+        },
+        {
+          "id": "lib.first-tile-focused",
+          "role": "under-test",
+          "precondition": "ui.screen == play.library",
+          "wait": {
+            "check": "ui.focused == play.library.tile",
+            "timeout_ticks": 120
+          },
+          "check": {
+            "name": "ui.focused",
+            "args": {
+              "is": "play.library.tile"
+            }
+          },
+          "expect": "LIB-01: a tile is focused (ring on the grid's first tile).",
+          "severity": "major",
+          "mode": "automated"
+        },
+        {
+          "id": "lib.header-footer-scan",
+          "role": "under-test",
+          "precondition": "ui.screen == play.library",
+          "expect": "LIB-01: header reads \"Your library · N games in M folders\", the footer names A/B/Y/X/LB/RB in the pad's own words (ADR-0256 Decision 6), an animated indicator shows while scanning.",
+          "severity": "minor",
+          "mode": "manual"
+        },
+        {
+          "id": "lib.hold-down-repeats",
+          "role": "under-test",
+          "precondition": "fixture rom-library-large; ui.screen == play.library",
+          "expect": "LIB-02: with 100+ ROMs, a held Down repeats after 400 ms then every 100 ms (ADR-0256 Decision 7) and the grid scrolls; judged by timing and eye. Part 2 (same with Right) is the next step.",
+          "severity": "major",
+          "mode": "manual"
+        },
+        {
+          "id": "lib.hold-right-repeats",
+          "role": "under-test",
+          "precondition": "fixture rom-library-large; ui.screen == play.library",
+          "expect": "LIB-02: the same with Right: a held Right repeats after 400 ms then every 100 ms and the focus walks the row, wrapping onto the next row.",
+          "severity": "major",
+          "mode": "manual"
+        },
+        {
+          "id": "lib.tap-down-steps-once",
+          "role": "under-test",
+          "precondition": "fixture rom-library-large; ui.focused == play.library.tile",
+          "action": {
+            "name": "pad.press",
+            "args": {
+              "button": "Down",
+              "ticks": 4
+            }
+          },
+          "wait": {
+            "check": "ui.focused == play.library.tile",
+            "timeout_ticks": 4
+          },
+          "check": {
+            "name": "ui.focused",
+            "args": {
+              "is": "play.library.tile"
+            }
+          },
+          "expect": "LIB-02: one tap steps the focus once and the focus stays in the grid.",
+          "severity": "major",
+          "mode": "automated"
+        },
+        {
+          "id": "lib.up-back-to-row-one",
+          "role": "under-test",
+          "precondition": "ui.focused == play.library.tile",
+          "action": {
+            "name": "pad.press",
+            "args": {
+              "button": "Up",
+              "ticks": 4
+            }
+          },
+          "wait": {
+            "check": "ui.focused == play.library.tile",
+            "timeout_ticks": 120
+          },
+          "check": {
+            "name": "ui.focused",
+            "args": {
+              "is": "play.library.tile"
+            }
+          },
+          "expect": "LIB-03 setup: Up returns the focus from row 2 to the top grid row, ready to enter the header.",
+          "severity": "major",
+          "mode": "automated"
+        },
+        {
+          "id": "lib.up-enters-header",
+          "role": "under-test",
+          "precondition": "ui.focused == play.library.tile",
+          "action": {
+            "name": "pad.press",
+            "args": {
+              "button": "Up",
+              "ticks": 4
+            }
+          },
+          "wait": {
+            "check": "ui.focused == play.library.search",
+            "timeout_ticks": 120
+          },
+          "check": {
+            "name": "ui.focused",
+            "args": {
+              "is": "play.library.search"
+            }
+          },
+          "expect": "LIB-03: Up from the top grid row enters the header row (search first, ADR-0264 Decision 3).",
+          "severity": "major",
+          "mode": "automated"
+        },
+        {
+          "id": "lib.header-right-folders",
+          "role": "under-test",
+          "precondition": "ui.focused == play.library.search",
+          "action": {
+            "name": "pad.press",
+            "args": {
+              "button": "Right",
+              "ticks": 4
+            }
+          },
+          "wait": {
+            "check": "ui.focused == play.library.folders",
+            "timeout_ticks": 120
+          },
+          "check": {
+            "name": "ui.focused",
+            "args": {
+              "is": "play.library.folders"
+            }
+          },
+          "expect": "LIB-03: Right moves to Library folders.",
+          "severity": "major",
+          "mode": "automated"
+        },
+        {
+          "id": "lib.header-right-browse",
+          "role": "under-test",
+          "precondition": "ui.focused == play.library.folders",
+          "action": {
+            "name": "pad.press",
+            "args": {
+              "button": "Right",
+              "ticks": 4
+            }
+          },
+          "wait": {
+            "check": "ui.focused == play.library.browse",
+            "timeout_ticks": 120
+          },
+          "check": {
+            "name": "ui.focused",
+            "args": {
+              "is": "play.library.browse"
+            }
+          },
+          "expect": "LIB-03: Right moves to Browse a file.",
+          "severity": "major",
+          "mode": "automated"
+        },
+        {
+          "id": "lib.header-right-back",
+          "role": "under-test",
+          "precondition": "ui.focused == play.library.browse",
+          "action": {
+            "name": "pad.press",
+            "args": {
+              "button": "Right",
+              "ticks": 4
+            }
+          },
+          "wait": {
+            "check": "ui.focused == play.library.back",
+            "timeout_ticks": 120
+          },
+          "check": {
+            "name": "ui.focused",
+            "args": {
+              "is": "play.library.back"
+            }
+          },
+          "expect": "LIB-03: Right moves to Back.",
+          "severity": "major",
+          "mode": "automated"
+        },
+        {
+          "id": "lib.header-left-across",
+          "role": "under-test",
+          "precondition": "ui.focused == play.library.back",
+          "action": {
+            "name": "pad.press",
+            "args": {
+              "button": "Left",
+              "ticks": 4
+            }
+          },
+          "wait": {
+            "check": "ui.focused == play.library.browse",
+            "timeout_ticks": 120
+          },
+          "check": {
+            "name": "ui.focused",
+            "args": {
+              "is": "play.library.browse"
+            }
+          },
+          "expect": "LIB-03: Left walks back across the header row (Back -> Browse), mirroring the Right walk.",
+          "severity": "major",
+          "mode": "automated"
+        },
+        {
+          "id": "lib.header-down-grid",
+          "role": "under-test",
+          "precondition": "ui.focused == play.library.browse",
+          "action": {
+            "name": "pad.press",
+            "args": {
+              "button": "Down",
+              "ticks": 4
+            }
+          },
+          "wait": {
+            "check": "ui.focused == play.library.tile",
+            "timeout_ticks": 120
+          },
+          "check": {
+            "name": "ui.focused",
+            "args": {
+              "is": "play.library.tile"
+            }
+          },
+          "expect": "LIB-03: Down from the header returns to the grid.",
+          "severity": "major",
+          "mode": "automated"
+        },
+        {
+          "id": "lib.filter-rb-wraps",
+          "role": "under-test",
+          "precondition": "ui.screen == play.library and two consoles in the library",
+          "expect": "LIB-04: RB steps All -> each console present -> All, wrapping; the grid narrows; never an empty filter (PlayerRomPickerViewModel.ConsoleFilter.cs). The filter is not a named control the hook reads.",
+          "severity": "minor",
+          "mode": "manual"
+        },
+        {
+          "id": "lib.filter-lb-backwards",
+          "role": "under-test",
+          "precondition": "ui.screen == play.library and two consoles in the library",
+          "expect": "LIB-04: LB walks the same ring backwards, wrapping at both ends.",
+          "severity": "minor",
+          "mode": "manual"
+        },
+        {
+          "id": "lib.filter-chips-not-focusable",
+          "role": "under-test",
+          "precondition": "ui.screen == play.library",
+          "expect": "KNOWN GAP: LIB-04 (#1134, KnownChipGaps = \"Library\"): the console chips cannot take focus; LB/RB is the only pad route. Record whether the current chip is obvious at couch distance.",
+          "severity": "major",
+          "mode": "manual"
+        },
+        {
+          "id": "lib.search-y-focuses-field",
+          "role": "under-test",
+          "precondition": "ui.focused == play.library.tile",
+          "action": {
+            "name": "pad.press",
+            "args": {
+              "button": "Y",
+              "ticks": 4
+            }
+          },
+          "wait": {
+            "check": "ui.focused == play.library.search",
+            "timeout_ticks": 120
+          },
+          "check": {
+            "name": "ui.focused",
+            "args": {
+              "is": "play.library.search"
+            }
+          },
+          "expect": "LIB-05: Y moves the ring to the search field.",
+          "severity": "major",
+          "mode": "automated"
+        },
+        {
+          "id": "lib.search-a-opens-keyboard",
+          "role": "under-test",
+          "precondition": "ui.focused == play.library.search",
+          "action": {
+            "name": "pad.press",
+            "args": {
+              "button": "A",
+              "ticks": 4
+            }
+          },
+          "wait": {
+            "check": "ui.visible == play.keyboard",
+            "timeout_ticks": 120
+          },
+          "check": {
+            "name": "ui.visible",
+            "args": {
+              "is": "play.keyboard"
+            }
+          },
+          "expect": "LIB-05: A opens the shared on-screen keyboard (ADR-0262) below the field; the sheet stays open.",
+          "severity": "major",
+          "mode": "automated"
+        },
+        {
+          "id": "lib.search-type-filters",
+          "role": "under-test",
+          "precondition": "ui.visible == play.keyboard",
+          "expect": "LIB-05: typing `zel` (or a prefix of an owned title) with D-pad + A filters the grid per letter; OK commits and focus returns to the field; an empty result shows \"No games match\" with a way to clear it.",
+          "severity": "minor",
+          "mode": "manual"
+        },
+        {
+          "id": "lib.search-b-cancels",
+          "role": "under-test",
+          "precondition": "ui.visible == play.keyboard",
+          "action": {
+            "name": "pad.press",
+            "args": {
+              "button": "B",
+              "ticks": 4
+            }
+          },
+          "wait": {
+            "check": "ui.focused == play.library.search",
+            "timeout_ticks": 8
+          },
+          "check": {
+            "name": "ui.focused",
+            "args": {
+              "is": "play.library.search"
+            }
+          },
+          "expect": "LIB-05: B on the open keyboard closes it, focus returns to the search field and the sheet does not close. The text revert on a second Y, A, B is judged by eye (next step).",
+          "severity": "major",
+          "mode": "automated"
+        },
+        {
+          "id": "lib.search-second-cancel-reverts",
+          "role": "under-test",
+          "precondition": "ui.focused == play.library.search",
+          "expect": "LIB-05: after typing, a second Y, A, B returns the field to its previous text; focus returns to it and the sheet does not close (typing is manual, so the text revert is manual).",
+          "severity": "minor",
+          "mode": "manual"
+        },
+        {
+          "id": "lib.search-sheet-stays",
+          "role": "under-test",
+          "precondition": "ui.focused == play.library.search",
+          "wait": {
+            "check": "ui.screen == play.library",
+            "timeout_ticks": 4
+          },
+          "check": {
+            "name": "ui.screen",
+            "args": {
+              "is": "play.library"
+            }
+          },
+          "expect": "LIB-05: the library sheet is still open under the cancelled keyboard.",
+          "severity": "major",
+          "mode": "automated"
+        },
+        {
+          "id": "lib.search-right-folders",
+          "role": "under-test",
+          "precondition": "ui.focused == play.library.search",
+          "action": {
+            "name": "pad.press",
+            "args": {
+              "button": "Right",
+              "ticks": 4
+            }
+          },
+          "wait": {
+            "check": "ui.focused == play.library.folders",
+            "timeout_ticks": 8
+          },
+          "check": {
+            "name": "ui.focused",
+            "args": {
+              "is": "play.library.folders"
+            }
+          },
+          "expect": "LIB-06: Right from the search field reaches Library folders.",
+          "severity": "major",
+          "mode": "automated"
+        },
+        {
+          "id": "lib.folders-open",
+          "role": "under-test",
+          "precondition": "ui.focused == play.library.folders",
+          "action": {
+            "name": "pad.press",
+            "args": {
+              "button": "A",
+              "ticks": 4
+            }
+          },
+          "wait": {
+            "check": "ui.screen == play.library.folders",
+            "timeout_ticks": 120
+          },
+          "check": {
+            "name": "ui.screen",
+            "args": {
+              "is": "play.library.folders"
+            }
+          },
+          "expect": "LIB-06: A on Library folders opens the pad-reachable folder list (ADR-0264 Decision 8).",
+          "severity": "major",
+          "mode": "automated"
+        },
+        {
+          "id": "lib.folders-no-native-dialog",
+          "role": "under-test",
+          "precondition": "ui.screen == play.library.folders",
+          "wait": {
+            "timeout_ticks": 4
+          },
+          "check": {
+            "name": "ui.dialogs",
+            "args": {
+              "is": []
+            }
+          },
+          "expect": "LIB-06: no native OS dialog is open over the folder list.",
+          "severity": "major",
+          "mode": "automated"
+        },
+        {
+          "id": "lib.folders-add-remove",
+          "role": "under-test",
+          "precondition": "ui.screen == play.library.folders",
+          "expect": "LIB-06: add a folder, remove it, add it back by pad; the header count updates.",
+          "severity": "major",
+          "mode": "manual"
+        },
+        {
+          "id": "lib.folders-b-closes",
+          "role": "under-test",
+          "precondition": "ui.screen == play.library.folders",
+          "action": {
+            "name": "pad.press",
+            "args": {
+              "button": "B",
+              "ticks": 4
+            }
+          },
+          "wait": {
+            "check": "ui.screen == play.library",
+            "timeout_ticks": 120
+          },
+          "check": {
+            "name": "ui.screen",
+            "args": {
+              "is": "play.library"
+            }
+          },
+          "expect": "LIB-06: B closes the folder list back to the library.",
+          "severity": "major",
+          "mode": "automated"
+        },
+        {
+          "id": "lib.folders-right-browse",
+          "role": "under-test",
+          "precondition": "ui.focused == play.library.folders",
+          "action": {
+            "name": "pad.press",
+            "args": {
+              "button": "Right",
+              "ticks": 4
+            }
+          },
+          "wait": {
+            "check": "ui.focused == play.library.browse",
+            "timeout_ticks": 8
+          },
+          "check": {
+            "name": "ui.focused",
+            "args": {
+              "is": "play.library.browse"
+            }
+          },
+          "expect": "LIB-07: Right from Library folders reaches Browse a file.",
+          "severity": "major",
+          "mode": "automated"
+        },
+        {
+          "id": "lib.browse-open",
+          "role": "under-test",
+          "precondition": "ui.focused == play.library.browse",
+          "action": {
+            "name": "pad.press",
+            "args": {
+              "button": "A",
+              "ticks": 4
+            }
+          },
+          "wait": {
+            "check": "ui.screen == play.library.browse",
+            "timeout_ticks": 120
+          },
+          "check": {
+            "name": "ui.screen",
+            "args": {
+              "is": "play.library.browse"
+            }
+          },
+          "expect": "LIB-07: A on Browse a file opens the folder browser (ADR-0256 Decision 9).",
+          "severity": "major",
+          "mode": "automated"
+        },
+        {
+          "id": "lib.browse-walk",
+          "role": "under-test",
+          "precondition": "ui.screen == play.library.browse",
+          "expect": "LIB-07: Confirm descends, B ascends; the action row leads the list but the ring never lands on it first (first-row guard); Make this my games folder inside a non-empty folder.",
+          "severity": "minor",
+          "mode": "manual"
+        },
+        {
+          "id": "lib.browse-b-root-dismisses",
+          "role": "under-test",
+          "precondition": "ui.screen == play.library.browse",
+          "action": {
+            "name": "pad.press",
+            "args": {
+              "button": "B",
+              "ticks": 4
+            }
+          },
+          "wait": {
+            "check": "ui.screen == play.library",
+            "timeout_ticks": 120
+          },
+          "check": {
+            "name": "ui.screen",
+            "args": {
+              "is": "play.library"
+            }
+          },
+          "expect": "LIB-07: B on the root dismisses with no load, back to the library.",
+          "severity": "major",
+          "mode": "automated"
+        },
+        {
+          "id": "lib.box-art",
+          "role": "under-test",
+          "precondition": "ui.screen == play.library and online",
+          "expect": "LIB-08: box art for known ROMs (lazy, visible tiles only), a generic console-colored cover carrying the title for unknown ones, nothing waits on the network; a visual check, record only if it blocks focus or scrolling.",
+          "severity": "minor",
+          "mode": "manual"
+        },
+        {
+          "id": "lib.browse-down-grid",
+          "role": "under-test",
+          "precondition": "ui.focused == play.library.browse",
+          "action": {
+            "name": "pad.press",
+            "args": {
+              "button": "Down",
+              "ticks": 4
+            }
+          },
+          "wait": {
+            "check": "ui.focused == play.library.tile",
+            "timeout_ticks": 8
+          },
+          "check": {
+            "name": "ui.focused",
+            "args": {
+              "is": "play.library.tile"
+            }
+          },
+          "expect": "LIB-09: Down from the header returns to the grid (LIB-09 starts from the grid).",
+          "severity": "major",
+          "mode": "automated"
+        },
+        {
+          "id": "lib.back-to-home",
+          "role": "under-test",
+          "precondition": "ui.screen == play.library",
+          "action": {
+            "name": "pad.press",
+            "args": {
+              "button": "B",
+              "ticks": 4
+            }
+          },
+          "wait": {
+            "check": "ui.screen == play.home",
+            "timeout_ticks": 120
+          },
+          "check": {
+            "name": "ui.screen",
+            "args": {
+              "is": "play.home"
+            }
+          },
+          "expect": "LIB-09: B from the grid goes back to Home.",
+          "severity": "major",
+          "mode": "automated"
+        },
+        {
+          "id": "lib.back-ring-on-opener",
+          "role": "under-test",
+          "precondition": "ui.screen == play.home",
+          "wait": {
+            "check": "ui.focused == play.home.open-rom",
+            "timeout_ticks": 8
+          },
+          "check": {
+            "name": "ui.focused",
+            "args": {
+              "is": "play.home.open-rom"
+            }
+          },
+          "expect": "LIB-09: the ring is on the control that opened the sheet, Open a ROM.",
+          "severity": "major",
+          "mode": "automated"
+        }
+      ],
+      "teardown": []
+    },
+    {
+      "id": "favorites",
+      "setup": [
+        {
+          "id": "fav.reach-library",
+          "role": "setup",
+          "precondition": "fixture rom and fixture settings.profiles.history-no-favorite",
+          "action": {
+            "name": "nav.goal",
+            "args": {
+              "goal": "ui.screen == play.library"
+            }
+          },
+          "wait": {
+            "check": "ui.screen == play.library",
+            "timeout_ticks": 600
+          },
+          "expect": "The library sheet is open with a tile focused (the FAV-01 precondition).",
+          "severity": "major",
+          "mode": "automated"
+        }
+      ],
+      "steps": [
+        {
+          "id": "fav.x-favorites-tile",
+          "role": "under-test",
+          "precondition": "ui.focused == play.library.tile",
+          "action": {
+            "name": "pad.press",
+            "args": {
+              "button": "X",
+              "ticks": 4
+            }
+          },
+          "wait": {
+            "check": "ui.focused == play.library.tile",
+            "timeout_ticks": 4
+          },
+          "check": {
+            "name": "ui.focused",
+            "args": {
+              "is": "play.library.tile"
+            }
+          },
+          "expect": "FAV-01: X on the focused tile keeps the ring on the grid and toggles Favorite (ADR-0268).",
+          "severity": "major",
+          "mode": "automated"
+        },
+        {
+          "id": "fav.footer-reads-unfavorite",
+          "role": "under-test",
+          "precondition": "ui.screen == play.library",
+          "expect": "FAV-01: the footer's X entry now reads Unfavorite (it read Favorite before).",
+          "severity": "minor",
+          "mode": "manual"
+        },
+        {
+          "id": "fav.back-to-home",
+          "role": "under-test",
+          "precondition": "ui.screen == play.library",
+          "action": {
+            "name": "pad.press",
+            "args": {
+              "button": "B",
+              "ticks": 4
+            }
+          },
+          "wait": {
+            "check": "ui.screen == play.home",
+            "timeout_ticks": 120
+          },
+          "check": {
+            "name": "ui.screen",
+            "args": {
+              "is": "play.home"
+            }
+          },
+          "expect": "FAV-01: B returns to Home.",
+          "severity": "major",
+          "mode": "automated"
+        },
+        {
+          "id": "fav.home-shelf-shown",
+          "role": "under-test",
+          "precondition": "ui.screen == play.home",
+          "wait": {
+            "check": "ui.visible == play.home.favorites",
+            "timeout_ticks": 8
+          },
+          "check": {
+            "name": "ui.visible",
+            "args": {
+              "is": "play.home.favorites"
+            }
+          },
+          "expect": "FAV-01: Home shows a Favorites shelf between Continue and Recent, newest favorite first.",
+          "severity": "major",
+          "mode": "automated"
+        },
+        {
+          "id": "fav.library-again",
+          "role": "under-test",
+          "precondition": "ui.focused == play.home.open-rom",
+          "action": {
+            "name": "pad.press",
+            "args": {
+              "button": "A",
+              "ticks": 4
+            }
+          },
+          "wait": {
+            "check": "ui.screen == play.library",
+            "timeout_ticks": 120
+          },
+          "check": {
+            "name": "ui.screen",
+            "args": {
+              "is": "play.library"
+            }
+          },
+          "expect": "FAV-01: A on Open a ROM returns to the library.",
+          "severity": "major",
+          "mode": "automated"
+        },
+        {
+          "id": "fav.x-unfavorites-tile",
+          "role": "under-test",
+          "precondition": "ui.focused == play.library.tile",
+          "action": {
+            "name": "pad.press",
+            "args": {
+              "button": "X",
+              "ticks": 4
+            }
+          },
+          "wait": {
+            "check": "ui.focused == play.library.tile",
+            "timeout_ticks": 4
+          },
+          "check": {
+            "name": "ui.focused",
+            "args": {
+              "is": "play.library.tile"
+            }
+          },
+          "expect": "FAV-01: X on the same tile unfavorites it; the ring stays on the grid.",
+          "severity": "major",
+          "mode": "automated"
+        },
+        {
+          "id": "fav.back-home-again",
+          "role": "under-test",
+          "precondition": "ui.screen == play.library",
+          "action": {
+            "name": "pad.press",
+            "args": {
+              "button": "B",
+              "ticks": 4
+            }
+          },
+          "wait": {
+            "check": "ui.screen == play.home",
+            "timeout_ticks": 120
+          },
+          "check": {
+            "name": "ui.screen",
+            "args": {
+              "is": "play.home"
+            }
+          },
+          "expect": "FAV-01: B returns to Home.",
+          "severity": "major",
+          "mode": "automated"
+        },
+        {
+          "id": "fav.shelf-hides-when-empty",
+          "role": "under-test",
+          "precondition": "ui.screen == play.home",
+          "expect": "FAV-01: with no favorite left the Favorites shelf is hidden.",
+          "severity": "minor",
+          "mode": "manual"
+        }
+      ],
+      "teardown": []
+    },
+    {
+      "id": "favorites-home",
+      "setup": [
+        {
+          "id": "fav2.reach-favorite-tile",
+          "role": "setup",
+          "precondition": "fixture rom, fixture rom-second and fixture settings.profiles.history-two-favorites",
+          "action": {
+            "name": "nav.goal",
+            "args": {
+              "goal": "ui.focused == play.home.favorite"
+            }
+          },
+          "wait": {
+            "check": "ui.focused == play.home.favorite",
+            "timeout_ticks": 600
+          },
+          "expect": "Home W-P2 with a Favorites shelf and the ring on a favorite tile (the FAV-02 precondition).",
+          "severity": "major",
+          "mode": "automated"
+        }
+      ],
+      "steps": [
+        {
+          "id": "fav2.x-on-favorite-tile",
+          "role": "under-test",
+          "precondition": "ui.focused == play.home.favorite",
+          "action": {
+            "name": "pad.press",
+            "args": {
+              "button": "X",
+              "ticks": 4
+            }
+          },
+          "wait": {
+            "check": "ui.visible == play.home.favorites",
+            "timeout_ticks": 4
+          },
+          "check": {
+            "name": "ui.visible",
+            "args": {
+              "is": "play.home.favorites"
+            }
+          },
+          "expect": "FAV-02: X acts on the focused cover; on a Home favorite tile it toggles that game, the ring stays on the shelf and the Favorites shelf stays visible (two favorites, so the shelf survives the toggle; ADR-0268 Decision 4).",
+          "severity": "major",
+          "mode": "automated"
+        },
+        {
+          "id": "fav2.focus-stays-on-favorite-tile",
+          "role": "under-test",
+          "precondition": "ui.visible == play.home.favorites",
+          "wait": {
+            "check": "ui.focused == play.home.favorite",
+            "timeout_ticks": 120
+          },
+          "check": {
+            "name": "ui.focused",
+            "args": {
+              "is": "play.home.favorite"
+            }
+          },
+          "expect": "FAV-02: after X the ring is still on a Home favorite tile (the shelf remains because a second favorite is left).",
+          "severity": "major",
+          "mode": "automated"
+        },
+        {
+          "id": "fav2.up-to-continue",
+          "role": "under-test",
+          "precondition": "ui.focused == play.home.favorite",
+          "action": {
+            "name": "pad.press",
+            "args": {
+              "button": "Up",
+              "ticks": 4
+            }
+          },
+          "wait": {
+            "check": "ui.focused == play.home.continue",
+            "timeout_ticks": 8
+          },
+          "check": {
+            "name": "ui.focused",
+            "args": {
+              "is": "play.home.continue"
+            }
+          },
+          "expect": "FAV-02: Up reaches the Continue card (focus order Continue -> Favorites -> Recent, ADR-0268 Decision 6).",
+          "severity": "major",
+          "mode": "automated"
+        },
+        {
+          "id": "fav2.x-on-continue",
+          "role": "under-test",
+          "precondition": "ui.focused == play.home.continue",
+          "action": {
+            "name": "pad.press",
+            "args": {
+              "button": "X",
+              "ticks": 4
+            }
+          },
+          "wait": {
+            "check": "ui.focused == play.home.continue",
+            "timeout_ticks": 4
+          },
+          "check": {
+            "name": "ui.focused",
+            "args": {
+              "is": "play.home.continue"
+            }
+          },
+          "expect": "FAV-02: X on the Continue card favorites the Continue game (ADR-0268 Decision 1); the ring stays on Continue.",
+          "severity": "major",
+          "mode": "automated"
+        },
+        {
+          "id": "fav2.down-favorite",
+          "role": "under-test",
+          "precondition": "ui.focused == play.home.continue",
+          "action": {
+            "name": "pad.press",
+            "args": {
+              "button": "Down",
+              "ticks": 4
+            }
+          },
+          "wait": {
+            "check": "ui.focused == play.home.favorite",
+            "timeout_ticks": 8
+          },
+          "check": {
+            "name": "ui.focused",
+            "args": {
+              "is": "play.home.favorite"
+            }
+          },
+          "expect": "FAV-02: Down returns to the Favorites shelf.",
+          "severity": "major",
+          "mode": "automated"
+        },
+        {
+          "id": "fav2.down-recent",
+          "role": "under-test",
+          "precondition": "ui.focused == play.home.favorite",
+          "action": {
+            "name": "pad.press",
+            "args": {
+              "button": "Down",
+              "ticks": 4
+            }
+          },
+          "wait": {
+            "check": "ui.focused == play.home.recent",
+            "timeout_ticks": 8
+          },
+          "check": {
+            "name": "ui.focused",
+            "args": {
+              "is": "play.home.recent"
+            }
+          },
+          "expect": "FAV-02: Down reaches the Recent grid.",
+          "severity": "major",
+          "mode": "automated"
+        },
+        {
+          "id": "fav2.down-open-rom",
+          "role": "under-test",
+          "precondition": "ui.focused == play.home.recent",
+          "action": {
+            "name": "pad.press",
+            "args": {
+              "button": "Down",
+              "ticks": 4
+            }
+          },
+          "wait": {
+            "check": "ui.focused == play.home.open-rom",
+            "timeout_ticks": 8
+          },
+          "check": {
+            "name": "ui.focused",
+            "args": {
+              "is": "play.home.open-rom"
+            }
+          },
+          "expect": "FAV-02: Down reaches Open a ROM.",
+          "severity": "major",
+          "mode": "automated"
+        },
+        {
+          "id": "fav2.x-elsewhere-does-nothing",
+          "role": "under-test",
+          "precondition": "ui.focused == play.home.open-rom",
+          "action": {
+            "name": "pad.press",
+            "args": {
+              "button": "X",
+              "ticks": 4
+            }
+          },
+          "wait": {
+            "check": "ui.focused == play.home.open-rom",
+            "timeout_ticks": 4
+          },
+          "check": {
+            "name": "ui.focused",
+            "args": {
+              "is": "play.home.open-rom"
+            }
+          },
+          "expect": "FAV-02: X on Open a ROM does nothing; the ring stays put.",
+          "severity": "major",
+          "mode": "automated"
+        }
+      ],
+      "teardown": []
+    },
+    {
+      "id": "game",
+      "setup": [
+        {
+          "id": "game.reach-library",
+          "role": "setup",
+          "precondition": "fixture rom and fixture settings.profiles.fresh",
+          "action": {
+            "name": "nav.goal",
+            "args": {
+              "goal": "ui.screen == play.library"
+            }
+          },
+          "wait": {
+            "check": "ui.screen == play.library",
+            "timeout_ticks": 600
+          },
+          "expect": "The library sheet is open with a tile focused (the GAME-01 precondition).",
+          "severity": "major",
+          "mode": "automated"
+        }
+      ],
+      "steps": [
+        {
+          "id": "game.a-loads-game",
+          "role": "under-test",
+          "precondition": "ui.focused == play.library.tile",
+          "action": {
+            "name": "pad.press",
+            "args": {
+              "button": "A",
+              "ticks": 4
+            }
+          },
+          "wait": {
+            "check": "ui.screen == play.game",
+            "timeout_ticks": 600
+          },
+          "check": {
+            "name": "ui.screen",
+            "args": {
+              "is": "play.game"
+            }
+          },
+          "expect": "GAME-01: A on a tile closes the sheet and the game runs.",
+          "severity": "major",
+          "mode": "automated"
+        },
+        {
+          "id": "game.load-card-and-toast",
+          "role": "under-test",
+          "precondition": "ui.screen == play.game",
+          "expect": "GAME-01: a load card with a moving indicator shows; for the first three starts the entry toast ends with the menu hint naming the pad's chord, e.g. \"· Select+Start for the menu\" (ADR-0251 §2), not \"Esc\".",
+          "severity": "minor",
+          "mode": "manual"
+        },
+        {
+          "id": "game.pad-is-the-consoles",
+          "role": "under-test",
+          "precondition": "ui.screen == play.game",
+          "action": {
+            "name": "pad.press",
+            "args": {
+              "button": "Right",
+              "ticks": 600
+            }
+          },
+          "wait": {
+            "check": "ui.screen == play.game",
+            "timeout_ticks": 600
+          },
+          "check": {
+            "name": "ui.screen",
+            "args": {
+              "is": "play.game"
+            }
+          },
+          "expect": "GAME-02: playing 10 s with the D-pad leaves the game running; the pad is the console's (ADR-0256 Decision 1).",
+          "severity": "major",
+          "mode": "automated"
+        },
+        {
+          "id": "game.buttons-are-the-consoles",
+          "role": "under-test",
+          "precondition": "ui.screen == play.game",
+          "expect": "GAME-02: the face buttons reach the console too; pressing A and B leaves the game running and nothing in the GUI reacts.",
+          "severity": "major",
+          "mode": "manual"
+        },
+        {
+          "id": "game.no-menu-feedback",
+          "role": "under-test",
+          "precondition": "ui.screen == play.game",
+          "expect": "GAME-02: no menu sound, no focus ring, no haptic tick, nothing in the GUI reacts; the status bar and lamps are hidden (ADR-0261 Consequences).",
+          "severity": "minor",
+          "mode": "manual"
+        }
+      ],
+      "teardown": []
+    },
+    {
+      "id": "game-archive",
+      "setup": [
+        {
+          "id": "game-archive.reach-library",
+          "role": "setup",
+          "precondition": "fixture rom-zip (a library holding only that file) and fixture settings.profiles.fresh",
+          "action": {
+            "name": "nav.goal",
+            "args": {
+              "goal": "ui.screen == play.library and ui.focused == play.library.tile"
+            }
+          },
+          "wait": {
+            "check": "ui.screen == play.library and ui.focused == play.library.tile",
+            "timeout_ticks": 600
+          },
+          "expect": "The library sheet is open with the multi-ROM archive tile focused (fixture rom-zip).",
+          "severity": "major",
+          "mode": "automated"
+        }
+      ],
+      "steps": [
+        {
+          "id": "game-archive.a-opens-select-sheet",
+          "role": "under-test",
+          "precondition": "ui.focused == play.library.tile and fixture rom-zip",
+          "action": {
+            "name": "pad.press",
+            "args": {
+              "button": "A",
+              "ticks": 4
+            }
+          },
+          "wait": {
+            "check": "ui.screen == play.select-rom",
+            "timeout_ticks": 120
+          },
+          "check": {
+            "name": "ui.screen",
+            "args": {
+              "is": "play.select-rom"
+            }
+          },
+          "expect": "GAME-03: A on the archive tile opens the \"which game\" sheet (PlaySelectRomSheet).",
+          "severity": "major",
+          "mode": "automated"
+        },
+        {
+          "id": "game-archive.b-cancels-back",
+          "role": "under-test",
+          "precondition": "ui.screen == play.select-rom",
+          "action": {
+            "name": "pad.press",
+            "args": {
+              "button": "B",
+              "ticks": 4
+            }
+          },
+          "wait": {
+            "check": "ui.screen == play.library",
+            "timeout_ticks": 120
+          },
+          "check": {
+            "name": "ui.screen",
+            "args": {
+              "is": "play.library"
+            }
+          },
+          "expect": "GAME-03: B cancels back to the library.",
+          "severity": "major",
+          "mode": "automated"
+        },
+        {
+          "id": "game-archive.a-reopens",
+          "role": "under-test",
+          "precondition": "ui.focused == play.library.tile",
+          "action": {
+            "name": "pad.press",
+            "args": {
+              "button": "A",
+              "ticks": 4
+            }
+          },
+          "wait": {
+            "check": "ui.screen == play.select-rom",
+            "timeout_ticks": 120
+          },
+          "check": {
+            "name": "ui.screen",
+            "args": {
+              "is": "play.select-rom"
+            }
+          },
+          "expect": "GAME-03: A on the archive tile opens the sheet again.",
+          "severity": "major",
+          "mode": "automated"
+        },
+        {
+          "id": "game-archive.a-picks-a-game",
+          "role": "under-test",
+          "precondition": "ui.screen == play.select-rom",
+          "action": {
+            "name": "pad.press",
+            "args": {
+              "button": "A",
+              "ticks": 4
+            }
+          },
+          "wait": {
+            "check": "ui.screen == play.game",
+            "timeout_ticks": 600
+          },
+          "check": {
+            "name": "ui.screen",
+            "args": {
+              "is": "play.game"
+            }
+          },
+          "expect": "GAME-03: D-pad + A picks a game and it loads.",
+          "severity": "major",
+          "mode": "automated"
+        }
+      ],
+      "teardown": []
+    },
+    {
+      "id": "game-bios",
+      "setup": [
+        {
+          "id": "game-bios.reach-library",
+          "role": "setup",
+          "precondition": "fixture rom-fds (a library holding only that file) and fixture settings.profiles.fresh",
+          "action": {
+            "name": "nav.goal",
+            "args": {
+              "goal": "ui.screen == play.library and ui.focused == play.library.tile"
+            }
+          },
+          "wait": {
+            "check": "ui.screen == play.library and ui.focused == play.library.tile",
+            "timeout_ticks": 600
+          },
+          "expect": "The library sheet is open with the FDS tile focused (fixture rom-fds, disksys.rom not installed).",
+          "severity": "major",
+          "mode": "automated"
+        }
+      ],
+      "steps": [
+        {
+          "id": "game-bios.a-opens-bios-sheet",
+          "role": "under-test",
+          "precondition": "ui.focused == play.library.tile and fixture rom-fds",
+          "action": {
+            "name": "pad.press",
+            "args": {
+              "button": "A",
+              "ticks": 4
+            }
+          },
+          "wait": {
+            "check": "ui.screen == play.bios",
+            "timeout_ticks": 120
+          },
+          "check": {
+            "name": "ui.screen",
+            "args": {
+              "is": "play.bios"
+            }
+          },
+          "expect": "GAME-04: A on the FDS image shows the BIOS sheet (W-P13).",
+          "severity": "major",
+          "mode": "automated"
+        },
+        {
+          "id": "game-bios.choose-file-native",
+          "role": "under-test",
+          "precondition": "ui.screen == play.bios",
+          "expect": "KNOWN GAP: GAME-04: Choose File... on the BIOS sheet is a native dialog (ADR-0256 Decision 9 refusals). Expected FAIL; record that Cancel still backs out.",
+          "severity": "major",
+          "mode": "manual"
+        },
+        {
+          "id": "game-bios.b-cancels",
+          "role": "under-test",
+          "precondition": "ui.screen == play.bios",
+          "action": {
+            "name": "pad.press",
+            "args": {
+              "button": "B",
+              "ticks": 4
+            }
+          },
+          "wait": {
+            "check": "ui.screen == play.library",
+            "timeout_ticks": 120
+          },
+          "check": {
+            "name": "ui.screen",
+            "args": {
+              "is": "play.library"
+            }
+          },
+          "expect": "GAME-04: B/Cancel backs out cleanly to the library.",
+          "severity": "major",
+          "mode": "automated"
+        },
+        {
+          "id": "game-bios.status-names-bios",
+          "role": "under-test",
+          "precondition": "ui.screen == play.library",
+          "expect": "GAME-04: the status line names the missing BIOS.",
+          "severity": "minor",
+          "mode": "manual"
+        }
+      ],
+      "teardown": []
     }
   ]
 }
