@@ -144,6 +144,34 @@ public class GuiTestHookTests : IDisposable
 		return (window, model);
 	}
 
+	//The Play home on a fresh settings folder: no play history, so there is no Continue
+	//card and the ring is on Open a ROM from launch - the profile the pad-only script's
+	//`fresh` fixture seeds. ShowHome's recent game would put the ring on Continue.
+	private (MainWindow Window, MainWindowViewModel Model) ShowFreshHome()
+	{
+		string recents = ConfigManager.RecentGamesFolder;
+		if(Directory.Exists(recents)) {
+			foreach(string stale in Directory.GetFiles(recents, "*.rgd")) {
+				File.Delete(stale);
+			}
+		}
+		PreferencesConfig prefs = ConfigManager.Config.Preferences;
+		prefs.UiMode = UiMode.Player;
+		prefs.Workspace = Workspace.Play;
+		prefs.ConfirmExitResetPower = false;
+		prefs.PauseWhenInBackground = false;
+		prefs.PauseWhenInMenusAndConfig = false;
+		MainWindow window = new();
+		window.ShowStarted();
+		_windows.Add(window);
+		MainWindowViewModel model = Assert.IsType<MainWindowViewModel>(window.DataContext);
+		WaitFor(() => model.MainMenu.HelpMenuItems.Count > 0, "MainWindow never finished building its menus.");
+		model.ConnectedGamepadCount = () => 1;
+		model.RecentGames.Init(GameScreenMode.RecentGames);
+		WaitFor(() => Focus(window, model) == "play.home.open-rom", "a fresh home did not put the ring on Open a ROM");
+		return (window, model);
+	}
+
 	private static string? Focus(MainWindow window, MainWindowViewModel model)
 	{
 		return new TestHookWiring.WindowTarget(window).State()["focus"]?.GetValue<string>();
@@ -354,6 +382,82 @@ public class GuiTestHookTests : IDisposable
 		Assert.Equal("play.home.continue", answers[1]["focus"]!.GetValue<string>());
 		Assert.Equal("play.home.open-rom", answers[^3]["focus"]!.GetValue<string>());
 		Assert.True(File.Exists(shot));
+		PlayPadNavigationWiring.SetKeyLookupsForTest(null, null);
+		hook!.Dispose();
+		Directory.Delete(Path.GetDirectoryName(endpoint)!, true);
+	}
+
+	//#1242 acceptance criterion 3: the two steps the pad-only script's Home and Library
+	//batches hang on, driven over the socket and on the profile the script's `fresh`
+	//fixture seeds - no play history, so the home's ring is on its one action from launch
+	//(`home.first-focus`), and A on it opens the library sheet (`home.open-library`,
+	//LIB-01). The issue warns the press may open a picker instead of the library; the
+	//state's `dialogs` is what would say so, so it is asserted empty too.
+	[AvaloniaFact]
+	public void GuiTestHook_e2e_A_on_the_fresh_home_opens_the_library_over_the_socket()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		if(OperatingSystem.IsWindows()) {
+			Assert.Skip("the e2e case speaks the Unix socket; the Windows named pipe has no headless case yet");
+		}
+		(MainWindow window, MainWindowViewModel model) = ShowFreshHome();
+		string endpoint = Path.Combine("/tmp", "m1242-" + Guid.NewGuid().ToString("N").Substring(0, 8), "hook.sock");
+		window.ReleaseCore = () => { };
+		using IDisposable? hook = TestHookWiring.Start(new[] { "--test-hook=" + endpoint, "--test-hook-token=s3" }, window, BackendCode);
+		Assert.NotNull(hook);
+		Assert.True(TestHookWiring.Running);
+		PlayPadNavigationWiring.SetKeyLookupsForTest(BackendName, BackendCode);
+
+		Task<List<JsonObject>> runner = Task.Run(() => {
+			List<JsonObject> answers = new();
+			using Socket client = new(AddressFamily.Unix, SocketType.Stream, ProtocolType.Unspecified);
+			client.Connect(new UnixDomainSocketEndPoint(endpoint));
+			using NetworkStream stream = new(client);
+			using StreamReader reader = new(stream, Encoding.UTF8);
+			using StreamWriter writer = new(stream, new UTF8Encoding(false)) { AutoFlush = true, NewLine = "\n" };
+			JsonObject Ask(string body)
+			{
+				writer.WriteLine("{\"id\":" + (answers.Count + 1) + ",\"token\":\"s3\"," + body + "}");
+				JsonObject answer = JsonNode.Parse(reader.ReadLine()!)!.AsObject();
+				answers.Add(answer);
+				return answer;
+			}
+			Ask("\"op\":\"hello\"");
+			//home.first-focus: the ring at a fresh launch, waited for in ticks the way the step waits.
+			JsonObject now = Ask("\"op\":\"state\"");
+			long start = now["tick"]!.GetValue<long>();
+			while(now["focus"]?.GetValue<string>() != "play.home.open-rom" && now["tick"]!.GetValue<long>() < start + 120) {
+				Thread.Sleep(20);
+				now = Ask("\"op\":\"state\"");
+			}
+			//home.open-library: A on the focused Open a ROM, then the sheet's own screen.
+			Ask("\"op\":\"inject\",\"action\":\"pad.press\",\"args\":{\"button\":\"A\",\"ticks\":4}");
+			now = Ask("\"op\":\"state\"");
+			start = now["tick"]!.GetValue<long>();
+			while(now["screen"]?.GetValue<string>() != "play.library" && now["tick"]!.GetValue<long>() < start + 120) {
+				Thread.Sleep(20);
+				now = Ask("\"op\":\"state\"");
+			}
+			Ask("\"op\":\"quit\"");
+			return answers;
+		});
+
+		Stopwatch clock = Stopwatch.StartNew();
+		while(!runner.IsCompleted) {
+			if(clock.ElapsedMilliseconds > 30000) {
+				throw new XunitException("the runner never finished");
+			}
+			Pump();
+			Thread.Sleep(20);
+		}
+		List<JsonObject> answers = runner.GetAwaiter().GetResult();
+
+		Assert.All(answers, a => Assert.True(a["ok"]!.GetValue<bool>(), a.ToJsonString()));
+		JsonObject ring = answers.First(a => a["focus"]?.GetValue<string>() == "play.home.open-rom");
+		Assert.Equal("play.home", ring["screen"]!.GetValue<string>());
+		JsonObject library = answers[^2];  // the state the wait stopped on, before quit
+		Assert.Equal("play.library", library["screen"]!.GetValue<string>());
+		Assert.Empty(library["dialogs"]!.AsArray());
 		PlayPadNavigationWiring.SetKeyLookupsForTest(null, null);
 		hook!.Dispose();
 		Directory.Delete(Path.GetDirectoryName(endpoint)!, true);
