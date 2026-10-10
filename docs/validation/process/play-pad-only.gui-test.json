@@ -281,10 +281,20 @@
         {
           "id": "home.back-focus-restored",
           "role": "under-test",
-          "precondition": "by hand: the screen is play.home",
-          "expect": "The ring is back on Open a ROM after B. (manual: needs action pad.release, which mesen-gui does not advertise)",
+          "precondition": "ui.screen == play.home",
+          "wait": {
+            "check": "ui.focused == play.home.open-rom",
+            "timeout_ticks": 120
+          },
+          "check": {
+            "name": "ui.focused",
+            "args": {
+              "is": "play.home.open-rom"
+            }
+          },
+          "expect": "The ring is back on Open a ROM after B.",
           "severity": "major",
-          "mode": "manual",
+          "mode": "automated",
           "content_hash": "26d90f25339ff27ca88ffa3fa5df52eb10355ad382570356263faef8161d8eaf"
         },
         {
@@ -300,7 +310,7 @@
           "id": "home.chord-focus-unchanged",
           "role": "under-test",
           "precondition": "by hand: the screen is play.home",
-          "expect": "Focus is unchanged after the chord. (manual: needs action pad.release, which mesen-gui does not advertise)",
+          "expect": "Focus is unchanged after the chord. (manual: needs action pad.chord, which mesen-gui does not advertise)",
           "severity": "minor",
           "mode": "manual",
           "content_hash": "4ffb2836a451a9e9f59ed8e68581a04c9f48d52f3a468513c4efbd4f21fcb92b"
@@ -335,7 +345,7 @@
           "id": "after-game.continue-first",
           "role": "under-test",
           "precondition": "by hand: the screen is play.home",
-          "expect": "Continue playing is the first focus stop. (manual: needs action pad.release, which mesen-gui does not advertise)",
+          "expect": "Continue playing is the first focus stop. (manual: a real ROM path and its No-Intro sha1 are supplied by hand; no ROM is committed)",
           "severity": "major",
           "mode": "manual",
           "content_hash": "a0e96b853c5b1aa95dedc4081fd06ce2bcbcafa80bdb7eae26578ad23b836167"
