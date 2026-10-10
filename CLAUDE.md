@@ -98,6 +98,25 @@ Board fields: Status (To triage → Todo → Doing → Testing → Done), Priori
 (P0/P1/P2), Size (S/M/L). The script sets Status and, optionally, Priority;
 moving further along the board is human triage.
 
+## Tickets from a spec (`/to-tickets`)
+
+Work broken out of a spec or plan with `/to-tickets` is published as GitHub
+Issues that each carry:
+
+- a `## Blocked by` section listing the gating issues (the squad loop and
+  `scripts/stack.sh` of the `squad-goal` skill read it);
+- the `ready-for-agent` triage label;
+- exactly one `wave:NN` label (two digits): `wave:01` for an issue with no
+  blockers, otherwise one more than the highest wave among its blockers. A
+  wave's issues can run in parallel once the earlier waves are done; the
+  squad hub sorts board cards by it. When an edge changes, move the label.
+- a type label from the repo's vocabulary when one fits (`bug` for a defect;
+  real bugs still go through `scripts/report-bug.sh`, above).
+
+The personal copy of the skill (`~/.agents/skills/to-tickets/SKILL.md`)
+carries these steps; the agent-squad fork re-vendors it into
+`vendor/skills/skills/to-tickets/` (`scripts/build_vendor_skills.py`).
+
 ## Community HD/MEP Pack triage (GitHub Project)
 
 Community-submitted packs are a **separate** flow from bug tracking, on the
