@@ -42,6 +42,37 @@ is).
 | `--test-hook=<socket path>` | open the hook's line-per-JSON-object socket there. Without the switch the process has no hook at all: no socket, no state, no input path changes, and `MESEN_GUI_WINDOW` is not read. |
 | `--test-hook-token=<secret>` | the token every request has to carry. Either switch with no value is a startup failure, not a run that quietly goes on without a hook. |
 
+## Input actions
+
+A step's `inject` carries one of these (#1281). Every one of them is a pad the
+application simulates in its own input path - the same pressed-key set a real pad
+writes - never a synthetic OS event, and the step's effect is read back from the
+application's state, never from a pixel (ADR-0271).
+
+| Action | Args | Meaning |
+| --- | --- | --- |
+| `pad.press` | `button`, `pad` (0), `ticks` \| `frames` | one press and its release. The duration unit is the state's: while the emulated clock runs the press is written in `frames`, otherwise in `ticks`. |
+| `pad.hold` | `button`, `pad` (0), `ticks` \| `frames` | the button goes down and stays down for that duration before letting go on its own. The unit is the state's, exactly as `pad.press`'s is (ADR-0272 item 4): `frames` while the emulated clock runs, `ticks` otherwise, and the family the state does not use is a failed step rather than a hold counted by a clock that is not moving. |
+| `pad.release` | `button`, `pad` (0) | the button goes up now, before the hold it is under has run out - a two-button gesture is written `pad.hold` then `pad.release`. A button no hold is keeping down is put up anyway: a release never fails a step. |
+| `pad.connect` | `index`, `family` (`xbox` \| `playstation`, default `xbox`) | hot-plugs a simulated pad on that device index. While a run is up the connected-pad count the window polls for its port lamps and its pad-loss pause is the hook's, so a script's connect is seen the way a real pad's is; until a script touches it, that count is the backend's own. |
+| `pad.disconnect` | `index` | unplugs the pad on that index. The family goes with the pad: a `pad.connect` after a disconnect, with no `family`, is the default one (`xbox`), never the family the unplugged pad had - a PlayStation pad put back without `family` has its buttons read as Xbox, so name the family again on the reconnect. |
+
+`pad` is a **device index**: `0` is the pad in the hand - ADR-0272 item 4's
+"device 0" - and `1` is the second pad. The hook resolves it to the
+backend's key names as `Pad<pad+1>` / `Joy<pad+1>`. A button is named the way the pad bridge names it
+(ADR-0272 item 4): `Up`, `Down`, `Left`, `Right`, `A`, `B`, `Start`, ... in the
+family the pad on that index was connected with.
+
+Every action above is a `pad.*` action, the namespace ADR-0272 item 7 gives this
+hook, and the ADR is accepted and **not amended** by any of this: the actions are
+the emulator side's implementation of the interface it pins, and the new names
+inside that namespace are written down here. `text.*` and `pointer.*` are
+deliberately **not** here: item 7 places both in the real-window mode (step 7),
+so a step that writes `text.type` gets `unknown action text.type` back from the
+hook. Typing on the application's own pad keyboard (ADR-0262) stays a product
+feature a player drives, not a script action, until an amendment to that item
+puts it somewhere a run may use.
+
 ## What a check may read
 
 `capabilities()` advertises these, and every one of them is answered from the
@@ -61,7 +92,12 @@ fails the run loudly rather than answering `false`.
 | `ui.paused` | `{"is":true}` | the application's own paused flag. |
 | `ui.lamps` | `{"port":1,"is":"lit"\|"dim"\|"hidden"}` | one port of the status line's four lamps (ADR-0249/ADR-0255). `hidden` is the bar not being drawn at all - the game running unpaused (ADR-0261) - and a lamp that is not drawn is never read as `dim`. A port outside 1-4 is `unknown id`. |
 | `ui.items` | `{"is":[<ids>]}` / `{"contains":"<id>"}` | the entries of the list the focus is in, in the order it draws them. The whole list compares as ids, never as one joined string: a game title can carry a comma. |
-| `ui.haptics` | `{"pad":1,"is":2}` / `{"pad":1,"at_least":1}` | the haptic tick requests the menu made on that pad since the last step, recorded at `HapticTickOutput` (#1106) while a hook runs. It is evidence of the request, never of a vibration: no motor is involved. A pad the menu never ticked reads `0`. |
+| `ui.haptics` | `{"pad":0,"is":2}` / `{"pad":0,"at_least":1}` | the haptic tick requests the menu made on that pad (0-based, 0 is the pad in the hand, 0-3) since the last step, recorded at `HapticTickOutput` (#1106) while a hook runs. It is evidence of the request, never of a vibration: no motor is involved. A pad the menu never ticked reads `0`. |
+
+Every `pad` field - the input actions' and `ui.haptics`' - is one 0-based index
+(ADR-0272 item 4's "device 0"), so `pad.press {"pad":0}` followed by
+`ui.haptics {"pad":0}` names the same pad. `ui.lamps` keeps its `port` field,
+1-based as the lamps label them ("P1").
 
 A step's own `inject` is what starts a step, so a `ui.haptics` check reads what
 that step caused and the state reads of a `wait` in between consume nothing.

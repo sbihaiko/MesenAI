@@ -82,6 +82,19 @@ class VerifyGuiTestActions(unittest.TestCase):
         self.assertIn("home.focus-holds-up", out)
         self.assertIn("pad.chord", out)
 
+    def test_batch_opening_with_a_hold_is_red(self):
+        # #1281 review: `pad.hold` puts a button down exactly as `pad.press` does, so
+        # a batch that opens with one drops the hold the same way #1232's press was
+        # dropped - the rule's own words are "actions that put a button down".
+        doc = self.doc()
+        self.batch(doc, "home")["setup"] = []
+        self.first_automated(self.batch(doc, "home"))["action"] = {"name": "pad.hold", "args": {"button": "Up", "ticks": 4}}
+        self.write(doc)
+        code, out = run_check(self.tmp)
+        self.assertEqual(code, 1, out)
+        self.assertIn("home.focus-holds-up", out)
+        self.assertIn("pad.hold", out)
+
     def test_committed_home_batch_observes_the_ring_before_its_first_press(self):
         home = self.batch(self.committed(), "home")
         first = self.first_automated(home)

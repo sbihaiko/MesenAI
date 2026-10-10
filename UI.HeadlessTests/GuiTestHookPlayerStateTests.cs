@@ -149,7 +149,7 @@ public class GuiTestHookPlayerStateTests
 
 			//A state read is what a wait polls: it must not look like a step boundary.
 			JsonArray haptics = target.State()["haptics"]!.AsArray();
-			Assert.Equal(new[] { 1, 2 }, haptics.Select(entry => entry!["pad"]!.GetValue<int>()).ToArray());
+			Assert.Equal(new[] { 0, 1 }, haptics.Select(entry => entry!["pad"]!.GetValue<int>()).ToArray());
 			Assert.Equal(new[] { 2, 1 }, haptics.Select(entry => entry!["count"]!.GetValue<int>()).ToArray());
 
 			target.Step();

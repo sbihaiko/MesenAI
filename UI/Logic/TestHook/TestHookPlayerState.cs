@@ -131,8 +131,8 @@ public static class TestHookLamps
 //#1282 (owner's added scope, 2026-10-10): the haptic tick requests the menu
 //made, per pad, since the last step. Recorded at HapticTickOutput.Tick - the
 //seam #1106 left - so a run proves the menu asked for a tick on the pad in hand
-//with no physical motor anywhere near it. The pad is named the way the lamps
-//name it: port 1 is the first pad.
+//with no physical motor anywhere near it. The pad is named the way the input
+//actions name it: 0 is the pad in the hand (one number names one pad).
 //
 //"Since the last step" is the protocol's own step boundary: a step's `inject`
 //restarts the counts, so the ticks a step's press caused are exactly what its
@@ -144,14 +144,14 @@ public sealed class TestHookHaptics
 
 	public void Record(uint padIndex)
 	{
-		int port = (int)padIndex + 1;
-		_counts[port] = Count(port) + 1;
+		int pad = (int)padIndex;
+		_counts[pad] = Count(pad) + 1;
 	}
 
 	//A step begins: the ticks from here on belong to it.
 	public void Restart() => _counts.Clear();
 
-	public int Count(int port) => _counts.TryGetValue(port, out int count) ? count : 0;
+	public int Count(int pad) => _counts.TryGetValue(pad, out int count) ? count : 0;
 
 	public JsonArray Take() => new(_counts.OrderBy(pair => pair.Key)
 		.Select(pair => (JsonNode?)new JsonObject { ["pad"] = pair.Key, ["count"] = pair.Value })
