@@ -4997,7 +4997,7 @@
               "within": "play.controller"
             }
           },
-          "expect": "CTL-01: the sheet holds the pad's focus (Done reachability is the next steps' under-test check, ctl.done-reachable-by-pad).",
+          "expect": "CTL-01: the sheet holds the pad's focus (Done reachability is checked by the controller-done batch setup).",
           "severity": "major",
           "mode": "automated"
         },
@@ -5126,30 +5126,6 @@
             }
           },
           "expect": "CTL-02: the sheet is still open and drivable after the cancelled capture.",
-          "severity": "major",
-          "mode": "automated"
-        },
-        {
-          "id": "ctl.done-reachable-by-pad",
-          "role": "under-test",
-          "precondition": "ui.screen == play.controller",
-          "action": {
-            "name": "nav.goal",
-            "args": {
-              "goal": "ui.focused == play.controller.done"
-            }
-          },
-          "wait": {
-            "check": "ui.focused == play.controller.done",
-            "timeout_ticks": 600
-          },
-          "check": {
-            "name": "ui.focused",
-            "args": {
-              "is": "play.controller.done"
-            }
-          },
-          "expect": "CTL-01: Done is reachable by pad from the sheet.",
           "severity": "major",
           "mode": "automated"
         },
