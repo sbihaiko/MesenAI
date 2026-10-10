@@ -14,17 +14,36 @@ namespace Mesen.Logic.TestHook
 	//The one escape hatch is the environment variable MESEN_GUI_WINDOW: the exact
 	//value "any" means "do not place me", for a CI, Linux or headless runner where
 	//there is no primary display to speak of. Unset (or "primary") means
-	//primary-display placement. The adapter reads the same variable and refuses a
-	//launch whose window is outside the primary display's bounds.
+	//primary-display placement. Nothing else is a mode: the adapter reads the same
+	//variable, refuses a launch for any other value before it starts anything, and
+	//the application refuses one at hook startup (TestHookWiring.Start), so a typo
+	//cannot pass as primary placement on either side.
 	public static class TestHookPlacement
 	{
 		public const string EnvironmentVariable = "MESEN_GUI_WINDOW";
+		public const string Primary = "primary";
 		public const string Any = "any";
 
 		//NSApplicationActivationPolicyAccessory: the process may show windows but is
 		//not in the Dock and never becomes the frontmost application, which is what
 		//keeps a run from taking the keyboard away from whoever is working.
 		public const int AccessoryPolicy = 1;
+
+		//The switch read strictly: unset, empty and "primary" all mean primary-display
+		//placement, "any" is the escape hatch, and anything else is a mistake in
+		//whatever started the run rather than an instruction to fall back. The hook
+		//validates with this once, at startup; IsAny below is the same question asked
+		//per window, where a throw would surface as a crash halfway through a run.
+		public static string Read(string? value)
+		{
+			if(string.IsNullOrEmpty(value) || value == Primary) {
+				return Primary;
+			}
+			if(value == Any) {
+				return Any;
+			}
+			throw new ArgumentException(EnvironmentVariable + "=" + value + " is not a window mode (expected " + Primary + " or " + Any + ")");
+		}
 
 		public static bool IsAny(string? value) => value == Any;
 
@@ -35,6 +54,18 @@ namespace Mesen.Logic.TestHook
 		public static bool NeedsActivationPolicy(bool isMacOS, bool hasPlatformWindow) => isMacOS && hasPlatformWindow;
 
 		public static int[] Rect(int x, int y, int width, int height) => new[] { x, y, width, height };
+
+		//The rectangle the window manager puts on the display, in physical pixels:
+		//the window's own origin - the frame's, not the client area's - plus the
+		//frame size the platform reports, which is the client area plus the title bar
+		//and the borders. This, not the client area, is what has to fit on the
+		//display; the scale turns logical units into the pixels a display is measured
+		//in. Never zero on either axis: a rect a fraction of a pixel wide would read
+		//as "inside" everything.
+		public static int[] FrameRect(int x, int y, double frameWidth, double frameHeight, double scale)
+			=> Rect(x, y,
+				Math.Max(1, (int)Math.Ceiling(frameWidth * scale)),
+				Math.Max(1, (int)Math.Ceiling(frameHeight * scale)));
 
 		//True when rect sits entirely inside area: a window half on a second display
 		//is not "inside the primary display".

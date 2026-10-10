@@ -103,5 +103,5 @@ Owns `docs/specs/` (CC0), `docs/roadmap/` (the consolidated PRD), `docs/adr/` (t
 - media/ — short demo excerpts and the generated `gui-redesign/` wireframe PNGs
 - releases/ — READMEs shipped inside the release zips
 - reviews/ — point-in-time review reports (fork/upstream inherited-code review)
-- agent-squad/ — GUI test squad spec and the Play couch GUI ratification questionnaire
+- agent-squad/ — GUI test squad spec, the Play couch GUI ratification questionnaire, and the GUI test run command with its environment
 - squad/ — squad run notes (`router-model-overrun.md`) and `workflows/` graphs

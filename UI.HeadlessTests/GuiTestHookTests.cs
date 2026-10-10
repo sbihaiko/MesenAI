@@ -249,6 +249,28 @@ public class GuiTestHookTests : IDisposable
 		Assert.Throws<ArgumentException>(() => TestHookWiring.Start(new[] { "--test-hook=" }, window, BackendCode));
 	}
 
+	//#1255 review: a value of MESEN_GUI_WINDOW that is neither mode is a startup
+	//failure the same way a --test-hook with no endpoint is. The adapter refuses one
+	//before it launches anything; a run started without the adapter must not read a
+	//typo as "primary placement", so the switch is validated where the hook starts.
+	//The rule itself is pinned host-free (UI.Tests/TestHook/TestHookPlacementTests).
+	[AvaloniaFact]
+	public void A_typo_in_the_window_switch_is_a_startup_failure_not_a_silent_placement()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model) = ShowHome();
+		string? before = Environment.GetEnvironmentVariable(TestHookPlacement.EnvironmentVariable);
+		Environment.SetEnvironmentVariable(TestHookPlacement.EnvironmentVariable, "off");
+		try {
+			ArgumentException error = Assert.Throws<ArgumentException>(
+				() => TestHookWiring.Start(new[] { "--test-hook=" + Path.Combine(_folder, "typo.sock"), "--test-hook-token=t" }, window, BackendCode));
+			Assert.Contains(TestHookPlacement.EnvironmentVariable, error.Message);
+			Assert.Contains("off", error.Message);
+		} finally {
+			Environment.SetEnvironmentVariable(TestHookPlacement.EnvironmentVariable, before);
+		}
+	}
+
 	[AvaloniaFact]
 	public void A_capture_with_a_game_loaded_is_refused_not_a_black_game_area()
 	{

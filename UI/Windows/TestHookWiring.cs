@@ -72,14 +72,32 @@ namespace Mesen.Windows
 			return KeepOnPrimaryDisplay(window);
 		}
 
-		//The window's rectangle in physical pixels - the same measurement the
-		//capture takes, and what the adapter compares against the primary display.
+		//The window's client area in physical pixels - the same measurement the
+		//capture takes (WindowTarget.Capture renders Bounds), and the fallback for a
+		//platform that reports no frame.
 		public static int[] WindowRect(Window window)
 		{
 			double scale = window.RenderScaling;
 			return TestHookPlacement.Rect(window.Position.X, window.Position.Y,
 				Math.Max(1, (int)Math.Ceiling(window.Bounds.Width * scale)),
 				Math.Max(1, (int)Math.Ceiling(window.Bounds.Height * scale)));
+		}
+
+		//The window's frame in physical pixels: Position plus FrameSize, the title
+		//bar and the borders included. This is the rectangle the window manager puts
+		//on the display, so it is the one that has to fit on it - a client rect that
+		//fits while the title bar hangs over the edge is still a window half off the
+		//display. Position is the frame's origin, the same reading WindowExtensions
+		//uses to center a child window (UI/Utilities/WindowExtensions.cs). Null when
+		//the platform reports no frame (a headless window), which is why the adapter
+		//falls back to position and size.
+		public static int[]? WindowFrameRect(Window window)
+		{
+			Size? frame = window.FrameSize;
+			return frame is null
+				? null
+				: TestHookPlacement.FrameRect(window.Position.X, window.Position.Y,
+					frame.Value.Width, frame.Value.Height, window.RenderScaling);
 		}
 
 		//Moves a window onto the primary display's working area when the OS put it
@@ -94,7 +112,7 @@ namespace Mesen.Windows
 			if(area is null) {
 				return null;
 			}
-			int[] rect = WindowRect(window);
+			int[] rect = WindowFrameRect(window) ?? WindowRect(window);
 			int[] placed = TestHookPlacement.Clamp(area, rect);
 			if(placed[0] == rect[0] && placed[1] == rect[1]) {
 				return null;
@@ -136,6 +154,11 @@ namespace Mesen.Windows
 			if(options is null) {
 				return null;
 			}
+			//#1255: the window switch is read once, here, where a wrong value can
+			//still fail the process (App.axaml.cs prints it and exits 2) instead of
+			//being read as primary placement a window at a time. Inert without the
+			//flag: a process that is not a test run never reads the variable at all.
+			TestHookPlacement.Read(Environment.GetEnvironmentVariable(TestHookPlacement.EnvironmentVariable));
 			//#1255: this window is built but not shown yet, and Start runs before the
 			//application shows it: the process stops activating and this window is
 			//shown without activation, so a person typing elsewhere keeps typing.
@@ -245,6 +268,11 @@ namespace Mesen.Windows
 						["mode"] = _window.WindowState == WindowState.FullScreen ? "fullscreen" : "windowed",
 						["size"] = new JsonArray(MainRect[2], MainRect[3]),
 						["position"] = new JsonArray(MainRect[0], MainRect[1]),
+						//#1255: the frame, which is what has to fit on the display,
+						//and the display's WORKING area, which is what the window was
+						//placed inside - the adapter refuses a window outside it, and a
+						//check looser than the placement could never fail for one.
+						["frame"] = AreaOf(WindowFrameRect(_window)),
 						["maximized"] = _window.WindowState == WindowState.Maximized,
 						["primaryBounds"] = AreaOf(PrimaryDisplayForTest(_window).Bounds),
 						["primaryWorkingArea"] = AreaOf(PrimaryDisplayForTest(_window).WorkingArea)
@@ -277,7 +305,11 @@ namespace Mesen.Windows
 				return new JsonObject {
 					["id"] = id,
 					["position"] = new JsonArray(rect[0], rect[1]),
-					["size"] = new JsonArray(rect[2], rect[3])
+					["size"] = new JsonArray(rect[2], rect[3]),
+					//#1255: the same frame the `window` object carries, so a dialog is
+					//measured the way the main window is - and null, not absent, when
+					//the platform reports no frame.
+					["frame"] = AreaOf(WindowFrameRect(window))
 				};
 			}
 

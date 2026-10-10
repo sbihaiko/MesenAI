@@ -44,6 +44,10 @@ class FakeHook:
         #env knobs let a launched stand-in app report a window the adapter must refuse.
         self.window_position = [int(os.environ.get("FAKE_WINDOW_X", 40)), int(os.environ.get("FAKE_WINDOW_Y", 60))]
         self.window_size = [1100, 700]
+        #The window manager's rectangle when the platform reports one - the frame,
+        #title bar and borders included. None is a platform that does not (a
+        #headless window), which is what the real hook reports too.
+        self.window_frame = None
         self.primary_bounds = [0, 0, 1512, 982]
         self.primary_working_area = [0, 25, 1512, 945]
         self.windows = []  # dialogs and secondary windows opened during the run
@@ -80,9 +84,11 @@ class FakeHook:
                 controls=[{"id": i, "enabled": True, "visible": True, "focused": i == self.focus} for i in self.known] + self.extra_controls,
                 window={
                     "mode": "windowed", "size": self.window_size, "position": self.window_position, "maximized": False,
+                    "frame": self.window_frame,
                     "primaryBounds": self.primary_bounds, "primaryWorkingArea": self.primary_working_area,
                 },
-                windows=[{"id": "main", "position": self.window_position, "size": self.window_size}] + self.windows,
+                windows=[{"id": "main", "position": self.window_position, "size": self.window_size,
+                          "frame": self.window_frame}] + self.windows,
             )
         elif op == "inject":
             if req["action"] != "pad.press":
@@ -249,6 +255,44 @@ class WindowPlacement(Base):
         with self.assertRaises(adapter.AdapterError):
             self.session.check("ui.screen", {"is": "play.home"})
 
+    #The app keeps a window inside the primary display's WORKING area - the same
+    #display without the menu bar (UI/Windows/TestHookWiring.KeepOnPrimaryDisplay).
+    #Checking against the full bounds instead is looser than the placement it is
+    #meant to police: a window the app itself would have pulled back down reads as
+    #"fully inside" while its title bar sits under the menu bar.
+    def test_a_window_under_the_menu_bar_is_outside_the_working_area(self):
+        self.hook.window_position = [40, 5]  # the primary working area starts at y=25
+        with self.assertRaises(adapter.AdapterError) as ctx:
+            self.session.check("ui.screen", {"is": "play.home"})
+        self.assertIn("primary display", str(ctx.exception))
+
+    #A window's frame - title bar and borders included - is what has to fit on the
+    #display, and it is what the platform puts there. A client rect that fits while
+    #the frame hangs over the edge is still a window half off the display.
+    def test_a_frame_that_hangs_over_the_bottom_edge_fails_the_read(self):
+        self.hook.window_position = [40, 260]
+        self.hook.window_frame = [40, 260, 1100, 740]  # 260 + 740 = 1000 > 970
+        with self.assertRaises(adapter.AdapterError) as ctx:
+            self.session.check("ui.screen", {"is": "play.home"})
+        self.assertIn("1100x740", str(ctx.exception))  # the frame, not the 1100x700 client rect
+
+    def test_a_dialog_whose_frame_hangs_over_the_edge_fails_the_step(self):
+        #Client rect inside the working area (120 + 600 = 720), frame outside it (500 + 660 = 1160 > 970).
+        self.hook.windows.append({"id": "play.controller-sheet", "position": [200, 120], "size": [800, 600],
+                                  "frame": [200, 500, 812, 660]})
+        with self.assertRaises(adapter.AdapterError) as ctx:
+            self.session.wait("ui.screen == play.home", 8)
+        self.assertIn("play.controller-sheet", str(ctx.exception))
+
+    #A frame the platform reports as None is a platform that has none (a headless
+    #window): the position and size the hook also reports are used then, never a
+    #window silently skipped.
+    def test_a_window_with_no_frame_is_measured_by_its_position_and_size(self):
+        self.hook.window_position = [1600, 100]
+        self.hook.window_frame = None
+        with self.assertRaises(adapter.AdapterError):
+            self.session.check("ui.screen", {"is": "play.home"})
+
     def test_a_dialog_opened_off_the_primary_display_fails_the_step(self):
         self.session.check("ui.screen", {"is": "play.home"})
         self.hook.windows.append({"id": "play.controller-sheet", "position": [1600, 100], "size": [800, 600]})
@@ -266,7 +310,11 @@ class WindowPlacement(Base):
         self.assertTrue(self.session.check("ui.screen", {"is": "play.home"})["passed"])
 
     def test_a_hook_that_reports_no_primary_display_is_an_error_not_a_pass(self):
+        #A hook with no screen to report reports neither the bounds nor the working
+        #area (UI/Windows/TestHookWiring.PrimaryDisplay), so neither stands in for
+        #the other: both cleared is the state this case is about.
         self.hook.primary_bounds = None
+        self.hook.primary_working_area = None
         with self.assertRaises(adapter.AdapterError) as ctx:
             self.session.check("ui.screen", {"is": "play.home"})
         self.assertIn("primary", str(ctx.exception))
