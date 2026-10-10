@@ -51,7 +51,7 @@ namespace Mesen.Tests.TestHook
 
 			public Rig()
 			{
-				Keys = new TestHookKeys((code, down) => Calls.Add((code, down)), name => name switch { "Pad1 Right" => (ushort)0x1011, _ => (ushort)0 }, () => Frames);
+				Keys = new TestHookKeys((code, down) => Calls.Add((code, down)), name => name switch { "Pad1 Right" => (ushort)0x1011, "Enter" => (ushort)0x0D, _ => (ushort)0 }, () => Frames);
 				Protocol = new TestHookProtocol("secret", Target, Keys);
 			}
 
@@ -165,6 +165,38 @@ namespace Mesen.Tests.TestHook
 			JsonObject ticks = rig.Ask("{\"id\":7,\"token\":\"secret\",\"op\":\"inject\",\"action\":\"pad.press\",\"args\":{\"button\":\"Right\",\"ticks\":4}}");
 			Assert.False(ticks["ok"]!.GetValue<bool>());
 			Assert.Empty(rig.Calls);
+		}
+
+		[Fact]
+		public void A_key_press_holds_the_literal_key_for_its_ticks_then_lets_go()
+		{
+			Rig rig = new();
+			JsonObject answer = rig.Ask("{\"id\":10,\"token\":\"secret\",\"op\":\"inject\",\"action\":\"key.press\",\"args\":{\"key\":\"Enter\",\"ticks\":1}}");
+			Assert.True(answer["ok"]!.GetValue<bool>());
+			Assert.Equal(new[] { ((ushort)0x0D, true) }, rig.Calls);
+			rig.Keys.Advance();
+			Assert.Equal(new[] { ((ushort)0x0D, true), ((ushort)0x0D, false) }, rig.Calls);
+		}
+
+		[Fact]
+		public void A_key_press_follows_the_duration_family_of_the_clock_and_names_an_unknown_key()
+		{
+			Rig rig = new();
+			JsonObject unknown = rig.Ask("{\"id\":11,\"token\":\"secret\",\"op\":\"inject\",\"action\":\"key.press\",\"args\":{\"key\":\"Hyper\",\"ticks\":1}}");
+			Assert.False(unknown["ok"]!.GetValue<bool>());
+			Assert.Contains("Hyper", unknown["error"]!.GetValue<string>());
+			rig.Frames = 100;
+			JsonObject ticks = rig.Ask("{\"id\":12,\"token\":\"secret\",\"op\":\"inject\",\"action\":\"key.press\",\"args\":{\"key\":\"Enter\",\"ticks\":1}}");
+			Assert.False(ticks["ok"]!.GetValue<bool>());
+			Assert.Empty(rig.Calls);
+		}
+
+		[Fact]
+		public void Hello_advertises_the_key_namespace()
+		{
+			Rig rig = new();
+			JsonObject hello = rig.Ask("{\"id\":13,\"token\":\"secret\",\"op\":\"hello\"}");
+			Assert.Contains("key", hello["namespaces"]!.AsArray().Select(n => n!.GetValue<string>()));
 		}
 
 		[Fact]

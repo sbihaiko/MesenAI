@@ -37,9 +37,19 @@ public sealed class TestHookKeys
 	//Null when the press was taken, otherwise why it was not.
 	public string? Press(int pad, string button, int? ticks, int? frames)
 	{
-		ushort code = CodeOfButton(pad, button);
+		return StartHold(CodeOfButton(pad, button), "unknown button " + button + " on pad " + pad, ticks, frames);
+	}
+
+	//A literal key name, as the backend names it (ADR-0272 item 4, key.*).
+	public string? PressKey(string key, int? ticks, int? frames)
+	{
+		return StartHold(_codeOf(key), "unknown key " + key, ticks, frames);
+	}
+
+	private string? StartHold(ushort code, string unknown, int? ticks, int? frames)
+	{
 		if(code == 0) {
-			return "unknown button " + button + " on pad " + pad;
+			return unknown;
 		}
 		long? now = _frames();
 		if(now.HasValue) {
