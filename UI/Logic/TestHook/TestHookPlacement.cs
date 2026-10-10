@@ -55,17 +55,38 @@ namespace Mesen.Logic.TestHook
 
 		public static int[] Rect(int x, int y, int width, int height) => new[] { x, y, width, height };
 
-		//The rectangle the window manager puts on the display, in physical pixels:
-		//the window's own origin - the frame's, not the client area's - plus the
-		//frame size the platform reports, which is the client area plus the title bar
-		//and the borders. This, not the client area, is what has to fit on the
-		//display; the scale turns logical units into the pixels a display is measured
-		//in. Never zero on either axis: a rect a fraction of a pixel wide would read
-		//as "inside" everything.
-		public static int[] FrameRect(int x, int y, double frameWidth, double frameHeight, double scale)
-			=> Rect(x, y,
-				Math.Max(1, (int)Math.Ceiling(frameWidth * scale)),
-				Math.Max(1, (int)Math.Ceiling(frameHeight * scale)));
+		//A window's rectangle, as the hook reports it: the window's own origin - the
+		//frame's, not the client area's - plus the size the platform reports, which
+		//is the frame size (the client area plus the title bar and the borders) for
+		//the rect that has to fit on the display, and the client size for the one
+		//the adapter falls back to.
+		//
+		//#1255: this is in the DISPLAY's unit, the unit Position and
+		//Screen.Bounds/WorkingArea are read in, so it can be compared against a
+		//display at all. That unit is the platform's: x and y arrive already in it
+		//(Position is a PixelPoint in the screen's own coordinates), but width and
+		//height are the DIPs Avalonia reports Bounds and FrameSize in, and a DIP is
+		//a point on macOS and a physical pixel everywhere else.
+		//
+		//screenRectsInPoints is which of the two this platform's screen rectangles
+		//are: true on macOS, where Screen.Bounds/WorkingArea come back in points and
+		//the DIP size IS the display's unit, so scaling it again is the bug - on the
+		//2x Retina laptop a 1100x700 window read as 2200x1400 against the 1440x900
+		//display it was on, no placement could contain it and every launch was
+		//refused. False on Windows and X11, where the screen rects are physical
+		//pixels and renderScaling is the DIP-to-pixel factor: without it a 1100x700
+		//window on a 150% display is measured 550 pixels narrower than it really is,
+		//and one hanging off the edge passes containment.
+		//
+		//Never zero on either axis: a rect a fraction of a unit wide would read as
+		//"inside" everything.
+		public static int[] WindowRect(int x, int y, double width, double height, double renderScaling, bool screenRectsInPoints)
+		{
+			double toScreenUnit = screenRectsInPoints ? 1.0 : renderScaling;
+			return Rect(x, y,
+				Math.Max(1, (int)Math.Ceiling(width * toScreenUnit)),
+				Math.Max(1, (int)Math.Ceiling(height * toScreenUnit)));
+		}
 
 		//True when rect sits entirely inside area: a window half on a second display
 		//is not "inside the primary display".

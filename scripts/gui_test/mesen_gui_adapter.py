@@ -20,7 +20,9 @@ settings.json beside `Preferences`, the application opens its windows without
 activating, and after the hook connects this adapter reads the window's own
 frame from the hook's state (`window` and `windows`) and FAILS the launch while
 any of them sits outside the primary display's working area; a step that opens a
-window off the primary display fails its own state read the same way.
+window off the primary display fails its own state read the same way. Both sides
+are compared as the hook reports them, in the one unit the hook reports in - the
+display's own (#1255), never re-scaled here.
 The one escape hatch is the environment variable `MESEN_GUI_WINDOW`: the exact
 value `any` means "do not enforce placement", for a CI, Linux or headless runner
 where there is no primary-display notion. This adapter reads it, and so does the
@@ -93,6 +95,35 @@ def contained_in(area, rect):
     return (rect[0] >= area[0] and rect[1] >= area[1]
             and rect[0] + rect[2] <= area[0] + area[2]
             and rect[1] + rect[3] <= area[1] + area[3])
+
+
+def _whole_numbers(value, count):
+    """value as a list of exactly `count` whole numbers, or None. A bool is not one."""
+    if not isinstance(value, (list, tuple)) or len(value) != count:
+        return None
+    return list(value) if all(isinstance(v, int) and not isinstance(v, bool) for v in value) else None
+
+
+def is_rect(value):
+    """True when value is [x, y, width, height] with a size above zero - the only shape the placement check can measure.
+
+    The window's rect and the display's area are compared as the hook reports them
+    (#1255), so both have to be rectangles: a truncated one, a null in the middle or
+    a display with no size is the hook's answer being unusable, which is an error to
+    report rather than an IndexError - or a 0x0 display every window fails against."""
+    numbers = _whole_numbers(value, 4)
+    return numbers is not None and numbers[2] > 0 and numbers[3] > 0
+
+
+def is_position(value):
+    """True when value is [x, y] - the origin half of a window the hook measures by position and size."""
+    return _whole_numbers(value, 2) is not None
+
+
+def is_size(value):
+    """True when value is [width, height] with both above zero - a size, unlike the two numbers a truncated rect leaves."""
+    numbers = _whole_numbers(value, 2)
+    return numbers is not None and numbers[0] > 0 and numbers[1] > 0
 
 
 def _sha1_of_rom(path):
@@ -281,23 +312,38 @@ class Session:
         - The rectangle is the window's FRAME - title bar and borders included -
           which is what the window manager puts on the display and what has to fit
           on it. The position and size the hook also reports are the client area,
-          and they are the fallback for a platform that reports no frame."""
+          and they are the fallback for a platform that reports no frame.
+
+        Both sides are compared exactly as the hook reports them, in the one unit
+        the hook reports in - the display's own (#1255). On a 2x Retina display that
+        is 1100x700 for the run's window and 1440x900 for the display it is on, so
+        the frame fits; a hook that folded the render scaling into the frame read
+        2200x1400 there and was refused. The adapter re-scales neither side: it
+        cannot tell which of the two is the wrong one, so it measures what it is
+        given and the hook is where the unit has to be right
+        (UI/Logic/TestHook/TestHookPlacement.cs)."""
         if self.window_mode != "primary":
             return None
         window = state.get("window") or {}
         area = window.get("primaryWorkingArea") or window.get("primaryBounds")
-        if not area:
-            return (f"the hook reported no primary display (state.window.primaryWorkingArea / primaryBounds): "
-                    f"set {WINDOW_ENV}=any on a runner where no primary display applies")
+        if not is_rect(area):
+            return (f"the hook reported no usable primary display (state.window.primaryWorkingArea / primaryBounds was "
+                    f"{area!r}): set {WINDOW_ENV}=any on a runner where no primary display applies")
         entries = state.get("windows") or [{"id": "main", "position": window.get("position"), "size": window.get("size"),
                                             "frame": window.get("frame")}]
         for entry in entries:
             rect = entry.get("frame")
             if rect is None:
                 position, size = entry.get("position"), entry.get("size")
-                if position is None or size is None:
-                    return f"the hook reported no position/size for window {entry.get('id')!r} (state.windows)"
+                if not is_position(position) or not is_size(size):
+                    return (f"the hook reported no position/size for window {entry.get('id')!r} (state.windows carried "
+                            f"position {position!r}, size {size!r}): a window with no frame is measured by its position "
+                            f"and size, as [x, y] and [width, height]")
                 rect = [position[0], position[1], size[0], size[1]]
+            elif not is_rect(rect):
+                return (f"the hook reported no rectangle for window {entry.get('id')!r} (state.windows carried frame "
+                        f"{rect!r}): a window is measured by its frame - or by its position and size - as "
+                        f"[x, y, width, height]")
             if not contained_in(area, rect):
                 return (f"window {entry.get('id')!r} at ({rect[0]},{rect[1]}) size {rect[2]}x{rect[3]} is not fully inside "
                         f"the primary display {area}: a GUI test run opens its windows on the primary (built-in) display "

@@ -319,6 +319,64 @@ class WindowPlacement(Base):
             self.session.check("ui.screen", {"is": "play.home"})
         self.assertIn("primary", str(ctx.exception))
 
+    #A display with no size is no display to measure a window against: a 0x0 area
+    #refuses every window, and saying "outside the primary display [0, 0, 0, 0]"
+    #sends the reader looking for the window's fault instead of the hook's. The two
+    #cleared fields above and this one are the same answer: no display was reported.
+    def test_a_display_with_no_size_is_an_error_not_a_pass(self):
+        self.hook.primary_working_area = [0, 0, 0, 0]
+        self.hook.primary_bounds = [0, 0, 0, 0]
+        with self.assertRaises(adapter.AdapterError) as ctx:
+            self.session.check("ui.screen", {"is": "play.home"})
+        self.assertIn("no usable primary display", str(ctx.exception))
+
+    #Like is compared with like: [x, y, width, height] is the only shape this check
+    #can measure, and anything else - a truncated rect, a null in the middle - is
+    #the hook's answer being unusable, refused with that said rather than dying on
+    #an IndexError the reader has to trace back to the hook.
+    def test_a_frame_that_is_not_a_rectangle_is_refused_as_the_hooks_answer(self):
+        self.hook.window_frame = [40, 60]
+        with self.assertRaises(adapter.AdapterError) as ctx:
+            self.session.check("ui.screen", {"is": "play.home"})
+        self.assertIn("rectangle", str(ctx.exception))
+
+    def test_a_window_with_no_size_is_refused_as_the_hooks_answer(self):
+        self.hook.window_frame = None
+        self.hook.window_size = [1100, 0]
+        with self.assertRaises(adapter.AdapterError) as ctx:
+            self.session.check("ui.screen", {"is": "play.home"})
+        self.assertIn("no position/size", str(ctx.exception))
+
+    #The 2x Retina laptop the real-binary gate failed on (#1255): a 2560x1600 panel
+    #run at 1440x900 points, so the display reads in points while the window's
+    #render scaling is 2.0. The hook reports the window's frame in that same unit
+    #(UI/Logic/TestHook/TestHookPlacement.cs), and the launch the run pins -
+    #1100x700 at 40,60 - is inside the display, so it is measured, not refused.
+    def test_a_retina_display_holds_the_window_the_hook_reports(self):
+        self.retina_display()
+        self.assertEqual(self.session.wait("ui.screen == play.home", 8), "met")
+
+    #The reading the gate was actually refused with: the same window on the same
+    #display, its frame folded through the render scaling - 2200x1400 for a
+    #1100x700 window, wider than the display it is on. The adapter never re-scales
+    #what the hook reports, so a hook reporting both sides in one unit is the whole
+    #fix: this is what a hook reporting two units is refused with.
+    def test_a_frame_folded_through_the_render_scaling_is_refused(self):
+        self.retina_display()
+        self.hook.window_position = [0, 30]
+        self.hook.window_frame = [0, 30, 2200, 1400]
+        with self.assertRaises(adapter.AdapterError) as ctx:
+            self.session.wait("ui.screen == play.home", 8)
+        self.assertIn("2200x1400", str(ctx.exception))
+        self.assertIn("[0, 30, 1440, 870]", str(ctx.exception))
+
+    def retina_display(self):
+        """The display of the 2x Retina laptop the gate failed on, and the window the run pins on it."""
+        self.hook.primary_bounds = [0, 0, 1440, 900]
+        self.hook.primary_working_area = [0, 30, 1440, 870]
+        self.hook.window_position = [40, 60]
+        self.hook.window_frame = [40, 60, 1100, 700]
+
 
 class WindowVariablePassThrough(unittest.TestCase):
     """#1255: the adapter reads MESEN_GUI_WINDOW itself, so a runner only has to not swallow it."""
