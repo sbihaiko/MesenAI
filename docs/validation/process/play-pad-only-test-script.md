@@ -150,7 +150,7 @@ platform reports a Home/Guide button yet).
 | HOME-03 | At least one game played (after GAME-01), back on Home W-P2 | D-pad through every Home element: *Continue playing*, the Favorites shelf (if any), the Recent grid, *Open a ROM…*. | Every element reachable; focus order Continue → Favorites → Recent (ADR-0268 Decision 6); the ring is on exactly one control at a time (ADR-0256 Decision 3). | | | |
 | HOME-04 | HOME-03 | From every Home control, press D-pad Up repeatedly, then Left/Right at the top row. | Focus **never** leaves the Home host onto the header's Profile button or the Tools ⋯ button (#1137, fixed in #1166: `PlayHomeHost` contains the walk; `KnownFocusLeaks` is empty at HEAD). If it does: FAIL and record which control, then press Down/B to return. | | | |
 | HOME-05 | Home | Press the chord on Home (no game). | Nothing harmful: no overlay opens for a game that is not loaded; focus unchanged. | | | |
-| HOME-06 | Home, **no game loaded** | Try to reach Settings by pad only. | **Expected FAIL (known gap, P0-2; to be filed as bug #1177):** Settings opens only from W-P4 (needs a game) or from Tools ⋯ / the macOS app menu (`UI/Windows/MainWindow.PlaySheets.cs:159-164`); Home has no Settings control (`UI/Views/PlayHomeView.axaml`); and the header's Tools ⋯ is deliberately unpadded since #1166 (`UI/Windows/PlayPadNavigationWiring.cs:329-345`). Record exactly what you tried. | | | |
+| HOME-06 | Home, **no game loaded** | Press Y (the footer reads *Y Settings*). | The Settings sheet opens by pad with no game loaded (#1177, fixed in #1213). B returns to the Home. Settings is still not a Home control and the header's Tools ⋯ stays deliberately unpadded since #1166 (`UI/Windows/PlayPadNavigationWiring.cs:329-345`). | | | |
 
 ### 4.2 Library (Open a game, ADR-0264)
 
@@ -216,7 +216,7 @@ platform reports a Home/Guide button yet).
 | CTL-02 | CTL-01 | D-pad to a console-control row (e.g. NES *B*), A to arm the capture, release, press the pad button you want; then arm another row and press a **navigation** control (A or B or a D-pad direction); then arm a row and press B to cancel. | Arming waits for the first button to be released; a mapped button lights the two lights (pad side / port side); a navigation control is **refused visibly** (ADR-0256 Decision 4); B cancels the capture and the sheet is still drivable — the pad regains authority (`HasAuthority` gains `!IsControllerCapturing`). | | | |
 | CTL-03 | CTL-01 | A on *Done*; reopen; B instead. | Both leave to W-P4; no capture stays armed after close (`Closing_the_sheet_ends_the_capture_it_was_in`) — the pad still moves focus on W-P4. | | | |
 | CTL-04 | CTL-01, EXTRA BUTTONS section | Bind a spare button (e.g. a paddle or the right stick click) to *Rewind*; B to the game; press it while playing. | The binding takes, the action fires in game (engine third key set, ADR-0255 slice 4). Navigation controls are not offered in this list. | | | |
-| CTL-05 | Home, **no game loaded** | Try to reach the Controller sheet. | **Known limitation, expected FAIL:** Settings itself is not reachable by pad with no game (HOME-06), so neither is the Controller sheet. If Settings is reached by keyboard (Tools ⋯ › Settings…), Controls › *More in Options…* opens the classic Options window's Input page, because `OpenControllerSheet()` returns false with no game loaded (`MainWindow.PlaySheets.cs:230-231`; ADR-0256 Decision 5 note). Record what the player sees. | | | |
+| CTL-05 | Home, **no game loaded** | Try to reach the Controller sheet. | Settings is reachable by pad now (Y, #1213). Controls › *More in Options…* still opens the classic Options window's Input page, because `OpenControllerSheet()` returns false with no game loaded (`MainWindow.PlaySheets.cs:230-231`; ADR-0256 Decision 5 note). **Known limitation:** the sheet itself still needs a loaded game. Record what the player sees. | | | |
 
 ### 4.8 Port lamps (ADR-0261) and hot-plug
 
@@ -340,11 +340,13 @@ to look hardest.
 1. **No pad route to quit the application** (TRAP-04). Tools ⋯ is
    deliberately unpadded; *Quit MesenAI* lives there. On a cabinet the only
    way out is the OS. Almost certain FAIL.
-2. **Settings, and so the Controller sheet, need a loaded game** (HOME-06,
-   CTL-05). Settings opens only from W-P4 or Tools ⋯ / the app menu, and Tools ⋯
-   is unpadded; a first-time cabinet user cannot change a setting or remap
-   before loading a game (ADR-0256 Decision 5 note). Also W-P15's auto-setup
-   sheet only fires for a pad **no** mapping uses.
+2. **The Controller sheet needs a loaded game** (CTL-05). Settings itself is
+   reachable by pad with no game since #1213 (Y on the Home, HOME-06), so a
+   first-time cabinet user can change a setting before loading a game — but
+   Controls › *More in Options…* still falls to the classic Options window's Input
+   page, because `OpenControllerSheet()` returns false with no game loaded
+   (ADR-0256 Decision 5 note). Also W-P15's auto-setup sheet only fires for a
+   pad **no** mapping uses.
 3. **The console filter's selected chip may not read from the couch** (LIB-04).
    LB/RB cycles the filter and lands the ring on the segment it selected
    (ADR-0264 amendment 2026-10-09, #1108), and the chips are reached now —
@@ -399,7 +401,7 @@ measured facts.
 | # | Suggestion | Rationale | Related |
 |---|---|---|---|
 | P0-1 | Add a pad-reachable *Quit MesenAI* (e.g. a row on the Home or a long-press on the W-P4 *Quit game* confirm, or make the Tools ⋯ menu walkable from the last Home row) | No pad route to exit the app; a cabinet cannot be shut down cleanly. PRD §13.3 rule 9 says the pad reaches everything in Play. **Needs /adr** — a second *Quit* in Play is a door change: ADR-0250 gives each menu entry one place per door. | ADR-0256 stop rule, #1137 (the containment that made Tools unpadded), ADR-0250 (one place per entry) |
-| P0-2 | Make Settings, and through it the Controller sheet, reachable by pad with no game loaded (HOME-06, CTL-05; to be filed as bug #1177) | Verified: Settings opens only from W-P4 or Tools ⋯ / the app menu (`MainWindow.PlaySheets.cs:159-164`), Home has no Settings control (`PlayHomeView.axaml`), Tools ⋯ is unpadded since #1166 (`PlayPadNavigationWiring.cs:329-345`), and with no game the Controls link falls to the classic Input page (`MainWindow.PlaySheets.cs:230-231`). A pad that needs a bind before it can play (DirectInput, or a pad whose Select/Start is broken) is stuck at Home. | ADR-0256 Decision 5 note, ADR-0255 |
+| P0-2 | ~~Make Settings, and through it the Controller sheet, reachable by pad with no game loaded (HOME-06, CTL-05; bug #1177)~~ **Done in #1213.** | HOME-06 is closed: Y on the Home opens the Settings sheet with no game loaded, and the footer names it. CTL-05 stays open in part — the sheet itself still needs a game, so Controls › *More in Options…* falls to the classic Input page (`MainWindow.PlaySheets.cs:230-231`). | ADR-0256 Decision 5 note, ADR-0255 |
 
 **P1 — operable but with a trap or a loud rough edge**
 
