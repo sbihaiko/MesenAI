@@ -63,17 +63,30 @@ namespace Mesen.Logic.TestHook
 		//
 		//#1255: this is in the DISPLAY's unit, the unit Position and
 		//Screen.Bounds/WorkingArea are read in, so it can be compared against a
-		//display at all. The render scaling has no part in it: on the 2x Retina
-		//laptop the real-binary gate failed on, a 1100x700 window reports a 1100x700
-		//frame while its display reports 1440x900 - both already in the same unit -
-		//and folding the scaling in read the frame as 2200x1400, wider than the
-		//display it was on, so no placement could contain it and every launch was
-		//refused. Never zero on either axis: a rect a fraction of a unit wide would
-		//read as "inside" everything.
-		public static int[] WindowRect(int x, int y, double width, double height)
-			=> Rect(x, y,
-				Math.Max(1, (int)Math.Ceiling(width)),
-				Math.Max(1, (int)Math.Ceiling(height)));
+		//display at all. That unit is the platform's: x and y arrive already in it
+		//(Position is a PixelPoint in the screen's own coordinates), but width and
+		//height are the DIPs Avalonia reports Bounds and FrameSize in, and a DIP is
+		//a point on macOS and a physical pixel everywhere else.
+		//
+		//screenRectsInPoints is which of the two this platform's screen rectangles
+		//are: true on macOS, where Screen.Bounds/WorkingArea come back in points and
+		//the DIP size IS the display's unit, so scaling it again is the bug - on the
+		//2x Retina laptop a 1100x700 window read as 2200x1400 against the 1440x900
+		//display it was on, no placement could contain it and every launch was
+		//refused. False on Windows and X11, where the screen rects are physical
+		//pixels and renderScaling is the DIP-to-pixel factor: without it a 1100x700
+		//window on a 150% display is measured 550 pixels narrower than it really is,
+		//and one hanging off the edge passes containment.
+		//
+		//Never zero on either axis: a rect a fraction of a unit wide would read as
+		//"inside" everything.
+		public static int[] WindowRect(int x, int y, double width, double height, double renderScaling, bool screenRectsInPoints)
+		{
+			double toScreenUnit = screenRectsInPoints ? 1.0 : renderScaling;
+			return Rect(x, y,
+				Math.Max(1, (int)Math.Ceiling(width * toScreenUnit)),
+				Math.Max(1, (int)Math.Ceiling(height * toScreenUnit)));
+		}
 
 		//True when rect sits entirely inside area: a window half on a second display
 		//is not "inside the primary display".

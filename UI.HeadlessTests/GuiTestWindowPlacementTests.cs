@@ -220,8 +220,9 @@ public class GuiTestWindowPlacementTests : IDisposable
 		//window has no window manager and so no frame to report, and the field is
 		//there as null rather than absent - the adapter's signal to fall back to
 		//position and size (pinned in scripts/test_gui_test_mesen_adapter.py). What
-		//the frame MEANS (origin + frame size, in physical pixels) is host-free and
-		//pinned in UI.Tests/TestHook/TestHookPlacementTests.
+		//the frame MEANS (origin + frame size, in the display's own unit - points on
+		//macOS, physical pixels on Windows and X11) is host-free and pinned in
+		//UI.Tests/TestHook/TestHookPlacementTests.
 		Assert.True(main.ContainsKey("frame"), "the adapter reads state.window.frame");
 		Assert.Equal(window.FrameSize is null, main["frame"] is null);
 		Assert.Equal(window.Bounds.Width, main["size"]![0]!.GetValue<int>());

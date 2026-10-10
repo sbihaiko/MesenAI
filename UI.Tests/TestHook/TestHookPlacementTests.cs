@@ -87,32 +87,63 @@ namespace Mesen.Tests.TestHook
 		//own (Position is the frame's origin, the same reading WindowExtensions uses
 		//to center a child), and the size is the frame's.
 		//
-		//#1255 gate: the rect is in the SAME unit as the display it is checked
+		//#1255 review: the rect is in the SAME unit as the display it is checked
 		//against - the display's own, which is the unit Window.Position and
-		//Screen.Bounds/WorkingArea are read in. The frame size the platform reports
-		//is already in that unit, so the render scaling has no part in the rect: on
-		//the 2x Retina laptop every launch was refused because it WAS folded in - a
-		//1100x700 window reported its frame as 2200x1400, wider than the 1440x900
-		//display it was on, so no placement could ever contain it.
+		//Screen.Bounds/WorkingArea are read in - and that unit is the platform's,
+		//not a constant. Avalonia reads Position and the screen rectangles as a
+		//PixelPoint/PixelRect whose VALUE is points on macOS and physical pixels on
+		//Windows and X11, while Bounds and FrameSize are device-independent pixels
+		//everywhere: on Windows and X11 the size has to be multiplied by the render
+		//scaling, on macOS it must not be. The 2x Retina laptop the gate failed on is
+		//the macOS case - scaling there read a 1100x700 window as 2200x1400 against
+		//the 1440x900 display it was on, so no placement could contain it and every
+		//launch was refused - and Windows/X11 is the other way round, where NOT
+		//scaling under-measures the window and lets one hanging off the edge pass.
 		[Theory]
-		[InlineData(1.0)]   // a display that reports 1:1, where the old fold was invisible
-		[InlineData(2.0)]   // the Retina laptop the gate failed on
-		public void The_reported_rect_is_the_displays_unit_whatever_the_render_scaling_is(double renderScaling)
+		[InlineData(2.0, true, 1100, 700)]   // the 2x Retina laptop: screen rects in points, so the DIP size IS the display's unit
+		[InlineData(1.5, false, 1650, 1050)] // a Windows/X11 display at 150%: physical pixels, so 1100 DIPs really cover 1650
+		[InlineData(1.0, false, 1100, 700)]  // a display that reports 1:1, where the two answers agree
+		public void The_reported_rect_is_the_displays_own_unit(double renderScaling, bool screenRectsInPoints, int width, int height)
 		{
-			//A 700-tall client area with a 28-tall title bar at 40,60: the frame the
-			//platform reports, read as it reports it, and the only rect a run may
-			//report for it.
-			int[] frame = TestHookPlacement.WindowRect(40, 60, 1100, 728);
+			Assert.Equal(new[] { 40, 60, width, height },
+				TestHookPlacement.WindowRect(40, 60, 1100, 700, renderScaling, screenRectsInPoints));
+		}
+
+		//The frame the platform reports is the size that goes in: a 700-tall client
+		//area with a 28-tall title bar reports 728, and that is the rect a run may
+		//report for it.
+		[Fact]
+		public void The_reported_rect_is_the_frame_the_platform_reports()
+		{
+			int[] frame = TestHookPlacement.WindowRect(40, 60, 1100, 728, 2.0, screenRectsInPoints: true);
 			Assert.Equal(new[] { 40, 60, 1100, 728 }, frame);
 			Assert.True(TestHookPlacement.Contains(RetinaWorkingArea, frame));
-			//What folding the render scaling into the same reading gives: the same
-			//rect at 1x, and at 2x a rect wider than the display it is on - refused
-			//instead of measured, which is what the gate saw.
-			int[] folded = { frame[0], frame[1], (int)Math.Ceiling(frame[2] * renderScaling), (int)Math.Ceiling(frame[3] * renderScaling) };
-			Assert.Equal(TestHookPlacement.Contains(RetinaWorkingArea, folded), renderScaling == 1.0);
-			//A frame a fraction of a unit wide is still a unit: a zero-sized rect
-			//would read as "inside" any display at all.
-			Assert.Equal(new[] { 40, 60, 1, 1 }, TestHookPlacement.WindowRect(40, 60, 0.2, 0.2));
+		}
+
+		//#1255 review: the false pass the un-scaled reading gives on a scaled display,
+		//the other half of the unit rule. A 1100x700-DIP window at x=1000 on a 150%
+		//Windows/X11 display really covers 1650x1050 physical pixels and reaches
+		//x=2650 against a 2560-wide working area, so it hangs off the right edge -
+		//while the reading that skipped the scaling stops at 2100 and reports it as
+		//inside.
+		[Fact]
+		public void A_window_hanging_off_a_scaled_display_is_outside()
+		{
+			int[] area = { 0, 0, 2560, 1400 };
+			int[] frame = TestHookPlacement.WindowRect(1000, 300, 1100, 700, 1.5, screenRectsInPoints: false);
+			Assert.Equal(new[] { 1000, 300, 1650, 1050 }, frame);
+			Assert.False(TestHookPlacement.Contains(area, frame));
+			Assert.True(TestHookPlacement.Contains(area, new[] { 1000, 300, 1100, 700 }),
+				"the un-scaled reading is the false pass the containment check must not give");
+		}
+
+		//A frame a fraction of a unit wide is still a unit: a zero-sized rect would
+		//read as "inside" any display at all.
+		[Fact]
+		public void A_rect_is_never_zero_wide()
+		{
+			Assert.Equal(new[] { 40, 60, 1, 1 }, TestHookPlacement.WindowRect(40, 60, 0.2, 0.2, 2.0, screenRectsInPoints: true));
+			Assert.Equal(new[] { 40, 60, 1, 1 }, TestHookPlacement.WindowRect(40, 60, 0.2, 0.2, 1.5, screenRectsInPoints: false));
 		}
 
 		//The state the gate refused, host-free: the run's window - pinned at 1100x700
@@ -123,7 +154,7 @@ namespace Mesen.Tests.TestHook
 		[Fact]
 		public void The_window_the_gate_refused_is_inside_the_display_that_refused_it()
 		{
-			int[] reported = TestHookPlacement.WindowRect(RetinaWorkingArea[0], RetinaWorkingArea[1], 1100, 700);
+			int[] reported = TestHookPlacement.WindowRect(RetinaWorkingArea[0], RetinaWorkingArea[1], 1100, 700, 2.0, screenRectsInPoints: true);
 			Assert.Equal(new[] { 0, 30, 1100, 700 }, reported);
 			Assert.True(TestHookPlacement.Contains(RetinaWorkingArea, reported));
 			Assert.False(TestHookPlacement.Contains(RetinaWorkingArea, new[] { 0, 30, 2200, 1400 }));
@@ -137,8 +168,8 @@ namespace Mesen.Tests.TestHook
 		[Fact]
 		public void A_frame_hanging_over_the_bottom_edge_is_outside_while_the_client_area_is_inside()
 		{
-			int[] client = TestHookPlacement.WindowRect(40, 260, 1100, 700);
-			int[] frame = TestHookPlacement.WindowRect(40, 260, 1100, 740);
+			int[] client = TestHookPlacement.WindowRect(40, 260, 1100, 700, 2.0, screenRectsInPoints: true);
+			int[] frame = TestHookPlacement.WindowRect(40, 260, 1100, 740, 2.0, screenRectsInPoints: true);
 			Assert.True(TestHookPlacement.Contains(WorkingArea, client));
 			Assert.False(TestHookPlacement.Contains(WorkingArea, frame));
 		}

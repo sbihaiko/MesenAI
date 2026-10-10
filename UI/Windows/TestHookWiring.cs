@@ -72,13 +72,28 @@ namespace Mesen.Windows
 			return KeepOnPrimaryDisplay(window);
 		}
 
+		//#1255: which unit the screen rectangles come back in on this platform, and
+		//so the unit a window's size has to be converted into before the two can be
+		//compared. Avalonia hands Screen.Bounds and Screen.WorkingArea over as a
+		//PixelRect on every platform, but the value behind it is points on macOS and
+		//physical pixels on Windows and X11, while Bounds and FrameSize are
+		//device-independent pixels everywhere - so on Windows and X11 the DIP size
+		//has to be multiplied by the render scaling, and on macOS it must be left
+		//alone. macOS is the exception the 2x Retina gate exposed: scaling its
+		//already-point rects read a 1100x700 window as 2200x1400 against the
+		//1440x900 display it was on, refusing every launch. Position is in the
+		//screen's own unit on both, which is why only the size is converted. A
+		//property, so a headless test can stand in for a platform it is not running
+		//on.
+		public static bool ScreenRectsInPoints { get; set; } = OperatingSystem.IsMacOS();
+
 		//The window's client area in the display's own unit - the same unit the
 		//display's bounds and working area come back in, and the fallback for a
 		//platform that reports no frame. Not the capture's pixels: WindowTarget.Capture
 		//sizes its bitmap itself, from Bounds and the render scaling.
 		public static int[] WindowRect(Window window)
 			=> TestHookPlacement.WindowRect(window.Position.X, window.Position.Y,
-				window.Bounds.Width, window.Bounds.Height);
+				window.Bounds.Width, window.Bounds.Height, window.RenderScaling, ScreenRectsInPoints);
 
 		//The window's frame in the display's own unit: Position plus FrameSize, the
 		//title bar and the borders included. This is the rectangle the window manager
@@ -86,18 +101,20 @@ namespace Mesen.Windows
 		//that fits while the title bar hangs over the edge is still a window half off
 		//the display. Position is the frame's origin, the same reading
 		//WindowExtensions uses to center a child window (UI/Utilities/WindowExtensions.cs),
-		//and FrameSize is the size the platform reports in the same unit - so this is
-		//Position plus FrameSize, with no render scaling anywhere (#1255: folding the
-		//scaling in made a 1100x700 window report 2200x1400 on a 1440x900 display, and
-		//every launch was refused). Null when the platform reports no frame (a
-		//headless window), which is why the adapter falls back to position and size.
+		//and FrameSize is the size the platform reports as DIPs, converted by
+		//ScreenRectsInPoints and the render scaling into the display's own unit -
+		//left alone on macOS, where a DIP is already a point (#1255: scaling it
+		//there made a 1100x700 window report 2200x1400 on a 1440x900 display, and
+		//every launch was refused), multiplied on Windows and X11, where it is a
+		//physical pixel. Null when the platform reports no frame (a headless
+		//window), which is why the adapter falls back to position and size.
 		public static int[]? WindowFrameRect(Window window)
 		{
 			Size? frame = window.FrameSize;
 			return frame is null
 				? null
 				: TestHookPlacement.WindowRect(window.Position.X, window.Position.Y,
-					frame.Value.Width, frame.Value.Height);
+					frame.Value.Width, frame.Value.Height, window.RenderScaling, ScreenRectsInPoints);
 		}
 
 		//Moves a window onto the primary display's working area when the OS put it
