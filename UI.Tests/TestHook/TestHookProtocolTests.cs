@@ -49,9 +49,9 @@ namespace Mesen.Tests.TestHook
 			public readonly TestHookKeys Keys;
 			public readonly TestHookProtocol Protocol;
 
-			public Rig()
+			public Rig(List<(string Key, bool Down)>? raised = null)
 			{
-				Keys = new TestHookKeys((code, down) => Calls.Add((code, down)), name => name switch { "Pad1 Right" => (ushort)0x1011, "Enter" => (ushort)0x0D, _ => (ushort)0 }, () => Frames);
+				Keys = new TestHookKeys((code, down) => Calls.Add((code, down)), name => name switch { "Pad1 Right" => (ushort)0x1011, "Enter" => (ushort)0x0D, _ => (ushort)0 }, () => Frames, raised is null ? null : (key, down) => raised.Add((key, down)));
 				Protocol = new TestHookProtocol("secret", Target, Keys);
 			}
 
@@ -168,6 +168,21 @@ namespace Mesen.Tests.TestHook
 		}
 
 		[Fact]
+		public void A_key_press_raises_the_key_on_the_GUI_when_it_starts_and_ends_but_a_pad_press_does_not()
+		{
+			List<(string Key, bool Down)> raised = new();
+			Rig rig = new(raised);
+			rig.Ask("{\"id\":16,\"token\":\"secret\",\"op\":\"inject\",\"action\":\"key.press\",\"args\":{\"key\":\"Enter\",\"ticks\":1}}");
+			Assert.Equal(new[] { ("Enter", true) }, raised);
+			rig.Keys.Advance();
+			Assert.Equal(new[] { ("Enter", true), ("Enter", false) }, raised);
+			raised.Clear();
+			rig.Ask("{\"id\":17,\"token\":\"secret\",\"op\":\"inject\",\"action\":\"pad.press\",\"args\":{\"button\":\"Right\",\"ticks\":1}}");
+			rig.Keys.Advance();
+			Assert.Empty(raised);
+		}
+
+		[Fact]
 		public void A_key_press_holds_the_literal_key_for_its_ticks_then_lets_go()
 		{
 			Rig rig = new();
@@ -188,6 +203,14 @@ namespace Mesen.Tests.TestHook
 			rig.Frames = 100;
 			JsonObject ticks = rig.Ask("{\"id\":12,\"token\":\"secret\",\"op\":\"inject\",\"action\":\"key.press\",\"args\":{\"key\":\"Enter\",\"ticks\":1}}");
 			Assert.False(ticks["ok"]!.GetValue<bool>());
+			Assert.Empty(rig.Calls);
+			JsonObject frames = rig.Ask("{\"id\":14,\"token\":\"secret\",\"op\":\"inject\",\"action\":\"key.press\",\"args\":{\"key\":\"Enter\",\"frames\":2}}");
+			Assert.True(frames["ok"]!.GetValue<bool>());
+			Assert.Contains(((ushort)0x0D, true), rig.Calls);
+			rig.Frames = null;
+			rig.Calls.Clear();
+			JsonObject stopped = rig.Ask("{\"id\":15,\"token\":\"secret\",\"op\":\"inject\",\"action\":\"key.press\",\"args\":{\"key\":\"Enter\",\"frames\":2}}");
+			Assert.False(stopped["ok"]!.GetValue<bool>());
 			Assert.Empty(rig.Calls);
 		}
 

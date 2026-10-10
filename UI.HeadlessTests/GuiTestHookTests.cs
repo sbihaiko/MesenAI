@@ -183,6 +183,27 @@ public class GuiTestHookTests : IDisposable
 		}
 	}
 
+	//The GUI keyboard reads Avalonia KeyDown/KeyUp, not the pressed set (MainWindow
+	//OnPreviewKeyDown): a key.press that only reached the set moved no focus.
+	[AvaloniaFact]
+	public void Injected_key_presses_move_the_Home_focus_through_the_GUI_keyboard()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model) = ShowHome();
+		TestHookWiring.WindowTarget target = new(window);
+		TestHookKeys keys = new(InputApi.SetInjectedKey, name => name == "Up" ? (ushort)0x2001 : BackendCode(name), () => null, target.RaiseKey);
+		TestHookProtocol hook = new("t", target, keys);
+		try {
+			JsonObject answer = JsonNode.Parse(hook.Handle("{\"id\":1,\"token\":\"t\",\"op\":\"inject\",\"action\":\"key.press\",\"args\":{\"key\":\"Up\",\"ticks\":1}}"))!.AsObject();
+			Assert.True(answer["ok"]!.GetValue<bool>(), answer.ToJsonString());
+			Pump();
+			Tick(window, keys);
+			Assert.Equal("play.home.open-rom", Focus(window, model));
+		} finally {
+			keys.ReleaseAll();
+		}
+	}
+
 	[AvaloniaFact]
 	public void An_injected_key_reads_as_pressed_through_IsKeyPressed_too()
 	{
