@@ -116,9 +116,11 @@ jobs:
           --results-directory "${{ runner.temp }}/render-results"
 
       # #1217: the hook e2e case really runs here, against the built core. The
-      # runner reads the dotnet summary and fails unless it is exactly 1 passed,
-      # 0 skipped, 0 failed (a skipped case is green to dotnet test).
-      - name: Run the GUI-test hook e2e case and require 1 passed, 0 skipped
+      # runner reads the dotnet summary and fails unless it is exactly 2 passed,
+      # 0 skipped, 0 failed (a skipped case is green to dotnet test). #1242 added
+      # the second case - the pad-only script's own Home and Library steps - so
+      # both are required.
+      - name: Run the GUI-test hook e2e cases and require 2 passed, 0 skipped
         env:
           MESEN_CORE_LIB: ${{ github.workspace }}/InteropDLL/obj.linux-x64/MesenCore.so
         run: python3 scripts/gui_test/run_headless_e2e.py linux-x64

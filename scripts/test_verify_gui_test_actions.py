@@ -70,13 +70,17 @@ class VerifyGuiTestActions(unittest.TestCase):
         self.assertIn("presses the pad", out)
 
     def test_batch_opening_with_a_chord_is_red(self):
+        # #1242: the pilot's `pause` steps are all `manual` now (the chord they need is not advertised), so
+        # the chord is put on the step that opens a batch once that batch's setup is taken away - the same
+        # mutation, on a step that really does press.
         doc = self.doc()
-        batch = self.batch(doc, "pause")
-        batch["setup"] = []
+        self.batch(doc, "home")["setup"] = []
+        self.first_automated(self.batch(doc, "home"))["action"] = {"name": "pad.chord", "args": {"ticks": 2}}
         self.write(doc)
         code, out = run_check(self.tmp)
         self.assertEqual(code, 1, out)
-        self.assertIn("pause.chord-opens", out)
+        self.assertIn("home.focus-holds-up", out)
+        self.assertIn("pad.chord", out)
 
     def test_committed_home_batch_observes_the_ring_before_its_first_press(self):
         home = self.batch(self.committed(), "home")
