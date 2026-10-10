@@ -295,7 +295,7 @@
           "expect": "The ring is back on Open a ROM after B.",
           "severity": "major",
           "mode": "automated",
-          "content_hash": "26d90f25339ff27ca88ffa3fa5df52eb10355ad382570356263faef8161d8eaf"
+          "content_hash": "68edb2aa9afa93a4ad8a9e155552ff2b7ce5b7dbdd987a0c1248b4a3e9aa497b"
         },
         {
           "id": "home.chord-opens-nothing",
@@ -313,7 +313,7 @@
           "expect": "Focus is unchanged after the chord. (manual: needs action pad.chord, which mesen-gui does not advertise)",
           "severity": "minor",
           "mode": "manual",
-          "content_hash": "4ffb2836a451a9e9f59ed8e68581a04c9f48d52f3a468513c4efbd4f21fcb92b"
+          "content_hash": "98940929d49c0d07fa01dd8f24f9fff0d1443b2b9479cc0448cb562bd38e5e02"
         },
         {
           "id": "home.settings-by-pad-gap",
@@ -348,7 +348,7 @@
           "expect": "Continue playing is the first focus stop. (manual: a real ROM path and its No-Intro sha1 are supplied by hand; no ROM is committed)",
           "severity": "major",
           "mode": "manual",
-          "content_hash": "a0e96b853c5b1aa95dedc4081fd06ce2bcbcafa80bdb7eae26578ad23b836167"
+          "content_hash": "94c39d9640a472b430edff5405dc86e7d27992ac3e9d169318fea2f0f71fdd83"
         },
         {
           "id": "after-game.order-favorites",
