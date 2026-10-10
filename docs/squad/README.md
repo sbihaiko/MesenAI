@@ -12,6 +12,6 @@ Global tooling (outside the repo):
 
 - `~/.claude/skills/squad-goal/SKILL.md` — the autonomous delivery loop.
 - `~/.claude/skills/squad-goal/scripts/launch.py` — launches a run from a
-  request file and opens its dashboard.
+  request file; its dashboard shows in the hub, never in its own tab.
 - `~/.claude/skills/squad-goal/scripts/hub.py` — the squad hub, one page with
   every live run dashboard (port 7700, loopback, read-only).

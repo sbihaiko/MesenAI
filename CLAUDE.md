@@ -241,7 +241,10 @@ rules are summarized in `docs/squad/README.md`.
 - **Review chain**: GPT Terra (fast) → GPT 6.1 Sol → Claude Opus 5.5.
 - **Owner carve-outs** stay with the owner: money, credentials, access,
   permanent deletion, external publication.
-- **Dashboards**: `launch.py` opens each run's dashboard; do not open it again.
+- **Dashboards**: no per-run dashboard tab, ever; the hub is the only page.
+  `launch.py` runs `squad start` with `SQUAD_HEADLESS=1`, so the run's
+  dashboard server starts for the hub without opening a tab. Never run
+  `/agent-squad:dashboard`.
 - **Hub** (`~/.claude/skills/squad-goal/scripts/hub.py`, default port 7700,
   loopback, read-only): lists every live run dashboard in one page. Start it
   once, detached, and open http://127.0.0.1:7700/ once.
