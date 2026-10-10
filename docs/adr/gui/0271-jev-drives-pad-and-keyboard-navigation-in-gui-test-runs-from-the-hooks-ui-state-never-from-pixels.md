@@ -1,9 +1,10 @@
 # ADR-0271: Jev drives pad and keyboard navigation in GUI test runs from the hook's UI state, never from pixels
 
-- Status: accepted (2026-10-09). Decision 6 is **A** (local only), picked by
-  the owner in session: "vai com A". Decisions 1–5 were agreed in the same
-  session. Not implemented; the work is the GUI test squad's goal-navigation
-  and trap-sweep tickets, which need their own go-ahead.
+- Status: accepted (2026-10-09). The owner's go-ahead for the whole ADR is,
+  verbatim: *"vai com A"* (2026-10-09), which picked Decision 6 = **A**
+  (local only); the owner agreed to Decisions 1–5 in the same session. Not
+  implemented. It is listed as slices T.1–T.2 (#1199, #1200) in
+  `docs/roadmap/PRD-mesence-enhancement-ecosystem.md` Part B §8.
 - Date: 2026-10-09
 - Related: GUI test squad spec (steps 9b and 9c, tickets #1178–#1198),
   ADR-0238, ADR-0242, ADR-0247, ADR-0157
@@ -72,7 +73,9 @@ product's own Jev features (ADR-0242, ADR-0247).
 ## Consequences
 
 - The hook must expose visible controls and menu options, not only the
-  focused control and the active screen; that widens the hook's ADR surface.
+  focused control and the active screen. The hook's state surface is decided
+  by the hook ADR on the open pull request #1202 (not on `main` yet), and
+  Decision 1 depends on it.
 - Scripts written with goals survive layout changes on the path; a
   regression *on* that path is caught only by the steps that test it with a
   fixed action, so scripts keep those steps.
