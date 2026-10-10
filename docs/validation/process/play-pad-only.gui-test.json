@@ -5086,8 +5086,7 @@
           "check": {
             "name": "ui.visible",
             "args": {
-              "is": "play.controller.capture-armed",
-              "visible": true
+              "is": "play.controller.capture-armed"
             }
           },
           "expect": "CTL-02: B is a navigation control and is refused; the capture stays armed (ADR-0256 Decision 4); the refusal note is not exposed by the hook",
@@ -5098,7 +5097,7 @@
           "id": "ctl.focus-stays-on-row-after-cancel",
           "role": "under-test",
           "precondition": "ui.visible == play.controller.capture-armed",
-          "expect": "CTL-02: Esc cancels the capture (ADR-0255 slice 3); the focus stays on the armed row and the sheet stays open. Esc is keyboard-only, outside the pad-only vocabulary",
+          "expect": "CTL-02: after Esc cancels the capture (ADR-0255 slice 3), the focus ring stays on the row that was armed. Esc is keyboard-only, outside the pad-only vocabulary",
           "severity": "major",
           "mode": "manual"
         },
@@ -5106,7 +5105,7 @@
           "id": "ctl.sheet-stays-after-cancel",
           "role": "under-test",
           "precondition": "ui.visible == play.controller.capture-armed",
-          "expect": "CTL-02: Esc cancels the capture (ADR-0255 slice 3); the focus stays on the armed row and the sheet stays open. Esc is keyboard-only, outside the pad-only vocabulary",
+          "expect": "CTL-02: after Esc cancels the capture, the Controller sheet stays open and the pad drives it again (HasAuthority gains !IsControllerCapturing). Esc is keyboard-only, outside the pad-only vocabulary",
           "severity": "major",
           "mode": "manual"
         },
