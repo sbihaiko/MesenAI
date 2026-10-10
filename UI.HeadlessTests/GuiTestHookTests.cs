@@ -34,10 +34,14 @@ namespace Mesen.HeadlessTests;
 //backend's key-name table is a stand-in, because a headless build has no key
 //manager (see PlayPadNavigationWiring.TickForTest).
 //
-//Every case asserts NativeCore.IsAvailable first and SKIPS with its reason when
-//the library is absent - the repo's pattern for MainWindow cases. That is a
+//Every window case asserts NativeCore.IsAvailable first and SKIPS with its reason
+//when the library is absent - the repo's pattern for MainWindow cases. That is a
 //skip, not a pass, but the headless suite is blind to it in CI (the core is not
-//built there), so the evidence is a local run with MESEN_CORE_LIB set.
+//built there), so the evidence for those is a local run with MESEN_CORE_LIB set,
+//and the checks that CAN run host-free live in UI.Tests/TestHook (the protocol,
+//the flag, the socket) plus `The_recents_folder_is_not_the_developers_real_one`
+//here, which reads only ConfigManager and so fails CI if this class ever clears
+//recents outside its own temp folder.
 [Collection(NativeCoreCollection.Name)]
 public class GuiTestHookTests : IDisposable
 {
@@ -47,6 +51,10 @@ public class GuiTestHookTests : IDisposable
 	private readonly bool _pauseInBackground = ConfigManager.Config.Preferences.PauseWhenInBackground;
 	private readonly bool _pauseInMenus = ConfigManager.Config.Preferences.PauseWhenInMenusAndConfig;
 	private readonly string _folder = Path.Combine(Path.GetTempPath(), "mesen-1182-" + Guid.NewGuid().ToString("N"));
+	//The recents get their own temp root, not one under `_folder`: a case asserts
+	//that `_folder` holds nothing the hook was not asked to create.
+	private readonly string _recents = Path.Combine(Path.GetTempPath(), "mesen-1182-recents-" + Guid.NewGuid().ToString("N"));
+	private readonly string? _recentFolderOverride = ConfigManager.RecentGamesFolderOverride;
 	private readonly List<MainWindow> _windows = new();
 
 	private static readonly string[] ButtonNames = { "A", "B", "X", "Y", "L1", "R1", "Start", "Select", "Up", "Down", "Left", "Right" };
@@ -63,6 +71,17 @@ public class GuiTestHookTests : IDisposable
 	public GuiTestHookTests()
 	{
 		Directory.CreateDirectory(_folder);
+		//#1017's rule, for this class: the recents these cases stamp - and the
+		//ones ShowFreshHome clears to get a home with no play history - live in
+		//this test's own folder. Without the override, `ShowFreshHome` would
+		//delete every `*.rgd` in the developer's real RecentGames folder on a
+		//local run (the headless host only redirects it when it can seed a
+		//portable settings.json, and a read-only output folder falls back to the
+		//real home). `The_recents_folder_is_not_the_developers_real_one` asserts
+		//the redirect, and this class is in the serial collection with the other
+		//classes that override it.
+		ConfigManager.RecentGamesFolderOverride = _recents;
+		Directory.CreateDirectory(ConfigManager.RecentGamesFolder);
 		if(NativeCore.IsAvailable && EmuApi.IsRunning()) {
 			EmuApi.Stop();
 			WaitFor(() => !EmuApi.IsRunning(), "the previous case's game never stopped");
@@ -83,6 +102,11 @@ public class GuiTestHookTests : IDisposable
 			foreach(string file in Directory.GetFiles(recents, "*.rgd")) {
 				File.Delete(file);
 			}
+		}
+		ConfigManager.RecentGamesFolderOverride = _recentFolderOverride;
+		try {
+			Directory.Delete(_recents, true);
+		} catch(IOException) {
 		}
 		PreferencesConfig prefs = ConfigManager.Config.Preferences;
 		prefs.UiMode = _uiMode;
@@ -187,6 +211,18 @@ public class GuiTestHookTests : IDisposable
 	}
 
 	private static TestHookKeys NewKeys() => new(InputApi.SetInjectedKey, BackendCode, () => null);
+
+	//#1017's rule, asserted here too: ShowFreshHome clears `*.rgd` to get a home
+	//with no play history, so the folder it clears has to be this test's own and
+	//never the developer's real RecentGames. Needs no window and no native core,
+	//so it is also the one case of this class that cannot pass vacuously on the
+	//core-less CI runner.
+	[Fact]
+	public void The_recents_folder_is_not_the_developers_real_one()
+	{
+		Assert.NotEqual(Path.Combine(ConfigManager.HomeFolder, "RecentGames"), ConfigManager.RecentGamesFolder);
+		Assert.StartsWith(_recents, ConfigManager.RecentGamesFolder);
+	}
 
 	[AvaloniaFact]
 	public void Injected_pad_presses_move_the_Home_focus_with_no_pad_attached()
@@ -337,62 +373,73 @@ public class GuiTestHookTests : IDisposable
 		Assert.True(TestHookWiring.Running);
 		PlayPadNavigationWiring.SetKeyLookupsForTest(BackendName, BackendCode);
 
-		Task<List<JsonObject>> runner = Task.Run(() => {
-			List<JsonObject> answers = new();
-			using Socket client = new(AddressFamily.Unix, SocketType.Stream, ProtocolType.Unspecified);
-			client.Connect(new UnixDomainSocketEndPoint(endpoint));
-			using NetworkStream stream = new(client);
-			using StreamReader reader = new(stream, Encoding.UTF8);
-			using StreamWriter writer = new(stream, new UTF8Encoding(false)) { AutoFlush = true, NewLine = "\n" };
-			JsonObject Ask(string body)
-			{
-				writer.WriteLine("{\"id\":" + (answers.Count + 1) + ",\"token\":\"s3\"," + body + "}");
-				JsonObject answer = JsonNode.Parse(reader.ReadLine()!)!.AsObject();
-				answers.Add(answer);
-				return answer;
-			}
-			Ask("\"op\":\"hello\"");
-			Ask("\"op\":\"state\"");
-			Ask("\"op\":\"inject\",\"action\":\"pad.press\",\"args\":{\"button\":\"Up\",\"ticks\":2}");
-			long start = Ask("\"op\":\"state\"")["tick"]!.GetValue<long>();
-			JsonObject now = answers[^1];
-			while(now["focus"]?.GetValue<string>() != "play.home.open-rom" && now["tick"]!.GetValue<long>() < start + 200) {
+		//Everything installed above is torn down in `finally`: an asserting case
+		//must not leave the test key lookups installed for the next case in this
+		//process, nor the socket folder under /tmp - the class's Dispose clears
+		//the window, the config and the temp folder, never either of these.
+		try {
+			Task<List<JsonObject>> runner = Task.Run(() => {
+				List<JsonObject> answers = new();
+				using Socket client = new(AddressFamily.Unix, SocketType.Stream, ProtocolType.Unspecified);
+				client.Connect(new UnixDomainSocketEndPoint(endpoint));
+				using NetworkStream stream = new(client);
+				using StreamReader reader = new(stream, Encoding.UTF8);
+				using StreamWriter writer = new(stream, new UTF8Encoding(false)) { AutoFlush = true, NewLine = "\n" };
+				JsonObject Ask(string body)
+				{
+					writer.WriteLine("{\"id\":" + (answers.Count + 1) + ",\"token\":\"s3\"," + body + "}");
+					JsonObject answer = JsonNode.Parse(reader.ReadLine()!)!.AsObject();
+					answers.Add(answer);
+					return answer;
+				}
+				Ask("\"op\":\"hello\"");
+				Ask("\"op\":\"state\"");
+				Ask("\"op\":\"inject\",\"action\":\"pad.press\",\"args\":{\"button\":\"Up\",\"ticks\":2}");
+				long start = Ask("\"op\":\"state\"")["tick"]!.GetValue<long>();
+				JsonObject now = answers[^1];
+				while(now["focus"]?.GetValue<string>() != "play.home.open-rom" && now["tick"]!.GetValue<long>() < start + 200) {
+					Thread.Sleep(20);
+					now = Ask("\"op\":\"state\"");
+				}
+				Ask("\"op\":\"capture\",\"path\":" + JsonValue.Create(shot)!.ToJsonString());
+				Ask("\"op\":\"quit\"");
+				return answers;
+			});
+
+			//The UI thread is this one: it serves the runner's requests (the server
+			//marshals them here) and runs the bridge's own 50 ms timer, whose tick reads
+			//the pressed set and counts the hook's ticks - the production path.
+			Stopwatch clock = Stopwatch.StartNew();
+			while(!runner.IsCompleted) {
+				if(clock.ElapsedMilliseconds > 30000) {
+					throw new XunitException("the runner never finished");
+				}
+				Pump();
 				Thread.Sleep(20);
-				now = Ask("\"op\":\"state\"");
 			}
-			Ask("\"op\":\"capture\",\"path\":" + JsonValue.Create(shot)!.ToJsonString());
-			Ask("\"op\":\"quit\"");
-			return answers;
-		});
+			List<JsonObject> answers = runner.GetAwaiter().GetResult();
 
-		//The UI thread is this one: it serves the runner's requests (the server
-		//marshals them here) and runs the bridge's own 50 ms timer, whose tick reads
-		//the pressed set and counts the hook's ticks - the production path.
-		Stopwatch clock = Stopwatch.StartNew();
-		while(!runner.IsCompleted) {
-			if(clock.ElapsedMilliseconds > 30000) {
-				throw new XunitException("the runner never finished");
-			}
-			Pump();
-			Thread.Sleep(20);
+			Assert.All(answers, a => Assert.True(a["ok"]!.GetValue<bool>(), a.ToJsonString()));
+			Assert.Equal("play.home.continue", answers[1]["focus"]!.GetValue<string>());
+			Assert.Equal("play.home.open-rom", answers[^3]["focus"]!.GetValue<string>());
+			Assert.True(File.Exists(shot));
+			hook!.Dispose();
+		} finally {
+			PlayPadNavigationWiring.SetKeyLookupsForTest(null, null);
+			Directory.Delete(Path.GetDirectoryName(endpoint)!, true);
 		}
-		List<JsonObject> answers = runner.GetAwaiter().GetResult();
-
-		Assert.All(answers, a => Assert.True(a["ok"]!.GetValue<bool>(), a.ToJsonString()));
-		Assert.Equal("play.home.continue", answers[1]["focus"]!.GetValue<string>());
-		Assert.Equal("play.home.open-rom", answers[^3]["focus"]!.GetValue<string>());
-		Assert.True(File.Exists(shot));
-		PlayPadNavigationWiring.SetKeyLookupsForTest(null, null);
-		hook!.Dispose();
-		Directory.Delete(Path.GetDirectoryName(endpoint)!, true);
 	}
 
-	//#1242 acceptance criterion 3: the two steps the pad-only script's Home and Library
-	//batches hang on, driven over the socket and on the profile the script's `fresh`
-	//fixture seeds - no play history, so the home's ring is on its one action from launch
-	//(`home.first-focus`), and A on it opens the library sheet (`home.open-library`,
-	//LIB-01). The issue warns the press may open a picker instead of the library; the
-	//state's `dialogs` is what would say so, so it is asserted empty too.
+	//#1242 acceptance criterion 3: every automated step the pad-only script's Home and
+	//Library batches name, driven over the socket and on the profile the script's
+	//`fresh` fixture seeds - no play history, so the home's ring is on its one action
+	//from launch (`home.first-focus`, and the `lib.home-ring` setup step the library
+	//batch opens with), A on it opens the library sheet (`home.open-library`,
+	//`lib.reach-library`, whose `lib.open-screen` is the same wait's screen), and B
+	//returns to the home with the ring back on the control that opened the sheet
+	//(`lib.back-to-home`, `lib.back-ring-on-opener`). The issue warns the press may open
+	//a picker instead of the library; the state's `dialogs` is what would say so, so it
+	//is asserted empty too.
 	[AvaloniaFact]
 	public void GuiTestHook_e2e_A_on_the_fresh_home_opens_the_library_over_the_socket()
 	{
@@ -408,58 +455,75 @@ public class GuiTestHookTests : IDisposable
 		Assert.True(TestHookWiring.Running);
 		PlayPadNavigationWiring.SetKeyLookupsForTest(BackendName, BackendCode);
 
-		Task<List<JsonObject>> runner = Task.Run(() => {
-			List<JsonObject> answers = new();
-			using Socket client = new(AddressFamily.Unix, SocketType.Stream, ProtocolType.Unspecified);
-			client.Connect(new UnixDomainSocketEndPoint(endpoint));
-			using NetworkStream stream = new(client);
-			using StreamReader reader = new(stream, Encoding.UTF8);
-			using StreamWriter writer = new(stream, new UTF8Encoding(false)) { AutoFlush = true, NewLine = "\n" };
-			JsonObject Ask(string body)
-			{
-				writer.WriteLine("{\"id\":" + (answers.Count + 1) + ",\"token\":\"s3\"," + body + "}");
-				JsonObject answer = JsonNode.Parse(reader.ReadLine()!)!.AsObject();
-				answers.Add(answer);
-				return answer;
-			}
-			Ask("\"op\":\"hello\"");
-			//home.first-focus: the ring at a fresh launch, waited for in ticks the way the step waits.
-			JsonObject now = Ask("\"op\":\"state\"");
-			long start = now["tick"]!.GetValue<long>();
-			while(now["focus"]?.GetValue<string>() != "play.home.open-rom" && now["tick"]!.GetValue<long>() < start + 120) {
-				Thread.Sleep(20);
-				now = Ask("\"op\":\"state\"");
-			}
-			//home.open-library: A on the focused Open a ROM, then the sheet's own screen.
-			Ask("\"op\":\"inject\",\"action\":\"pad.press\",\"args\":{\"button\":\"A\",\"ticks\":4}");
-			now = Ask("\"op\":\"state\"");
-			start = now["tick"]!.GetValue<long>();
-			while(now["screen"]?.GetValue<string>() != "play.library" && now["tick"]!.GetValue<long>() < start + 120) {
-				Thread.Sleep(20);
-				now = Ask("\"op\":\"state\"");
-			}
-			Ask("\"op\":\"quit\"");
-			return answers;
-		});
+		//Torn down in `finally`, like the case above: a failing assert must not leave
+		//the test key lookups installed for the next case, nor the socket folder.
+		try {
+			Task<(List<JsonObject> Answers, JsonObject Ring, JsonObject Library, JsonObject BackHome)> runner = Task.Run(() => {
+				List<JsonObject> answers = new();
+				using Socket client = new(AddressFamily.Unix, SocketType.Stream, ProtocolType.Unspecified);
+				client.Connect(new UnixDomainSocketEndPoint(endpoint));
+				using NetworkStream stream = new(client);
+				using StreamReader reader = new(stream, Encoding.UTF8);
+				using StreamWriter writer = new(stream, new UTF8Encoding(false)) { AutoFlush = true, NewLine = "\n" };
+				JsonObject Ask(string body)
+				{
+					writer.WriteLine("{\"id\":" + (answers.Count + 1) + ",\"token\":\"s3\"," + body + "}");
+					JsonObject answer = JsonNode.Parse(reader.ReadLine()!)!.AsObject();
+					answers.Add(answer);
+					return answer;
+				}
+				//The wait a step's `wait.check` is: poll the state in ticks until the
+				//check holds, the way the supervised runner polls the hook.
+				JsonObject Wait(Func<JsonObject, bool> until)
+				{
+					JsonObject now = Ask("\"op\":\"state\"");
+					long start = now["tick"]!.GetValue<long>();
+					while(!until(now) && now["tick"]!.GetValue<long>() < start + 120) {
+						Thread.Sleep(20);
+						now = Ask("\"op\":\"state\"");
+					}
+					return now;
+				}
+				Ask("\"op\":\"hello\"");
+				//home.first-focus, lib.home-ring: the ring at a fresh launch.
+				JsonObject ring = Wait(s => s["focus"]?.GetValue<string>() == "play.home.open-rom");
+				//home.open-library, lib.reach-library: A on the focused Open a ROM.
+				Ask("\"op\":\"inject\",\"action\":\"pad.press\",\"args\":{\"button\":\"A\",\"ticks\":4}");
+				//lib.open-screen: the sheet's own screen, not a picker.
+				JsonObject library = Wait(s => s["screen"]?.GetValue<string>() == "play.library");
+				//lib.back-to-home, lib.back-ring-on-opener: B out of the sheet.
+				Ask("\"op\":\"inject\",\"action\":\"pad.press\",\"args\":{\"button\":\"B\",\"ticks\":4}");
+				JsonObject backHome = Wait(s => s["screen"]?.GetValue<string>() == "play.home"
+					&& s["focus"]?.GetValue<string>() == "play.home.open-rom");
+				Ask("\"op\":\"quit\"");
+				return (answers, ring, library, backHome);
+			});
 
-		Stopwatch clock = Stopwatch.StartNew();
-		while(!runner.IsCompleted) {
-			if(clock.ElapsedMilliseconds > 30000) {
-				throw new XunitException("the runner never finished");
+			Stopwatch clock = Stopwatch.StartNew();
+			while(!runner.IsCompleted) {
+				if(clock.ElapsedMilliseconds > 30000) {
+					throw new XunitException("the runner never finished");
+				}
+				Pump();
+				Thread.Sleep(20);
 			}
-			Pump();
-			Thread.Sleep(20);
+			(List<JsonObject> answers, JsonObject ring, JsonObject library, JsonObject backHome) = runner.GetAwaiter().GetResult();
+
+			Assert.All(answers, a => Assert.True(a["ok"]!.GetValue<bool>(), a.ToJsonString()));
+			Assert.True(ring["focus"]?.GetValue<string>() == "play.home.open-rom",
+				"home.first-focus/lib.home-ring: " + ring.ToJsonString());
+			Assert.True(ring["screen"]?.GetValue<string>() == "play.home", ring.ToJsonString());
+			Assert.True(library["screen"]?.GetValue<string>() == "play.library",
+				"home.open-library/lib.reach-library/lib.open-screen: " + library.ToJsonString());
+			Assert.Empty(library["dialogs"]!.AsArray());
+			Assert.True(backHome["screen"]?.GetValue<string>() == "play.home",
+				"lib.back-to-home: " + backHome.ToJsonString());
+			Assert.True(backHome["focus"]?.GetValue<string>() == "play.home.open-rom",
+				"lib.back-ring-on-opener: " + backHome.ToJsonString());
+			hook!.Dispose();
+		} finally {
+			PlayPadNavigationWiring.SetKeyLookupsForTest(null, null);
+			Directory.Delete(Path.GetDirectoryName(endpoint)!, true);
 		}
-		List<JsonObject> answers = runner.GetAwaiter().GetResult();
-
-		Assert.All(answers, a => Assert.True(a["ok"]!.GetValue<bool>(), a.ToJsonString()));
-		JsonObject ring = answers.First(a => a["focus"]?.GetValue<string>() == "play.home.open-rom");
-		Assert.Equal("play.home", ring["screen"]!.GetValue<string>());
-		JsonObject library = answers[^2];  // the state the wait stopped on, before quit
-		Assert.Equal("play.library", library["screen"]!.GetValue<string>());
-		Assert.Empty(library["dialogs"]!.AsArray());
-		PlayPadNavigationWiring.SetKeyLookupsForTest(null, null);
-		hook!.Dispose();
-		Directory.Delete(Path.GetDirectoryName(endpoint)!, true);
 	}
 }

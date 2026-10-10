@@ -122,6 +122,61 @@ class VerifyGuiTestAdapterSurface(unittest.TestCase):
         self.assertEqual(code, 1, out)
         self.assertIn("no AutomationId", out)
 
+    def test_unknown_control_id_in_a_wait_is_red(self):
+        """A `wait.check` names a control id too.
+
+        `ui.visible` is a check the pilot's own steps wait on, so a wait over
+        `ui.focused`/`ui.screen`/`ui.visible` must have its id read like any other -
+        otherwise an unknown id in a wait is the one id form the rule misses.
+        """
+        doc = self.pilot()
+        step = [s for s in self.batch(doc, "home")["steps"] if s["id"] == "home.focus-holds-up"][0]
+        step["wait"] = {"check": "ui.visible == play.home.gone", "ticks": 4}
+        self.write(doc)
+        code, out = run_check(self.tmp)
+        self.assertEqual(code, 1, out)
+        self.assertIn("play.home.gone", out)
+
+    def test_a_compound_precondition_is_red(self):
+        # #1242, from the real run: the supervised runner reads everything before " == " as the
+        # check name, so a compound precondition asks the adapter for a check that does not
+        # exist and the whole batch dies with `UnknownId: ...`. One comparison, or prose.
+        doc = self.pilot()
+        step = [s for s in self.batch(doc, "library")["steps"] if s["id"] == "lib.up-back-to-row-one"][0]
+        step["precondition"] = "ui.focused == play.library.tile and fixture rom"
+        self.write(doc)
+        code, out = run_check(self.tmp)
+        self.assertEqual(code, 1, out)
+        self.assertIn("not one", out)
+
+    def test_a_manual_step_whose_precondition_is_a_check_is_red(self):
+        # #1242, from the real run: the supervised runner evaluates every step's precondition,
+        # then does not run a manual one. A manual step's start state is reached by hand, so the
+        # adapter cannot be asked to confirm it: `ui.focused == play.library.search` made the
+        # runner raise `UnknownId` and killed the whole library batch.
+        doc = self.pilot()
+        step = [s for s in self.batch(doc, "library")["steps"] if s["id"] == "lib.up-back-to-row-one"][0]
+        step["precondition"] = "ui.focused == play.home.open-rom"
+        self.write(doc)
+        code, out = run_check(self.tmp)
+        self.assertEqual(code, 1, out)
+        self.assertIn("is manual but its precondition", out)
+
+    def test_malformed_check_args_do_not_crash_the_check(self):
+        """One error line per drift, never a traceback.
+
+        A `check.args` that is not a dict names no id this check can read, so it must
+        be skipped - the format validator is what rejects the script, and this check
+        must still exit cleanly instead of raising out of its own reader.
+        """
+        doc = self.pilot()
+        step = [s for s in self.batch(doc, "home")["steps"] if s["id"] == "home.focus-holds-up"][0]
+        step["check"] = {"name": "ui.focused", "args": ["is", "play.home.open-rom"]}
+        self.write(doc)
+        code, out = run_check(self.tmp)
+        self.assertNotIn("Traceback", out)
+        self.assertEqual(code, 0, out)
+
     def test_no_script_at_all_is_red(self):
         (self.tmp / PILOT).unlink()
         code, out = run_check(self.tmp)

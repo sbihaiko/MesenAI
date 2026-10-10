@@ -361,8 +361,13 @@ class HeadlessRunnerVerdict(unittest.TestCase):
         word = "Passed" if not failed else "Failed"
         return f"{word}!  - Failed:     {failed}, Passed:     {passed}, Skipped:     {skipped}, Total:     {failed + passed + skipped}, Duration: 3 s"
 
-    def test_exactly_one_passed_and_none_skipped_is_a_pass(self):
-        self.assertEqual(runner.verdict(self.line(0, 1, 0)), [])
+    def test_both_cases_passed_and_none_skipped_is_a_pass(self):
+        """#1242: the gate covers the Home case and the fresh-home/Library one, so a
+        filter that only ran one of them is a failure, not a pass."""
+        self.assertEqual(runner.verdict(self.line(0, 2, 0)), [])
+
+    def test_one_case_missing_is_a_failure(self):
+        self.assertTrue(runner.verdict(self.line(0, 1, 0)))
 
     def test_a_skipped_case_is_a_failure(self):
         self.assertTrue(runner.verdict(self.line(0, 0, 1)))
@@ -375,7 +380,14 @@ class HeadlessRunnerVerdict(unittest.TestCase):
 
     def test_the_case_name_matches_the_adapters_headless_case(self):
         self.assertEqual("GuiTestHookTests." + runner.CASE, adapter.HEADLESS_E2E_CASE)
-        self.assertIn(runner.CASE, (ROOT / "UI.HeadlessTests" / "GuiTestHookTests.cs").read_text())
+        src = (ROOT / "UI.HeadlessTests" / "GuiTestHookTests.cs").read_text()
+        self.assertIn(runner.CASE, src)
+        #The fresh-home/Library case is the second one the gate runs: it is what covers
+        #`lib.home-ring` and `lib.reach-library`, the library batch's own setup steps.
+        self.assertEqual(("GuiTestHookTests." + runner.CASE,
+                          "GuiTestHookTests.GuiTestHook_e2e_A_on_the_fresh_home_opens_the_library_over_the_socket"),
+                         runner.CASES)
+        self.assertIn(runner.CASES[1].rsplit(".", 1)[1], src)
 
 
 class HeadlessRunnerRealCall(unittest.TestCase):
@@ -400,11 +412,16 @@ class HeadlessRunnerRealCall(unittest.TestCase):
         return HeadlessRunnerVerdict.line(failed, passed, skipped)
 
     def test_a_passing_summary_exits_zero(self):
-        self.dotnet(f"echo '{self.summary(0, 1, 0)}'")
+        self.dotnet(f"echo '{self.summary(0, 2, 0)}'")
         self.assertEqual(runner.main(["x"]), 0)
 
     def test_a_passing_summary_with_a_failing_exit_code_fails(self):
-        self.dotnet(f"echo '{self.summary(0, 1, 0)}'", code=1)
+        self.dotnet(f"echo '{self.summary(0, 2, 0)}'", code=1)
+        self.assertEqual(runner.main(["x"]), 1)
+
+    def test_only_one_of_the_two_cases_running_fails_the_call(self):
+        """#1242: the filter matches both cases; one that did not run is a failure."""
+        self.dotnet(f"echo '{self.summary(0, 1, 0)}'")
         self.assertEqual(runner.main(["x"]), 1)
 
     def test_a_skipped_case_fails_the_call(self):

@@ -66,7 +66,11 @@ def check(repo: Path) -> list[str]:
         try:
             doc = json.loads(js.read_text(encoding="utf-8"))
             rendered = renderer.render(doc)
-        except (ValueError, KeyError) as e:
+        except (ValueError, KeyError, TypeError, AttributeError, IndexError) as e:
+            #Any script the renderer cannot walk is unrenderable, and reported as such:
+            #the renderer's own refusal is a ValueError, but a malformed one (a `batches`
+            #that is not a list, a step that is not a dict) raises out of its walk, and
+            #this check's contract is one error line per drift, never a traceback.
             errors.append(f"{rel}: unknown format or unrenderable script ({e})")
             continue
         if not view.is_file():

@@ -7,7 +7,7 @@ cases: one case is several steps. So a step refers to the case it walks - in its
 `expect` - and this check reads the pairing in both directions:
 
   - a case of the scenario no step refers to is lost, and a lost case is exactly what a narrowed script must not do
-    (`play-pad-only`'s 53 unadvertisable steps became `manual` for #1242, never dropped);
+    (a `play-pad-only` step whose capability the adapter does not advertise became `manual` for #1242, never dropped);
   - a step naming a case the scenario does not define is a typo that hides a lost case.
 
 The scenario's id is the leading token of the first cell of a row of a table headed `ID`, because a case may carry a

@@ -389,8 +389,9 @@ doc-checks-1: check-manifest
 	# missing is still true - so the narrowed script cannot go stale from here.
 	python3 scripts/checks/verify_gui_test_adapter_surface.py
 	python3 scripts/test_verify_gui_test_adapter_surface.py
-	# #1242: no case of the manual scenario beside a script is lost by it - the
-	# 53 steps the adapter cannot be asked to run became `manual`, never dropped.
+	# #1242: no case of the manual scenario beside a script is lost by it - a step
+	# the adapter cannot be asked to run became `manual`, never dropped. The step
+	# counts live in the script and in the check's own run, not in this comment.
 	python3 scripts/checks/verify_gui_test_scenario_coverage.py
 	python3 scripts/test_verify_gui_test_scenario_coverage.py
 	./scripts/checks/verify_core_no_http_client.sh

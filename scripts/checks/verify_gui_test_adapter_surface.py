@@ -21,7 +21,15 @@ Four rules, per `docs/**/*.gui-test.json`:
   - a fixture kind, or a `settings.profile`, the adapter does not support: `launch()` fails, it never skips;
   - a `manual` step whose expect text claims it needs an action, check, variant, control or fixture the
     adapter or the application really has: the claim is what makes the manual list readable, and a claim
-    that has gone stale is exactly how a narrowed script drifts out of date.
+    that has gone stale is exactly how a narrowed script drifts out of date;
+  - a precondition written as a check that is not one comparison: the supervised runner reads everything
+    before ` == ` as the check name, so `ui.screen == play.home and ui.focused == play.home.open-rom`
+    asks for a check called `ui.screen == play.home and ui.focused == play.home.open-rom`, and the batch
+    dies with `UnknownId` (the #1242 run did);
+  - a `manual` step whose precondition is a check at all: the runner evaluates every step's precondition
+    and then does not run a manual one, and a manual start state is reached by hand - the adapter cannot
+    confirm it (the same run died on `ui.focused == play.library.search`). A manual precondition says
+    what the person driving the pad has in front of them.
 
 The last rule is what the free-text reasons would otherwise hide: it needs no rewrite of the texts, and it
 turns each `needs <kind> <name>` into a fact the repository can re-check.
@@ -44,9 +52,15 @@ from pathlib import Path
 ADAPTER = Path("scripts") / "gui_test" / "mesen_gui_adapter.py"
 VARIANT_AXIS = re.compile(r"^([A-Za-z]+\.[A-Za-z]+)=(\S+)$")
 AUTOMATION_ID = re.compile(r'AutomationId\s*[=(]\s*"([^"]+)"')
-CHECK_ID = re.compile(r"\b(?:ui\.focused|ui\.visible)\s*(?:==|!=)\s*(\S+)")
-WAIT_ID = re.compile(r"\bui\.(?:focused|screen)\s*==\s*(\S+)")
+#The control ids a check names inside a `wait.check` string: `ui.focused`, `ui.visible`
+#and `ui.screen`, in either direction. One pattern for both places an id can appear - a
+#step's own `check` (`check.args`) and the check text a `wait` carries - so no id form is
+#the one the rule forgets to read.
+ID_IN_CHECK = re.compile(r"\bui\.(?:focused|visible|screen)\s*(?:==|!=)\s*(\S+)")
 CLAIM = re.compile(r"needs (action|check|variant|control|fixture)\s+([^\s,;)]+)")
+#A precondition the runner can evaluate: one comparison and nothing else. Prose (a cold start,
+#a fixture, "every Play surface") is fine and is not read; a compound `A and B` is not.
+PRECONDITION = re.compile(r"ui\.(?:screen|focused|visible|dialogs)\s*==\s*\S+\Z")
 
 
 def load_adapter(repo: Path, errors: list[str]):
@@ -73,15 +87,25 @@ def automation_ids(repo: Path, errors: list[str]) -> set[str]:
 
 
 def step_ids(step: dict) -> list[str]:
-    """Every control id an automated step names in its check or its wait."""
+    """Every control id an automated step names in its check or its wait.
+
+    A step's own `check` carries its id in `args`; a `wait` carries it inside the check
+    text, read with the same pattern. A malformed step (an `args` that is not a dict, a
+    value that is not a string) names no id this check can read and is skipped: the
+    format validator is what refuses it, and this check's contract is one error line per
+    drift, never a traceback.
+    """
     out: list[str] = []
     check = step.get("check") or {}
-    for key in ("is", "within"):
-        if key in (check.get("args") or {}):
-            out.append(check["args"][key])
+    args = check.get("args") if isinstance(check, dict) else None
+    if isinstance(args, dict):
+        for key in ("is", "within"):
+            value = args.get(key)
+            if isinstance(value, str) and value:
+                out.append(value)
     wait = step.get("wait") or {}
-    if wait.get("check"):
-        out += WAIT_ID.findall(wait["check"])
+    if isinstance(wait, dict) and isinstance(wait.get("check"), str):
+        out += ID_IN_CHECK.findall(wait["check"])
     return out
 
 
@@ -132,7 +156,18 @@ def check_script(doc: dict, name: str, caps: dict, kinds: set[str], profiles: li
         for part in ("setup", "steps", "teardown"):
             for step in batch.get(part, []):
                 sid = step.get("id", "?")
+                pre = (step.get("precondition") or "").strip()
+                if "==" in pre and not PRECONDITION.match(pre):
+                    bad.append(f"{name}: step {sid} has precondition {pre!r}, which is not one "
+                               f"`ui.<key> == <value>` comparison - the supervised runner reads "
+                               f"everything before ' == ' as the check name, so the batch fails with "
+                               f"`UnknownId`, as the #1242 run did")
                 if step.get("mode") != "automated":
+                    if "==" in pre:
+                        bad.append(f"{name}: step {sid} is manual but its precondition {pre!r} is a "
+                                   f"check - the runner evaluates it and then does not run the step, "
+                                   f"so it asks the adapter for a state only a hand reaches "
+                                   f"(#1242: the library batch died with `UnknownId`)")
                     bad += claim_errors(name, sid, step.get("expect") or "", caps, kinds, ids)
                     continue
                 action = step.get("action") or {}

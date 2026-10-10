@@ -75,6 +75,37 @@ class VerifyGuiTestRender(unittest.TestCase):
         self.assertEqual(code, 1, out)
         self.assertIn("unknown format", out)
 
+    def test_malformed_script_is_red_not_a_traceback(self):
+        """One error line per drift, never a traceback.
+
+        A script the renderer cannot walk at all (`batches` not a list) is as much a
+        failure as a stale view: the check reports it and exits 1, it does not raise
+        out of its own reader.
+        """
+        j = self.tmp / PROCESS / f"{PILOT}.json"
+        d = json.loads(j.read_text(encoding="utf-8"))
+        d["batches"] = 3
+        j.write_text(json.dumps(d), encoding="utf-8")
+        code, out = run_check(self.tmp)
+        self.assertEqual(code, 1, out)
+        self.assertNotIn("Traceback", out)
+        self.assertIn("unrenderable", out)
+
+    def test_malformed_header_is_red_not_a_traceback(self):
+        """The header is parsed, not trusted.
+
+        A header line with no `key: value` must be reported as a drift - one error
+        line - and never raise out of the reader (a traceback is not a verdict).
+        """
+        v = self.tmp / VENDORED
+        v.chmod(0o644)
+        text = v.read_text(encoding="utf-8")
+        v.write_text(text.replace("# sha256: ", "# sha256 ", 1), encoding="utf-8")
+        code, out = run_check(self.tmp)
+        self.assertEqual(code, 1, out)
+        self.assertNotIn("Traceback", out)
+        self.assertIn("sha256", out)
+
     def test_no_script_at_all_is_red(self):
         (self.tmp / PROCESS / f"{PILOT}.json").unlink()
         code, out = run_check(self.tmp)

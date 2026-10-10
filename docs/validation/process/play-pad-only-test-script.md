@@ -159,7 +159,7 @@ platform reports a Home/Guide button yet).
 | LIB-01 | Home, ROMs placed per §2.1 step 5 (or a folder added in LIB-06 first) | A on *Open a ROM…*. | The flat library grid opens with cover tiles, header "Your library · N games in M folders", a focused tile with the ring, and a footer naming A/B/Y/X/LB/RB in the pad's own words (ADR-0256 Decision 6). While scanning, an animated indicator shows. | | | |
 | LIB-02 | LIB-01, a library of 100+ ROMs | Hold D-pad Down for 3 s, then tap it 5 times; same with Right. | Held direction repeats after a short delay (400 ms, then every 100 ms, `PadNavRepeat`) — ADR-0256 Decision 7; taps step once each. The grid scrolls to keep the focused tile visible; no tile is skipped; no runaway after release. | | | |
 | LIB-03 | LIB-01 | Up from the top grid row; Left/Right across the header row; Down back to the grid. | Up enters the header row (search, *Library folders…*, *Browse a file…*, Back); Left/Right move between them; Down returns to the grid (ADR-0264 Decision 3). | | | |
-| LIB-04 | LIB-01 | RB repeatedly until the filter comes back to All; then LB repeatedly the same way. | One option per press: All → each console present → All, wrapping at both ends (`PlayerRomPickerViewModel.ConsoleFilter.cs:94-113`); LB walks the same ring backwards; the grid narrows; never lands on an empty filter. **Known gap (#1134, `KnownChipGaps = "Library"`):** the chips themselves cannot take focus; LB/RB is the only pad route. Record whether the current chip is visually obvious at couch distance. | | | |
+| LIB-04 | LIB-01 | RB repeatedly until the filter comes back to All; then LB repeatedly the same way. After each press, watch where the ring is. | One option per press: All → each console present → All, wrapping at both ends (`PlayerRomPickerViewModel.ConsoleFilter.cs`); LB walks the same ring backwards; the grid narrows; never lands on an empty filter. After the press the ring is **on the chip row**, on the segment the press selected (ADR-0264 amendment 2026-10-09, #1108): the row is one element, so its Left/Right step the same ring one console at a time, its Up leaves for the header and its Down returns to the grid it filters, and the footer names the shoulders and no Play (ADR-0256 Decision 6). The landing is skipped only where the sheet's own claim outranks it — while a restore is in flight (`IsRestorePending`/`IsRestoreLanding`, the ring lands on the remembered game) or while the search box keeps the ring. Outside those two, a ring that does not reach the row is a FAIL. Record whether the segment the ring is on is obvious at couch distance. | | | |
 | LIB-05 | LIB-01 | Press Y (the ring moves to the search field), then A opens the on-screen keyboard (`PlayPadNavigationWiring.cs:812-828`). Type `zel` (or a prefix of a title you own) on the on-screen keyboard with D-pad + A; press OK. Then Y, A again, press B. | Y focuses the field and A opens the shared on-screen keyboard (ADR-0262) below it; the grid filters as each letter lands; OK commits and the focus returns to the field with its ring. The second time, B **cancels**: the field returns to its previous text and the focus returns to it (Decision 4). The sheet does **not** close under the keyboard. An empty result shows "No games match" with a way to clear it, never an empty grid. | | | |
 | LIB-06 | LIB-01 | Up to the header, A on *Library folders…*. Add a folder, remove it, add it back, B out. | The pad-reachable folder list opens (ADR-0264 Decision 8), not a native folder picker. Add/remove by pad; the header count updates; B closes it back to the library. A native OS dialog here = FAIL. | | | |
 | LIB-07 | LIB-01 | A on *Browse a file…*; walk one folder down and up; try A on *Make this my games folder* inside a non-empty folder; B from the first list. | The folder browser of ADR-0256 Decision 9 opens; Confirm descends, B ascends; the action row leads the list but the ring never **lands** on it first (first-row guard); B on the root dismisses with no load. | | | |
@@ -276,7 +276,7 @@ platform reports a Home/Guide button yet).
 
 | ID | Precondition | Pad-only steps | Expected | [W] | [F] | Notes |
 |---|---|---|---|---|---|---|
-| JOURNEY-01 | Cold start, keyboard and mouse already set aside | Launch → Home → *Open a ROM…* → search with Y, A → A on a tile → play 30 s → chord → Settings › Display › Interface size → Large → B → Save states → save a slot → B → Resume → chord → Quit game → confirm → Home. | Every step by pad; no keyboard or mouse touched; the whole trip under 5 minutes; note the number of presses where it felt long. | | | |
+| JOURNEY-01 | Cold start: the app is launched by OS means first (HOME-01 — there is no pad-only launch), the keyboard and mouse are set aside, and the timed pad-only journey starts at Home | Launch → Home → *Open a ROM…* → search with Y, A → A on a tile → play 30 s → chord → Settings › Display › Interface size → Large → B → Save states → save a slot → B → Resume → chord → Quit game → confirm → Home. | Every step **from Home on** by pad; no keyboard or mouse touched after the launch; the timed part starts at Home (launching is not part of it) and the whole trip is under 5 minutes; note the number of presses where it felt long. | | | |
 | JOURNEY-02 | JOURNEY-01 | Full screen variant: enter full screen in Settings first, run the same trip, exit full screen at the end. | Same, with focus kept across both mode switches. | — | | |
 
 ### 4.15 Defects log
@@ -345,9 +345,11 @@ to look hardest.
    is unpadded; a first-time cabinet user cannot change a setting or remap
    before loading a game (ADR-0256 Decision 5 note). Also W-P15's auto-setup
    sheet only fires for a pad **no** mapping uses.
-3. **Console filter chips are not focusable** (LIB-04, #1134 closed but the
-   chip gap is still named in `KnownChipGaps`). LB/RB works; the visual
-   cue of the active chip from the couch is unverified.
+3. **The console filter's selected chip may not read from the couch** (LIB-04).
+   LB/RB cycles the filter and lands the ring on the segment it selected
+   (ADR-0264 amendment 2026-10-09, #1108), and the chips are reached now —
+   `KnownChipGaps` is empty (#1134 closed, `PlayPadWalkTests.cs:149`). What is
+   unverified is the visual cue of the active chip at 10 ft.
 4. **Native dialogs remain by decision** inside Play for BIOS, pack
    dependency, save-state import/export, shader and palette (ADR-0256
    Decision 9 refusals). GAME-04 will FAIL on *Choose File…*; that is a
@@ -403,7 +405,7 @@ measured facts.
 
 | # | Suggestion | Rationale | Related |
 |---|---|---|---|
-| P1-1 | Pad-walkable console chips, or a visibly "selected" chip state sized for 10 ft | LB/RB cycles blind; the chip gap is still named in `KnownChipGaps`. | #1134, ADR-0264 Decision 5 |
+| P1-1 | A visibly "selected" chip state sized for 10 ft | The ring reaches the chip row (ADR-0264 amendment 2026-10-09, #1108; `KnownChipGaps` empty, #1134 closed), but whether the selected chip reads at couch distance is unverified. | #1134, ADR-0264 amendment 2026-10-09, ADR-0264 Decision 5 |
 | P1-2 | Pad-driven BIOS file pick (reuse the *Browse a file…* folder walk with a BIOS-extension filter) | GB/GBA/SMS BIOS is the first thing a new console needs and it is native today. | ADR-0256 Decision 9 refusals (a new ADR, not a patch) |
 | P1-3 | A *Home* long-press or a dedicated extra-button default to open W-P4 on pads where Select+Start is a soft reset in some games | ADR-0251 Consequences names the trade-off; no Home/Guide button is reported by any backend yet. | ADR-0251 §3, ADR-0256 Decision 5 |
 | P1-4 | Extend the width cap to every Play sheet (#1123 closed with the settings sheet only; no open issue tracks the rest) | Only the settings sheet is guaranteed at 512x505; a small window at Extra large will clip the others. | ADR-0269 Decision 6 |

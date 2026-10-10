@@ -79,7 +79,7 @@
         {
           "id": "launch.port-lamp-p1",
           "role": "under-test",
-          "precondition": "ui.screen == play.home",
+          "precondition": "by hand: the screen is play.home",
           "expect": "The ring is visible on Open a ROM and the pad port lamps show P1 lit (ADR-0261); judged by eye, the hook exposes neither.",
           "variants": {
             "window.mode": "windowed"
@@ -212,7 +212,7 @@
         {
           "id": "home.ring-visible",
           "role": "under-test",
-          "precondition": "ui.focused == play.home.open-rom",
+          "precondition": "by hand: the ring is on play.home.open-rom",
           "expect": "The focus ring never disappears through the four presses.",
           "severity": "minor",
           "mode": "manual"
@@ -270,7 +270,7 @@
         {
           "id": "home.back-focus-restored",
           "role": "under-test",
-          "precondition": "ui.screen == play.home",
+          "precondition": "by hand: the screen is play.home",
           "expect": "The ring is back on Open a ROM after B. (manual: needs action pad.release, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -278,7 +278,7 @@
         {
           "id": "home.chord-opens-nothing",
           "role": "under-test",
-          "precondition": "ui.screen == play.home",
+          "precondition": "by hand: the screen is play.home",
           "expect": "The chord with no game loaded opens no overlay. (HOME-05) (manual: needs action pad.chord, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -286,7 +286,7 @@
         {
           "id": "home.chord-focus-unchanged",
           "role": "under-test",
-          "precondition": "ui.screen == play.home",
+          "precondition": "by hand: the screen is play.home",
           "expect": "Focus is unchanged after the chord. (manual: needs action pad.release, which mesen-gui does not advertise)",
           "severity": "minor",
           "mode": "manual"
@@ -294,7 +294,7 @@
         {
           "id": "home.settings-by-pad-gap",
           "role": "under-test",
-          "precondition": "ui.screen == play.home",
+          "precondition": "by hand: the screen is play.home",
           "expect": "Y opens the Settings sheet from Home with no game loaded (bug #1177, ADR-0256 W-P8); B returns to Home.",
           "severity": "major",
           "mode": "manual"
@@ -318,7 +318,7 @@
         {
           "id": "after-game.continue-first",
           "role": "under-test",
-          "precondition": "ui.screen == play.home",
+          "precondition": "by hand: the screen is play.home",
           "expect": "Continue playing is the first focus stop. (manual: needs action pad.release, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -326,7 +326,7 @@
         {
           "id": "after-game.order-favorites",
           "role": "under-test",
-          "precondition": "ui.focused == play.home.continue",
+          "precondition": "by hand: the ring is on play.home.continue",
           "expect": "Favorites follows Continue when the shelf exists (ADR-0268 Decision 6). (manual: needs control play.home.favorites, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -334,7 +334,7 @@
         {
           "id": "after-game.order-recent",
           "role": "under-test",
-          "precondition": "ui.focused == play.home.favorites",
+          "precondition": "by hand: the ring is on play.home.favorites",
           "expect": "Recent follows Favorites (Continue, Favorites, Recent; ADR-0268 Decision 6). (manual: needs control play.home.recent, control play.home.favorites, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -342,7 +342,7 @@
         {
           "id": "after-game.order-open-rom",
           "role": "under-test",
-          "precondition": "ui.focused == play.home.recent",
+          "precondition": "by hand: the ring is on play.home.recent",
           "expect": "Open a ROM is reachable last. (manual: needs control play.home.recent, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -350,7 +350,7 @@
         {
           "id": "after-game.one-ring",
           "role": "under-test",
-          "precondition": "ui.screen == play.home",
+          "precondition": "by hand: the screen is play.home",
           "expect": "The ring is on exactly one control at a time (ADR-0256 Decision 3); with a Favorites shelf present the order is Continue, Favorites, Recent. Both are judged by eye.",
           "severity": "minor",
           "mode": "manual"
@@ -358,7 +358,7 @@
         {
           "id": "after-game.contained-up-continue",
           "role": "under-test",
-          "precondition": "ui.focused == play.home.continue",
+          "precondition": "by hand: the ring is on play.home.continue",
           "expect": "Repeated D-pad Up from Continue never leaves the Home host for the header's Profile or Tools buttons (#1137, #1166). (manual: batch setup after-game.reach-home is manual, so nothing established the state this step asserts)",
           "severity": "major",
           "mode": "manual"
@@ -366,7 +366,7 @@
         {
           "id": "after-game.contained-up-recent",
           "role": "under-test",
-          "precondition": "ui.focused == play.home.recent",
+          "precondition": "by hand: the ring is on play.home.recent",
           "expect": "Repeated D-pad Up from Recent never leaves the Home host for the header's Profile or Tools buttons (#1137, #1166). (manual: needs control play.home.recent, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -374,7 +374,7 @@
         {
           "id": "after-game.contained-up-favorites",
           "role": "under-test",
-          "precondition": "ui.focused == play.home.favorites",
+          "precondition": "by hand: the ring is on play.home.favorites",
           "expect": "Repeated D-pad Up from Favorites never leaves the Home host for the header's Profile or Tools buttons (#1137, #1166). (manual: needs control play.home.favorites, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -382,7 +382,7 @@
         {
           "id": "after-game.contained-up-open-rom",
           "role": "under-test",
-          "precondition": "ui.focused == play.home.open-rom",
+          "precondition": "by hand: the ring is on play.home.open-rom",
           "expect": "Repeated D-pad Up from Open a ROM never leaves the Home host for the header's Profile or Tools buttons (#1137, #1166). (manual: batch setup after-game.reach-home is manual, so nothing established the state this step asserts)",
           "severity": "major",
           "mode": "manual"
@@ -390,7 +390,7 @@
         {
           "id": "after-game.contained-sideways-left",
           "role": "under-test",
-          "precondition": "ui.focused == play.home.continue",
+          "precondition": "by hand: the ring is on play.home.continue",
           "expect": "Left on the top row stays inside the Home host. (manual: batch setup after-game.reach-home is manual, so nothing established the state this step asserts)",
           "severity": "major",
           "mode": "manual"
@@ -398,7 +398,7 @@
         {
           "id": "after-game.contained-sideways-right",
           "role": "under-test",
-          "precondition": "ui.focused == play.home.continue",
+          "precondition": "by hand: the ring is on play.home.continue",
           "expect": "Right on the top row stays inside the Home host. (manual: batch setup after-game.reach-home is manual, so nothing established the state this step asserts)",
           "severity": "major",
           "mode": "manual"
@@ -406,7 +406,7 @@
         {
           "id": "after-game.contained-other-controls-gap",
           "role": "under-test",
-          "precondition": "ui.screen == play.home",
+          "precondition": "by hand: the screen is play.home",
           "expect": "From Favorites, Recent and Open a ROM, D-pad Left and Right keep focus inside Home (the automated steps press them from Continue only)",
           "severity": "major",
           "mode": "manual"
@@ -437,7 +437,7 @@
         {
           "id": "lib.reach-library",
           "role": "setup",
-          "precondition": "ui.screen == play.home and ui.focused == play.home.open-rom",
+          "precondition": "ui.focused == play.home.open-rom",
           "action": {
             "name": "pad.press",
             "args": {
@@ -482,7 +482,7 @@
         {
           "id": "lib.first-tile-focused",
           "role": "under-test",
-          "precondition": "ui.screen == play.library",
+          "precondition": "by hand: the screen is play.library",
           "expect": "LIB-01: a tile is focused (ring on the grid's first tile). (manual: needs control play.library.tile, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -490,15 +490,15 @@
         {
           "id": "lib.header-footer-scan",
           "role": "under-test",
-          "precondition": "ui.screen == play.library",
-          "expect": "LIB-01: header reads \"Your library \u00b7 N games in M folders\", the footer names A/B/Y/X/LB/RB in the pad's own words (ADR-0256 Decision 6), an animated indicator shows while scanning.",
+          "precondition": "by hand: the screen is play.library",
+          "expect": "LIB-01: header reads \"Your library · N games in M folders\", the footer names A/B/Y/X/LB/RB in the pad's own words (ADR-0256 Decision 6), an animated indicator shows while scanning.",
           "severity": "minor",
           "mode": "manual"
         },
         {
           "id": "lib.hold-down-repeats",
           "role": "under-test",
-          "precondition": "fixture rom-library-large; ui.screen == play.library",
+          "precondition": "fixture rom-library-large and a library of 100+ ROMs",
           "expect": "LIB-02: with 100+ ROMs, a held Down repeats after 400 ms then every 100 ms (ADR-0256 Decision 7) and the grid scrolls; judged by timing and eye. Part 2 (same with Right) is the next step.",
           "severity": "major",
           "mode": "manual"
@@ -506,7 +506,7 @@
         {
           "id": "lib.hold-right-repeats",
           "role": "under-test",
-          "precondition": "fixture rom-library-large; ui.screen == play.library",
+          "precondition": "fixture rom-library-large and a library of 100+ ROMs",
           "expect": "LIB-02: the same with Right: a held Right repeats after 400 ms then every 100 ms and the focus walks the row, wrapping onto the next row.",
           "severity": "major",
           "mode": "manual"
@@ -514,7 +514,7 @@
         {
           "id": "lib.tap-down-steps-once",
           "role": "under-test",
-          "precondition": "fixture rom-library-large; ui.focused == play.library.tile",
+          "precondition": "fixture rom-library-large and a tile focused in the library",
           "expect": "LIB-02: one tap steps the focus once and the focus stays in the grid. (manual: needs control play.library.tile, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -522,7 +522,7 @@
         {
           "id": "lib.up-back-to-row-one",
           "role": "under-test",
-          "precondition": "ui.focused == play.library.tile",
+          "precondition": "a tile focused in the library",
           "expect": "LIB-03 setup: Up returns the focus from row 2 to the top grid row, ready to enter the header. (manual: needs control play.library.tile, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -530,7 +530,7 @@
         {
           "id": "lib.up-enters-header",
           "role": "under-test",
-          "precondition": "ui.focused == play.library.tile",
+          "precondition": "a tile focused in the library",
           "expect": "LIB-03: Up from the top grid row enters the header row (search first, ADR-0264 Decision 3). (manual: needs control play.library.search, control play.library.tile, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -538,7 +538,7 @@
         {
           "id": "lib.header-right-folders",
           "role": "under-test",
-          "precondition": "ui.focused == play.library.search",
+          "precondition": "by hand: the ring is on play.library.search",
           "expect": "LIB-03: Right moves to Library folders. (manual: needs control play.library.folders, control play.library.search, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -546,7 +546,7 @@
         {
           "id": "lib.header-right-browse",
           "role": "under-test",
-          "precondition": "ui.focused == play.library.folders",
+          "precondition": "by hand: the ring is on play.library.folders",
           "expect": "LIB-03: Right moves to Browse a file. (manual: needs control play.library.browse, control play.library.folders, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -554,7 +554,7 @@
         {
           "id": "lib.header-right-back",
           "role": "under-test",
-          "precondition": "ui.focused == play.library.browse",
+          "precondition": "by hand: the ring is on play.library.browse",
           "expect": "LIB-03: Right moves to Back. (manual: needs control play.library.back, control play.library.browse, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -562,7 +562,7 @@
         {
           "id": "lib.header-left-across",
           "role": "under-test",
-          "precondition": "ui.focused == play.library.back",
+          "precondition": "by hand: the ring is on play.library.back",
           "expect": "LIB-03: Left walks back across the header row (Back -> Browse), mirroring the Right walk. (manual: needs control play.library.browse, control play.library.back, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -570,7 +570,7 @@
         {
           "id": "lib.header-down-grid",
           "role": "under-test",
-          "precondition": "ui.focused == play.library.browse",
+          "precondition": "by hand: the ring is on play.library.browse",
           "expect": "LIB-03: Down from the header returns to the grid. (manual: needs control play.library.tile, control play.library.browse, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -578,31 +578,31 @@
         {
           "id": "lib.filter-rb-wraps",
           "role": "under-test",
-          "precondition": "ui.screen == play.library and two consoles in the library",
-          "expect": "LIB-04: RB steps All -> each console present -> All, wrapping; the grid narrows; never an empty filter (PlayerRomPickerViewModel.ConsoleFilter.cs). The filter is not a named control the hook reads.",
+          "precondition": "by hand: the screen is play.library",
+          "expect": "LIB-04: RB steps All -> each console present -> All, wrapping at both ends, the grid narrows, and the ring lands on the segment the press selected (PlayerRomPickerViewModel.ConsoleFilter.cs; ADR-0264 amendment 2026-10-09, #1108), never an empty filter. Record whether the segment the ring is on is obvious at couch distance. The row is not a named control the hook reads, so the landing is judged by eye.",
           "severity": "minor",
           "mode": "manual"
         },
         {
           "id": "lib.filter-lb-backwards",
           "role": "under-test",
-          "precondition": "ui.screen == play.library and two consoles in the library",
-          "expect": "LIB-04: LB walks the same ring backwards, wrapping at both ends.",
+          "precondition": "by hand: the screen is play.library",
+          "expect": "LIB-04: LB walks the same ring backwards, wrapping at both ends, and lands the ring on the segment it moved (ADR-0264 amendment 2026-10-09, #1108).",
           "severity": "minor",
           "mode": "manual"
         },
         {
-          "id": "lib.filter-chips-not-focusable",
+          "id": "lib.filter-segment-focus",
           "role": "under-test",
-          "precondition": "ui.screen == play.library",
-          "expect": "KNOWN GAP: LIB-04 (#1134, KnownChipGaps = \"Library\"): the console chips cannot take focus; LB/RB is the only pad route. Record whether the current chip is obvious at couch distance.",
+          "precondition": "by hand: the screen is play.library",
+          "expect": "LIB-04 (ADR-0264 amendment 2026-10-09, #1108): after a shoulder press the ring is ON the chip row, on the segment the press selected - the row is one element, so its Left/Right step the same ring one console at a time, its Up leaves for the header and its Down returns to the grid it filters, and the footer names the shoulders and no Play (ADR-0256 Decision 6). The landing is skipped only where the sheet's own claim outranks it: while a restore is in flight (IsRestorePending / IsRestoreLanding) the ring lands on the remembered game, and the search box keeps the ring as it always did. FAIL if the ring does not reach the row outside those two. The row is not a named control the hook reads, so this is judged by eye. Record whether the ring on the row is obvious at couch distance.",
           "severity": "major",
           "mode": "manual"
         },
         {
           "id": "lib.search-y-focuses-field",
           "role": "under-test",
-          "precondition": "ui.focused == play.library.tile",
+          "precondition": "a tile focused in the library",
           "expect": "LIB-05: Y moves the ring to the search field. (manual: needs control play.library.search, control play.library.tile, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -610,7 +610,7 @@
         {
           "id": "lib.search-a-opens-keyboard",
           "role": "under-test",
-          "precondition": "ui.focused == play.library.search",
+          "precondition": "by hand: the ring is on play.library.search",
           "expect": "LIB-05: A opens the shared on-screen keyboard (ADR-0262) below the field; the sheet stays open. (manual: needs control play.keyboard, control play.library.search, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -618,7 +618,7 @@
         {
           "id": "lib.search-type-filters",
           "role": "under-test",
-          "precondition": "ui.visible == play.keyboard",
+          "precondition": "by hand: play.keyboard is visible",
           "expect": "LIB-05: typing `zel` (or a prefix of an owned title) with D-pad + A filters the grid per letter; OK commits and focus returns to the field; an empty result shows \"No games match\" with a way to clear it. (manual: needs control play.keyboard, which mesen-gui does not advertise)",
           "severity": "minor",
           "mode": "manual"
@@ -626,7 +626,7 @@
         {
           "id": "lib.search-b-cancels",
           "role": "under-test",
-          "precondition": "ui.visible == play.keyboard",
+          "precondition": "by hand: play.keyboard is visible",
           "expect": "LIB-05: B on the open keyboard closes it, focus returns to the search field and the sheet does not close. The text revert on a second Y, A, B is judged by eye (next step). (manual: needs control play.library.search, control play.keyboard, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -634,7 +634,7 @@
         {
           "id": "lib.search-second-cancel-reverts",
           "role": "under-test",
-          "precondition": "ui.focused == play.library.search",
+          "precondition": "by hand: the ring is on play.library.search",
           "expect": "LIB-05: after typing, a second Y, A, B returns the field to its previous text; focus returns to it and the sheet does not close (typing is manual, so the text revert is manual). (manual: needs control play.library.search, which mesen-gui does not advertise)",
           "severity": "minor",
           "mode": "manual"
@@ -642,7 +642,7 @@
         {
           "id": "lib.search-sheet-stays",
           "role": "under-test",
-          "precondition": "ui.focused == play.library.search",
+          "precondition": "by hand: the ring is on play.library.search",
           "expect": "LIB-05: the library sheet is still open under the cancelled keyboard. (manual: needs control play.library.search, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -650,7 +650,7 @@
         {
           "id": "lib.search-right-folders",
           "role": "under-test",
-          "precondition": "ui.focused == play.library.search",
+          "precondition": "by hand: the ring is on play.library.search",
           "expect": "LIB-06: Right from the search field reaches Library folders. (manual: needs control play.library.folders, control play.library.search, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -658,7 +658,7 @@
         {
           "id": "lib.folders-open",
           "role": "under-test",
-          "precondition": "ui.focused == play.library.folders",
+          "precondition": "by hand: the ring is on play.library.folders",
           "expect": "LIB-06: A on Library folders opens the pad-reachable folder list (ADR-0264 Decision 8). (manual: needs control play.library.folders, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -666,7 +666,7 @@
         {
           "id": "lib.folders-no-native-dialog",
           "role": "under-test",
-          "precondition": "ui.screen == play.library.folders",
+          "precondition": "by hand: the screen is play.library.folders",
           "expect": "LIB-06: no native OS dialog is open over the folder list. (manual: needs control play.library.folders, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -674,7 +674,7 @@
         {
           "id": "lib.folders-add-remove",
           "role": "under-test",
-          "precondition": "ui.screen == play.library.folders",
+          "precondition": "by hand: the screen is play.library.folders",
           "expect": "LIB-06: add a folder, remove it, add it back by pad; the header count updates. (manual: needs control play.library.folders, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -682,7 +682,7 @@
         {
           "id": "lib.folders-b-closes",
           "role": "under-test",
-          "precondition": "ui.screen == play.library.folders",
+          "precondition": "by hand: the screen is play.library.folders",
           "expect": "LIB-06: B closes the folder list back to the library. (manual: needs control play.library.folders, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -690,7 +690,7 @@
         {
           "id": "lib.folders-right-browse",
           "role": "under-test",
-          "precondition": "ui.focused == play.library.folders",
+          "precondition": "by hand: the ring is on play.library.folders",
           "expect": "LIB-07: Right from Library folders reaches Browse a file. (manual: needs control play.library.browse, control play.library.folders, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -698,7 +698,7 @@
         {
           "id": "lib.browse-open",
           "role": "under-test",
-          "precondition": "ui.focused == play.library.browse",
+          "precondition": "by hand: the ring is on play.library.browse",
           "expect": "LIB-07: A on Browse a file opens the folder browser (ADR-0256 Decision 9). (manual: needs control play.library.browse, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -706,7 +706,7 @@
         {
           "id": "lib.browse-walk",
           "role": "under-test",
-          "precondition": "ui.screen == play.library.browse",
+          "precondition": "by hand: the screen is play.library.browse",
           "expect": "LIB-07: Confirm descends, B ascends; the action row leads the list but the ring never lands on it first (first-row guard); Make this my games folder inside a non-empty folder. (manual: needs control play.library.browse, which mesen-gui does not advertise)",
           "severity": "minor",
           "mode": "manual"
@@ -714,7 +714,7 @@
         {
           "id": "lib.browse-b-root-dismisses",
           "role": "under-test",
-          "precondition": "ui.screen == play.library.browse",
+          "precondition": "by hand: the screen is play.library.browse",
           "expect": "LIB-07: B on the root dismisses with no load, back to the library. (manual: needs control play.library.browse, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -722,7 +722,7 @@
         {
           "id": "lib.box-art",
           "role": "under-test",
-          "precondition": "ui.screen == play.library and online",
+          "precondition": "by hand: the screen is play.library",
           "expect": "LIB-08: box art for known ROMs (lazy, visible tiles only), a generic console-colored cover carrying the title for unknown ones, nothing waits on the network; a visual check, record only if it blocks focus or scrolling.",
           "severity": "minor",
           "mode": "manual"
@@ -730,7 +730,7 @@
         {
           "id": "lib.browse-down-grid",
           "role": "under-test",
-          "precondition": "ui.focused == play.library.browse",
+          "precondition": "by hand: the ring is on play.library.browse",
           "expect": "LIB-09: Down from the header returns to the grid (LIB-09 starts from the grid). (manual: needs control play.library.tile, control play.library.browse, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -797,7 +797,7 @@
         {
           "id": "fav.x-favorites-tile",
           "role": "under-test",
-          "precondition": "ui.focused == play.library.tile",
+          "precondition": "a tile focused in the library",
           "expect": "FAV-01: X on the focused tile keeps the ring on the grid and toggles Favorite (ADR-0268). (manual: needs control play.library.tile, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -805,7 +805,7 @@
         {
           "id": "fav.footer-reads-unfavorite",
           "role": "under-test",
-          "precondition": "ui.screen == play.library",
+          "precondition": "by hand: the screen is play.library",
           "expect": "FAV-01: the footer's X entry now reads Unfavorite (it read Favorite before).",
           "severity": "minor",
           "mode": "manual"
@@ -813,7 +813,7 @@
         {
           "id": "fav.back-to-home",
           "role": "under-test",
-          "precondition": "ui.screen == play.library",
+          "precondition": "by hand: the screen is play.library",
           "expect": "FAV-01: B returns to Home. (manual: batch setup fav.reach-library is manual, so nothing established the state this step asserts)",
           "severity": "major",
           "mode": "manual"
@@ -821,7 +821,7 @@
         {
           "id": "fav.home-shelf-shown",
           "role": "under-test",
-          "precondition": "ui.screen == play.home",
+          "precondition": "by hand: the screen is play.home",
           "expect": "FAV-01: Home shows a Favorites shelf between Continue and Recent, newest favorite first. (manual: needs control play.home.favorites, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -829,7 +829,7 @@
         {
           "id": "fav.library-again",
           "role": "under-test",
-          "precondition": "ui.focused == play.home.open-rom",
+          "precondition": "by hand: the ring is on play.home.open-rom",
           "expect": "FAV-01: A on Open a ROM returns to the library. (manual: batch setup fav.reach-library is manual, so nothing established the state this step asserts)",
           "severity": "major",
           "mode": "manual"
@@ -837,7 +837,7 @@
         {
           "id": "fav.x-unfavorites-tile",
           "role": "under-test",
-          "precondition": "ui.focused == play.library.tile",
+          "precondition": "a tile focused in the library",
           "expect": "FAV-01: X on the same tile unfavorites it; the ring stays on the grid. (manual: needs control play.library.tile, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -845,7 +845,7 @@
         {
           "id": "fav.back-home-again",
           "role": "under-test",
-          "precondition": "ui.screen == play.library",
+          "precondition": "by hand: the screen is play.library",
           "expect": "FAV-01: B returns to Home. (manual: batch setup fav.reach-library is manual, so nothing established the state this step asserts)",
           "severity": "major",
           "mode": "manual"
@@ -853,7 +853,7 @@
         {
           "id": "fav.shelf-hides-when-empty",
           "role": "under-test",
-          "precondition": "ui.screen == play.home",
+          "precondition": "by hand: the screen is play.home",
           "expect": "FAV-01: with no favorite left the Favorites shelf is hidden.",
           "severity": "minor",
           "mode": "manual"
@@ -877,7 +877,7 @@
         {
           "id": "fav2.x-on-favorite-tile",
           "role": "under-test",
-          "precondition": "ui.focused == play.home.favorite",
+          "precondition": "by hand: the ring is on play.home.favorite",
           "expect": "FAV-02: X acts on the focused cover; on a Home favorite tile it toggles that game, the ring stays on the shelf and the Favorites shelf stays visible (two favorites, so the shelf survives the toggle; ADR-0268 Decision 4). (manual: needs control play.home.favorites, control play.home.favorite, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -885,7 +885,7 @@
         {
           "id": "fav2.focus-stays-on-favorite-tile",
           "role": "under-test",
-          "precondition": "ui.visible == play.home.favorites",
+          "precondition": "by hand: play.home.favorites is visible",
           "expect": "FAV-02: after X the ring is still on a Home favorite tile (the shelf remains because a second favorite is left). (manual: needs control play.home.favorite, control play.home.favorites, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -893,7 +893,7 @@
         {
           "id": "fav2.up-to-continue",
           "role": "under-test",
-          "precondition": "ui.focused == play.home.favorite",
+          "precondition": "by hand: the ring is on play.home.favorite",
           "expect": "FAV-02: Up reaches the Continue card (focus order Continue -> Favorites -> Recent, ADR-0268 Decision 6). (manual: needs control play.home.favorite, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -901,7 +901,7 @@
         {
           "id": "fav2.x-on-continue",
           "role": "under-test",
-          "precondition": "ui.focused == play.home.continue",
+          "precondition": "by hand: the ring is on play.home.continue",
           "expect": "FAV-02: X on the Continue card favorites the Continue game (ADR-0268 Decision 1); the ring stays on Continue. (manual: batch setup fav2.reach-favorite-tile is manual, so nothing established the state this step asserts)",
           "severity": "major",
           "mode": "manual"
@@ -909,7 +909,7 @@
         {
           "id": "fav2.down-favorite",
           "role": "under-test",
-          "precondition": "ui.focused == play.home.continue",
+          "precondition": "by hand: the ring is on play.home.continue",
           "expect": "FAV-02: Down returns to the Favorites shelf. (manual: needs control play.home.favorite, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -917,7 +917,7 @@
         {
           "id": "fav2.down-recent",
           "role": "under-test",
-          "precondition": "ui.focused == play.home.favorite",
+          "precondition": "by hand: the ring is on play.home.favorite",
           "expect": "FAV-02: Down reaches the Recent grid. (manual: needs control play.home.recent, control play.home.favorite, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -925,7 +925,7 @@
         {
           "id": "fav2.down-open-rom",
           "role": "under-test",
-          "precondition": "ui.focused == play.home.recent",
+          "precondition": "by hand: the ring is on play.home.recent",
           "expect": "FAV-02: Down reaches Open a ROM. (manual: needs control play.home.recent, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -933,7 +933,7 @@
         {
           "id": "fav2.x-elsewhere-does-nothing",
           "role": "under-test",
-          "precondition": "ui.focused == play.home.open-rom",
+          "precondition": "by hand: the ring is on play.home.open-rom",
           "expect": "FAV-02: X on Open a ROM does nothing; the ring stays put. (manual: batch setup fav2.reach-favorite-tile is manual, so nothing established the state this step asserts)",
           "severity": "major",
           "mode": "manual"
@@ -957,7 +957,7 @@
         {
           "id": "game.a-loads-game",
           "role": "under-test",
-          "precondition": "ui.focused == play.library.tile",
+          "precondition": "a tile focused in the library",
           "expect": "GAME-01: A on a tile closes the sheet and the game runs. (manual: needs control play.game, control play.library.tile, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -965,15 +965,15 @@
         {
           "id": "game.load-card-and-toast",
           "role": "under-test",
-          "precondition": "ui.screen == play.game",
-          "expect": "GAME-01: a load card with a moving indicator shows; for the first three starts the entry toast ends with the menu hint naming the pad's chord, e.g. \"\u00b7 Select+Start for the menu\" (ADR-0251 \u00a72), not \"Esc\". (manual: needs control play.game, which mesen-gui does not advertise)",
+          "precondition": "by hand: the screen is play.game",
+          "expect": "GAME-01: a load card with a moving indicator shows; for the first three starts the entry toast ends with the menu hint naming the pad's chord, e.g. \"· Select+Start for the menu\" (ADR-0251 §2), not \"Esc\". (manual: needs control play.game, which mesen-gui does not advertise)",
           "severity": "minor",
           "mode": "manual"
         },
         {
           "id": "game.pad-is-the-consoles",
           "role": "under-test",
-          "precondition": "ui.screen == play.game",
+          "precondition": "by hand: the screen is play.game",
           "expect": "GAME-02: playing 10 s with the D-pad leaves the game running; the pad is the console's (ADR-0256 Decision 1). (manual: needs control play.game, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -981,7 +981,7 @@
         {
           "id": "game.buttons-are-the-consoles",
           "role": "under-test",
-          "precondition": "ui.screen == play.game",
+          "precondition": "by hand: the screen is play.game",
           "expect": "GAME-02: the face buttons reach the console too; pressing A and B leaves the game running and nothing in the GUI reacts. (manual: needs control play.game, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -989,7 +989,7 @@
         {
           "id": "game.no-menu-feedback",
           "role": "under-test",
-          "precondition": "ui.screen == play.game",
+          "precondition": "by hand: the screen is play.game",
           "expect": "GAME-02: no menu sound, no focus ring, no haptic tick, nothing in the GUI reacts; the status bar and lamps are hidden (ADR-0261 Consequences). (manual: needs control play.game, which mesen-gui does not advertise)",
           "severity": "minor",
           "mode": "manual"
@@ -1013,7 +1013,7 @@
         {
           "id": "game-archive.a-opens-select-sheet",
           "role": "under-test",
-          "precondition": "ui.focused == play.library.tile and fixture rom-zip",
+          "precondition": "a tile focused in the library (fixture rom-zip)",
           "expect": "GAME-03: A on the archive tile opens the \"which game\" sheet (PlaySelectRomSheet). (manual: needs control play.select-rom, control play.library.tile, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -1021,7 +1021,7 @@
         {
           "id": "game-archive.b-cancels-back",
           "role": "under-test",
-          "precondition": "ui.screen == play.select-rom",
+          "precondition": "by hand: the screen is play.select-rom",
           "expect": "GAME-03: B cancels back to the library. (manual: needs control play.select-rom, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -1029,7 +1029,7 @@
         {
           "id": "game-archive.a-reopens",
           "role": "under-test",
-          "precondition": "ui.focused == play.library.tile",
+          "precondition": "a tile focused in the library",
           "expect": "GAME-03: A on the archive tile opens the sheet again. (manual: needs control play.select-rom, control play.library.tile, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -1037,7 +1037,7 @@
         {
           "id": "game-archive.a-picks-a-game",
           "role": "under-test",
-          "precondition": "ui.screen == play.select-rom",
+          "precondition": "by hand: the screen is play.select-rom",
           "expect": "GAME-03: D-pad + A picks a game and it loads. (manual: needs control play.game, control play.select-rom, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -1061,7 +1061,7 @@
         {
           "id": "game-bios.a-opens-bios-sheet",
           "role": "under-test",
-          "precondition": "ui.focused == play.library.tile and fixture rom-fds",
+          "precondition": "a tile focused in the library (fixture rom-fds)",
           "expect": "GAME-04: A on the FDS image shows the BIOS sheet (W-P13). (manual: needs control play.bios, control play.library.tile, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -1069,7 +1069,7 @@
         {
           "id": "game-bios.choose-file-native",
           "role": "under-test",
-          "precondition": "ui.screen == play.bios",
+          "precondition": "by hand: the screen is play.bios",
           "expect": "KNOWN GAP: GAME-04: Choose File... on the BIOS sheet is a native dialog (ADR-0256 Decision 9 refusals). Expected FAIL; record that Cancel still backs out. (manual: needs control play.bios, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -1077,7 +1077,7 @@
         {
           "id": "game-bios.b-cancels",
           "role": "under-test",
-          "precondition": "ui.screen == play.bios",
+          "precondition": "by hand: the screen is play.bios",
           "expect": "GAME-04: B/Cancel backs out cleanly to the library. (manual: needs control play.bios, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -1085,7 +1085,7 @@
         {
           "id": "game-bios.status-names-bios",
           "role": "under-test",
-          "precondition": "ui.screen == play.library",
+          "precondition": "by hand: the screen is play.library",
           "expect": "GAME-04: the status line names the missing BIOS.",
           "severity": "minor",
           "mode": "manual"
@@ -1110,7 +1110,7 @@
         {
           "id": "dialogs.no-trap",
           "role": "under-test",
-          "precondition": "ui.screen == play.home",
+          "precondition": "by hand: the screen is play.home",
           "expect": "Jev walks Home by pad toward screens it has not visited; every dialog it reaches has a pad move that leaves it (no trap), within 60 moves. (manual: needs action nav.sweep, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -1134,7 +1134,7 @@
         {
           "id": "pause.chord-opens",
           "role": "under-test",
-          "precondition": "ui.screen == play.game",
+          "precondition": "by hand: the screen is play.game",
           "expect": "P4-01: the chord opens W-P4 with the game paused behind it. (manual: needs action pad.chord, control play.pause, control play.game, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -1142,7 +1142,7 @@
         {
           "id": "pause.resume-focused",
           "role": "under-test",
-          "precondition": "ui.screen == play.pause",
+          "precondition": "by hand: the screen is play.pause",
           "expect": "P4-01: Resume is the focused control. (manual: needs control play.pause.resume, control play.pause, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -1150,7 +1150,7 @@
         {
           "id": "pause.row-resume",
           "role": "under-test",
-          "precondition": "ui.screen == play.pause",
+          "precondition": "by hand: the screen is play.pause",
           "expect": "P4-01: the control resume is present (seven in all: Resume, Save states, Pack, Enhancements, Cheats, Settings, Quit game). (manual: needs control play.pause.resume, control play.pause, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -1158,7 +1158,7 @@
         {
           "id": "pause.row-save-states",
           "role": "under-test",
-          "precondition": "ui.screen == play.pause",
+          "precondition": "by hand: the screen is play.pause",
           "expect": "P4-01: the control save-states is present (seven in all: Resume, Save states, Pack, Enhancements, Cheats, Settings, Quit game). (manual: needs control play.pause.save-states, control play.pause, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -1166,7 +1166,7 @@
         {
           "id": "pause.row-pack",
           "role": "under-test",
-          "precondition": "ui.screen == play.pause",
+          "precondition": "by hand: the screen is play.pause",
           "expect": "P4-01: the control pack is present (seven in all: Resume, Save states, Pack, Enhancements, Cheats, Settings, Quit game). (manual: needs control play.pause.pack, control play.pause, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -1174,7 +1174,7 @@
         {
           "id": "pause.row-enhancements",
           "role": "under-test",
-          "precondition": "ui.screen == play.pause",
+          "precondition": "by hand: the screen is play.pause",
           "expect": "P4-01: the control enhancements is present (seven in all: Resume, Save states, Pack, Enhancements, Cheats, Settings, Quit game). (manual: needs control play.pause.enhancements, control play.pause, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -1182,7 +1182,7 @@
         {
           "id": "pause.row-cheats",
           "role": "under-test",
-          "precondition": "ui.screen == play.pause",
+          "precondition": "by hand: the screen is play.pause",
           "expect": "P4-01: the control cheats is present (seven in all: Resume, Save states, Pack, Enhancements, Cheats, Settings, Quit game). (manual: needs control play.pause.cheats, control play.pause, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -1190,7 +1190,7 @@
         {
           "id": "pause.row-settings",
           "role": "under-test",
-          "precondition": "ui.screen == play.pause",
+          "precondition": "by hand: the screen is play.pause",
           "expect": "P4-01: the control settings is present (seven in all: Resume, Save states, Pack, Enhancements, Cheats, Settings, Quit game). (manual: needs control play.pause.settings, control play.pause, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -1198,7 +1198,7 @@
         {
           "id": "pause.row-quit-game",
           "role": "under-test",
-          "precondition": "ui.screen == play.pause",
+          "precondition": "by hand: the screen is play.pause",
           "expect": "P4-01: the control quit-game is present (seven in all: Resume, Save states, Pack, Enhancements, Cheats, Settings, Quit game). (manual: needs control play.pause.quit-game, control play.pause, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -1206,7 +1206,7 @@
         {
           "id": "pause.footer-words",
           "role": "under-test",
-          "precondition": "ui.screen == play.pause",
+          "precondition": "by hand: the screen is play.pause",
           "expect": "P4-01: the footer names \"B to resume\" in words for the pad in hand (ADR-0256 Decision 6: \"Circle\", never a glyph); the hook does not read footer text. (manual: needs control play.pause, which mesen-gui does not advertise)",
           "severity": "minor",
           "mode": "manual"
@@ -1214,7 +1214,7 @@
         {
           "id": "pause.frozen-frame-bar-lamps",
           "role": "under-test",
-          "precondition": "ui.screen == play.pause",
+          "precondition": "by hand: the screen is play.pause",
           "expect": "P4-01: a frozen frame shows behind the overlay and the status bar and lamps are visible; judged by eye. (manual: needs control play.pause, which mesen-gui does not advertise)",
           "severity": "minor",
           "mode": "manual"
@@ -1222,7 +1222,7 @@
         {
           "id": "pause.chord-again-resumes",
           "role": "under-test",
-          "precondition": "ui.screen == play.pause",
+          "precondition": "by hand: the screen is play.pause",
           "expect": "P4-02: the chord again closes W-P4 and resumes the game (ADR-0241 Esc order: game, W-P4, resume). (manual: needs action pad.chord, control play.game, control play.pause, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -1230,7 +1230,7 @@
         {
           "id": "pause.reopen-for-b",
           "role": "under-test",
-          "precondition": "ui.screen == play.game",
+          "precondition": "by hand: the screen is play.game",
           "expect": "P4-02: the chord reopens W-P4 (setup for the B half). (manual: needs action pad.chord, control play.pause, control play.game, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -1238,7 +1238,7 @@
         {
           "id": "pause.b-resumes",
           "role": "under-test",
-          "precondition": "ui.screen == play.pause",
+          "precondition": "by hand: the screen is play.pause",
           "expect": "P4-02: B closes W-P4 and resumes the game. (manual: needs control play.game, control play.pause, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -1246,7 +1246,7 @@
         {
           "id": "pause.reopen-for-rows",
           "role": "under-test",
-          "precondition": "ui.screen == play.game",
+          "precondition": "by hand: the screen is play.game",
           "expect": "P4-03: the chord reopens W-P4 with Resume focused (P4-01 precondition). (manual: needs action pad.chord, control play.pause, control play.game, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -1254,7 +1254,7 @@
         {
           "id": "pause.down-to-save-states",
           "role": "under-test",
-          "precondition": "ui.focused == play.pause.resume",
+          "precondition": "by hand: the ring is on play.pause.resume",
           "expect": "P4-03: D-pad Down from resume reaches save-states; the ring is on it. (manual: needs control play.pause.save-states, control play.pause.resume, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -1262,7 +1262,7 @@
         {
           "id": "pause.down-to-pack",
           "role": "under-test",
-          "precondition": "ui.focused == play.pause.save-states",
+          "precondition": "by hand: the ring is on play.pause.save-states",
           "expect": "P4-03: D-pad Down from save-states reaches pack; the ring is on it. (manual: needs control play.pause.pack, control play.pause.save-states, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -1270,7 +1270,7 @@
         {
           "id": "pause.down-to-enhancements",
           "role": "under-test",
-          "precondition": "ui.focused == play.pause.pack",
+          "precondition": "by hand: the ring is on play.pause.pack",
           "expect": "P4-03: D-pad Down from pack reaches enhancements; the ring is on it. (manual: needs control play.pause.enhancements, control play.pause.pack, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -1278,7 +1278,7 @@
         {
           "id": "pause.down-to-cheats",
           "role": "under-test",
-          "precondition": "ui.focused == play.pause.enhancements",
+          "precondition": "by hand: the ring is on play.pause.enhancements",
           "expect": "P4-03: D-pad Down from enhancements reaches cheats; the ring is on it. (manual: needs control play.pause.cheats, control play.pause.enhancements, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -1286,7 +1286,7 @@
         {
           "id": "pause.down-to-settings",
           "role": "under-test",
-          "precondition": "ui.focused == play.pause.cheats",
+          "precondition": "by hand: the ring is on play.pause.cheats",
           "expect": "P4-03: D-pad Down from cheats reaches settings; the ring is on it. (manual: needs control play.pause.settings, control play.pause.cheats, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -1294,7 +1294,7 @@
         {
           "id": "pause.down-to-quit-game",
           "role": "under-test",
-          "precondition": "ui.focused == play.pause.settings",
+          "precondition": "by hand: the ring is on play.pause.settings",
           "expect": "P4-03: D-pad Down from settings reaches quit-game; the ring is on it. (manual: needs control play.pause.quit-game, control play.pause.settings, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -1302,7 +1302,7 @@
         {
           "id": "pause.down-no-wrap",
           "role": "under-test",
-          "precondition": "ui.focused == play.pause.quit-game",
+          "precondition": "by hand: the ring is on play.pause.quit-game",
           "expect": "P4-03: Down on the last row does not wrap and is not a dead end that moves the ring away. (manual: needs control play.pause.quit-game, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -1310,7 +1310,7 @@
         {
           "id": "pause.left-contained",
           "role": "under-test",
-          "precondition": "ui.focused == play.pause.quit-game",
+          "precondition": "by hand: the ring is on play.pause.quit-game",
           "expect": "P4-03: Left keeps focus on the last row, no escape from W-P4. (manual: needs control play.pause.quit-game, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -1318,7 +1318,7 @@
         {
           "id": "pause.right-contained",
           "role": "under-test",
-          "precondition": "ui.focused == play.pause.quit-game",
+          "precondition": "by hand: the ring is on play.pause.quit-game",
           "expect": "P4-03: Right keeps focus on the last row, no escape from W-P4. (manual: needs control play.pause.quit-game, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -1326,7 +1326,7 @@
         {
           "id": "pause.up-to-settings",
           "role": "under-test",
-          "precondition": "ui.focused == play.pause.quit-game",
+          "precondition": "by hand: the ring is on play.pause.quit-game",
           "expect": "P4-03: D-pad Up from quit-game reaches settings. (manual: needs control play.pause.settings, control play.pause.quit-game, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -1334,7 +1334,7 @@
         {
           "id": "pause.up-to-cheats",
           "role": "under-test",
-          "precondition": "ui.focused == play.pause.settings",
+          "precondition": "by hand: the ring is on play.pause.settings",
           "expect": "P4-03: D-pad Up from settings reaches cheats. (manual: needs control play.pause.cheats, control play.pause.settings, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -1342,7 +1342,7 @@
         {
           "id": "pause.up-to-enhancements",
           "role": "under-test",
-          "precondition": "ui.focused == play.pause.cheats",
+          "precondition": "by hand: the ring is on play.pause.cheats",
           "expect": "P4-03: D-pad Up from cheats reaches enhancements. (manual: needs control play.pause.enhancements, control play.pause.cheats, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -1350,7 +1350,7 @@
         {
           "id": "pause.up-to-pack",
           "role": "under-test",
-          "precondition": "ui.focused == play.pause.enhancements",
+          "precondition": "by hand: the ring is on play.pause.enhancements",
           "expect": "P4-03: D-pad Up from enhancements reaches pack. (manual: needs control play.pause.pack, control play.pause.enhancements, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -1358,7 +1358,7 @@
         {
           "id": "pause.up-to-save-states",
           "role": "under-test",
-          "precondition": "ui.focused == play.pause.pack",
+          "precondition": "by hand: the ring is on play.pause.pack",
           "expect": "P4-03: D-pad Up from pack reaches save-states. (manual: needs control play.pause.save-states, control play.pause.pack, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -1366,7 +1366,7 @@
         {
           "id": "pause.up-to-resume",
           "role": "under-test",
-          "precondition": "ui.focused == play.pause.save-states",
+          "precondition": "by hand: the ring is on play.pause.save-states",
           "expect": "P4-03: D-pad Up from save-states reaches resume. (manual: needs control play.pause.resume, control play.pause.save-states, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -1374,7 +1374,7 @@
         {
           "id": "pause.up-no-wrap-header",
           "role": "under-test",
-          "precondition": "ui.focused == play.pause.resume",
+          "precondition": "by hand: the ring is on play.pause.resume",
           "expect": "P4-03: Up on Resume stays on Resume: no wrap into the header. (manual: needs control play.pause.resume, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -1382,7 +1382,7 @@
         {
           "id": "pause.ring-visible-each-row",
           "role": "under-test",
-          "precondition": "ui.screen == play.pause",
+          "precondition": "by hand: the screen is play.pause",
           "expect": "P4-03: the ring is visible on every row through the walk; judged by eye. (manual: needs control play.pause, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -1390,7 +1390,7 @@
         {
           "id": "pause.footer-follows-pad",
           "role": "under-test",
-          "precondition": "ui.screen == play.pause and second pad connected",
+          "precondition": "by hand: the screen is play.pause",
           "expect": "P4-04 (pass 3): switching to the other pad mid-overlay and pressing any direction makes the footer re-read for the pad now in hand (ADR-0256 Decision 6); needs two pads. (manual: needs control play.pause, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -1398,7 +1398,7 @@
         {
           "id": "pause.save-states-focus",
           "role": "setup",
-          "precondition": "ui.screen == play.pause",
+          "precondition": "by hand: the screen is play.pause",
           "expect": "P4-05 (setup): focus Save states. (manual: needs action nav.goal, control play.pause.save-states, control play.pause, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -1406,7 +1406,7 @@
         {
           "id": "pause.save-states-opens",
           "role": "under-test",
-          "precondition": "ui.focused == play.pause.save-states",
+          "precondition": "by hand: the ring is on play.pause.save-states",
           "expect": "P4-05: A on Save states opens the Save states sheet. (manual: needs control play.save-states, control play.pause.save-states, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -1414,7 +1414,7 @@
         {
           "id": "pause.save-states-slot-roundtrip",
           "role": "under-test",
-          "precondition": "ui.screen == play.save-states",
+          "precondition": "by hand: the screen is play.save-states",
           "expect": "P4-05: walk the slot grid, save to a slot, load it, all with D-pad + A; Shared replays... (if shown) opens and B backs out. (manual: needs control play.save-states, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -1422,7 +1422,7 @@
         {
           "id": "pause.save-states-b-to-pause",
           "role": "under-test",
-          "precondition": "ui.screen == play.save-states",
+          "precondition": "by hand: the screen is play.save-states",
           "expect": "P4-05: B closes back to W-P4, not to the game. (manual: needs control play.pause, control play.save-states, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -1430,7 +1430,7 @@
         {
           "id": "pause.pack-focus",
           "role": "setup",
-          "precondition": "ui.screen == play.pause",
+          "precondition": "by hand: the screen is play.pause",
           "expect": "P4-06 (setup): focus Pack. (manual: needs action nav.goal, control play.pause.pack, control play.pause, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -1438,7 +1438,7 @@
         {
           "id": "pause.pack-opens",
           "role": "under-test",
-          "precondition": "ui.focused == play.pause.pack and fixture pack",
+          "precondition": "the pack row focused in the pause menu (fixture pack)",
           "expect": "P4-06: with one pack, A on Pack opens the pack detail (W-P6). (manual: needs control play.pack, control play.pause.pack, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -1446,7 +1446,7 @@
         {
           "id": "pause.pack-detail-controls",
           "role": "under-test",
-          "precondition": "ui.visible == play.pack",
+          "precondition": "by hand: play.pack is visible",
           "expect": "P4-06: with one pack the detail (W-P6) shows Done, Show pack folder, Details. (manual: needs control play.pack, which mesen-gui does not advertise)",
           "severity": "minor",
           "mode": "manual"
@@ -1454,7 +1454,7 @@
         {
           "id": "pause.pack-show-folder-gap",
           "role": "under-test",
-          "precondition": "ui.visible == play.pack",
+          "precondition": "by hand: play.pack is visible",
           "expect": "KNOWN GAP (P4-06): Show pack folder is expected FAIL; Finder takes the foreground and the pad cannot bring MesenAI back. PASS only if the pad still drives Play afterwards with no keyboard or mouse. The hook cannot observe the OS foreground. (manual: needs control play.pack, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -1462,7 +1462,7 @@
         {
           "id": "pause.pack-b-to-pause",
           "role": "under-test",
-          "precondition": "ui.visible == play.pack",
+          "precondition": "by hand: play.pack is visible",
           "expect": "P4-06: B closes back to W-P4; focus returns to play.pause.pack. (manual: needs control play.pause.pack, control play.pack, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -1470,7 +1470,7 @@
         {
           "id": "pause.enh-focus",
           "role": "setup",
-          "precondition": "ui.screen == play.pause",
+          "precondition": "by hand: the screen is play.pause",
           "expect": "P4-07 (setup): focus Enhancements. (manual: needs action nav.goal, control play.pause.enhancements, control play.pause, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -1478,7 +1478,7 @@
         {
           "id": "pause.enh-opens",
           "role": "under-test",
-          "precondition": "ui.focused == play.pause.enhancements",
+          "precondition": "by hand: the ring is on play.pause.enhancements",
           "expect": "P4-07: A on Enhancements opens the sheet. (manual: needs control play.enhancements, control play.pause.enhancements, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -1486,7 +1486,7 @@
         {
           "id": "pause.enh-toggle-apply",
           "role": "under-test",
-          "precondition": "ui.screen == play.enhancements",
+          "precondition": "by hand: the screen is play.enhancements",
           "expect": "P4-07: a switch toggles by A; the footer label (Done/Apply/Apply & Reload) follows the draft; applying with a reload returns to the game or W-P4 with no mouse. (manual: needs control play.enhancements, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -1494,7 +1494,7 @@
         {
           "id": "pause.enh-b-discards",
           "role": "under-test",
-          "precondition": "ui.screen == play.enhancements",
+          "precondition": "by hand: the screen is play.enhancements",
           "expect": "P4-07: B discards back to W-P4. (manual: needs control play.pause, control play.enhancements, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -1502,7 +1502,7 @@
         {
           "id": "pause.cheats-focus",
           "role": "setup",
-          "precondition": "ui.screen == play.pause",
+          "precondition": "by hand: the screen is play.pause",
           "expect": "P4-08 (setup): focus Cheats. (manual: needs action nav.goal, control play.pause.cheats, control play.pause, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -1510,7 +1510,7 @@
         {
           "id": "pause.cheats-opens",
           "role": "under-test",
-          "precondition": "ui.focused == play.pause.cheats",
+          "precondition": "by hand: the ring is on play.pause.cheats",
           "expect": "P4-08: A on Cheats opens the sheet. (manual: needs control play.cheats, control play.pause.cheats, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -1518,7 +1518,7 @@
         {
           "id": "pause.cheats-add-focus",
           "role": "setup",
-          "precondition": "ui.screen == play.cheats",
+          "precondition": "by hand: the screen is play.cheats",
           "expect": "P4-08 (setup): focus Add a Code. (manual: needs action nav.goal, control play.cheats.add-code, control play.cheats, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -1526,7 +1526,7 @@
         {
           "id": "pause.cheats-add-keyboard",
           "role": "under-test",
-          "precondition": "ui.focused == play.cheats.add-code",
+          "precondition": "by hand: the ring is on play.cheats.add-code",
           "expect": "P4-08: A on Add a Code opens the on-screen keyboard (code-shaped field, ADR-0262 Decision 2). (manual: needs control play.keyboard, control play.cheats.add-code, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -1534,7 +1534,7 @@
         {
           "id": "pause.cheats-code-keyboard-letters",
           "role": "under-test",
-          "precondition": "ui.visible == play.keyboard",
+          "precondition": "by hand: play.keyboard is visible",
           "expect": "P4-08: the code keyboard shows APZLGITYEOXUKSVN (Game Genie letters) first; the description field is free text; commit works. (manual: needs control play.keyboard, which mesen-gui does not advertise)",
           "severity": "minor",
           "mode": "manual"
@@ -1542,7 +1542,7 @@
         {
           "id": "pause.cheats-field-b-cancels",
           "role": "under-test",
-          "precondition": "ui.visible == play.keyboard",
+          "precondition": "by hand: play.keyboard is visible",
           "expect": "P4-08: B cancels a field without closing the sheet; focus returns to play.cheats.add-code. (manual: needs control play.cheats.add-code, control play.keyboard, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -1550,7 +1550,7 @@
         {
           "id": "pause.cheats-api-key-mask",
           "role": "under-test",
-          "precondition": "ui.screen == play.cheats",
+          "precondition": "by hand: the screen is play.cheats",
           "expect": "P4-08: the API key field (if visible) masks its draft as the bullet character. (manual: needs control play.cheats, which mesen-gui does not advertise)",
           "severity": "minor",
           "mode": "manual"
@@ -1558,7 +1558,7 @@
         {
           "id": "pause.cheats-b-to-pause",
           "role": "under-test",
-          "precondition": "ui.screen == play.cheats",
+          "precondition": "by hand: the screen is play.cheats",
           "expect": "P4-08: B closes the sheet back to W-P4. (manual: needs control play.pause, control play.cheats, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -1566,7 +1566,7 @@
         {
           "id": "pause.quit-focus",
           "role": "setup",
-          "precondition": "ui.screen == play.pause",
+          "precondition": "by hand: the screen is play.pause",
           "expect": "P4-09 (setup): focus Quit game. (manual: needs action nav.goal, control play.pause.quit-game, control play.pause, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -1574,7 +1574,7 @@
         {
           "id": "pause.quit-confirm-in-place",
           "role": "under-test",
-          "precondition": "ui.focused == play.pause.quit-game",
+          "precondition": "by hand: the ring is on play.pause.quit-game",
           "expect": "P4-09: A on Quit game shows the confirm in place on W-P4, reachable. (manual: needs control play.pause.quit-confirm, control play.pause.quit-game, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -1582,7 +1582,7 @@
         {
           "id": "pause.quit-b-keeps-playing",
           "role": "under-test",
-          "precondition": "ui.visible == play.pause.quit-confirm",
+          "precondition": "by hand: play.pause.quit-confirm is visible",
           "expect": "P4-09: B on the confirm dismisses it and stays on W-P4 (keep playing); focus returns to play.pause.quit-game. (manual: needs control play.pause.quit-game, control play.pause.quit-confirm, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -1590,7 +1590,7 @@
         {
           "id": "pause.quit-reconfirm",
           "role": "under-test",
-          "precondition": "ui.focused == play.pause.quit-game",
+          "precondition": "by hand: the ring is on play.pause.quit-game",
           "expect": "P4-09: A again shows the confirm. (manual: needs control play.pause.quit-confirm, control play.pause.quit-game, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -1598,7 +1598,7 @@
         {
           "id": "pause.quit-confirm-lands-home",
           "role": "under-test",
-          "precondition": "ui.visible == play.pause.quit-confirm",
+          "precondition": "by hand: play.pause.quit-confirm is visible",
           "expect": "P4-09: confirming powers the game off and lands on Home. (manual: needs control play.pause.quit-confirm, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -1606,7 +1606,7 @@
         {
           "id": "pause.quit-home-ring",
           "role": "under-test",
-          "precondition": "ui.screen == play.home",
+          "precondition": "by hand: the screen is play.home",
           "expect": "P4-09: the ring is placed on Home's first control. (manual: batch setup pause.reach-game is manual, so nothing established the state this step asserts)",
           "severity": "major",
           "mode": "manual"
@@ -1630,7 +1630,7 @@
         {
           "id": "settings.a-opens",
           "role": "under-test",
-          "precondition": "ui.focused == play.pause.settings",
+          "precondition": "by hand: the ring is on play.pause.settings",
           "expect": "SET-01: A on Settings opens W-P8. (manual: needs control play.settings, control play.pause.settings, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -1638,7 +1638,7 @@
         {
           "id": "settings.tab-display-first",
           "role": "under-test",
-          "precondition": "ui.screen == play.settings",
+          "precondition": "by hand: the screen is play.settings",
           "expect": "SET-01: the sheet opens on the Display tab. (manual: needs control play.settings.tab-display, control play.settings, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -1646,7 +1646,7 @@
         {
           "id": "settings.display-down-into-page",
           "role": "under-test",
-          "precondition": "ui.focused == play.settings.tab-display",
+          "precondition": "by hand: the ring is on play.settings.tab-display",
           "expect": "SET-01: Down from the display tab enters its page. (manual: needs control play.settings.page, control play.settings.tab-display, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -1654,7 +1654,7 @@
         {
           "id": "settings.display-done-reachable",
           "role": "under-test",
-          "precondition": "ui.screen == play.settings",
+          "precondition": "by hand: the screen is play.settings",
           "expect": "SET-01: Done is reachable on the display page. Premise: held Down repeats at 400 ms then every 100 ms (~17 moves in 40 ticks), the Settings vertical chain does not wrap, and Done is its last row. (manual: needs control play.settings.done, control play.settings, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -1662,7 +1662,7 @@
         {
           "id": "settings.display-up-page",
           "role": "under-test",
-          "precondition": "ui.focused == play.settings.done",
+          "precondition": "by hand: the ring is on play.settings.done",
           "expect": "SET-01: Up from Done on display goes to the page (no More in Options on this tab). (manual: needs control play.settings.page, control play.settings.done, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -1670,7 +1670,7 @@
         {
           "id": "settings.display-back-to-tab",
           "role": "setup",
-          "precondition": "ui.screen == play.settings",
+          "precondition": "by hand: the screen is play.settings",
           "expect": "SET-01 (setup): back to the display tab for the next step. (manual: needs action nav.goal, control play.settings.tab-display, control play.settings, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -1678,7 +1678,7 @@
         {
           "id": "settings.tab-right-look",
           "role": "under-test",
-          "precondition": "ui.focused == play.settings.tab-display",
+          "precondition": "by hand: the ring is on play.settings.tab-display",
           "expect": "SET-01: Right on the tab strip reaches look. (manual: needs control play.settings.tab-look, control play.settings.tab-display, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -1686,7 +1686,7 @@
         {
           "id": "settings.tab-left-display",
           "role": "under-test",
-          "precondition": "ui.focused == play.settings.tab-look",
+          "precondition": "by hand: the ring is on play.settings.tab-look",
           "expect": "SET-01: Left on the tab strip goes back to display. (manual: needs control play.settings.tab-display, control play.settings.tab-look, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -1694,7 +1694,7 @@
         {
           "id": "settings.tab-right-look-again",
           "role": "setup",
-          "precondition": "ui.focused == play.settings.tab-display",
+          "precondition": "by hand: the ring is on play.settings.tab-display",
           "expect": "SET-01 (setup): back to the look tab for the next step. (manual: needs control play.settings.tab-look, control play.settings.tab-display, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -1702,7 +1702,7 @@
         {
           "id": "settings.look-down-into-page",
           "role": "under-test",
-          "precondition": "ui.focused == play.settings.tab-look",
+          "precondition": "by hand: the ring is on play.settings.tab-look",
           "expect": "SET-01: Down from the look tab enters its page. (manual: needs control play.settings.page, control play.settings.tab-look, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -1710,7 +1710,7 @@
         {
           "id": "settings.look-done-reachable",
           "role": "under-test",
-          "precondition": "ui.screen == play.settings",
+          "precondition": "by hand: the screen is play.settings",
           "expect": "SET-01: Done is reachable on the look page. Premise: held Down repeats at 400 ms then every 100 ms (~17 moves in 40 ticks), the Settings vertical chain does not wrap, and Done is its last row. (manual: needs control play.settings.done, control play.settings, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -1718,7 +1718,7 @@
         {
           "id": "settings.look-up-page",
           "role": "under-test",
-          "precondition": "ui.focused == play.settings.done",
+          "precondition": "by hand: the ring is on play.settings.done",
           "expect": "SET-01: Up from Done on look goes to the page (no More in Options on this tab). (manual: needs control play.settings.page, control play.settings.done, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -1726,7 +1726,7 @@
         {
           "id": "settings.look-back-to-tab",
           "role": "setup",
-          "precondition": "ui.screen == play.settings",
+          "precondition": "by hand: the screen is play.settings",
           "expect": "SET-01 (setup): back to the look tab for the next step. (manual: needs action nav.goal, control play.settings.tab-look, control play.settings, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -1734,7 +1734,7 @@
         {
           "id": "settings.tab-right-audio",
           "role": "under-test",
-          "precondition": "ui.focused == play.settings.tab-look",
+          "precondition": "by hand: the ring is on play.settings.tab-look",
           "expect": "SET-01: Right on the tab strip reaches audio. (manual: needs control play.settings.tab-audio, control play.settings.tab-look, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -1742,7 +1742,7 @@
         {
           "id": "settings.audio-down-into-page",
           "role": "under-test",
-          "precondition": "ui.focused == play.settings.tab-audio",
+          "precondition": "by hand: the ring is on play.settings.tab-audio",
           "expect": "SET-01: Down from the audio tab enters its page. (manual: needs control play.settings.page, control play.settings.tab-audio, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -1750,7 +1750,7 @@
         {
           "id": "settings.audio-done-reachable",
           "role": "under-test",
-          "precondition": "ui.screen == play.settings",
+          "precondition": "by hand: the screen is play.settings",
           "expect": "SET-01: Done is reachable on the audio page. Premise: held Down repeats at 400 ms then every 100 ms (~17 moves in 40 ticks), the Settings vertical chain does not wrap, and Done is its last row. (manual: needs control play.settings.done, control play.settings, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -1758,7 +1758,7 @@
         {
           "id": "settings.audio-up-more",
           "role": "under-test",
-          "precondition": "ui.focused == play.settings.done",
+          "precondition": "by hand: the ring is on play.settings.done",
           "expect": "SET-01: Up from Done on audio reaches More in Options. (manual: needs control play.settings.more-in-options, control play.settings.done, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -1766,7 +1766,7 @@
         {
           "id": "settings.audio-up-page",
           "role": "under-test",
-          "precondition": "ui.focused == play.settings.more-in-options",
+          "precondition": "by hand: the ring is on play.settings.more-in-options",
           "expect": "SET-01: Up again from More in Options reaches the audio page. (manual: needs control play.settings.page, control play.settings.more-in-options, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -1774,7 +1774,7 @@
         {
           "id": "settings.audio-back-to-tab",
           "role": "setup",
-          "precondition": "ui.screen == play.settings",
+          "precondition": "by hand: the screen is play.settings",
           "expect": "SET-01 (setup): back to the audio tab for the next step. (manual: needs action nav.goal, control play.settings.tab-audio, control play.settings, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -1782,7 +1782,7 @@
         {
           "id": "settings.tab-right-controls",
           "role": "under-test",
-          "precondition": "ui.focused == play.settings.tab-audio",
+          "precondition": "by hand: the ring is on play.settings.tab-audio",
           "expect": "SET-01: Right on the tab strip reaches controls. (manual: needs control play.settings.tab-controls, control play.settings.tab-audio, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -1790,7 +1790,7 @@
         {
           "id": "settings.controls-down-into-page",
           "role": "under-test",
-          "precondition": "ui.focused == play.settings.tab-controls",
+          "precondition": "by hand: the ring is on play.settings.tab-controls",
           "expect": "SET-01: Down from the controls tab enters its page. (manual: needs control play.settings.page, control play.settings.tab-controls, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -1798,7 +1798,7 @@
         {
           "id": "settings.controls-done-reachable",
           "role": "under-test",
-          "precondition": "ui.screen == play.settings",
+          "precondition": "by hand: the screen is play.settings",
           "expect": "SET-01: Done is reachable on the controls page. Premise: held Down repeats at 400 ms then every 100 ms (~17 moves in 40 ticks), the Settings vertical chain does not wrap, and Done is its last row. (manual: needs control play.settings.done, control play.settings, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -1806,7 +1806,7 @@
         {
           "id": "settings.controls-up-more",
           "role": "under-test",
-          "precondition": "ui.focused == play.settings.done",
+          "precondition": "by hand: the ring is on play.settings.done",
           "expect": "SET-01: Up from Done on controls reaches More in Options. (manual: needs control play.settings.more-in-options, control play.settings.done, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -1814,7 +1814,7 @@
         {
           "id": "settings.controls-up-page",
           "role": "under-test",
-          "precondition": "ui.focused == play.settings.more-in-options",
+          "precondition": "by hand: the ring is on play.settings.more-in-options",
           "expect": "SET-01: Up again from More in Options reaches the controls page. (manual: needs control play.settings.page, control play.settings.more-in-options, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -1822,7 +1822,7 @@
         {
           "id": "settings.controls-back-to-tab",
           "role": "setup",
-          "precondition": "ui.screen == play.settings",
+          "precondition": "by hand: the screen is play.settings",
           "expect": "SET-01 (setup): back to the controls tab for the next step. (manual: needs action nav.goal, control play.settings.tab-controls, control play.settings, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -1830,7 +1830,7 @@
         {
           "id": "settings.tab-right-system",
           "role": "under-test",
-          "precondition": "ui.focused == play.settings.tab-controls",
+          "precondition": "by hand: the ring is on play.settings.tab-controls",
           "expect": "SET-01: Right on the tab strip reaches system. (manual: needs control play.settings.tab-system, control play.settings.tab-controls, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -1838,7 +1838,7 @@
         {
           "id": "settings.system-down-into-page",
           "role": "under-test",
-          "precondition": "ui.focused == play.settings.tab-system",
+          "precondition": "by hand: the ring is on play.settings.tab-system",
           "expect": "SET-01: Down from the system tab enters its page. (manual: needs control play.settings.page, control play.settings.tab-system, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -1846,7 +1846,7 @@
         {
           "id": "settings.system-done-reachable",
           "role": "under-test",
-          "precondition": "ui.screen == play.settings",
+          "precondition": "by hand: the screen is play.settings",
           "expect": "SET-01: Done is reachable on the system page. Premise: held Down repeats at 400 ms then every 100 ms (~17 moves in 40 ticks), the Settings vertical chain does not wrap, and Done is its last row. (manual: needs control play.settings.done, control play.settings, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -1854,7 +1854,7 @@
         {
           "id": "settings.system-up-page",
           "role": "under-test",
-          "precondition": "ui.focused == play.settings.done",
+          "precondition": "by hand: the ring is on play.settings.done",
           "expect": "SET-01: Up from Done on system goes to the page (no More in Options on this tab). (manual: needs control play.settings.page, control play.settings.done, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -1862,7 +1862,7 @@
         {
           "id": "settings.system-back-to-tab",
           "role": "setup",
-          "precondition": "ui.screen == play.settings",
+          "precondition": "by hand: the screen is play.settings",
           "expect": "SET-01 (setup): back to the system tab for the next step. (manual: needs action nav.goal, control play.settings.tab-system, control play.settings, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -1870,7 +1870,7 @@
         {
           "id": "settings.exit-fullscreen-done-focus",
           "role": "setup",
-          "precondition": "ui.screen == play.settings",
+          "precondition": "by hand: the screen is play.settings",
           "expect": "SET-01 (setup): focus Done. (manual: needs action nav.goal, control play.settings.done, control play.settings, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -1878,7 +1878,7 @@
         {
           "id": "settings.exit-fullscreen-left-of-done",
           "role": "under-test",
-          "precondition": "ui.focused == play.settings.done",
+          "precondition": "by hand: the ring is on play.settings.done",
           "expect": "SET-01: Exit full screen is Left of Done, not above it (FS-02). (manual: needs variant window.mode=fullscreen, control play.settings.exit-fullscreen, control play.settings.done, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -1886,7 +1886,7 @@
         {
           "id": "settings.size-focus",
           "role": "setup",
-          "precondition": "ui.screen == play.settings",
+          "precondition": "by hand: the screen is play.settings",
           "expect": "SET-02 (setup): focus Interface size on the Display tab. (manual: needs action nav.goal, control play.settings.interface-size, control play.settings, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -1894,7 +1894,7 @@
         {
           "id": "settings.size-right-large",
           "role": "under-test",
-          "precondition": "ui.focused == play.settings.interface-size",
+          "precondition": "by hand: the ring is on play.settings.interface-size",
           "expect": "SET-02: Right steps the value in place to Large; the focus stays on the row. (manual: needs control play.settings.interface-size, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -1902,7 +1902,7 @@
         {
           "id": "settings.size-right-xlarge",
           "role": "under-test",
-          "precondition": "ui.focused == play.settings.interface-size",
+          "precondition": "by hand: the ring is on play.settings.interface-size",
           "expect": "SET-02: Right steps the value in place to Extra large; the focus stays on the row. (manual: needs control play.settings.interface-size, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -1910,7 +1910,7 @@
         {
           "id": "settings.size-xlarge-done",
           "role": "under-test",
-          "precondition": "ui.focused == play.settings.interface-size",
+          "precondition": "by hand: the ring is on play.settings.interface-size",
           "expect": "SET-02: at Extra large Done stays pinned and reachable (ADR-0269 Decision 6). Premise: held Down repeats at 400 ms then every 100 ms (~17 moves in 40 ticks, so this step holds 60 ticks for the taller Extra large chain), the Settings vertical chain does not wrap, and Done is its last row. (manual: needs control play.settings.done, control play.settings.interface-size, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -1918,7 +1918,7 @@
         {
           "id": "settings.size-back-to-row",
           "role": "setup",
-          "precondition": "ui.focused == play.settings.done",
+          "precondition": "by hand: the ring is on play.settings.done",
           "expect": "SET-02 (setup): back to Interface size. (manual: needs action nav.goal, control play.settings.interface-size, control play.settings.done, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -1926,7 +1926,7 @@
         {
           "id": "settings.size-left-standard",
           "role": "under-test",
-          "precondition": "ui.focused == play.settings.interface-size",
+          "precondition": "by hand: the ring is on play.settings.interface-size",
           "expect": "SET-02: Left steps the value back toward Standard in place. (manual: needs control play.settings.interface-size, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -1934,7 +1934,7 @@
         {
           "id": "settings.size-left-standard-2",
           "role": "under-test",
-          "precondition": "ui.focused == play.settings.interface-size",
+          "precondition": "by hand: the ring is on play.settings.interface-size",
           "expect": "SET-02: the second Left reaches Standard; the focus stays on the row. (manual: needs control play.settings.interface-size, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -1942,7 +1942,7 @@
         {
           "id": "settings.size-standard-done",
           "role": "under-test",
-          "precondition": "ui.focused == play.settings.interface-size",
+          "precondition": "by hand: the ring is on play.settings.interface-size",
           "expect": "SET-02: at Standard Done is reachable. Premise: held Down repeats at 400 ms then every 100 ms (~17 moves in 40 ticks), the Settings vertical chain does not wrap, and Done is its last row. (manual: needs control play.settings.done, control play.settings.interface-size, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -1950,7 +1950,7 @@
         {
           "id": "settings.size-applies-scrolls",
           "role": "under-test",
-          "precondition": "ui.screen == play.settings",
+          "precondition": "by hand: the screen is play.settings",
           "expect": "SET-02: each value applies at once and only Play chrome scales, never the game picture; at Extra large the rows scroll with nothing clipped (guaranteed at 1024x640 and 512x505); record legibility at couch distance per size in the rubric. The hook exposes no values or geometry. (manual: needs control play.settings, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -1958,7 +1958,7 @@
         {
           "id": "settings.menu-sounds-row",
           "role": "under-test",
-          "precondition": "ui.screen == play.settings",
+          "precondition": "by hand: the screen is play.settings",
           "expect": "SET-03: Menu sounds is visible when the host audio path exists (ADR-0270, #1126) and hidden otherwise; record which. (manual: needs control play.settings, which mesen-gui does not advertise)",
           "severity": "minor",
           "mode": "manual"
@@ -1966,7 +1966,7 @@
         {
           "id": "settings.rumble-focus",
           "role": "setup",
-          "precondition": "ui.screen == play.settings",
+          "precondition": "by hand: the screen is play.settings",
           "expect": "SET-04 (setup): focus the Rumble slider on the Controls tab. (manual: needs action nav.goal, control play.settings.rumble, control play.settings, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -1974,7 +1974,7 @@
         {
           "id": "settings.rumble-left",
           "role": "under-test",
-          "precondition": "ui.focused == play.settings.rumble",
+          "precondition": "by hand: the ring is on play.settings.rumble",
           "expect": "SET-04: Left steps Rumble toward 0 in place. (manual: needs control play.settings.rumble, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -1982,7 +1982,7 @@
         {
           "id": "settings.rumble-right",
           "role": "under-test",
-          "precondition": "ui.focused == play.settings.rumble",
+          "precondition": "by hand: the ring is on play.settings.rumble",
           "expect": "SET-04: Right steps Rumble back up in place. (manual: needs control play.settings.rumble, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -1990,7 +1990,7 @@
         {
           "id": "settings.menu-tick",
           "role": "under-test",
-          "precondition": "ui.focused == play.settings.rumble",
+          "precondition": "by hand: the ring is on play.settings.rumble",
           "expect": "SET-04: Menu tick shows only when the core says the pad is aimable (MenuTickAvailable; macOS with a rumble-capable pad); with Rumble 0 the switch is disabled with the reason text; on, a short tick on each focus move, never while a game runs unpaused (HapticTickRule.ShouldTickOnMove). On a pad without rumble mark N/A, not FAIL. (manual: needs control play.settings.rumble, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -1998,7 +1998,7 @@
         {
           "id": "settings.deadzone-focus",
           "role": "setup",
-          "precondition": "ui.focused == play.settings.rumble",
+          "precondition": "by hand: the ring is on play.settings.rumble",
           "expect": "SET-05 (setup): focus the Deadzone slider. (manual: needs action nav.goal, control play.settings.deadzone, control play.settings.rumble, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -2006,7 +2006,7 @@
         {
           "id": "settings.deadzone-left",
           "role": "under-test",
-          "precondition": "ui.focused == play.settings.deadzone",
+          "precondition": "by hand: the ring is on play.settings.deadzone",
           "expect": "SET-05: Left steps the Deadzone slider in place. (manual: needs control play.settings.deadzone, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -2014,7 +2014,7 @@
         {
           "id": "settings.deadzone-right",
           "role": "under-test",
-          "precondition": "ui.focused == play.settings.deadzone",
+          "precondition": "by hand: the ring is on play.settings.deadzone",
           "expect": "SET-05: Right steps the Deadzone slider in place. (manual: needs control play.settings.deadzone, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -2022,7 +2022,7 @@
         {
           "id": "settings.deadzone-readout-drift",
           "role": "under-test",
-          "precondition": "ui.focused == play.settings.deadzone",
+          "precondition": "by hand: the ring is on play.settings.deadzone",
           "expect": "SET-05: the value readout follows the slider; stick drift must not move the menu cursor (the bridge reads D-pad names only, see PAD-03). The hook reads no values or stick axes. (manual: needs control play.settings.deadzone, which mesen-gui does not advertise)",
           "severity": "minor",
           "mode": "manual"
@@ -2030,7 +2030,7 @@
         {
           "id": "settings.box-art-focus",
           "role": "setup",
-          "precondition": "ui.screen == play.settings",
+          "precondition": "by hand: the screen is play.settings",
           "expect": "SET-06 (setup): focus Download box art on the System tab. (manual: needs action nav.goal, control play.settings.download-box-art, control play.settings, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -2038,7 +2038,7 @@
         {
           "id": "settings.box-art-change",
           "role": "under-test",
-          "precondition": "ui.focused == play.settings.download-box-art",
+          "precondition": "by hand: the ring is on play.settings.download-box-art",
           "expect": "SET-06: A changes Download box art by pad; the focus stays on the row. (manual: needs control play.settings.download-box-art, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -2046,7 +2046,7 @@
         {
           "id": "settings.box-art-change-back",
           "role": "under-test",
-          "precondition": "ui.focused == play.settings.download-box-art",
+          "precondition": "by hand: the ring is on play.settings.download-box-art",
           "expect": "SET-06: A changes it back; the focus stays on the row. (manual: needs control play.settings.download-box-art, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -2054,15 +2054,15 @@
         {
           "id": "settings.system-no-native-dialog",
           "role": "under-test",
-          "precondition": "ui.screen == play.settings",
-          "expect": "KNOWN GAP: SET-06: no native OS dialog opens on the System tab. A native panel is not an Avalonia control, so the hook's dialogs list (app sheets, ADR-0272 \u00a73) cannot see it; verify by eye or with the vision fallback. (manual: needs control play.settings, which mesen-gui does not advertise)",
+          "precondition": "by hand: the screen is play.settings",
+          "expect": "KNOWN GAP: SET-06: no native OS dialog opens on the System tab. A native panel is not an Avalonia control, so the hook's dialogs list (app sheets, ADR-0272 §3) cannot see it; verify by eye or with the vision fallback. (manual: needs control play.settings, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
         },
         {
           "id": "settings.system-rows-restart",
           "role": "under-test",
-          "precondition": "ui.screen == play.settings",
+          "precondition": "by hand: the screen is play.settings",
           "expect": "SET-06: every System row (storage, keyboard preset, ...) is a pad-drivable control; a storage change offers a restart rather than pretending (ADR-0256 Decision 8). (manual: needs control play.settings, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -2070,7 +2070,7 @@
         {
           "id": "settings.b-closes-to-pause",
           "role": "under-test",
-          "precondition": "ui.screen == play.settings",
+          "precondition": "by hand: the screen is play.settings",
           "expect": "SET-07: B closes the sheet back to W-P4. (manual: needs control play.pause, control play.settings, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -2078,7 +2078,7 @@
         {
           "id": "settings.changes-kept",
           "role": "under-test",
-          "precondition": "ui.screen == play.pause",
+          "precondition": "by hand: the screen is play.pause",
           "expect": "SET-07: the changes made on the tabs are kept after B; the hook reads no setting values. (manual: needs control play.pause, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -2099,7 +2099,7 @@
         {
           "id": "pause-pack-multi.chord-opens",
           "role": "setup",
-          "precondition": "ui.screen == play.game",
+          "precondition": "by hand: the screen is play.game",
           "expect": "W-P4 is open over the running game (setup, from P4-01). (manual: needs action pad.chord, control play.pause, control play.game, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -2107,7 +2107,7 @@
         {
           "id": "pause-pack-multi.pack-focus",
           "role": "setup",
-          "precondition": "ui.screen == play.pause and fixture pack-multi",
+          "precondition": "by hand: the screen is play.pause",
           "expect": "P4-06 (setup): focus Pack with 2+ installed packs. (manual: needs action nav.goal, control play.pause.pack, control play.pause, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -2117,7 +2117,7 @@
         {
           "id": "pause-pack-multi.pack-picker-opens",
           "role": "under-test",
-          "precondition": "ui.focused == play.pause.pack and fixture pack-multi",
+          "precondition": "the pack row focused in the pause menu (fixture pack-multi)",
           "expect": "P4-06: with 2+ packs A on Pack opens the picker W-P5. (manual: needs control play.pack, control play.pause.pack, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -2125,7 +2125,7 @@
         {
           "id": "pause-pack-multi.pack-picker-controls",
           "role": "under-test",
-          "precondition": "ui.visible == play.pack",
+          "precondition": "by hand: play.pack is visible",
           "expect": "P4-06: the picker (W-P5) has radios by D-pad, Use This Pack and Cancel. (manual: needs control play.pack, which mesen-gui does not advertise)",
           "severity": "minor",
           "mode": "manual"
@@ -2133,7 +2133,7 @@
         {
           "id": "pause-pack-multi.pack-picker-b-to-pause",
           "role": "under-test",
-          "precondition": "ui.visible == play.pack",
+          "precondition": "by hand: play.pack is visible",
           "expect": "P4-06: B closes the picker back to W-P4; focus returns to play.pause.pack. (manual: needs control play.pause.pack, control play.pack, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -2155,7 +2155,7 @@
         {
           "id": "settings-menu-sounds.menu-sounds-focus",
           "role": "setup",
-          "precondition": "ui.screen == play.settings and ui.visible == play.settings.menu-sounds",
+          "precondition": "by hand: the screen is play.settings",
           "expect": "SET-03: focus Menu sounds on the Audio tab; if the host has no Menu sounds row this step fails and stops only this batch. (manual: needs action nav.goal, control play.settings.menu-sounds, control play.settings, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -2165,7 +2165,7 @@
         {
           "id": "settings-menu-sounds.menu-sounds-toggle",
           "role": "under-test",
-          "precondition": "ui.focused == play.settings.menu-sounds",
+          "precondition": "by hand: the ring is on play.settings.menu-sounds",
           "expect": "SET-03: A toggles Menu sounds on; the focus stays on the row. (manual: needs control play.settings.menu-sounds, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -2173,7 +2173,7 @@
         {
           "id": "settings-menu-sounds.menu-sounds-blips",
           "role": "under-test",
-          "precondition": "ui.focused == play.settings.menu-sounds",
+          "precondition": "by hand: the ring is on play.settings.menu-sounds",
           "expect": "SET-03: a soft blip on move, confirm and back at a fixed low level, never while a game runs unpaused (MenuSounds.ShouldPlay); the game's own audio is unaffected (ADR-0270). Judged by ear. (manual: needs control play.settings.menu-sounds, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -2195,7 +2195,7 @@
         {
           "id": "ctl.reach-more-in-options",
           "role": "setup",
-          "precondition": "ui.focused == play.settings.tab-controls",
+          "precondition": "by hand: the ring is on play.settings.tab-controls",
           "expect": "Settings is open on the Controls tab with More in Options focused (the CTL-01 precondition: SET-01, Controls tab, game loaded); reached from the Controls tab so the goal cannot stop on Audio's identical button. (manual: needs action nav.goal, control play.settings.more-in-options, control play.settings.tab-controls, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -2205,7 +2205,7 @@
         {
           "id": "ctl.open-sheet",
           "role": "under-test",
-          "precondition": "ui.focused == play.settings.more-in-options",
+          "precondition": "by hand: the ring is on play.settings.more-in-options",
           "expect": "CTL-01: A on More in Options opens the Play Controller sheet over the paused game, not the classic ConfigWindow. (manual: needs control play.controller, control play.settings.more-in-options, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -2213,7 +2213,7 @@
         {
           "id": "ctl.sheet-holds-focus",
           "role": "under-test",
-          "precondition": "ui.screen == play.controller",
+          "precondition": "by hand: the screen is play.controller",
           "expect": "CTL-01: the sheet holds the pad's focus (Done reachability is checked by the controller-done batch setup). (manual: needs control play.controller, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -2221,7 +2221,7 @@
         {
           "id": "ctl.pad-drawing-lights",
           "role": "under-test",
-          "precondition": "ui.screen == play.controller",
+          "precondition": "by hand: the screen is play.controller",
           "expect": "CTL-01: the live pad drawing lights the buttons you press; the hook does not read the drawing, judged by eye on a real pad. (manual: needs control play.controller, which mesen-gui does not advertise)",
           "severity": "minor",
           "mode": "manual"
@@ -2229,7 +2229,7 @@
         {
           "id": "ctl.reach-first-row",
           "role": "setup",
-          "precondition": "ui.screen == play.controller",
+          "precondition": "by hand: the screen is play.controller",
           "expect": "The first console-control row of the Controller sheet is focused (the CTL-02 precondition). (manual: needs action nav.goal, control play.controller.row-first, control play.controller, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -2237,7 +2237,7 @@
         {
           "id": "ctl.arm-row",
           "role": "under-test",
-          "precondition": "ui.focused == play.controller.row-first",
+          "precondition": "by hand: the ring is on play.controller.row-first",
           "expect": "CTL-02: A on a console-control row arms the capture. (manual: needs control play.controller.capture-armed, control play.controller.row-first, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -2245,7 +2245,7 @@
         {
           "id": "ctl.arm-waits-release",
           "role": "under-test",
-          "precondition": "ui.visible == play.controller.capture-armed",
+          "precondition": "by hand: play.controller.capture-armed is visible",
           "expect": "CTL-02: arming waits for the first button to be released, then the next pad button pressed maps and lights the two lights (pad side / port side); needs a real pad. (manual: needs control play.controller.capture-armed, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -2253,7 +2253,7 @@
         {
           "id": "ctl.nav-control-refused",
           "role": "under-test",
-          "precondition": "ui.visible == play.controller.capture-armed",
+          "precondition": "by hand: play.controller.capture-armed is visible",
           "expect": "CTL-02: pressing a navigation control (A, B or a D-pad direction) while armed is refused visibly (ADR-0256 Decision 4); the refusal is not exposed by the hook and A/B are the pad's own presses. (manual: needs control play.controller.capture-armed, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -2261,7 +2261,7 @@
         {
           "id": "ctl.b-refused-capture-stays-armed",
           "role": "under-test",
-          "precondition": "ui.visible == play.controller.capture-armed",
+          "precondition": "by hand: play.controller.capture-armed is visible",
           "expect": "CTL-02: B is a navigation control and is refused; the capture stays armed (ADR-0256 Decision 4); the refusal note is not exposed by the hook (manual: needs control play.controller.capture-armed, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -2269,7 +2269,7 @@
         {
           "id": "ctl.focus-stays-on-row-after-cancel",
           "role": "under-test",
-          "precondition": "ui.visible == play.controller.capture-armed",
+          "precondition": "by hand: play.controller.capture-armed is visible",
           "expect": "CTL-02: after Esc cancels the capture (ADR-0255 slice 3), the focus ring stays on the row that was armed. Esc is keyboard-only, outside the pad-only vocabulary (manual: needs control play.controller.capture-armed, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -2277,7 +2277,7 @@
         {
           "id": "ctl.sheet-stays-after-cancel",
           "role": "under-test",
-          "precondition": "ui.visible == play.controller.capture-armed",
+          "precondition": "by hand: play.controller.capture-armed is visible",
           "expect": "CTL-02: after Esc cancels the capture, the Controller sheet stays open and the pad drives it again (HasAuthority gains !IsControllerCapturing). Esc is keyboard-only, outside the pad-only vocabulary (manual: needs control play.controller.capture-armed, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -2285,7 +2285,7 @@
         {
           "id": "ctl.bind-extra-button",
           "role": "under-test",
-          "precondition": "ui.screen == play.controller",
+          "precondition": "by hand: the screen is play.controller",
           "expect": "CTL-04: bind a spare button (a paddle or the right stick click) to Rewind, B to the game, press it while playing: the binding takes and the action fires in game (engine third key set, ADR-0255 slice 4); navigation controls are not offered in the list. Needs a real pad with a spare button. (manual: needs control play.controller, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -2309,7 +2309,7 @@
         {
           "id": "controller-done.leaves",
           "role": "under-test",
-          "precondition": "ui.focused == play.controller.done",
+          "precondition": "by hand: the ring is on play.controller.done",
           "expect": "CTL-03: A on Done leaves the sheet to W-P4. (manual: needs control play.pause, control play.controller.done, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -2317,7 +2317,7 @@
         {
           "id": "controller-done.reach-settings-row",
           "role": "setup",
-          "precondition": "ui.screen == play.pause",
+          "precondition": "by hand: the screen is play.pause",
           "expect": "W-P4 is open with the Settings row focused (reopen does not restore a row, so the row is pinned before the Down press). (manual: needs action nav.goal, control play.pause.settings, control play.pause, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -2325,7 +2325,7 @@
         {
           "id": "controller-done.pad-still-moves",
           "role": "under-test",
-          "precondition": "ui.focused == play.pause.settings",
+          "precondition": "by hand: the ring is on play.pause.settings",
           "expect": "CTL-03: no capture stays armed after close; the pad still moves focus on W-P4. (manual: needs control play.pause.quit-game, control play.pause.settings, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -2349,7 +2349,7 @@
         {
           "id": "controller-b.leaves",
           "role": "under-test",
-          "precondition": "ui.focused == play.controller.row-first",
+          "precondition": "by hand: the ring is on play.controller.row-first",
           "expect": "CTL-03: B instead of Done leaves the sheet to W-P4. (manual: needs control play.pause, control play.controller.row-first, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -2357,7 +2357,7 @@
         {
           "id": "controller-b.reach-settings-row",
           "role": "setup",
-          "precondition": "ui.screen == play.pause",
+          "precondition": "by hand: the screen is play.pause",
           "expect": "W-P4 is open with the Settings row focused (reopen does not restore a row, so the row is pinned before the Down press). (manual: needs action nav.goal, control play.pause.settings, control play.pause, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -2365,7 +2365,7 @@
         {
           "id": "controller-b.pad-still-moves",
           "role": "under-test",
-          "precondition": "ui.focused == play.pause.settings",
+          "precondition": "by hand: the ring is on play.pause.settings",
           "expect": "CTL-03: no capture stays armed after close; the pad still moves focus on W-P4. (manual: needs control play.pause.quit-game, control play.pause.settings, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
@@ -2389,7 +2389,7 @@
         {
           "id": "ctl.no-game-gap",
           "role": "under-test",
-          "precondition": "ui.screen == play.home",
+          "precondition": "by hand: the screen is play.home",
           "expect": "CTL-05: KNOWN GAP, expected FAIL. Settings is not reachable by pad with no game (HOME-06, bug #1177), so neither is the Controller sheet. With Settings reached by keyboard, Controls > More in Options opens the classic Options window's Input page because OpenControllerSheet() returns false with no game loaded (ADR-0256 Decision 5 note). Record what the player sees.",
           "severity": "major",
           "mode": "manual"
@@ -2413,7 +2413,7 @@
         {
           "id": "lamp.four-lamps-p1",
           "role": "under-test",
-          "precondition": "ui.screen == play.home",
+          "precondition": "by hand: the screen is play.home",
           "expect": "LAMP-01: the status line shows four lamps, P1 lit and the others dim; the number is the label and the pad name is the tooltip; the hook exposes neither lamps nor tooltips, judged by eye.",
           "severity": "minor",
           "mode": "manual"
@@ -2421,8 +2421,8 @@
         {
           "id": "lamp.second-pad-hotplug",
           "role": "under-test",
-          "precondition": "ui.screen == play.home",
-          "expect": "LAMP-02: plug a second pad in (or power it on over Bluetooth), wait 2 s, power it off: the second lamp lights within about 1 s (1 s poll) and dims again, nothing else moves, the ring stays where it was; the W-P15 pill \"New controller \u2026\" on its first press is expected. A real plug is physical-only and is not simulated.",
+          "precondition": "by hand: the screen is play.home",
+          "expect": "LAMP-02: plug a second pad in (or power it on over Bluetooth), wait 2 s, power it off: the second lamp lights within about 1 s (1 s poll) and dims again, nothing else moves, the ring stays where it was; the W-P15 pill \"New controller …\" on its first press is expected. A real plug is physical-only and is not simulated.",
           "severity": "major",
           "mode": "manual"
         }
@@ -2445,7 +2445,7 @@
         {
           "id": "lamp.bar-hidden-in-game",
           "role": "under-test",
-          "precondition": "ui.screen == play.game",
+          "precondition": "by hand: the screen is play.game",
           "expect": "LAMP-03: the status bar and lamps are hidden while the game runs; a pack-install pill over a running game keeps the bar (sheetOpen), record only if observed; the hook does not read the bar. (manual: needs control play.game, which mesen-gui does not advertise)",
           "severity": "minor",
           "mode": "manual"
@@ -2469,23 +2469,23 @@
         {
           "id": "loss.focus-lost-pauses",
           "role": "under-test",
-          "precondition": "ui.screen == play.game",
-          "expect": "LOSS-01: another app takes focus: W-P4 opens with \"Paused \u2014 \u2026\" naming the lost focus; regaining focus stays paused (ADR-0254 answer 1) and only Resume or the chord resumes. Taking focus by pad is not possible on macOS without a keyboard, so this is BLOCKED unless a second machine or remote switch exists; the keyboard (Cmd-Tab) may be used if noted. (manual: needs control play.game, which mesen-gui does not advertise)",
+          "precondition": "by hand: the screen is play.game",
+          "expect": "LOSS-01: another app takes focus: W-P4 opens with \"Paused — …\" naming the lost focus; regaining focus stays paused (ADR-0254 answer 1) and only Resume or the chord resumes. Taking focus by pad is not possible on macOS without a keyboard, so this is BLOCKED unless a second machine or remote switch exists; the keyboard (Cmd-Tab) may be used if noted. (manual: needs control play.game, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
         },
         {
           "id": "loss.pad-unplug-pauses",
           "role": "under-test",
-          "precondition": "ui.screen == play.game",
-          "expect": "LOSS-02: unplug the pad, then replug it: W-P4 opens with \"Paused \u2014 controller disconnected\" (ADR-0254 amendment, always on in Play, not gated by PauseWhenInBackground); replugging rewrites the line to \"Controller reconnected\" and does not resume; the action bar names the pad still connected, or the keyboard with none. Then record whether the replugged pad resumes (chord or A on Resume). A real unplug is not simulated. (manual: needs control play.game, which mesen-gui does not advertise)",
+          "precondition": "by hand: the screen is play.game",
+          "expect": "LOSS-02: unplug the pad, then replug it: W-P4 opens with \"Paused — controller disconnected\" (ADR-0254 amendment, always on in Play, not gated by PauseWhenInBackground); replugging rewrites the line to \"Controller reconnected\" and does not resume; the action bar names the pad still connected, or the keyboard with none. Then record whether the replugged pad resumes (chord or A on Resume). A real unplug is not simulated. (manual: needs control play.game, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
         },
         {
           "id": "loss.pad-off-mid-menu",
           "role": "under-test",
-          "precondition": "ui.screen == play.game",
+          "precondition": "by hand: the screen is play.game",
           "expect": "LOSS-03 (pass 3): the tester opens W-P4 first (pause the running game); then, with a Bluetooth second pad, power it off, on again, press a direction: no second pause (already paused); on return the pad drives focus again and the footer names the right control. (manual: needs control play.game, which mesen-gui does not advertise)",
           "severity": "minor",
           "mode": "manual"
@@ -2493,7 +2493,7 @@
         {
           "id": "loss.pad-sleep",
           "role": "under-test",
-          "precondition": "ui.screen == play.game",
+          "precondition": "by hand: the screen is play.game",
           "expect": "LOSS-04 (pass 3): leave a Bluetooth pad idle until it sleeps (vendor timeout, typically 10-15 min), then wake it: sleep is a disconnect, W-P4 opens as in LOSS-02, and waking reconnects so the pad can navigate W-P4 and resume. Not covered by any repo test; observation only. (manual: needs control play.game, which mesen-gui does not advertise)",
           "severity": "minor",
           "mode": "manual"
@@ -2626,7 +2626,7 @@
         {
           "id": "JOURNEY-01",
           "role": "under-test",
-          "precondition": "Cold start, keyboard and mouse already set aside",
+          "precondition": "Cold start: the app is launched by OS means first (HOME-01 - a pad-only launch does not exist), the keyboard and mouse are set aside, and the timed pad-only journey starts at Home",
           "expect": "Launch -> Home -> Open a ROM -> search with Y, A -> A on a tile -> play 30 s -> chord -> Settings > Display > Interface size -> Large -> B -> Save states -> save a slot -> B -> Resume -> chord -> Quit game -> confirm -> Home, under 5 minutes (needs action pad.chord, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual"
