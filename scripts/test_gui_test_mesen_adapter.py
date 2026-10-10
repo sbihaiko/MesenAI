@@ -177,10 +177,10 @@ class AdapterE2E(unittest.TestCase):
         self.app.chmod(self.app.stat().st_mode | stat.S_IXUSR)
         self.rom = self.tmp / "Contra (USA).nes"
         self.rom.write_bytes(b"rom")
-        self.fixtures = {
-            "settings": {"profile": "fresh"},
-            "rom": {"path": str(self.rom), "sha1": hashlib.sha1(b"rom").hexdigest()},
-        }
+        # No rom fixture: the adapter refuses one until the hook can open a ROM; tests that
+        # need a launch must not pass it (refusal is covered by test_rom_fixture_is_refused_not_ignored).
+        self.fixtures = {"settings": {"profile": "fresh"}}
+        self.rom_fixture = {"path": str(self.rom), "sha1": hashlib.sha1(b"rom").hexdigest()}
 
     def launch(self, fixtures=None):
         return adapter.MesenGuiAdapter(binary=str(self.app), workdir=self.tmp / "run").launch(fixtures or self.fixtures)
@@ -205,25 +205,29 @@ class AdapterE2E(unittest.TestCase):
         session = self.launch()
         try:
             self.assertIn("--test-hook=", " ".join(session.argv))
-            self.assertEqual(session.env["HOME"], str(self.tmp / "run" / "home"))
+            # HOME does not isolate the app; the fresh profile is a settings.json next to the cloned binary.
+            clone = Path(session.argv[0])
+            self.assertEqual(clone.parent, self.tmp / "run" / "app")
+            self.assertEqual((clone.parent / "settings.json").read_text(), "{}\n")
             self.assertTrue(session.log_text().startswith("test hook listening on"))
         finally:
             session.teardown()
 
     def test_a_missing_rom_fails_launch_and_starts_nothing(self):
         self.rom.unlink()
+        self.fixtures["rom"] = self.rom_fixture
         with self.assertRaises(adapter.FixtureError) as ctx:
             self.launch()
         self.assertIn("rom", str(ctx.exception))
         self.assertFalse((self.tmp / "run" / "hook.sock").exists())
 
     def test_a_rom_with_the_wrong_sha1_fails_launch(self):
-        self.fixtures["rom"]["sha1"] = "0" * 40
+        self.fixtures["rom"] = {**self.rom_fixture, "sha1": "0" * 40}
         with self.assertRaises(adapter.FixtureError):
             self.launch()
 
     def test_a_placeholder_sha1_is_not_a_pass(self):
-        self.fixtures["rom"]["sha1"] = "<no-intro sha1 per ADR-0003, filled when the adapter lands>"
+        self.fixtures["rom"] = {**self.rom_fixture, "sha1": "<no-intro sha1 per ADR-0003, filled when the adapter lands>"}
         with self.assertRaises(adapter.FixtureError):
             self.launch()
 
