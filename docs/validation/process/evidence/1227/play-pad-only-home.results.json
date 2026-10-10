@@ -1,0 +1,211 @@
+{
+  "format": "gui-test-results/1",
+  "run_id": "20261010T174902-7e3300",
+  "adapter": "mesen_gui_adapter:MesenGuiAdapter",
+  "adapter_name": "mesen-gui",
+  "script": {
+    "path": "/Users/bihaiko/wt-1227-mesenai/docs/validation/process/play-pad-only.gui-test.json",
+    "sha256": "a738986b7997562abb9a1f1a4c92db483ae9638574affb5cadefb76713bfde19",
+    "name": "play-pad-only"
+  },
+  "platform": "darwin-arm64",
+  "build_sha": "31ea201301d1727d0997d97fb076a51eec91c09f",
+  "started": "2026-10-10T17:49:02-0300",
+  "status": "passed",
+  "reasons": [],
+  "steps": [
+    {
+      "id": "home.first-focus",
+      "batch": "home",
+      "mode": "automated",
+      "role": "setup",
+      "expect": "HOME-01 - no wizard (ADR-0256 Decision 8); Play Home W-P1 is on screen and Open a ROM is already focused",
+      "verdict": "passed",
+      "capture": {
+        "path": "/tmp/e2e-1227/play-pad-only-20261010T174902-home.results.json.artifacts/capture-1.png",
+        "size": [
+          2200,
+          1400
+        ],
+        "sha256": "0308c7d0c1ed0692d049aa4292d0bd5d87c87b1817f03c4c6150ce12ddd84859"
+      },
+      "held": false
+    },
+    {
+      "id": "home.focus-holds-up",
+      "batch": "home",
+      "mode": "automated",
+      "role": "under-test",
+      "expect": "Focus stays on Open a ROM after D-pad Up. (HOME-02, HOME-04)",
+      "verdict": "passed",
+      "capture": {
+        "path": "/tmp/e2e-1227/play-pad-only-20261010T174902-home.results.json.artifacts/capture-2.png",
+        "size": [
+          2200,
+          1400
+        ],
+        "sha256": "0308c7d0c1ed0692d049aa4292d0bd5d87c87b1817f03c4c6150ce12ddd84859"
+      },
+      "held": false
+    },
+    {
+      "id": "home.focus-holds-down",
+      "batch": "home",
+      "mode": "automated",
+      "role": "under-test",
+      "expect": "Focus stays on Open a ROM after D-pad Down.",
+      "verdict": "passed",
+      "capture": {
+        "path": "/tmp/e2e-1227/play-pad-only-20261010T174902-home.results.json.artifacts/capture-3.png",
+        "size": [
+          2200,
+          1400
+        ],
+        "sha256": "0308c7d0c1ed0692d049aa4292d0bd5d87c87b1817f03c4c6150ce12ddd84859"
+      },
+      "held": false
+    },
+    {
+      "id": "home.focus-holds-left",
+      "batch": "home",
+      "mode": "automated",
+      "role": "under-test",
+      "expect": "Focus stays on Open a ROM after D-pad Left.",
+      "verdict": "passed",
+      "capture": {
+        "path": "/tmp/e2e-1227/play-pad-only-20261010T174902-home.results.json.artifacts/capture-4.png",
+        "size": [
+          2200,
+          1400
+        ],
+        "sha256": "0308c7d0c1ed0692d049aa4292d0bd5d87c87b1817f03c4c6150ce12ddd84859"
+      },
+      "held": false
+    },
+    {
+      "id": "home.focus-holds-right",
+      "batch": "home",
+      "mode": "automated",
+      "role": "under-test",
+      "expect": "Focus stays on Open a ROM after D-pad Right.",
+      "verdict": "passed",
+      "capture": {
+        "path": "/tmp/e2e-1227/play-pad-only-20261010T174902-home.results.json.artifacts/capture-5.png",
+        "size": [
+          2200,
+          1400
+        ],
+        "sha256": "0308c7d0c1ed0692d049aa4292d0bd5d87c87b1817f03c4c6150ce12ddd84859"
+      },
+      "held": false
+    },
+    {
+      "id": "home.ring-visible",
+      "batch": "home",
+      "mode": "manual",
+      "role": "under-test",
+      "expect": "The focus ring never disappears through the four presses.",
+      "verdict": "pending",
+      "capture": null,
+      "held": false
+    },
+    {
+      "id": "home.open-library",
+      "batch": "home",
+      "mode": "automated",
+      "role": "under-test",
+      "expect": "A on Open a ROM opens the library sheet (LIB-01). (HOME-02)",
+      "verdict": "passed",
+      "capture": {
+        "path": "/tmp/e2e-1227/play-pad-only-20261010T174902-home.results.json.artifacts/capture-6.png",
+        "size": [
+          2200,
+          1400
+        ],
+        "sha256": "e86ded58b247c9a387f075224a68fa3ce776a5653e8f400c6fcf25b07f3c2416"
+      },
+      "held": false
+    },
+    {
+      "id": "home.back-to-home",
+      "batch": "home",
+      "mode": "automated",
+      "role": "under-test",
+      "expect": "B on the sheet returns to Home.",
+      "verdict": "passed",
+      "capture": {
+        "path": "/tmp/e2e-1227/play-pad-only-20261010T174902-home.results.json.artifacts/capture-7.png",
+        "size": [
+          2200,
+          1400
+        ],
+        "sha256": "9465a8d0ae5a34e2e582460d742415da7089e4931b981e8ae3fcae8b0d1aeb68"
+      },
+      "held": false
+    },
+    {
+      "id": "home.back-focus-restored",
+      "batch": "home",
+      "mode": "manual",
+      "role": "under-test",
+      "expect": "The ring is back on Open a ROM after B. (manual: needs action pad.release, which mesen-gui does not advertise)",
+      "verdict": "pending",
+      "capture": null,
+      "held": false
+    },
+    {
+      "id": "home.chord-opens-nothing",
+      "batch": "home",
+      "mode": "manual",
+      "role": "under-test",
+      "expect": "The chord with no game loaded opens no overlay. (HOME-05) (manual: needs action pad.chord, which mesen-gui does not advertise)",
+      "verdict": "pending",
+      "capture": null,
+      "held": false
+    },
+    {
+      "id": "home.chord-focus-unchanged",
+      "batch": "home",
+      "mode": "manual",
+      "role": "under-test",
+      "expect": "Focus is unchanged after the chord. (manual: needs action pad.release, which mesen-gui does not advertise)",
+      "verdict": "pending",
+      "capture": null,
+      "held": false
+    },
+    {
+      "id": "home.settings-by-pad-gap",
+      "batch": "home",
+      "mode": "manual",
+      "role": "under-test",
+      "expect": "Y opens the Settings sheet from Home with no game loaded (bug #1177, ADR-0256 W-P8); B returns to Home.",
+      "verdict": "pending",
+      "capture": null,
+      "held": false
+    }
+  ],
+  "batches": [
+    {
+      "id": "home",
+      "verdict": "passed",
+      "teardown": []
+    }
+  ],
+  "bug": {
+    "filed": false,
+    "reason": "no step failed"
+  },
+  "selection": {
+    "kind": "batch",
+    "value": "home"
+  },
+  "summary": {
+    "passed": 7,
+    "failed": 0,
+    "needs review": 0,
+    "pending": 5,
+    "not executed": 0,
+    "steps": 12,
+    "executed": 7
+  }
+}

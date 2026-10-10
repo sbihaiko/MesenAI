@@ -1,0 +1,94 @@
+{
+  "parent": {
+    "number": 1286,
+    "state": "open",
+    "comments": 2,
+    "last": "## Run summary: `play-pad-only`\n\n- Run: `20261010T174902-7e3300` | script `a738986b7997562abb9a1f1a4c92db483ae9638574affb5cadefb76713bfde19` | build `31ea201301d1727d0997d97fb076a51eec91c09f` | platform `darwin-arm64`\n\n- passed: 7\n- pending: 5\n- pending: `home.back-focus-restored`, `home.chord-focus-unchanged`, `home.chord-opens-nothing`, `home.ring-visible`, `home.settings-by-pad-gap`\n- no result in the run: `after-game.contained-other-controls-gap`, `after-game.contained-sideways-left`, `after-game.contained-sideways-right`, `after-game.contained-up-continue`, `after-game.contained-up-favori"
+  },
+  "home_cases": [
+    {
+      "case": "home.back-focus-restored",
+      "issue": 1299,
+      "state": "open",
+      "last_comment": "**pending**",
+      "parent": "1286"
+    },
+    {
+      "case": "home.back-to-home",
+      "issue": 1298,
+      "state": "closed",
+      "last_comment": "**passed**",
+      "parent": "1286"
+    },
+    {
+      "case": "home.chord-focus-unchanged",
+      "issue": 1301,
+      "state": "open",
+      "last_comment": "**pending**",
+      "parent": "1286"
+    },
+    {
+      "case": "home.chord-opens-nothing",
+      "issue": 1300,
+      "state": "open",
+      "last_comment": "**pending**",
+      "parent": "1286"
+    },
+    {
+      "case": "home.first-focus",
+      "issue": 1291,
+      "state": "closed",
+      "last_comment": "**passed**",
+      "parent": "1286"
+    },
+    {
+      "case": "home.focus-holds-down",
+      "issue": 1293,
+      "state": "closed",
+      "last_comment": "**passed**",
+      "parent": "1286"
+    },
+    {
+      "case": "home.focus-holds-left",
+      "issue": 1294,
+      "state": "closed",
+      "last_comment": "**passed**",
+      "parent": "1286"
+    },
+    {
+      "case": "home.focus-holds-right",
+      "issue": 1295,
+      "state": "closed",
+      "last_comment": "**passed**",
+      "parent": "1286"
+    },
+    {
+      "case": "home.focus-holds-up",
+      "issue": 1292,
+      "state": "closed",
+      "last_comment": "**passed**",
+      "parent": "1286"
+    },
+    {
+      "case": "home.open-library",
+      "issue": 1297,
+      "state": "closed",
+      "last_comment": "**passed**",
+      "parent": "1286"
+    },
+    {
+      "case": "home.ring-visible",
+      "issue": 1296,
+      "state": "open",
+      "last_comment": "**pending**",
+      "parent": "1286"
+    },
+    {
+      "case": "home.settings-by-pad-gap",
+      "issue": 1302,
+      "state": "open",
+      "last_comment": "**pending**",
+      "parent": "1286"
+    }
+  ]
+}
