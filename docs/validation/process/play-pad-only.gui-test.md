@@ -54,9 +54,9 @@ Steps:
 | `home.ring-visible` | under-test | `by hand: the ring is on play.home.open-rom` | — | — | — | The focus ring never disappears through the four presses. | all | minor | manual |
 | `home.open-library` | under-test | `ui.focused == play.home.open-rom` | `pad.press(button="A", ticks=4)` | `ui.screen == play.library` within 120 ticks | `ui.screen(is="play.library")` | A on Open a ROM opens the library sheet (LIB-01). (HOME-02) | all | major | automated |
 | `home.back-to-home` | under-test | `ui.screen == play.library` | `pad.press(button="B", ticks=4)` | `ui.screen == play.home` within 120 ticks | `ui.screen(is="play.home")` | B on the sheet returns to Home. | all | major | automated |
-| `home.back-focus-restored` | under-test | `by hand: the screen is play.home` | — | — | — | The ring is back on Open a ROM after B. (manual: needs action pad.release, which mesen-gui does not advertise) | all | major | manual |
+| `home.back-focus-restored` | under-test | `ui.screen == play.home` | — | `ui.focused == play.home.open-rom` within 120 ticks | `ui.focused(is="play.home.open-rom")` | The ring is back on Open a ROM after B. | all | major | automated |
 | `home.chord-opens-nothing` | under-test | `by hand: the screen is play.home` | — | — | — | The chord with no game loaded opens no overlay. (HOME-05) (manual: needs action pad.chord, which mesen-gui does not advertise) | all | major | manual |
-| `home.chord-focus-unchanged` | under-test | `by hand: the screen is play.home` | — | — | — | Focus is unchanged after the chord. (manual: needs action pad.release, which mesen-gui does not advertise) | all | minor | manual |
+| `home.chord-focus-unchanged` | under-test | `by hand: the screen is play.home` | — | — | — | Focus is unchanged after the chord. (manual: needs action pad.chord, which mesen-gui does not advertise) | all | minor | manual |
 | `home.settings-by-pad-gap` | under-test | `by hand: the screen is play.home` | — | — | — | Y opens the Settings sheet from Home with no game loaded (bug #1177, ADR-0256 W-P8); B returns to Home. | all | major | manual |
 
 ## Batch `home-after-game`
@@ -71,7 +71,7 @@ Steps:
 
 | ID | Role | Precondition | Action | Wait | Check | Expected | Variants | Severity | Mode |
 |---|---|---|---|---|---|---|---|---|---|
-| `after-game.continue-first` | under-test | `by hand: the screen is play.home` | — | — | — | Continue playing is the first focus stop. (manual: needs action pad.release, which mesen-gui does not advertise) | all | major | manual |
+| `after-game.continue-first` | under-test | `by hand: the screen is play.home` | — | — | — | Continue playing is the first focus stop. (manual: a real ROM path and its No-Intro sha1 are supplied by hand; no ROM is committed) | all | major | manual |
 | `after-game.order-favorites` | under-test | `by hand: the ring is on play.home.continue` | — | — | — | Favorites follows Continue when the shelf exists (ADR-0268 Decision 6). (manual: needs control play.home.favorites, which mesen-gui does not advertise) | all | major | manual |
 | `after-game.order-recent` | under-test | `by hand: the ring is on play.home.favorites` | — | — | — | Recent follows Favorites (Continue, Favorites, Recent; ADR-0268 Decision 6). (manual: needs control play.home.recent, control play.home.favorites, which mesen-gui does not advertise) | all | major | manual |
 | `after-game.order-open-rom` | under-test | `by hand: the ring is on play.home.recent` | — | — | — | Open a ROM is reachable last. (manual: needs control play.home.recent, which mesen-gui does not advertise) | all | major | manual |

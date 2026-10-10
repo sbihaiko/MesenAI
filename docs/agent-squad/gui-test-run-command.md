@@ -60,9 +60,8 @@ pixel (ADR-0271).
 | `pad.disconnect` | `index` | unplugs the pad on that index. A pad plugged back in is read in the family it was connected with. |
 
 `pad` is a **device index**: `0` is the pad in the hand - ADR-0272 item 4's
-"device 0" - and `1` is the second pad. It is the state's own index, so
-`args.pad` is the same `pad` in `ui.state` and the same number the backend's
-key-name lookup takes. A button is named the way the pad bridge names it
+"device 0" - and `1` is the second pad. The hook resolves it to the
+backend's key names as `Pad<pad+1>` / `Joy<pad+1>`. A button is named the way the pad bridge names it
 (ADR-0272 item 4): `Up`, `Down`, `Left`, `Right`, `A`, `B`, `Start`, ... in the
 family the pad on that index was connected with.
 
