@@ -81,6 +81,12 @@ class PlaceFixtures(unittest.TestCase):
         settings = json.loads((launched.parent / "settings.json").read_text())
         self.assertEqual(settings["Preferences"]["UiMode"], "Player")
 
+    def test_the_seeded_settings_turn_single_instance_off(self):
+        # SingleInstance takes a machine-wide mutex: with it on, a launch beside any other Mesen exits 0 (#1220).
+        launched = adapter.resolve_fixtures({}, self.work, self.exe)
+        settings = json.loads((launched.parent / "settings.json").read_text())
+        self.assertIs(settings["Preferences"]["SingleInstance"], False)
+
     def test_a_files_destination_outside_the_home_is_refused(self):
         src = self.root / "a.txt"
         src.write_text("x")

@@ -100,7 +100,9 @@ def resolve_fixtures(fixtures, workdir, binary):
     # A settings.json that exists without a UiMode key is the upgrade path (Advanced), which leaves Play Home; a
     # missing file is the fresh-unzip path (Player) but the clone must carry one, so the key is written.
     # LibraryFolders stays absent without a rom, so the first run starts at Home.
-    settings = {"Preferences": {"UiMode": "Player"}}
+    # SingleInstance (PreferencesConfig.SingleInstance, default true) takes a machine-wide mutex: beside any other Mesen a
+    # launch would hand its arguments over and exit 0 before the hook comes up (#1220), so a test launch turns it off.
+    settings = {"Preferences": {"UiMode": "Player", "SingleInstance": False}}
     if rom is not None:
         # Only through the profile, never argv (ADR-0272 item 6): the ROM is a library tile.
         library = home / "library"
