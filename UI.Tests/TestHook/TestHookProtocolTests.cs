@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Net.Sockets;
 using System.Text;
 using System.Text.Json.Nodes;
@@ -268,6 +269,59 @@ namespace Mesen.Tests.TestHook
 				using StreamReader reader = new(stream, Encoding.UTF8);
 				Assert.Equal("{\"echo\":\"ping\"}", reader.ReadLine());
 				Assert.Equal("{\"echo\":\"pong\"}", reader.ReadLine());
+			} finally {
+				server.Dispose();
+				Directory.Delete(folder, true);
+			}
+		}
+
+		[Fact]
+		public void An_overlapping_hold_on_one_code_keeps_it_pressed_until_the_longest_ends()
+		{
+			Rig rig = new();
+			Assert.Null(rig.Keys.Press(1, "Right", 10, null));
+			Assert.Null(rig.Keys.Press(1, "Right", 2, null));
+			rig.Calls.Clear();
+			for(int i = 0; i < 2; i++) {
+				rig.Keys.Advance();
+			}
+			Assert.DoesNotContain((ushort)0x1011, rig.Calls.Where(c => !c.Down).Select(c => c.Code));
+			for(int i = 0; i < 8; i++) {
+				rig.Keys.Advance();
+			}
+			Assert.Single(rig.Calls, c => !c.Down);
+		}
+
+		[Fact]
+		public void A_line_over_the_limit_closes_the_connection_instead_of_growing_the_buffer()
+		{
+			if(OperatingSystem.IsWindows()) {
+				return;
+			}
+			string folder = Path.Combine(Path.GetTempPath(), "hook-" + Guid.NewGuid().ToString("N"));
+			string endpoint = Path.Combine(folder, "hook.sock");
+			using TestHookServer server = TestHookServer.Start(endpoint, line => line);
+			try {
+				using Socket client = new(AddressFamily.Unix, SocketType.Stream, ProtocolType.Unspecified);
+				client.Connect(new UnixDomainSocketEndPoint(endpoint));
+				client.ReceiveTimeout = 3000;
+				byte[] chunk = new byte[64 * 1024];
+				Array.Fill(chunk, (byte)'a');
+				try {
+					for(int i = 0; i < 40; i++) {
+						client.Send(chunk);
+					}
+				} catch(SocketException) {
+				}
+				byte[] reply = new byte[16];
+				int read;
+				try {
+					read = client.Receive(reply);
+				} catch(SocketException ex) {
+					Assert.NotEqual(SocketError.TimedOut, ex.SocketErrorCode);
+					read = 0;
+				}
+				Assert.Equal(0, read);
 			} finally {
 				server.Dispose();
 				Directory.Delete(folder, true);

@@ -83,7 +83,11 @@ namespace Mesen
 				//The GUI test hook: only a process started with --test-hook gets one.
 				//A path it cannot create is a startup failure, never a silent run.
 				try {
-					TestHookWiring.Start(Program.CommandLineArgs, (MainWindow)desktop.MainWindow);
+					IDisposable? testHook = TestHookWiring.Start(Program.CommandLineArgs, (MainWindow)desktop.MainWindow);
+					if(testHook is not null) {
+						//Quit closes the window; the socket must not outlive it.
+						desktop.MainWindow.Closed += (_, _) => testHook.Dispose();
+					}
 				} catch(Exception ex) {
 					Console.Error.WriteLine("test hook unavailable: " + ex.Message);
 					Environment.Exit(2);

@@ -13,6 +13,8 @@ namespace Mesen.Logic.TestHook;
 //Windows. No TCP port is opened on loopback or anywhere else.
 public sealed class TestHookServer : IDisposable
 {
+	private const int MaxLineChars = 1024 * 1024;
+
 	private readonly CancellationTokenSource _stop = new();
 	private readonly Func<string, string> _handler;
 	private readonly string _endpoint;
@@ -80,12 +82,30 @@ public sealed class TestHookServer : IDisposable
 				using StreamReader reader = new(stream, new UTF8Encoding(false), false, 4096, true);
 				using StreamWriter writer = new(stream, new UTF8Encoding(false), 4096, true) { AutoFlush = true, NewLine = "\n" };
 				string? line;
-				while((line = reader.ReadLine()) is not null) {
+				while((line = ReadBoundedLine(reader)) is not null) {
 					writer.WriteLine(_handler(line));
 				}
 			} catch(IOException) {
 			}
 		}
+	}
+
+	//A line past MaxLineChars is a runner gone wrong: null ends the connection
+	//rather than letting an unterminated line grow the buffer without bound.
+	private static string? ReadBoundedLine(StreamReader reader)
+	{
+		StringBuilder line = new();
+		int c;
+		while((c = reader.Read()) >= 0) {
+			if(c == '\n') {
+				return line.ToString().TrimEnd('\r');
+			}
+			if(line.Length >= MaxLineChars) {
+				return null;
+			}
+			line.Append((char)c);
+		}
+		return line.Length > 0 ? line.ToString() : null;
 	}
 
 	public void Dispose()

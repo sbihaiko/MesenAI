@@ -67,7 +67,10 @@ public sealed class TestHookKeys
 			bool done = hold.UntilFrame is long until ? now is long current && current >= until : Tick >= hold.UntilTick;
 			if(done) {
 				_holds.RemoveAt(i);
-				_setKey(hold.Code, false);
+				//A code held twice stays down until its longest hold ends.
+				if(!_holds.Exists(h => h.Code == hold.Code)) {
+					_setKey(hold.Code, false);
+				}
 			}
 		}
 	}
