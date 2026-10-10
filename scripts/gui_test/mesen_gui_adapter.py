@@ -15,6 +15,7 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import socket
 import subprocess
 import sys
@@ -52,8 +53,27 @@ def _sha1_of_rom(path):
     return hashlib.sha1(data).hexdigest()
 
 
-def resolve_fixtures(fixtures, workdir):
-    """Place every fixture under workdir and return the HOME the app runs with."""
+def _clone_app_folder(binary, dest):
+    """Clone the app folder (copy-on-write where the filesystem has it) and return the cloned binary."""
+    src = Path(binary).resolve().parent
+    if dest.exists():
+        shutil.rmtree(dest)
+    if sys.platform == "darwin" and subprocess.run(["cp", "-c", "-R", str(src), str(dest)], capture_output=True).returncode == 0:
+        pass
+    else:
+        if dest.exists():
+            shutil.rmtree(dest)
+        shutil.copytree(src, dest, symlinks=True)
+    return dest / Path(binary).name
+
+
+def resolve_fixtures(fixtures, workdir, binary):
+    """Place every fixture and return the cloned binary the app runs from.
+
+    HOME does not isolate the app (.NET resolves ApplicationData natively on
+    macOS); the one override is a settings.json next to the executable
+    (ConfigManager.DefaultPortableFolder), so the session runs from a clone of
+    the app folder seeded with a fresh one, and `files` land in that folder."""
     unknown = sorted(set(fixtures) - FIXTURE_KINDS)
     if unknown:
         raise FixtureError("fixture kind not supported by mesen-gui: " + ", ".join(unknown))
@@ -71,8 +91,11 @@ def resolve_fixtures(fixtures, workdir):
         have = _sha1_of_rom(path)
         if have != want:
             raise FixtureError(f"rom fixture {path} sha1 {have} is not the expected {want}")
-    home = Path(workdir) / "home"
-    home.mkdir(parents=True, exist_ok=True)
+        # Checked but not handed to the app would be ignored-rather-than-failed (ADR-0272 item 6).
+        raise FixtureError("rom fixture not yet placeable: the hook has no way to open a ROM yet")
+    launched = _clone_app_folder(binary, Path(workdir) / "app")
+    home = launched.parent
+    (home / "settings.json").write_text("{}\n")  # portable mode, fresh profile
     for item in fixtures.get("files") or []:
         src = Path(item.get("src", ""))
         if not src.is_file():
@@ -80,7 +103,7 @@ def resolve_fixtures(fixtures, workdir):
         dest = home / item["dest"]
         dest.parent.mkdir(parents=True, exist_ok=True)
         dest.write_bytes(src.read_bytes())
-    return home
+    return launched
 
 
 class MesenGuiAdapter:
@@ -99,13 +122,13 @@ class MesenGuiAdapter:
             raise Unavailable("no application binary: pass binary= or set MESEN_GUI_BINARY")
         workdir = self.workdir or Path(os.environ.get("TMPDIR", "/tmp")) / f"mesen-gui-{os.getpid()}"
         workdir.mkdir(parents=True, exist_ok=True)
-        home = resolve_fixtures(fixtures, workdir)  # before anything starts
+        binary = resolve_fixtures(fixtures, workdir, self.binary)  # before anything starts
         endpoint = str(workdir / "hook.sock")
         if len(endpoint) > 100:
             raise Unavailable(f"socket path too long for a Unix socket: {endpoint}")
         token = os.urandom(8).hex()
-        argv = [self.binary, "--test-hook=" + endpoint, "--test-hook-token=" + token]
-        env = dict(os.environ, HOME=str(home))
+        argv = [str(binary), "--test-hook=" + endpoint, "--test-hook-token=" + token]
+        env = dict(os.environ)
         log = open(workdir / "app.log", "wb")
         proc = subprocess.Popen(argv, env=env, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
         session = Session(endpoint, token, proc, workdir, argv=argv, env=env, log=log)
