@@ -4,6 +4,7 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.LogicalTree;
 using Avalonia.Media.Imaging;
+using Avalonia.Platform;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using Mesen.Interop;
@@ -25,8 +26,86 @@ namespace Mesen.Windows
 	{
 		private static TestHookKeys? _keys;
 		private static TestHookServer? _server;
+		private static readonly List<Window> _open = new();
 
 		public static bool Running => _keys is not null;
+
+		//#1255: every window the application creates while a hook runs - the main
+		//window first, then each dialog - is shown without activating (called from
+		//MesenWindow.OnInitialized, before the platform window comes up).
+		public static void WindowCreated(Window window)
+		{
+			if(Running) {
+				TestHookActivation.Confine(window);
+			}
+		}
+
+		//#1255: a window that has just opened is kept inside the primary display's
+		//working area and becomes part of what the run reports, so no window of the
+		//application can sit on an external monitor - a dialog follows the main
+		//window instead of landing wherever the window manager puts it.
+		public static void WindowOpened(Window window)
+		{
+			if(!Running) {
+				return;
+			}
+			if(!_open.Contains(window)) {
+				_open.Add(window);
+				window.Closed += (_, _) => _open.Remove(window);
+			}
+			KeepOnPrimaryDisplay(window);
+		}
+
+		//The windows a state read reports, the main one first. Dialogs opened before
+		//this process had a hook (nothing is constructed without the flag) never appear.
+		private static List<Window> ReportedWindows(Window main)
+		{
+			List<Window> windows = new() { main };
+			foreach(Window window in _open) {
+				if(!ReferenceEquals(window, main) && window.IsVisible) {
+					windows.Add(window);
+				}
+			}
+			return windows;
+		}
+
+		//The window's rect in physical pixels, the same way Capture measures it.
+		private static int[] WindowRect(Window window)
+		{
+			double scale = window.RenderScaling;
+			return TestHookPlacement.Rect(window.Position.X, window.Position.Y,
+				Math.Max(1, (int)Math.Ceiling(window.Bounds.Width * scale)),
+				Math.Max(1, (int)Math.Ceiling(window.Bounds.Height * scale)));
+		}
+
+		private static Screen? PrimaryScreen(Window window)
+			=> window.Screens.Primary ?? window.Screens.All.FirstOrDefault();
+
+		private static int[]? AreaOf(PixelRect area) => TestHookPlacement.Rect(area.X, area.Y, area.Width, area.Height);
+
+		//The primary display's full bounds and its working area (the same display
+		//without the menu bar), or nulls when the platform has no screen to ask.
+		private static (int[]? Bounds, int[]? WorkingArea) PrimaryDisplay(Window window)
+		{
+			Screen? screen = PrimaryScreen(window);
+			return screen is null ? (null, null) : (AreaOf(screen.Bounds), AreaOf(screen.WorkingArea));
+		}
+
+		public static void KeepOnPrimaryDisplay(Window window)
+		{
+			if(TestHookPlacement.IsAny(Environment.GetEnvironmentVariable(TestHookPlacement.EnvironmentVariable))) {
+				return;  // MESEN_GUI_WINDOW=any: a runner with no primary-display notion
+			}
+			int[]? area = PrimaryDisplay(window).WorkingArea;
+			if(area is null) {
+				return;
+			}
+			int[] rect = WindowRect(window);
+			int[] placed = TestHookPlacement.Clamp(area, rect);
+			if(placed[0] != rect[0] || placed[1] != rect[1]) {
+				window.Position = new PixelPoint(placed[0], placed[1]);
+			}
+		}
 
 		//The tick the pad bridge counts. Null keys = no hook = nothing happens.
 		public static void Advance() => _keys?.Advance();
@@ -51,6 +130,10 @@ namespace Mesen.Windows
 			if(options is null) {
 				return null;
 			}
+			//#1255: before this window is shown (Start runs with the window built but
+			//not yet up): the process never activates and the window is shown without
+			//activating, so a person typing elsewhere keeps typing.
+			TestHookActivation.Confine(window);
 			WindowTarget target = new(window);
 			TestHookKeys keys = new(InputApi.SetInjectedKey, keyCode ?? InputApi.GetKeyCode, RunningFrames, target.RaiseKey);
 			TestHookProtocol protocol = new(options.Token, target, keys);
@@ -137,6 +220,11 @@ namespace Mesen.Windows
 						});
 					}
 				}
+				//#1255: where the run's windows are. The adapter refuses a launch (or
+				//a step) whose window sits outside the primary display's bounds, so
+				//the position and the display it is compared against travel together.
+				int[] mainRect = WindowRect(_window);
+				(int[]? bounds, int[]? workingArea) = PrimaryDisplay(_window);
 				return new JsonObject {
 					//#1228: the topmost surface that is up, off the ids the loop
 					//above collected - never a single hardcoded id, which is how
@@ -149,8 +237,26 @@ namespace Mesen.Windows
 					["options"] = options,
 					["window"] = new JsonObject {
 						["mode"] = _window.WindowState == WindowState.FullScreen ? "fullscreen" : "windowed",
-						["size"] = new JsonArray((int)_window.Bounds.Width, (int)_window.Bounds.Height)
-					}
+						["size"] = new JsonArray(mainRect[2], mainRect[3]),
+						["position"] = new JsonArray(mainRect[0], mainRect[1]),
+						["maximized"] = _window.WindowState == WindowState.Maximized,
+						["primaryBounds"] = Area(bounds),
+						["primaryWorkingArea"] = Area(workingArea)
+					},
+					["windows"] = new JsonArray(ReportedWindows(_window).Select(w => (JsonNode)WindowEntry(w)).ToArray())
+				};
+			}
+
+			private static JsonNode? Area(int[]? rect)
+				=> rect is null ? null : new JsonArray(rect[0], rect[1], rect[2], rect[3]);
+
+			private static JsonObject WindowEntry(Window window)
+			{
+				int[] rect = WindowRect(window);
+				return new JsonObject {
+					["id"] = window is MainWindow ? "main" : (window.Title ?? window.GetType().Name),
+					["position"] = new JsonArray(rect[0], rect[1]),
+					["size"] = new JsonArray(rect[2], rect[3])
 				};
 			}
 

@@ -8,6 +8,7 @@ using System.Text;
 using System.Text.Json.Nodes;
 using System.Threading;
 using System.Threading.Tasks;
+using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
 using Avalonia.Threading;
 using Mesen.Config;
@@ -48,6 +49,7 @@ public class GuiTestHookTests : IDisposable
 	private readonly bool _pauseInMenus = ConfigManager.Config.Preferences.PauseWhenInMenusAndConfig;
 	private readonly string _folder = Path.Combine(Path.GetTempPath(), "mesen-1182-" + Guid.NewGuid().ToString("N"));
 	private readonly List<MainWindow> _windows = new();
+	private readonly List<MesenWindow> _dialogs = new();
 
 	private static readonly string[] ButtonNames = { "A", "B", "X", "Y", "L1", "R1", "Start", "Select", "Up", "Down", "Left", "Right" };
 	private static readonly Dictionary<ushort, string> Backend = ButtonNames.Select((name, i) => (Code: (ushort)(0x1000 + i), Name: "Pad1 " + name)).ToDictionary(p => p.Code, p => p.Name);
@@ -72,6 +74,10 @@ public class GuiTestHookTests : IDisposable
 	public void Dispose()
 	{
 		PlayPadNavigationWiring.SetKeyLookupsForTest(null, null);
+		foreach(MesenWindow dialog in _dialogs) {
+			dialog.Close();
+		}
+		_dialogs.Clear();
 		foreach(MainWindow window in _windows) {
 			window.ReleaseCore = () => { };
 			window.Close();
@@ -247,6 +253,113 @@ public class GuiTestHookTests : IDisposable
 
 		//And the flag with no endpoint is a startup failure, not a run without a hook.
 		Assert.Throws<ArgumentException>(() => TestHookWiring.Start(new[] { "--test-hook=" }, window, BackendCode));
+	}
+
+	//#1255: a run opens on the primary (built-in) display and says where it is, so
+	//the adapter can refuse a run that landed on an external monitor. The state has
+	//to carry both sides of that comparison: the window's own rect, and the display
+	//it is measured against. The geometry rule itself is pinned host-free
+	//(UI.Tests/TestHook/TestHookPlacementTests).
+	[AvaloniaFact]
+	public void The_state_reports_the_main_window_and_the_primary_display()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model) = ShowHome();
+		JsonObject state = new TestHookWiring.WindowTarget(window).State();
+
+		JsonObject reported = state["window"]!.AsObject();
+		Assert.Equal(window.Position.X, reported["position"]![0]!.GetValue<int>());
+		Assert.Equal(window.Position.Y, reported["position"]![1]!.GetValue<int>());
+		Assert.Equal(Math.Max(1, (int)Math.Ceiling(window.Bounds.Width * window.RenderScaling)), reported["size"]![0]!.GetValue<int>());
+		Assert.Equal(Math.Max(1, (int)Math.Ceiling(window.Bounds.Height * window.RenderScaling)), reported["size"]![1]!.GetValue<int>());
+		//The display the adapter checks against, as [x, y, width, height]. A window's
+		//position is a physical pixel count and a display's bounds are too, so the
+		//two have to be reported together for the check to mean anything.
+		Assert.NotNull(reported["primaryBounds"]);
+		Assert.Equal(4, reported["primaryBounds"]!.AsArray().Count);
+
+		JsonArray windows = state["windows"]!.AsArray();
+		Assert.Single(windows);
+		Assert.Equal("main", windows[0]!["id"]!.GetValue<string>());
+		Assert.Equal(window.Position.X, windows[0]!["position"]![0]!.GetValue<int>());
+	}
+
+	//A dialog is a window of the run like any other: the adapter refuses a step
+	//whose window is off the primary display, so the state has to name every one.
+	[AvaloniaFact]
+	public void A_second_window_opened_while_the_hook_runs_is_reported()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model) = ShowHome();
+		string endpoint = Path.Combine("/tmp", "m1255-" + Guid.NewGuid().ToString("N").Substring(0, 8), "hook.sock");
+		window.ReleaseCore = () => { };
+		using IDisposable? hook = TestHookWiring.Start(new[] { "--test-hook=" + endpoint, "--test-hook-token=s3" }, window, BackendCode);
+		Assert.NotNull(hook);
+
+		MesenWindow dialog = new() { Title = "play.controller-sheet" };
+		_dialogs.Add(dialog);
+		dialog.Show();
+		Pump();
+		try {
+			Assert.False(dialog.ShowActivated, "a window the run opens is shown without activating");
+			JsonArray windows = new TestHookWiring.WindowTarget(window).State()["windows"]!.AsArray();
+			Assert.Equal(2, windows.Count);
+			Assert.Equal("main", windows[0]!["id"]!.GetValue<string>());
+			Assert.Equal("play.controller-sheet", windows[1]!["id"]!.GetValue<string>());
+		} finally {
+			dialog.Close();
+		}
+		Pump();
+	}
+
+	//#1255: no focus theft. On macOS the process with --test-hook asks AppKit for
+	//the accessory policy before its first window is shown, and every window it
+	//opens is shown without activating - the two things that keep a run from
+	//pulling the caret out of whatever the person at the machine is typing into.
+	//Driving input goes through the hook, never through the operating system's
+	//focus, which is why nothing here activates anything.
+	[AvaloniaFact]
+	public void The_hook_asks_for_the_accessory_policy_and_shows_its_window_without_activating()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model) = ShowHome();
+		string endpoint = Path.Combine("/tmp", "m1255-" + Guid.NewGuid().ToString("N").Substring(0, 8), "hook.sock");
+		List<int> applied = new();
+		Func<Window, (bool, string?)> platform = TestHookActivation.DescribePlatformForTest;
+		Action<int> policy = TestHookActivation.ApplyPolicyForTest;
+		TestHookActivation.DescribePlatformForTest = _ => (true, "NSWindow");
+		TestHookActivation.ApplyPolicyForTest = applied.Add;
+		window.ReleaseCore = () => { };
+		try {
+			using IDisposable? hook = TestHookWiring.Start(new[] { "--test-hook=" + endpoint, "--test-hook-token=s3" }, window, BackendCode);
+			Assert.NotNull(hook);
+			Assert.False(window.ShowActivated, "the run's own window must not activate");
+			Assert.Equal(new[] { TestHookPlacement.AccessoryPolicy }, applied);
+		} finally {
+			TestHookActivation.DescribePlatformForTest = platform;
+			TestHookActivation.ApplyPolicyForTest = policy;
+		}
+	}
+
+	//A headless or non-macOS process has no NSWindow behind it: the test host's own
+	//activation policy is not ours to retarget.
+	[AvaloniaFact]
+	public void A_window_with_no_native_macos_handle_is_left_out_of_the_policy()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model) = ShowHome();
+		List<int> applied = new();
+		Func<Window, (bool, string?)> platform = TestHookActivation.DescribePlatformForTest;
+		Action<int> policy = TestHookActivation.ApplyPolicyForTest;
+		TestHookActivation.DescribePlatformForTest = _ => (false, "Headless");
+		TestHookActivation.ApplyPolicyForTest = applied.Add;
+		try {
+			TestHookActivation.Confine(window);
+			Assert.Empty(applied);
+		} finally {
+			TestHookActivation.DescribePlatformForTest = platform;
+			TestHookActivation.ApplyPolicyForTest = policy;
+		}
 	}
 
 	[AvaloniaFact]
