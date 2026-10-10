@@ -16,6 +16,7 @@
   ADR-0262.
 - Supersedes / amends: none. This is the hook/adapter/format half of the squad
   spec's step 0 and step 2; the navigation half is ADR-0271.
+- Amended: 2026-10-10. Fable proxy (owner asleep, 2026-10-10): "PICK: a" — "The emulator adapter hands a `rom` fixture to the app only through the profile: the hash-verified file is copied into a folder under the session's cloned app folder and that folder is written as `Preferences.LibraryFolders` in the seeded portable `settings.json`, never passed on argv, so a fresh profile still starts at Home and the ROM is reachable as a library tile."
 
 ## Context
 
@@ -224,6 +225,11 @@ by the script's `target` id from a registry and implements:
   SHA1 per ADR-0003, pack, settings profile, files placed on disk), then starts
   the application and returns a session. An adapter that cannot load what it
   needs **fails** — it never skips: a green run means the steps executed.
+  The emulator adapter hands a `rom` fixture to the app only through the
+  profile: the hash-verified file is copied into a folder under the session's
+  cloned app folder and that folder is written as `Preferences.LibraryFolders`
+  in the seeded portable `settings.json`, never passed on argv, so a fresh
+  profile still starts at Home and the ROM is reachable as a library tile.
 - `session.inject(action, args)` — one action, acknowledged.
 - `session.check(name, args)` — an objective observation of UI state. The
   adapter's `session.check` covers `ui.*` only, from the hook's snapshot;
