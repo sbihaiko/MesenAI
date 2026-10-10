@@ -1,8 +1,8 @@
 # ADR-0274: An overlapping slice is refused at dispatch, not serialized at merge
 
-- Status: accepted
+- Status: proposed (not yet accepted: no verbatim human go-ahead is recorded; per CLAUDE.md it stays `proposed` until a human picks, and implementing #1400 waits for that)
 - Date: 2026-10-10
-- Related: ADR-0273 (the two-level review verdict this completes the other half of)
+- Related: ADR-0273 (the two-level review verdict this completes the other half of; its Context and Consequences put GitHub's native merge queue out of scope)
 
 ## Context
 
@@ -19,8 +19,9 @@ sibling PR #1391 editing the same files. The overlap had already been detected:
 as a note appended to the child's own request, and a note inside the request is
 advice the child may ignore — which it did.
 
-ADR-0273 sketched a merge queue as the remedy and put it out of its own scope.
-Measured against the loop's logs, a merge queue does not address this: it
+ADR-0273 put GitHub's native merge queue out of its own scope (a change to the
+merge path and the `main gate` ruleset). Measured against the loop's logs, that
+merge queue does not address this overlap: it
 serializes *merges*, while the conflict is authored by parallel *edits*. No
 ordering of merges turns a file edited on both sides into a clean merge; it only
 decides who loses. What remained of its job is already done elsewhere — the
@@ -40,17 +41,22 @@ other pending requests of that same panel name.
 The gate is calibrated narrow, deliberately:
 
 - **Panel members against each other.** Only same-panel, same-launch siblings are
-  compared. Sibling sets legitimately share a file (a common test helper, a
-  shared fixture); a hard block against *every* open PR would deadlock a wave on
-  a file its members are all entitled to touch.
+  compared, and a hit is always a refusal: there is no allowlist and no
+  exception for a shared test helper or fixture among members of one panel. Such
+  a file is written once by one member, and the others declare `## Blocked by`
+  on it (Consequences). Legitimate sharing is between the panel and open PRs
+  *outside* it, which is exactly why the gate does not compare against those
+  (next item): a hard block against *every* open PR would deadlock a wave on a
+  file it is entitled to touch.
 - **Never against an older open PR that is about to merge.** That overlap is
   already handled where it belongs, by the dirty-head rule in the autopilot loop.
 - **Refuse the launch, not the child.** The repair is a re-split or an explicit
   ordering edge, both of which belong to the dispatcher and are cheap there. A
   child told to avoid a file it needs has no honest way to comply.
 
-The merge queue is **not built**. ADR-0273's out-of-scope note is closed by this
-decision rather than left open.
+GitHub's merge queue is **not enabled**. The question ADR-0273 left open (its
+Context non-goals and Consequences) is closed by this decision once accepted,
+rather than left open.
 
 ## Consequences
 
