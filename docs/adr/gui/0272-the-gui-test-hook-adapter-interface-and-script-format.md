@@ -2,7 +2,7 @@
 
 - Status: accepted (2026-10-09). The owner answered the three open points in
   session — "A/A/A (Recommended)" — and all three answers are folded into the
-  Decision below (items 4, 5 and 7); the record of what was picked, and of the
+  Decision below (items 6, 5 and 7: P1 into 6, P2 into 5, P3 into 7); the record of what was picked, and of the
   alternatives that were not, is the "Owner's picks" section. Listed as a slice
   in `docs/roadmap/PRD-mesence-enhancement-ecosystem.md` (Part B §8, slice
   T.0, tickets #1178, #1179, #1181, #1182, #1183). The implementation tickets
@@ -138,27 +138,38 @@ items 3 and 4 of that decision need; this ADR is that surface.
 **4. Input is injected inside the application, at the layer that consumes it.**
 There are two input layers in this application and they are fed differently.
 
-- **The GUI navigation layer** is the host's pressed-key set, which every GUI
-  consumer polls: `InputApi.GetPressedKeys()` → `KeyManager::GetPressedKeys`
-  (`InteropDLL/InputApiWrapper.cpp`). Its consumers are `PadInHand`,
-  `PlayControllerSetup`, `PlayPadNavigationWiring`, `PlayEdgeFlowsWiring` and
-  `ControllerSheetViewModel.Remap`. This is what a step on a screen **with no
-  game loaded** must drive — the pad-walk rules, the Home screen, a settings
-  sheet — and `pad.*`/`key.*` reach that set directly.
-- **The in-game layer** is `IInputProvider::SetInput`, called once per emulated
-  frame from `BaseControlManager::UpdateInputState()` (ADR-0157 §2), which feeds
-  the emulated console and nothing else. It is not reachable at all when no game
-  is loaded, and no GUI consumer reads it.
+- **The host pressed-key set** is what a physical press reaches, and every
+  reader of a press polls it: `InputApi.GetPressedKeys()` →
+  `KeyManager::GetPressedKeys` (`InteropDLL/InputApiWrapper.cpp`). Its readers
+  are the GUI (`PlayPadNavigation`, `UI/Logic/PlayPadNavigation.cs:89-110`, fed
+  by the bridge's tick, `UI/Windows/PlayPadNavigationWiring.cs:818`), the
+  shortcuts (`Core/Shared/ShortcutKeyHandler.cpp:79,383`, including the
+  ADR-0251 Select+Start chord), the Controller sheet's capture
+  (`UI/Windows/PlayPadNavigationWiring.cs:741-751`, read while `HasAuthority` is
+  false), the slot grid's Back edge (`PlayPadNavigation.cs:102-110`, asked at
+  `PlayPadNavigationWiring.cs:883`) and the emulated console itself
+  (`Core/Shared/BaseControlDevice.cpp:257`, `SetPressedState`). So `pad.*` and
+  `key.*` **always** go into this set, on every screen and whether or not a game
+  is loaded or paused: the inject layer is keyed by **who reads the press**, not
+  by the screen.
+- **`IInputProvider::SetInput`** is called once per emulated frame from
+  `BaseControlManager::UpdateInputState()` (ADR-0157 §2) and feeds the emulated
+  console and nothing else; no GUI consumer reads it, and it is not reachable
+  with no game loaded. It is an **opt-in** layer, used only by a step that
+  asserts console-only input while the game runs unpaused, and the step names it
+  explicitly (`"layer":"console"`); a step that does not name it never uses it.
 
 A step's duration unit follows from the layer it drives, and this is binding:
-with a game loaded the unit is the **emulated frame** (`frames`, `timeout_frames`,
-counted as ADR-0157 §1/§2 count them), and on a screen with **no game loaded**
-the unit is the **hook's own tick** (`ticks`, `timeout_ticks` — §7) — never
-`frames`, because there is no emulated frame counter to advance and a step
-written that way would spin on a counter frozen at 0. So one action is written
-either `{"op":"inject","action":"pad.press","args":{"button":"Right","frames":4}}`
-in game or `{"op":"inject","action":"pad.press","args":{"button":"Right","ticks":4}}`
-on a screen with no game. Buttons are named by the emulator's own key names
+`frames` / `timeout_frames` (counted as ADR-0157 §1/§2 count them) **only while
+the emulated clock advances** — a game is loaded and not paused — and `ticks` /
+`timeout_ticks` (the hook's own tick, §7) in **every other state**: no game,
+paused, the pause overlay, the load card, the picker. Outside a running game
+there is no emulated frame counter to advance, and a step written in `frames`
+would spin on a counter frozen at its last value. The validator/runner treats a
+step whose unit does not match the live state as malformed. So one action is
+written either `{"op":"inject","action":"pad.press","args":{"button":"Right","frames":4}}`
+while the game runs, or `{"op":"inject","action":"pad.press","args":{"button":"Right","ticks":4}}`
+on any other state. Buttons are named by the emulator's own key names
 (`BaseControlDevice::GetKeyNameAssociations()`, as ADR-0157 §2 does), so one name
 drives a NES, GB and SMS pad and the script is console-independent. Both layers
 **overlay** physical input rather than replacing it: a pad plugged into the
@@ -286,15 +297,16 @@ applies to, a severity, and `automated` or `manual`). Names are
   runner. `emu.*` (RAM) is reserved and not part of v1: when a script needs it,
   it is added by amending this ADR, not by a script inventing a name and not by
   widening the hook's snapshot with an emulator register view.
-- Durations and waits: the unit is **`frames` while a game is loaded** and
-  **`ticks` while none is** — a step on a screen with no game loaded writes
-  `ticks` and `timeout_ticks`, and is a malformed step if it writes `frames` or
-  `timeout_frames`, because the emulated frame counter is frozen at 0 there and
-  the step would wait forever on a number that never moves (§4). So the pilot
-  script's Home-screen step is
-  `{"name":"pad.press","args":{"button":"Right","ticks":4}}` with
-  `{"check":"...","timeout_ticks":120}`, and the same button held in game is
-  `{"button":"Right","frames":4}`. Both units are application-reported counters,
+- Durations and waits: the unit is keyed by whether the emulated clock advances
+  (§4): **`frames` / `timeout_frames` only while a game is loaded and not
+  paused**, and **`ticks` / `timeout_ticks` in every other state** (no game,
+  paused, the pause overlay, the load card, the picker). A step whose unit does
+  not match the live state is malformed — the validator and the runner reject it
+  — because the emulated frame counter does not move there and the step would
+  wait forever on a number that never moves. So the pilot script's Home-screen
+  step is `{"name":"pad.press","args":{"button":"Right","ticks":4}}` with
+  `{"check":"...","timeout_ticks":120}`, and the same button held in a running
+  game is `{"button":"Right","frames":4}`. Both units are application-reported counters,
   never host time (ADR-0157 §1). Every `wait` carries its `timeout_*`; a wait may
   also name a check predicate, and then the timeout applies to it.
 
@@ -360,7 +372,7 @@ already weighed and why it lost.
   caller does not already have; it must not grow a network transport later
   without a new ADR.
 - **The `tick` counter is load-bearing and new.** ADR-0157 §1 exists because
-  host-time waits flake; the GUI has no emulated clock when no game is loaded, so
+  host-time waits flake; the GUI has no advancing emulated clock outside a running game, so
   a UI counter reported by the application is what keeps that flake out. A wait
   that spends host time is a defect, not a convenience.
 - **`nav.goal` spends money and `emu.*` is not in v1.** A run containing goal
