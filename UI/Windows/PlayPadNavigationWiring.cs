@@ -114,6 +114,20 @@ namespace Mesen.Windows
 			}
 		}
 
+		//#1232, and the same kind of seam as TickForTest: the arbiter's content area,
+		//registered by a headless case that needs the launch window's own state -
+		//the content area ON SCREEN with its first control not resolvable yet -
+		//exactly rather than raced against. That state is real: the window's startup
+		//task classifies the home on a background thread, and until it lands
+		//`RecentGames.Visible` is the constructor's own Player-mode `true` while no
+		//home screen is classified, so the content area resolves to no first control
+		//at all. The wiring registers the same three things through its own call; a
+		//case asks for one of the three to be unresolvable.
+		public static void ContentForTest(MainWindow window, System.ComponentModel.INotifyPropertyChanged source, string[] properties, Func<Control?> target, Func<Control?>? root)
+		{
+			PlayFocusOnOpen.Of(window)?.ContentForTest(source, properties, target, root);
+		}
+
 		//#994 review 3: where the keyboard panel is drawn; a headless case swaps
 		//it to stand in for a field with no overlay layer. Null puts it back.
 		private static Func<Visual, OverlayLayer?> _overlayOf = OverlayLayer.GetOverlayLayer;
@@ -350,7 +364,10 @@ namespace Mesen.Windows
 		//over a game), which is why the root is read here rather than derived from
 		//the focused control: one root answers for every screen the content area
 		//shows. Null when the host is not on screen - a game running with nothing
-		//up - and the arbiter's last resort then has the window, as before.
+		//up - and the arbiter's last resort then has the window, as before. It is
+		//also what tells the arbiter the content area IS the screen when its first
+		//control is not resolvable yet: a press there waits for the home instead of
+		//putting the ring on the renderer panel under it (#1235, #1232).
 		private static Control? ContentRoot(MainWindow window)
 		{
 			return Named(window, "PlayHomeHost") is Control host && host.IsEffectivelyVisible ? host : null;

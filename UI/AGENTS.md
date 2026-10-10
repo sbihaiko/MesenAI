@@ -236,6 +236,18 @@ can be exercised by real xunit tests without Avalonia or the native
   takes the row that held the focus with it — so the step is also what
   re-arbitrates, and the ring lands on the new first row. Without it the sheet
   would answer the first step and no other.
+  The same rule reads for the content area, which is what the arbiter finds
+  when no claim is open: a content area whose first control is not resolvable
+  *yet* while the content area itself is the screen being shown — the launch
+  window, where
+  `RecentGames.Visible` is the constructor's own Player-mode `true` and the
+  startup task has not classified the home yet — is waited for, never answered
+  with the renderer panel under it (that panel is focusable, so `Focus()`
+  succeeds on it and the decision reads as landed while the ring is on a
+  surface the player cannot see; #1235/#1232, `PlayFocusOnOpen.Apply`). The
+  content area's own root — the host a D-pad press stays inside — is what says
+  which of the two states it is in; a root that answers nothing means no
+  content area is on screen, and the renderer really is the surface then.
   `Enter` is the only place focus is taken, and always with
   `NavigationMethod.Directional`: that is what makes it a `:focus-visible`
   focus, which is what paints `PlayerFocusRing` on the pad's own carriers.

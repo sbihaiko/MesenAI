@@ -1142,11 +1142,91 @@ public class PlayPadNavigationTests : IDisposable
 		Pump();
 		Assert.Null(FocusedName(window));
 
+		//#1232 review: the ring has to be provably gone BEFORE the press, or the
+		//wait below cannot tell the press's own decision from one already in
+		//flight. The decision is posted (PlayFocusOnOpen.Refresh posts at Loaded
+		//priority) and an attempt that failed keeps its give-up watch on the
+		//window's LayoutUpdated, so a decision that nothing asked for can land on
+		//the home's action on a later pass and be read as the press's work. Two
+		//more drains and the layout pass they carry say it did not: no watched
+		//property moved, so nothing re-asked the decision and the ring stayed off.
+		Pump();
+		Pump();
+		Assert.Null(FocusedName(window));
+
 		Release(window);
 		Feed(window, PadNavAction.Up);
 		Pump();
 		WaitFor(() => FocusedName(window) == "PlayHomeOpenRomPrimary",
 			() => $"a press with no ring left the home with no ring either ({Focused(window, model)})");
+	}
+
+	//The launch window the run was made against, which the case above does not
+	//reach: the home host is on screen before the app's own startup task has
+	//classified the home, so the arbiter's CONTENT TARGET is still null while the
+	//content area is the screen being shown (`RecentGames.Visible` is the
+	//constructor's own Player-mode `true`; every home flag is still false, so the
+	//content area resolves to no first control at all).
+	//
+	//A press there found no ring AND no content target, and the arbiter's last
+	//resort - the renderer panel - took the focus: it is a focusable panel UNDER
+	//the home, so Focus() succeeds and the decision reads as landed while the ring
+	//is on a surface the screen is not showing. Measured with the app instrumented
+	//at PlayFocusOnOpen.Apply (`content=<null> now=Panel#RendererPanel(visible=True)`,
+	//then `lost ... (visible=False)` as the home took over), which is why the run
+	//read `ui.focused` as None. #1235's regression only takes the ring away AFTER
+	//the home settled with a resolvable content target, so it never saw this.
+	//
+	//The state is set through the arbiter's own seam rather than raced against the
+	//window's background startup task: the content area, the root a press stays
+	//inside, and the target are the same three the wiring registers, with the
+	//target deliberately unresolvable - exactly the launch window's value.
+	[AvaloniaFact]
+	public void A_press_with_no_ring_and_no_content_target_waits_for_the_home_instead_of_the_renderer()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		ClearRecents();
+		(MainWindow window, MainWindowViewModel model) = ShowPlay();
+		model.RecentGames.Init(GameScreenMode.RecentGames);
+		Assert.True(model.RecentGames.ShowFirstRunHome, "the home is not the first-run one, so this case would prove nothing");
+		WaitFor(() => FocusedName(window) == "PlayHomeOpenRomPrimary",
+			() => $"the first-run home opened without its one action focused ({Focused(window, model)})");
+
+		PlayPadNavigationWiring.ContentForTest(window, model.RecentGames, [nameof(RecentGamesViewModel.Visible)],
+			() => null, () => window.FindNamed<Control>("PlayHomeHost"));
+
+		//The ring on nothing, and the content target null - and both of them
+		//provably still that way before the press (see the case above).
+		window.FocusManager?.Focus(null, NavigationMethod.Directional, KeyModifiers.None);
+		Pump();
+		Assert.Null(FocusedName(window));
+		Pump();
+		Pump();
+		Assert.Null(FocusedName(window));
+
+		Release(window);
+		Feed(window, PadNavAction.Up);
+		Pump();
+
+		//The press must not answer with the renderer panel: it is a surface the
+		//screen is not showing, and taking it reads as a landed decision, so the
+		//ring stays there for good. ADR-0256 Decision 3 is one focusable control at
+		//a time WITH the focus drawn - waiting for the home's own first control is
+		//the only answer that keeps it drawn.
+		Assert.True(FocusedName(window) != "RendererPanel",
+			$"a press with no ring and no content target landed on the renderer panel ({Focused(window, model)})");
+
+		//And the wait is the home's: the moment the content area can resolve its
+		//first control - what the startup task's own classification does - the ring
+		//is on it. A second press, through the same path the first one took.
+		PlayPadNavigationWiring.ContentForTest(window, model.RecentGames, [nameof(RecentGamesViewModel.Visible)],
+			() => window.FindNamed<Control>("PlayHomeOpenRomPrimary"),
+			() => window.FindNamed<Control>("PlayHomeHost"));
+		Release(window);
+		Feed(window, PadNavAction.Up);
+		Pump();
+		WaitFor(() => FocusedName(window) == "PlayHomeOpenRomPrimary",
+			() => $"the home's one action never took the ring back ({Focused(window, model)})");
 	}
 
 	//The recents the home reads are `.rgd` files in the app's own folder, and the
