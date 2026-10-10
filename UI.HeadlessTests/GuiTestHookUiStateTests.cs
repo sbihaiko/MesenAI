@@ -11,6 +11,7 @@ namespace Mesen.HeadlessTests;
 //#1199 (ADR-0271 Consequences): the hook's UI state carries the four fields Jev
 //navigates from - screen, focused control, visible controls and menu options -
 //as named ids, never pixels. Goal navigation in the agent-squad fork reads them.
+[Collection(NativeCoreCollection.Name)]
 public class GuiTestHookUiStateTests
 {
 	private static Control Named(Control control, string id)
