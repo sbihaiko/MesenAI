@@ -36,7 +36,7 @@
       "path": "<library>/Contra (USA).nes",
       "sha1": "<no-intro sha1 per ADR-0003, filled when the adapter lands>"
     },
-    "note": "Control ids are provisional until the in-app AutomationIds land (#1182); steps use the HOME-01..06 wording of the manual script. Library, Favorites and Game batches (#1193) follow LIB-01..09, FAV-01..02, GAME-01..04; ids under play.library.*, play.keyboard, play.select-rom, play.bios and play.game are provisional the same way.",
+    "note": "Control ids are provisional until the in-app AutomationIds land (#1182); steps use the HOME-01..06 wording of the manual script. Library, Favorites and Game batches (#1193) follow LIB-01..09, FAV-01..02, GAME-01..04; Controller sheet, port lamps and loss batches (#1195) follow CTL-01..05, LAMP-01..03 and LOSS-01..04; ids under play.controller.* are provisional the same way. Ids under play.library.*, play.keyboard, play.select-rom, play.bios and play.game are provisional the same way.",
     "rom-second": {
       "path": "<library>/Mega Man 2 (USA).nes",
       "sha1": "<no-intro sha1 per ADR-0003, filled when the adapter lands>",
@@ -4913,6 +4913,564 @@
           "precondition": "ui.focused == play.settings.menu-sounds",
           "expect": "SET-03: a soft blip on move, confirm and back at a fixed low level, never while a game runs unpaused (MenuSounds.ShouldPlay); the game's own audio is unaffected (ADR-0270). Judged by ear.",
           "severity": "major",
+          "mode": "manual"
+        }
+      ],
+      "teardown": []
+    },
+    {
+      "id": "controller",
+      "setup": [
+        {
+          "id": "ctl.reach-controls-tab",
+          "role": "setup",
+          "precondition": "fixture rom and fixture settings.profiles.fresh",
+          "action": {
+            "name": "nav.goal",
+            "args": {
+              "goal": "ui.focused == play.settings.tab-controls"
+            }
+          },
+          "wait": {
+            "check": "ui.focused == play.settings.tab-controls",
+            "timeout_ticks": 600
+          },
+          "expect": "Settings is open with the Controls tab focused; More in Options exists on both Audio and Controls, so the Controls tab is pinned first.",
+          "severity": "major",
+          "mode": "automated"
+        },
+        {
+          "id": "ctl.reach-more-in-options",
+          "role": "setup",
+          "precondition": "ui.focused == play.settings.tab-controls",
+          "action": {
+            "name": "nav.goal",
+            "args": {
+              "goal": "ui.focused == play.settings.more-in-options"
+            }
+          },
+          "wait": {
+            "check": "ui.focused == play.settings.more-in-options",
+            "timeout_ticks": 600
+          },
+          "expect": "Settings is open on the Controls tab with More in Options focused (the CTL-01 precondition: SET-01, Controls tab, game loaded); reached from the Controls tab so the goal cannot stop on Audio's identical button.",
+          "severity": "major",
+          "mode": "automated"
+        }
+      ],
+      "steps": [
+        {
+          "id": "ctl.open-sheet",
+          "role": "under-test",
+          "precondition": "ui.focused == play.settings.more-in-options",
+          "action": {
+            "name": "pad.press",
+            "args": {
+              "button": "A",
+              "ticks": 4
+            }
+          },
+          "wait": {
+            "check": "ui.screen == play.controller",
+            "timeout_ticks": 120
+          },
+          "check": {
+            "name": "ui.screen",
+            "args": {
+              "is": "play.controller"
+            }
+          },
+          "expect": "CTL-01: A on More in Options opens the Play Controller sheet over the paused game, not the classic ConfigWindow.",
+          "severity": "major",
+          "mode": "automated"
+        },
+        {
+          "id": "ctl.sheet-holds-focus",
+          "role": "under-test",
+          "precondition": "ui.screen == play.controller",
+          "wait": {
+            "timeout_ticks": 4
+          },
+          "check": {
+            "name": "ui.focused",
+            "args": {
+              "within": "play.controller"
+            }
+          },
+          "expect": "CTL-01: the sheet holds the pad's focus (Done reachability is checked by the controller-done batch setup).",
+          "severity": "major",
+          "mode": "automated"
+        },
+        {
+          "id": "ctl.pad-drawing-lights",
+          "role": "under-test",
+          "precondition": "ui.screen == play.controller",
+          "expect": "CTL-01: the live pad drawing lights the buttons you press; the hook does not read the drawing, judged by eye on a real pad.",
+          "severity": "minor",
+          "mode": "manual"
+        },
+        {
+          "id": "ctl.reach-first-row",
+          "role": "setup",
+          "precondition": "ui.screen == play.controller",
+          "action": {
+            "name": "nav.goal",
+            "args": {
+              "goal": "ui.focused == play.controller.row-first"
+            }
+          },
+          "wait": {
+            "check": "ui.focused == play.controller.row-first",
+            "timeout_ticks": 600
+          },
+          "expect": "The first console-control row of the Controller sheet is focused (the CTL-02 precondition).",
+          "severity": "major",
+          "mode": "automated"
+        },
+        {
+          "id": "ctl.arm-row",
+          "role": "under-test",
+          "precondition": "ui.focused == play.controller.row-first",
+          "action": {
+            "name": "pad.press",
+            "args": {
+              "button": "A",
+              "ticks": 4
+            }
+          },
+          "wait": {
+            "check": "ui.visible == play.controller.capture-armed",
+            "timeout_ticks": 120
+          },
+          "check": {
+            "name": "ui.visible",
+            "args": {
+              "is": "play.controller.capture-armed"
+            }
+          },
+          "expect": "CTL-02: A on a console-control row arms the capture.",
+          "severity": "major",
+          "mode": "automated"
+        },
+        {
+          "id": "ctl.arm-waits-release",
+          "role": "under-test",
+          "precondition": "ui.visible == play.controller.capture-armed",
+          "expect": "CTL-02: arming waits for the first button to be released, then the next pad button pressed maps and lights the two lights (pad side / port side); needs a real pad.",
+          "severity": "major",
+          "mode": "manual"
+        },
+        {
+          "id": "ctl.nav-control-refused",
+          "role": "under-test",
+          "precondition": "ui.visible == play.controller.capture-armed",
+          "expect": "CTL-02: pressing a navigation control (A, B or a D-pad direction) while armed is refused visibly (ADR-0256 Decision 4); the refusal is not exposed by the hook and A/B are the pad's own presses.",
+          "severity": "major",
+          "mode": "manual"
+        },
+        {
+          "id": "ctl.b-refused-capture-stays-armed",
+          "role": "under-test",
+          "precondition": "ui.visible == play.controller.capture-armed",
+          "action": {
+            "name": "pad.press",
+            "args": {
+              "button": "B",
+              "ticks": 4
+            }
+          },
+          "wait": {
+            "check": "ui.visible == play.controller.capture-armed",
+            "timeout_ticks": 8
+          },
+          "check": {
+            "name": "ui.visible",
+            "args": {
+              "is": "play.controller.capture-armed"
+            }
+          },
+          "expect": "CTL-02: B is a navigation control and is refused; the capture stays armed (ADR-0256 Decision 4); the refusal note is not exposed by the hook",
+          "severity": "major",
+          "mode": "automated"
+        },
+        {
+          "id": "ctl.focus-stays-on-row-after-cancel",
+          "role": "under-test",
+          "precondition": "ui.visible == play.controller.capture-armed",
+          "expect": "CTL-02: after Esc cancels the capture (ADR-0255 slice 3), the focus ring stays on the row that was armed. Esc is keyboard-only, outside the pad-only vocabulary",
+          "severity": "major",
+          "mode": "manual"
+        },
+        {
+          "id": "ctl.sheet-stays-after-cancel",
+          "role": "under-test",
+          "precondition": "ui.visible == play.controller.capture-armed",
+          "expect": "CTL-02: after Esc cancels the capture, the Controller sheet stays open and the pad drives it again (HasAuthority gains !IsControllerCapturing). Esc is keyboard-only, outside the pad-only vocabulary",
+          "severity": "major",
+          "mode": "manual"
+        },
+        {
+          "id": "ctl.bind-extra-button",
+          "role": "under-test",
+          "precondition": "ui.screen == play.controller",
+          "expect": "CTL-04: bind a spare button (a paddle or the right stick click) to Rewind, B to the game, press it while playing: the binding takes and the action fires in game (engine third key set, ADR-0255 slice 4); navigation controls are not offered in the list. Needs a real pad with a spare button.",
+          "severity": "major",
+          "mode": "manual"
+        }
+      ],
+      "teardown": []
+    },
+    {
+      "id": "controller-done",
+      "setup": [
+        {
+          "id": "controller-done.reach",
+          "role": "setup",
+          "precondition": "fixture rom and fixture settings.profiles.fresh",
+          "action": {
+            "name": "nav.goal",
+            "args": {
+              "goal": "ui.focused == play.controller.done"
+            }
+          },
+          "wait": {
+            "check": "ui.focused == play.controller.done",
+            "timeout_ticks": 600
+          },
+          "expect": "The Controller sheet is open with Done focused (the CTL-03 precondition: CTL-01).",
+          "severity": "major",
+          "mode": "automated"
+        }
+      ],
+      "steps": [
+        {
+          "id": "controller-done.leaves",
+          "role": "under-test",
+          "precondition": "ui.focused == play.controller.done",
+          "action": {
+            "name": "pad.press",
+            "args": {
+              "button": "A",
+              "ticks": 4
+            }
+          },
+          "wait": {
+            "check": "ui.screen == play.pause",
+            "timeout_ticks": 120
+          },
+          "check": {
+            "name": "ui.screen",
+            "args": {
+              "is": "play.pause"
+            }
+          },
+          "expect": "CTL-03: A on Done leaves the sheet to W-P4.",
+          "severity": "major",
+          "mode": "automated"
+        },
+        {
+          "id": "controller-done.reach-settings-row",
+          "role": "setup",
+          "precondition": "ui.screen == play.pause",
+          "action": {
+            "name": "nav.goal",
+            "args": {
+              "goal": "ui.focused == play.pause.settings"
+            }
+          },
+          "wait": {
+            "check": "ui.focused == play.pause.settings",
+            "timeout_ticks": 120
+          },
+          "expect": "W-P4 is open with the Settings row focused (reopen does not restore a row, so the row is pinned before the Down press).",
+          "severity": "major",
+          "mode": "automated"
+        },
+        {
+          "id": "controller-done.pad-still-moves",
+          "role": "under-test",
+          "precondition": "ui.focused == play.pause.settings",
+          "action": {
+            "name": "pad.press",
+            "args": {
+              "button": "Down",
+              "ticks": 4
+            }
+          },
+          "wait": {
+            "check": "ui.focused == play.pause.quit-game",
+            "timeout_ticks": 8
+          },
+          "check": {
+            "name": "ui.focused",
+            "args": {
+              "is": "play.pause.quit-game"
+            }
+          },
+          "expect": "CTL-03: no capture stays armed after close; the pad still moves focus on W-P4.",
+          "severity": "major",
+          "mode": "automated"
+        }
+      ],
+      "teardown": []
+    },
+    {
+      "id": "controller-b",
+      "setup": [
+        {
+          "id": "controller-b.reach",
+          "role": "setup",
+          "precondition": "fixture rom and fixture settings.profiles.fresh",
+          "action": {
+            "name": "nav.goal",
+            "args": {
+              "goal": "ui.focused == play.controller.row-first"
+            }
+          },
+          "wait": {
+            "check": "ui.focused == play.controller.row-first",
+            "timeout_ticks": 600
+          },
+          "expect": "The Controller sheet is open with a row focused (the CTL-03 precondition: CTL-01).",
+          "severity": "major",
+          "mode": "automated"
+        }
+      ],
+      "steps": [
+        {
+          "id": "controller-b.leaves",
+          "role": "under-test",
+          "precondition": "ui.focused == play.controller.row-first",
+          "action": {
+            "name": "pad.press",
+            "args": {
+              "button": "B",
+              "ticks": 4
+            }
+          },
+          "wait": {
+            "check": "ui.screen == play.pause",
+            "timeout_ticks": 120
+          },
+          "check": {
+            "name": "ui.screen",
+            "args": {
+              "is": "play.pause"
+            }
+          },
+          "expect": "CTL-03: B instead of Done leaves the sheet to W-P4.",
+          "severity": "major",
+          "mode": "automated"
+        },
+        {
+          "id": "controller-b.reach-settings-row",
+          "role": "setup",
+          "precondition": "ui.screen == play.pause",
+          "action": {
+            "name": "nav.goal",
+            "args": {
+              "goal": "ui.focused == play.pause.settings"
+            }
+          },
+          "wait": {
+            "check": "ui.focused == play.pause.settings",
+            "timeout_ticks": 120
+          },
+          "expect": "W-P4 is open with the Settings row focused (reopen does not restore a row, so the row is pinned before the Down press).",
+          "severity": "major",
+          "mode": "automated"
+        },
+        {
+          "id": "controller-b.pad-still-moves",
+          "role": "under-test",
+          "precondition": "ui.focused == play.pause.settings",
+          "action": {
+            "name": "pad.press",
+            "args": {
+              "button": "Down",
+              "ticks": 4
+            }
+          },
+          "wait": {
+            "check": "ui.focused == play.pause.quit-game",
+            "timeout_ticks": 8
+          },
+          "check": {
+            "name": "ui.focused",
+            "args": {
+              "is": "play.pause.quit-game"
+            }
+          },
+          "expect": "CTL-03: no capture stays armed after close; the pad still moves focus on W-P4.",
+          "severity": "major",
+          "mode": "automated"
+        }
+      ],
+      "teardown": []
+    },
+    {
+      "id": "controller-no-game",
+      "setup": [
+        {
+          "id": "ctl-no-game.reach-home",
+          "role": "setup",
+          "precondition": "fixture settings.profiles.fresh",
+          "action": {
+            "name": "nav.goal",
+            "args": {
+              "goal": "ui.screen == play.home"
+            }
+          },
+          "wait": {
+            "check": "ui.screen == play.home",
+            "timeout_ticks": 600
+          },
+          "expect": "Home with no game loaded (the CTL-05 precondition).",
+          "severity": "major",
+          "mode": "automated"
+        }
+      ],
+      "steps": [
+        {
+          "id": "ctl.no-game-gap",
+          "role": "under-test",
+          "precondition": "ui.screen == play.home",
+          "expect": "CTL-05: KNOWN GAP, expected FAIL. Settings is not reachable by pad with no game (HOME-06, bug #1177), so neither is the Controller sheet. With Settings reached by keyboard, Controls > More in Options opens the classic Options window's Input page because OpenControllerSheet() returns false with no game loaded (ADR-0256 Decision 5 note). Record what the player sees.",
+          "severity": "major",
+          "mode": "manual"
+        }
+      ],
+      "teardown": []
+    },
+    {
+      "id": "lamps",
+      "setup": [
+        {
+          "id": "lamps.reach-home",
+          "role": "setup",
+          "precondition": "fixture settings.profiles.fresh",
+          "action": {
+            "name": "nav.goal",
+            "args": {
+              "goal": "ui.screen == play.home"
+            }
+          },
+          "wait": {
+            "check": "ui.screen == play.home",
+            "timeout_ticks": 600
+          },
+          "expect": "Home with the pad port lamps on the status line (the LAMP-01 precondition: one pad).",
+          "severity": "major",
+          "mode": "automated"
+        }
+      ],
+      "steps": [
+        {
+          "id": "lamp.four-lamps-p1",
+          "role": "under-test",
+          "precondition": "ui.screen == play.home",
+          "expect": "LAMP-01: the status line shows four lamps, P1 lit and the others dim; the number is the label and the pad name is the tooltip; the hook exposes neither lamps nor tooltips, judged by eye.",
+          "severity": "minor",
+          "mode": "manual"
+        },
+        {
+          "id": "lamp.second-pad-hotplug",
+          "role": "under-test",
+          "precondition": "ui.screen == play.home",
+          "expect": "LAMP-02: plug a second pad in (or power it on over Bluetooth), wait 2 s, power it off: the second lamp lights within about 1 s (1 s poll) and dims again, nothing else moves, the ring stays where it was; the W-P15 pill \"New controller …\" on its first press is expected. A real plug is physical-only and is not simulated.",
+          "severity": "major",
+          "mode": "manual"
+        }
+      ],
+      "teardown": []
+    },
+    {
+      "id": "lamps-game",
+      "setup": [
+        {
+          "id": "lamps-game.reach-game",
+          "role": "setup",
+          "precondition": "fixture rom and fixture settings.profiles.fresh",
+          "action": {
+            "name": "nav.goal",
+            "args": {
+              "goal": "ui.screen == play.game"
+            }
+          },
+          "wait": {
+            "check": "ui.screen == play.game",
+            "timeout_ticks": 600
+          },
+          "expect": "A game is running unpaused (the LAMP-03 precondition).",
+          "severity": "major",
+          "mode": "automated"
+        }
+      ],
+      "steps": [
+        {
+          "id": "lamp.bar-hidden-in-game",
+          "role": "under-test",
+          "precondition": "ui.screen == play.game",
+          "expect": "LAMP-03: the status bar and lamps are hidden while the game runs; a pack-install pill over a running game keeps the bar (sheetOpen), record only if observed; the hook does not read the bar.",
+          "severity": "minor",
+          "mode": "manual"
+        }
+      ],
+      "teardown": []
+    },
+    {
+      "id": "loss",
+      "setup": [
+        {
+          "id": "loss.reach-game",
+          "role": "setup",
+          "precondition": "fixture rom and fixture settings.profiles.fresh",
+          "action": {
+            "name": "nav.goal",
+            "args": {
+              "goal": "ui.screen == play.game"
+            }
+          },
+          "wait": {
+            "check": "ui.screen == play.game",
+            "timeout_ticks": 600
+          },
+          "expect": "A game is running unpaused with PauseWhenInBackground at its default (on).",
+          "severity": "major",
+          "mode": "automated"
+        }
+      ],
+      "steps": [
+        {
+          "id": "loss.focus-lost-pauses",
+          "role": "under-test",
+          "precondition": "ui.screen == play.game",
+          "expect": "LOSS-01: another app takes focus: W-P4 opens with \"Paused — …\" naming the lost focus; regaining focus stays paused (ADR-0254 answer 1) and only Resume or the chord resumes. Taking focus by pad is not possible on macOS without a keyboard, so this is BLOCKED unless a second machine or remote switch exists; the keyboard (Cmd-Tab) may be used if noted.",
+          "severity": "major",
+          "mode": "manual"
+        },
+        {
+          "id": "loss.pad-unplug-pauses",
+          "role": "under-test",
+          "precondition": "ui.screen == play.game",
+          "expect": "LOSS-02: unplug the pad, then replug it: W-P4 opens with \"Paused — controller disconnected\" (ADR-0254 amendment, always on in Play, not gated by PauseWhenInBackground); replugging rewrites the line to \"Controller reconnected\" and does not resume; the action bar names the pad still connected, or the keyboard with none. Then record whether the replugged pad resumes (chord or A on Resume). A real unplug is not simulated.",
+          "severity": "major",
+          "mode": "manual"
+        },
+        {
+          "id": "loss.pad-off-mid-menu",
+          "role": "under-test",
+          "precondition": "ui.screen == play.game",
+          "expect": "LOSS-03 (pass 3): the tester opens W-P4 first (pause the running game); then, with a Bluetooth second pad, power it off, on again, press a direction: no second pause (already paused); on return the pad drives focus again and the footer names the right control.",
+          "severity": "minor",
+          "mode": "manual"
+        },
+        {
+          "id": "loss.pad-sleep",
+          "role": "under-test",
+          "precondition": "ui.screen == play.game",
+          "expect": "LOSS-04 (pass 3): leave a Bluetooth pad idle until it sleeps (vendor timeout, typically 10-15 min), then wake it: sleep is a disconnect, W-P4 opens as in LOSS-02, and waking reconnects so the pad can navigate W-P4 and resume. Not covered by any repo test; observation only.",
+          "severity": "minor",
           "mode": "manual"
         }
       ],
