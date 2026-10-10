@@ -411,6 +411,15 @@ class HeadlessWiring(unittest.TestCase):
         self.assertIn("GuiTestHook_e2e_a_runner_drives_the_Home_over_the_socket", src)
         self.assertEqual(adapter.HEADLESS_E2E_CASE, "GuiTestHookTests.GuiTestHook_e2e_a_runner_drives_the_Home_over_the_socket")
 
+    def test_ci_runs_the_real_case_through_the_runner_against_the_built_core(self):
+        """Grepping the name proves nothing (a skipped case is green): a CI job that builds the core must call the runner."""
+        wf = (ROOT / ".github" / "workflows" / "render-gate.yml").read_text()
+        step = wf.split("run_headless_e2e.py")
+        self.assertGreater(len(step), 1, "no CI step runs scripts/gui_test/run_headless_e2e.py")
+        self.assertIn("MESEN_CORE_LIB: ${{ github.workspace }}/InteropDLL/obj.linux-x64/MesenCore.so", step[0].rsplit("- name:", 1)[1])
+        self.assertIn("linux-x64", step[1].split("\n", 1)[0])
+        self.assertIn("'scripts/gui_test/**'", wf.split("jobs:")[0], "a runner change must trigger the gate")
+
 
 if __name__ == "__main__":
     unittest.main()
