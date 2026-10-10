@@ -42,6 +42,37 @@ is).
 | `--test-hook=<socket path>` | open the hook's line-per-JSON-object socket there. Without the switch the process has no hook at all: no socket, no state, no input path changes, and `MESEN_GUI_WINDOW` is not read. |
 | `--test-hook-token=<secret>` | the token every request has to carry. Either switch with no value is a startup failure, not a run that quietly goes on without a hook. |
 
+## What a check may read
+
+`capabilities()` advertises these, and every one of them is answered from the
+hook's own UI state - never from a pixel (ADR-0271) and never from display text
+(ADR-0272 item 3). An id the application does not have is `unknown id`, which
+fails the run loudly rather than answering `false`.
+
+| Check | Args | Reads |
+| --- | --- | --- |
+| `ui.screen` | `{"is":"play.home"}` | the surface the player is looking at. |
+| `ui.focused` | `{"is":"<id>"}` / `{"within":"<prefix>"}` | the focused control's id. |
+| `ui.visible` | `{"is":"<id>"}` | whether a named control is drawn. |
+| `ui.dialogs` | `{"is":[...]}` | the dialogs the hook reports. |
+| `ui.ring` | `{"is":"<id>"}` / `{"is":"none"}` | the focus ring PlayerTheme paints on `:focus-visible`; `none` is a control focused with no ring - the state a pad player must never be left in (#824, #1232). |
+| `ui.footer` | `{"is":"confirm,settings"}` / `{"contains":"back"}` | the action bar the focused surface declared (`PlayBarDeclarations`), in order, as `PlayAction` ids. Any other word is `unknown id`. |
+| `ui.surface` | `{"is":"play.pause"}` / `{"is":"none"}` | the topmost open sheet or overlay, from the focus arbiter's own claim order (`PlayFocusOnOpen`, ADR-0249), or `none` when none is up. The ids are `TestHookSurfaces`. |
+| `emu.paused` | `{"is":true}` | the application's own paused flag. |
+| `pad.lamps` | `{"port":1,"is":"lit"\|"dim"\|"hidden"}` | one port of the status line's four lamps (ADR-0249/ADR-0255). `hidden` is the bar not being drawn at all - the game running unpaused (ADR-0261) - and a lamp that is not drawn is never read as `dim`. A port outside 1-4 is `unknown id`. |
+| `ui.items` | `{"is":[<ids>]}` / `{"contains":"<id>"}` | the entries of the list the focus is in, in the order it draws them. The whole list compares as ids, never as one joined string: a game title can carry a comma. |
+| `pad.haptics` | `{"pad":1,"is":2}` / `{"pad":1,"at_least":1}` | the haptic tick requests the menu made on that pad since the last step, recorded at `HapticTickOutput` (#1106) while a hook runs. It is evidence of the request, never of a vibration: no motor is involved. A pad the menu never ticked reads `0`. |
+
+A step's own `inject` is what starts a step, so a `pad.haptics` check reads what
+that step caused and the state reads of a `wait` in between consume nothing.
+
+`emu.paused`, `pad.lamps` and `pad.haptics` are named by issue #1282, and two of
+the three names sit outside ADR-0272 item 7's closed vocabulary: `emu.*` is
+reserved there for the emulator's RAM (and not part of v1) and `pad.*` is the
+action namespace. They are implemented under the names the issue asks for; the
+ADR is not amended, and the mismatch is flagged for the owner rather than
+resolved unilaterally.
+
 ## Running the emulator-side checks
 
 ```sh

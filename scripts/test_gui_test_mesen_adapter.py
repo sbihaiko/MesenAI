@@ -8,6 +8,7 @@ real child process. Fixtures FAIL when missing; nothing here skips."""
 import hashlib
 import json
 import os
+import re
 import socket
 import stat
 import sys
@@ -51,6 +52,16 @@ class FakeHook:
         self.primary_bounds = [0, 0, 1512, 982]
         self.primary_working_area = [0, 25, 1512, 945]
         self.windows = []  # dialogs and secondary windows opened during the run
+        # #1282: what a player judges by eye, as the hook reports it. The ring follows the focus, the way
+        # the real one is on the control that took it with NavigationMethod.Directional.
+        self.ring_visible = True
+        self.footer = ["confirm", "settings"]
+        self.surface = "none"
+        self.paused = False
+        self.bar_shown = True
+        self.lit_ports = [1]
+        self.items = ["play.home.recent.Contra (USA).nes"]
+        self.haptics = [{"pad": 1, "count": 1}]
         self.quit = threading.Event()
         self.server = socket.socket(socket.AF_UNIX)
         self.server.bind(str(path))
@@ -81,6 +92,11 @@ class FakeHook:
             self.tick += 0 if self.frozen else 3
             out.update(
                 screen="play.home", dialogs=[], focus=self.focus, tick=self.tick, frames=0,
+                ring={"visible": self.ring_visible, "target": self.focus},
+                footer=self.footer, surface=self.surface, paused=self.paused,
+                lamps={"shown": self.bar_shown,
+                       "ports": [{"port": p, "lit": p in self.lit_ports, "name": ""} for p in (1, 2, 3, 4)]},
+                items=self.items, haptics=self.haptics,
                 controls=[{"id": i, "enabled": True, "visible": True, "focused": i == self.focus} for i in self.known] + self.extra_controls,
                 window={
                     "mode": "windowed", "size": self.window_size, "position": self.window_position, "maximized": False,
@@ -129,6 +145,14 @@ class AdapterContract(Base):
         self.assertTrue(self.session.check("ui.screen", {"is": "play.home"})["passed"])
         self.assertTrue(self.session.check("ui.focused", {"is": "play.home.open-rom"})["passed"])
         self.assertTrue(self.session.check("ui.visible", {"is": "play.home.continue"})["passed"])
+        # #1282: every check the adapter advertises answers against the hook's own state.
+        self.assertTrue(self.session.check("ui.ring", {"is": "play.home.open-rom"})["passed"])
+        self.assertTrue(self.session.check("ui.footer", {"is": "confirm,settings"})["passed"])
+        self.assertTrue(self.session.check("ui.surface", {"is": "none"})["passed"])
+        self.assertTrue(self.session.check("emu.paused", {"is": False})["passed"])
+        self.assertTrue(self.session.check("pad.lamps", {"port": 1, "is": "lit"})["passed"])
+        self.assertTrue(self.session.check("ui.items", {"contains": "play.home.recent.Contra (USA).nes"})["passed"])
+        self.assertTrue(self.session.check("pad.haptics", {"pad": 1, "at_least": 1})["passed"])
 
     def test_a_duplicated_id_is_visible_when_any_copy_is_visible(self):
         # First-run Home: the Primary Open ROM is on screen, the hidden Secondary (PlayHomeWithRecents) comes later in the tree.
@@ -158,10 +182,93 @@ class AdapterContract(Base):
         with self.assertRaises(adapter.UnknownId):
             self.session.check("ui.visible", {"is": "nope"})
 
+    def test_the_surface_vocabulary_is_the_hook_s_own_list(self):
+        # The adapter's SURFACES is what a script validates against, so it must be the ids
+        # UI/Logic/TestHook/TestHookSurfaces.cs declares - read from that file, never a copy.
+        source = (ROOT / "UI" / "Logic" / "TestHook" / "TestHookSurfaces.cs").read_text()
+        declared = re.findall(r'public const string \w+ = "([^"]+)";', source)
+        # The hook declares `none` beside the surfaces (what `ui.surface` reads when nothing is open).
+        self.assertEqual(sorted(declared), sorted(list(adapter.SURFACES) + [adapter.NO_ID]))
+
     def test_a_failed_check_is_false_not_an_error(self):
         result = self.session.check("ui.focused", {"is": "play.home.open-rom"})
         self.assertFalse(result["passed"])
         self.assertEqual(result["observed"], "play.home.continue")
+
+
+class PlayerVisibleChecks(Base):
+    """#1282: what a player judges by eye, read from the hook's UI state - never from pixels."""
+
+    def test_the_ring_is_the_focused_control_and_none_when_it_is_not_painted(self):
+        self.assertEqual(self.session.check("ui.ring", {"is": "play.home.continue"})["observed"],
+                         "play.home.continue")
+        self.hook.ring_visible = False  # focused with no NavigationMethod: no ring, though the control has the focus
+        result = self.session.check("ui.ring", {"is": "none"})
+        self.assertEqual(result, {"passed": True, "observed": "none"})
+        self.assertFalse(self.session.check("ui.ring", {"is": "play.home.continue"})["passed"])
+
+    def test_a_ring_on_an_unknown_id_is_unknown_id(self):
+        with self.assertRaises(adapter.UnknownId):
+            self.session.check("ui.ring", {"is": "play.home.renamed"})
+
+    def test_the_footer_is_the_bar_in_order_and_an_unknown_action_is_unknown_id(self):
+        self.hook.footer = ["move", "confirm", "back"]
+        self.assertEqual(self.session.check("ui.footer", {"is": "move,confirm,back"})["observed"], "move,confirm,back")
+        self.assertTrue(self.session.check("ui.footer", {"is": "move,confirm,back"})["passed"])
+        self.assertFalse(self.session.check("ui.footer", {"is": "confirm,move,back"})["passed"])
+        self.assertTrue(self.session.check("ui.footer", {"contains": "confirm"})["passed"])
+        self.assertFalse(self.session.check("ui.footer", {"contains": "favorite"})["passed"])
+        with self.assertRaises(adapter.UnknownId):
+            self.session.check("ui.footer", {"contains": "quit"})
+
+    def test_a_surface_the_application_does_not_have_is_unknown_id(self):
+        self.hook.surface = "play.settings.system"
+        self.assertTrue(self.session.check("ui.surface", {"is": "play.settings.system"})["passed"])
+        self.assertFalse(self.session.check("ui.surface", {"is": "play.settings"})["passed"])
+        self.assertEqual(self.session.check("ui.surface", {"is": "none"})["observed"], "play.settings.system")
+        with self.assertRaises(adapter.UnknownId):
+            self.session.check("ui.surface", {"is": "play.renamed"})
+
+    def test_paused_reads_the_emulator_state_the_shell_reads(self):
+        self.assertTrue(self.session.check("emu.paused", {"is": False})["passed"])
+        self.hook.paused = True
+        self.assertTrue(self.session.check("emu.paused", {"is": True})["passed"])
+        self.assertFalse(self.session.check("emu.paused", {"is": False})["passed"])
+        self.assertTrue(self.session.check("emu.paused", {"is": True})["observed"])
+
+    def test_a_lamp_that_is_not_drawn_is_hidden_and_never_dim(self):
+        self.hook.lit_ports = [1, 2]
+        self.assertEqual(self.session.check("pad.lamps", {"port": 2, "is": "lit"})["observed"], "lit")
+        self.assertEqual(self.session.check("pad.lamps", {"port": 3, "is": "dim"})["observed"], "dim")
+        self.hook.bar_shown = False  # the game runs unpaused: the bar and its lamps are not drawn (ADR-0261)
+        self.assertEqual(self.session.check("pad.lamps", {"port": 3, "is": "hidden"})["observed"], "hidden")
+        self.assertFalse(self.session.check("pad.lamps", {"port": 3, "is": "dim"})["passed"])
+
+    def test_a_port_that_is_not_one_of_the_four_is_unknown_id(self):
+        for bad in (0, 5, "1", True):
+            with self.assertRaises(adapter.UnknownId):
+                self.session.check("pad.lamps", {"port": bad, "is": "lit"})
+            with self.assertRaises(adapter.UnknownId):
+                self.session.check("pad.haptics", {"pad": bad, "is": 1})
+        with self.assertRaises(adapter.UnknownId):
+            self.session.check("pad.lamps", {"port": 1, "is": "on"})
+
+    def test_the_items_are_the_focused_lists_entry_ids(self):
+        self.hook.items = ["play.home.recent.Contra (USA).nes", "play.home.recent.Metroid (USA).nes"]
+        self.assertTrue(self.session.check("ui.items", {"is": self.hook.items})["passed"])
+        self.assertFalse(self.session.check("ui.items", {"is": ["play.home.recent.Metroid (USA).nes"]})["passed"])
+        # A game title can carry a comma, so the list compares whole ids, never a joined string.
+        self.assertTrue(self.session.check("ui.items", {"contains": "play.home.recent.Contra (USA).nes"})["passed"])
+        self.assertFalse(self.session.check("ui.items", {"contains": "play.home.recent"})["passed"])
+        self.assertEqual(self.session.check("ui.items", {"is": []})["observed"], self.hook.items)
+
+    def test_the_haptics_are_the_ticks_the_menu_asked_for_on_one_pad(self):
+        self.hook.haptics = [{"pad": 1, "count": 3}, {"pad": 2, "count": 1}]
+        self.assertEqual(self.session.check("pad.haptics", {"pad": 1, "is": 3})["observed"], 3)
+        self.assertTrue(self.session.check("pad.haptics", {"pad": 2, "at_least": 1})["passed"])
+        self.assertFalse(self.session.check("pad.haptics", {"pad": 1, "at_least": 4})["passed"])
+        # A pad the menu never ticked reads zero, which is a failed check and not a missing answer.
+        self.assertEqual(self.session.check("pad.haptics", {"pad": 4, "at_least": 1})["observed"], 0)
 
     def test_wait_is_met_when_the_condition_holds_in_ticks(self):
         self.session.inject("pad.press", {"button": "Up", "ticks": 2})

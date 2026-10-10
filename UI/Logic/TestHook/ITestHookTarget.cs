@@ -13,6 +13,12 @@ public interface ITestHookTarget
 	//counters.
 	JsonObject State();
 
+	//#1282: a step begins, on the request that starts it (an `inject`). What is
+	//counted "since the last step" - the haptic ticks the menu asked for - restarts
+	//here, so a step's own check reads what that step caused and the state reads in
+	//between (a wait polls state, ADR-0272 item 4) consume nothing.
+	void Step();
+
 	//A PNG of the application window only, never the desktop.
 	CaptureResult Capture(string path);
 

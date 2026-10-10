@@ -1,4 +1,5 @@
 using Avalonia;
+using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
@@ -292,6 +293,11 @@ namespace Mesen.Controls
 					ctrl.SetValue(Grid.ColumnProperty, col);
 					ctrl.SetValue(Grid.RowProperty, row);
 					ctrl.Entry = Entries[index];
+					//#1282: the tile's own test-facing name, so `ui.items` reads the
+					//list the way `visible` and `focus` read a control - never from
+					//pixels. The grid's id and the entry's, which is the same pair a
+					//person reads off the shelf.
+					AutomationProperties.SetAutomationId(ctrl, EntryId(Entries[index]));
 					ctrl.IsActiveEntry = index == SelectedIndex;
 					ctrl.Init();
 
@@ -299,6 +305,16 @@ namespace Mesen.Controls
 				}
 			}
 			grid.Children.AddRange(entries);
+		}
+
+		//#1282: the id one entry carries. The grid's own id when it has one - the
+		//Play home names its two shelves - and the entry's name after it. No id at
+		//all for a grid with no name of its own: an unnamed list stays invisible to
+		//the hook rather than inventing a name the application never declared.
+		private string? EntryId(RecentGameInfo entry)
+		{
+			string? grid = AutomationProperties.GetAutomationId(this);
+			return grid is { Length: > 0 } ? grid + "." + entry.Name : null;
 		}
 
 		private bool _loadRequested = false;

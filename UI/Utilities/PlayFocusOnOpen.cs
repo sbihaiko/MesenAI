@@ -4,6 +4,7 @@ using Avalonia.Input;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using Mesen.Logic;
+using Mesen.Logic.TestHook;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
@@ -48,7 +49,12 @@ internal sealed class PlayFocusOnOpen
 	private EventHandler? _onLayoutPass;
 	private readonly PlayFocusWatch _layoutWatch = new();
 
-	private sealed record Claim(Func<bool> IsOpen, Func<Control?> Target, Func<Control?>? Root = null, Func<IReadOnlyList<PlayBarEntry>>? Actions = null);
+	//`surface` is #1282's half: the name the GUI test hook reports as `ui.surface`
+	//while this claim is the topmost open one (TestHookSurfaces). It is a Func
+	//because the ROM picker's claim is three surfaces in one sheet (#1032/#1036):
+	//the library, the folder browser and the library-folders list are the same
+	//claim read in three modes.
+	private sealed record Claim(Func<bool> IsOpen, Func<Control?> Target, Func<string> Surface, Func<Control?>? Root = null, Func<IReadOnlyList<PlayBarEntry>>? Actions = null);
 
 	public PlayFocusOnOpen(Window window)
 	{
@@ -76,9 +82,14 @@ internal sealed class PlayFocusOnOpen
 	//focus also declares what its buttons do, so the shared action bar
 	//(PlayActionBar) lists exactly what the surface performs and no surface
 	//writes a footer of its own. Null is a surface not on the bar yet (#1108).
-	public void When(INotifyPropertyChanged source, string[] properties, Func<bool> isOpen, Func<Control?> target, Func<Control?>? root = null, Func<IReadOnlyList<PlayBarEntry>>? actions = null)
+	//
+	//`surface` (#1282) is the claim's own name, the one the GUI test hook reports
+	//as `ui.surface` - a sheet or an overlay is one surface whatever control it
+	//opens on, and `ui.screen` (TestHookScreens) is the other question, which of
+	//the floors the player is standing on.
+	public void When(INotifyPropertyChanged source, string[] properties, Func<bool> isOpen, Func<Control?> target, Func<string> surface, Func<Control?>? root = null, Func<IReadOnlyList<PlayBarEntry>>? actions = null)
 	{
-		Claim claim = new(isOpen, target, root, actions);
+		Claim claim = new(isOpen, target, surface, root, actions);
 		_claims.Add(claim);
 		Watch(source, properties);
 	}
@@ -375,6 +386,24 @@ internal sealed class PlayFocusOnOpen
 	{
 		return Open() is Claim claim ? claim.Actions?.Invoke() : _contentActions?.Invoke();
 	}
+
+	//#1282: the surface stack as the GUI test hook reads it - every claim in the
+	//arbiter's own order (topmost first, ADR-0249's Esc order) with whether it is
+	//open. The names are the claims' own, never inferred from the controls that
+	//happen to be visible, which is how `ui.screen` named the wrong surface in
+	//#1228.
+	public IReadOnlyList<(string Id, bool IsOpen)> SurfaceStack()
+	{
+		List<(string, bool)> stack = new(_claims.Count);
+		foreach(Claim claim in _claims) {
+			stack.Add((claim.Surface(), claim.IsOpen()));
+		}
+		return stack;
+	}
+
+	//The id of the topmost open surface, or null when nothing is up over the
+	//content area. `ui.surface` reads this.
+	public string? TopmostSurfaceId() => TestHookSurfaces.Topmost(SurfaceStack());
 
 	private Claim? Open()
 	{

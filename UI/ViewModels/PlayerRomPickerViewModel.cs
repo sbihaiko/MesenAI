@@ -53,6 +53,13 @@ namespace Mesen.ViewModels
 		}
 
 		public string Path { get; }
+
+		//#1282: the tile's test-facing name, declared here because this is where
+		//the tile is, and read by the GUI test hook's `ui.items` through the
+		//template's AutomationId binding. The file name and not the Title: the
+		//canonical-title pass (#1038) rewrites the Title in place, and a check on
+		//the list the player is looking at must not break when a ROM is renamed.
+		public string EntryId => "play.library.tile." + System.IO.Path.GetFileName(Path);
 		//Settable and notifying because a tile outlives the title it was built
 		//with: the canonical-title pass (#1038) renames it in place once the
 		//ROM's hash is known, and a new Title has to reach the template without

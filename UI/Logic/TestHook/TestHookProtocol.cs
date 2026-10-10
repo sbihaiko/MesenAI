@@ -81,6 +81,8 @@ public sealed class TestHookProtocol
 		if(action != "pad.press" && action != "key.press") {
 			throw new ArgumentException("unknown action " + action);
 		}
+		//#1282: the request that starts a step is the one that counts from now on.
+		_target.Step();
 		JsonObject args = request["args"]?.AsObject() ?? new JsonObject();
 		int? ticks = args["ticks"]?.GetValue<int>();
 		int? frames = args["frames"]?.GetValue<int>();
