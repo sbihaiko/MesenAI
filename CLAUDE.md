@@ -204,3 +204,35 @@ label is not "accepted" — only a live catalog row is. De-listing rules
   `pack:known-missing` is applied by the validation run itself, from the
   errata resolved against the computed Pack Hash (ADR-0152) — never by the
   classify step, whose inputs are submitter-controlled.
+
+## Coding squad (agent-squad) and squad hub
+
+All coding goes through agent-squad, never an Agent-tool coder. The
+autonomous loop that drives issues through it is the global `squad-goal`
+skill (`~/.claude/skills/squad-goal/`, outside this repo); its operating
+rules are summarized in `docs/squad/README.md`.
+
+- **Launch**: write the request to `~/.cache/squad-goal/req/<name>.txt`, then
+  run `python3 ~/.claude/skills/squad-goal/scripts/launch.py <file>` from the
+  checkout. Launch detached (`Popen(start_new_session=True)`); never
+  `nohup … &` with `disown`, which dies when the tool's task ends.
+- **One panel per frontier**: every startable issue goes in one `squad start`
+  request, one child and one PR each. A separate run only for a fix on an
+  existing PR branch or work that cannot join the panel.
+- **Caps**: `docs/squad/workflows/dynamic.graph.json` — `max_parallel` 10,
+  `max_children` 20, `spend_cap` 168. Give each child a disjoint file slice.
+- **Every coding request states**: base `origin/main`; open the PR yourself;
+  `Refs #N`, never `Closes`; `GitHub issue #N`; coding model
+  `claude-deepseek-v4-flash` (no `[1m]` suffix), fallback `claude-sonnet-5-5`;
+  en-US; no `Co-Authored-By` and no "Generated with Claude Code" line.
+- **Fix runs** on an existing PR: check out `origin/<branch>`, push to the same
+  branch, no new PR.
+- **Review chain**: GPT Terra (fast) → GPT 6.1 Sol → Claude Opus 5.5.
+- **Owner carve-outs** stay with the owner: money, credentials, access,
+  permanent deletion, external publication.
+- **Dashboards**: `launch.py` opens each run's dashboard; do not open it again.
+- **Hub** (`~/.claude/skills/squad-goal/scripts/hub.py`, default port 7700,
+  loopback, read-only): lists every live run dashboard in one page. Start it
+  once, detached, and open http://127.0.0.1:7700/ once.
+- **Issue state**: every dispatch, PR, verdict, CI result, merge and e2e result
+  is commented on the issue and reflected on the board at once.
