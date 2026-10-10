@@ -12,6 +12,8 @@ double KeyManager::_xMouseMovement;
 double KeyManager::_yMouseMovement;
 EmuSettings* KeyManager::_settings = nullptr;
 SimpleLock KeyManager::_lock;
+SimpleLock KeyManager::_injectedLock;
+vector<uint16_t> KeyManager::_injectedKeys;
 
 void KeyManager::RegisterKeyManager(IKeyManager* keyManager)
 {
@@ -34,10 +36,16 @@ void KeyManager::SetSettings(EmuSettings* settings)
 
 bool KeyManager::IsKeyPressed(uint16_t keyCode)
 {
-	if(_keyManager != nullptr) {
-		return _settings->IsInputEnabled() && _keyManager->IsKeyPressed(keyCode);
+	//Input disabled (a dialog has focus) silences the overlay too, as it does the
+	//backend. A host with no backend registered still reads an injected code, the
+	//way GetPressedKeys does.
+	if(_settings != nullptr && !_settings->IsInputEnabled()) {
+		return false;
 	}
-	return false;
+	if(_keyManager != nullptr && _keyManager->IsKeyPressed(keyCode)) {
+		return true;
+	}
+	return IsInjected(keyCode);
 }
 
 optional<int16_t> KeyManager::GetAxisPosition(uint16_t keyCode)
@@ -56,8 +64,29 @@ bool KeyManager::IsMouseButtonPressed(MouseButton button)
 	return false;
 }
 
-vector<uint16_t> KeyManager::GetPressedKeys()
+//The GUI test hook's overlay (the GUI test hook ADR, PR #1202, item 4): codes a
+//run asked to hold down, read as pressed on top of whatever the backend reports.
+//Empty unless the host started with --test-hook, so a normal run never differs.
+void KeyManager::SetInjectedKey(uint16_t keyCode, bool pressed)
 {
+	auto lock = _injectedLock.AcquireSafe();
+	auto it = std::find(_injectedKeys.begin(), _injectedKeys.end(), keyCode);
+	if(pressed && it == _injectedKeys.end()) {
+		_injectedKeys.push_back(keyCode);
+	} else if(!pressed && it != _injectedKeys.end()) {
+		_injectedKeys.erase(it);
+	}
+}
+
+bool KeyManager::IsInjected(uint16_t keyCode)
+{
+	auto lock = _injectedLock.AcquireSafe();
+	return std::find(_injectedKeys.begin(), _injectedKeys.end(), keyCode) != _injectedKeys.end();
+}
+
+vector<uint16_t> KeyManager::GetBackendPressedKeys()
+{
+	vector<uint16_t> keys;
 	if(_keyManager != nullptr) {
 		//#902: a backend's set can carry the "no key" sentinel - macOS recorded it
 		//for any key code its table cannot name, and SetKeyState is a host export
@@ -68,7 +97,21 @@ vector<uint16_t> KeyManager::GetPressedKeys()
 		//that cannot tell the sentinel from a key.
 		return IKeyManager::WithoutNoKey(_keyManager->GetPressedKeys());
 	}
-	return vector<uint16_t>();
+	return keys;
+}
+
+//The backend's set with the test hook's overlay merged in at the exit, the same
+//overlay IsKeyPressed applies, so the two readers never disagree.
+vector<uint16_t> KeyManager::GetPressedKeys()
+{
+	vector<uint16_t> keys = GetBackendPressedKeys();
+	auto lock = _injectedLock.AcquireSafe();
+	for(uint16_t injected : _injectedKeys) {
+		if(std::find(keys.begin(), keys.end(), injected) == keys.end()) {
+			keys.push_back(injected);
+		}
+	}
+	return keys;
 }
 
 string KeyManager::GetKeyName(uint16_t keyCode)

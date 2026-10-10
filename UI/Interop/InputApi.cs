@@ -42,6 +42,12 @@ namespace Mesen.Interop
 			}
 		}
 
+		//The GUI test hook's door (the GUI test hook ADR, PR #1202, item 4): hold a
+		//code down in the host pressed-key set, or let it go. Only TestHookKeys calls
+		//it, and only when the process was started with --test-hook.
+		[DllImport(DllPath)] [return: MarshalAs(UnmanagedType.I1)] public static extern bool IsKeyPressed(UInt16 scanCode);
+		[DllImport(DllPath)] public static extern void SetInjectedKey(UInt16 scanCode, [MarshalAs(UnmanagedType.I1)] bool pressed);
+
 		//The capacity is passed as an explicit length so the native copy loop reads
 		//its bound from here instead of repeating a literal that can drift, and the
 		//RETURN is the size of the set the backend holds - so a set too large for

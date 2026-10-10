@@ -4,6 +4,7 @@ using Mesen.Debugger.ViewModels;
 using Mesen.Debugger.Windows;
 using Mesen.Interop;
 using Mesen.Localization;
+using Mesen.Logic.TestHook;
 using Mesen.Utilities;
 using Mesen.ViewModels;
 using Mesen.Windows;
@@ -42,7 +43,8 @@ public class CommandLineHelper
 
 	private void ProcessCommandLineArgs(string[] args, bool forStartup)
 	{
-		foreach(string arg in args) {
+		//The GUI test hook's flags are read by TestHookWiring.Start, not by the emulator.
+		foreach(string arg in TestHookOptions.WithoutHookArgs(args)) {
 			string absPath;
 			if(Path.IsPathRooted(arg)) {
 				absPath = arg;
