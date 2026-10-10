@@ -27,7 +27,8 @@
       "profiles": {
         "fresh": "no play history, no favorites",
         "history-one-favorite": "one game in play history (so Continue and Recent exist) and that game favorited (so Favorites exists, ADR-0268 Decision 4)",
-        "history-no-favorite": "one game in play history (so Continue and Recent exist) and no favorites (FAV-01 starts from an empty Favorites shelf)"
+        "history-no-favorite": "one game in play history (so Continue and Recent exist) and no favorites (FAV-01 starts from an empty Favorites shelf)",
+        "history-two-favorites": "two games in play history (so Continue and Recent exist) and both favorited, so unfavoriting one favorite via X leaves the Favorites shelf visible (ADR-0268 Decision 4)"
       }
     },
     "rom": {
@@ -643,7 +644,7 @@
         {
           "id": "lib.reach-library",
           "role": "setup",
-          "precondition": "fixture rom and fixture settings.profiles.fresh",
+          "precondition": "fixture rom-library-large and fixture settings.profiles.fresh",
           "action": {
             "name": "nav.goal",
             "args": {
@@ -707,15 +708,23 @@
         {
           "id": "lib.hold-down-repeats",
           "role": "under-test",
-          "precondition": "fixture rom folder with 100+ ROMs; ui.screen == play.library",
-          "expect": "LIB-02: with 100+ ROMs, a held Down repeats after 400 ms then every 100 ms (ADR-0256 Decision 7) and the grid scrolls; judged by timing and eye.",
+          "precondition": "fixture rom-library-large; ui.screen == play.library",
+          "expect": "LIB-02: with 100+ ROMs, a held Down repeats after 400 ms then every 100 ms (ADR-0256 Decision 7) and the grid scrolls; judged by timing and eye. Part 2 (same with Right) is the next step.",
+          "severity": "major",
+          "mode": "manual"
+        },
+        {
+          "id": "lib.hold-right-repeats",
+          "role": "under-test",
+          "precondition": "fixture rom-library-large; ui.screen == play.library",
+          "expect": "LIB-02: the same with Right: a held Right repeats after 400 ms then every 100 ms and the focus walks the row, wrapping onto the next row.",
           "severity": "major",
           "mode": "manual"
         },
         {
           "id": "lib.tap-down-steps-once",
           "role": "under-test",
-          "precondition": "ui.focused == play.library.tile",
+          "precondition": "fixture rom-library-large; ui.focused == play.library.tile",
           "action": {
             "name": "pad.press",
             "args": {
@@ -734,6 +743,31 @@
             }
           },
           "expect": "LIB-02: one tap steps the focus once and the focus stays in the grid.",
+          "severity": "major",
+          "mode": "automated"
+        },
+        {
+          "id": "lib.up-back-to-row-one",
+          "role": "under-test",
+          "precondition": "ui.focused == play.library.tile",
+          "action": {
+            "name": "pad.press",
+            "args": {
+              "button": "Up",
+              "ticks": 4
+            }
+          },
+          "wait": {
+            "check": "ui.focused == play.library.tile",
+            "timeout_ticks": 120
+          },
+          "check": {
+            "name": "ui.focused",
+            "args": {
+              "is": "play.library.tile"
+            }
+          },
+          "expect": "LIB-03 setup: Up returns the focus from row 2 to the top grid row, ready to enter the header.",
           "severity": "major",
           "mode": "automated"
         },
@@ -834,6 +868,31 @@
             }
           },
           "expect": "LIB-03: Right moves to Back.",
+          "severity": "major",
+          "mode": "automated"
+        },
+        {
+          "id": "lib.header-left-across",
+          "role": "under-test",
+          "precondition": "ui.focused == play.library.back",
+          "action": {
+            "name": "pad.press",
+            "args": {
+              "button": "Left",
+              "ticks": 4
+            }
+          },
+          "wait": {
+            "check": "ui.focused == play.library.browse",
+            "timeout_ticks": 120
+          },
+          "check": {
+            "name": "ui.focused",
+            "args": {
+              "is": "play.library.browse"
+            }
+          },
+          "expect": "LIB-03: Left walks back across the header row (Back -> Browse), mirroring the Right walk.",
           "severity": "major",
           "mode": "automated"
         },
@@ -965,9 +1024,17 @@
               "is": "play.library.search"
             }
           },
-          "expect": "LIB-05: on a second Y, A, B the field returns to its previous text, focus returns to it, and the sheet does not close.",
+          "expect": "LIB-05: B on the open keyboard closes it, focus returns to the search field and the sheet does not close. The text revert on a second Y, A, B is judged by eye (next step).",
           "severity": "major",
           "mode": "automated"
+        },
+        {
+          "id": "lib.search-second-cancel-reverts",
+          "role": "under-test",
+          "precondition": "ui.focused == play.library.search",
+          "expect": "LIB-05: after typing, a second Y, A, B returns the field to its previous text; focus returns to it and the sheet does not close (typing is manual, so the text revert is manual).",
+          "severity": "minor",
+          "mode": "manual"
         },
         {
           "id": "lib.search-sheet-stays",
@@ -1440,7 +1507,7 @@
         {
           "id": "fav2.reach-favorite-tile",
           "role": "setup",
-          "precondition": "fixture rom and fixture settings.profiles.history-one-favorite",
+          "precondition": "fixture rom and fixture settings.profiles.history-two-favorites",
           "action": {
             "name": "nav.goal",
             "args": {
@@ -1469,8 +1536,26 @@
             }
           },
           "wait": {
-            "check": "ui.focused == play.home.favorite",
+            "check": "ui.visible == play.home.favorites",
             "timeout_ticks": 4
+          },
+          "check": {
+            "name": "ui.visible",
+            "args": {
+              "is": "play.home.favorites"
+            }
+          },
+          "expect": "FAV-02: X acts on the focused cover; on a Home favorite tile it toggles that game, the ring stays on the shelf and the Favorites shelf stays visible (two favorites, so the shelf survives the toggle; ADR-0268 Decision 4).",
+          "severity": "major",
+          "mode": "automated"
+        },
+        {
+          "id": "fav2.focus-stays-on-favorite-tile",
+          "role": "under-test",
+          "precondition": "ui.visible == play.home.favorites",
+          "wait": {
+            "check": "ui.focused == play.home.favorite",
+            "timeout_ticks": 120
           },
           "check": {
             "name": "ui.focused",
@@ -1478,7 +1563,7 @@
               "is": "play.home.favorite"
             }
           },
-          "expect": "FAV-02: X acts on the focused cover; on a Home favorite tile it toggles that game and the ring stays on the shelf.",
+          "expect": "FAV-02: after X the ring is still on a Home favorite tile (the shelf remains because a second favorite is left).",
           "severity": "major",
           "mode": "automated"
         },
@@ -1717,6 +1802,14 @@
           "mode": "automated"
         },
         {
+          "id": "game.buttons-are-the-consoles",
+          "role": "under-test",
+          "precondition": "ui.screen == play.game",
+          "expect": "GAME-02: the face buttons reach the console too; pressing A and B leaves the game running and nothing in the GUI reacts.",
+          "severity": "major",
+          "mode": "manual"
+        },
+        {
           "id": "game.no-menu-feedback",
           "role": "under-test",
           "precondition": "ui.screen == play.game",
@@ -1733,15 +1826,15 @@
         {
           "id": "game-archive.reach-library",
           "role": "setup",
-          "precondition": "fixture rom and fixture settings.profiles.fresh",
+          "precondition": "fixture rom-zip (a library holding only that file) and fixture settings.profiles.fresh",
           "action": {
             "name": "nav.goal",
             "args": {
-              "goal": "ui.screen == play.library"
+              "goal": "ui.screen == play.library and ui.focused == play.library.tile"
             }
           },
           "wait": {
-            "check": "ui.screen == play.library",
+            "check": "ui.screen == play.library and ui.focused == play.library.tile",
             "timeout_ticks": 600
           },
           "expect": "The library sheet is open with the multi-ROM archive tile focused (fixture rom-zip).",
@@ -1859,15 +1952,15 @@
         {
           "id": "game-bios.reach-library",
           "role": "setup",
-          "precondition": "fixture rom and fixture settings.profiles.fresh",
+          "precondition": "fixture rom-fds (a library holding only that file) and fixture settings.profiles.fresh",
           "action": {
             "name": "nav.goal",
             "args": {
-              "goal": "ui.screen == play.library"
+              "goal": "ui.screen == play.library and ui.focused == play.library.tile"
             }
           },
           "wait": {
-            "check": "ui.screen == play.library",
+            "check": "ui.screen == play.library and ui.focused == play.library.tile",
             "timeout_ticks": 600
           },
           "expect": "The library sheet is open with the FDS tile focused (fixture rom-fds, disksys.rom not installed).",
@@ -1902,6 +1995,14 @@
           "mode": "automated"
         },
         {
+          "id": "game-bios.choose-file-native",
+          "role": "under-test",
+          "precondition": "ui.screen == play.bios",
+          "expect": "KNOWN GAP: GAME-04: Choose File... on the BIOS sheet is a native dialog (ADR-0256 Decision 9 refusals). Expected FAIL; record that Cancel still backs out.",
+          "severity": "major",
+          "mode": "manual"
+        },
+        {
           "id": "game-bios.b-cancels",
           "role": "under-test",
           "precondition": "ui.screen == play.bios",
@@ -1932,14 +2033,6 @@
           "precondition": "ui.screen == play.library",
           "expect": "GAME-04: the status line names the missing BIOS.",
           "severity": "minor",
-          "mode": "manual"
-        },
-        {
-          "id": "game-bios.choose-file-native",
-          "role": "under-test",
-          "precondition": "ui.screen == play.bios",
-          "expect": "KNOWN GAP: GAME-04: Choose File... on the BIOS sheet is a native dialog (ADR-0256 Decision 9 refusals). Expected FAIL; record that Cancel still backs out.",
-          "severity": "major",
           "mode": "manual"
         }
       ],
