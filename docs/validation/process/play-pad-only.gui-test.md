@@ -19,19 +19,23 @@
   },
   "rom-fds": {
     "note": "an FDS image with disksys.rom not installed (GAME-04)",
-    "path": "<library>/Disk System Game.fds"
+    "path": "<library>/Disk System Game.fds",
+    "sha1": "<no-intro sha1 per ADR-0003, filled when the adapter lands>"
   },
   "rom-library-large": {
     "note": "a folder with 100+ ROMs (LIB-02)",
-    "path": "<library-large>"
+    "path": "<library-large>",
+    "sha1": "<no-intro sha1 per ADR-0003, filled when the adapter lands>"
   },
   "rom-second": {
     "note": "the second game in the history-two-favorites profile, played before fixture rom (FAV-02)",
-    "path": "<library>/Mega Man 2 (USA).nes"
+    "path": "<library>/Mega Man 2 (USA).nes",
+    "sha1": "<no-intro sha1 per ADR-0003, filled when the adapter lands>"
   },
   "rom-zip": {
     "note": "an archive holding several ROMs (GAME-03)",
-    "path": "<library>/Multi ROM Pack.zip"
+    "path": "<library>/Multi ROM Pack.zip",
+    "sha1": "<no-intro sha1 per ADR-0003, filled when the adapter lands>"
   },
   "settings": {
     "profiles": {
