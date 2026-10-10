@@ -42,6 +42,35 @@ is).
 | `--test-hook=<socket path>` | open the hook's line-per-JSON-object socket there. Without the switch the process has no hook at all: no socket, no state, no input path changes, and `MESEN_GUI_WINDOW` is not read. |
 | `--test-hook-token=<secret>` | the token every request has to carry. Either switch with no value is a startup failure, not a run that quietly goes on without a hook. |
 
+## Input actions
+
+A step's `inject` carries one of these (#1281). Every one of them is a pad the
+application simulates in its own input path - the same pressed-key set a real pad
+writes, or the application's own on-screen keyboard - never a synthetic OS event,
+and the step's effect is read back from the application's state, never from a
+pixel (ADR-0271).
+
+| Action | Args | Meaning |
+| --- | --- | --- |
+| `pad.press` | `button`, `pad` (0), `ticks` \| `frames` | one press and its release. The duration unit is the state's: while the emulated clock runs the press is written in `frames`, otherwise in `ticks`. |
+| `pad.hold` | `button`, `pad` (0), `ticks` | the button goes down and stays down for that many ticks - the GUI's own tick, which never freezes, so a hold is always written in `ticks` and never in `frames`. |
+| `pad.release` | `button`, `pad` (0) | the button goes up now, before the hold it is under has run out - a two-button gesture is written `pad.hold` then `pad.release`. A button no hold is keeping down is put up anyway: a release never fails a step. |
+| `text.type` | `text` | types through the on-screen keyboard the application itself shows (the one pad keyboard, ADR-0262), by walking its grid and pressing each key. A keyboard that is not open, or a character it has no key for, fails the step. |
+| `pad.connect` | `index`, `family` (`xbox` \| `playstation`, default `xbox`) | hot-plugs a simulated pad on that device index. While a run is up the connected-pad count the window polls for its port lamps and its pad-loss pause is the hook's, so a script's connect is seen the way a real pad's is; until a script touches it, that count is the backend's own. |
+| `pad.disconnect` | `index` | unplugs the pad on that index. The family goes with the pad: a `pad.connect` after a disconnect, with no `family`, is the default one (`xbox`), never the family the unplugged pad had - a PlayStation pad put back without `family` has its buttons read as Xbox, so name the family again on the reconnect. |
+
+`pad` is a **device index**: `0` is the pad in the hand - ADR-0272 item 4's
+"device 0" - and `1` is the second pad. The hook resolves it to the
+backend's key names as `Pad<pad+1>` / `Joy<pad+1>`. A button is named the way the pad bridge names it
+(ADR-0272 item 4): `Up`, `Down`, `Left`, `Right`, `A`, `B`, `Start`, ... in the
+family the pad on that index was connected with.
+
+ADR-0272 is an accepted ADR and is **not amended** by any of this: the actions
+above are the emulator side's implementation of the interface it pins, and this
+document is where they are written down - including the two places the actions
+run ahead of the ADR's text, `pad.hold`/`pad.release` and `text.*` being
+documented here rather than folded into its step inventory.
+
 ## Running the emulator-side checks
 
 ```sh

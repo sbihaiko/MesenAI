@@ -144,6 +144,18 @@ namespace Mesen.Windows
 			return Installed.TryGetValue(window, out Bridge? bridge) ? bridge.Keyboard : null;
 		}
 
+		//#1281 (text.type): the GUI test hook's door onto the same keyboard. It is
+		//production's path, not a test seam - the hook ships in every build and is
+		//inert without --test-hook - and it types through the keyboard the window
+		//already shows rather than opening one: what a step types into is the field
+		//the run put the ring on, exactly as a person would find it.
+		public static string? TypeOnKeyboard(MainWindow window, string text)
+		{
+			return Installed.TryGetValue(window, out Bridge? bridge)
+				? bridge.TypeOnKeyboard(text)
+				: "the pad bridge is not attached to this window";
+		}
+
 		//The field the open keyboard types into, or null - #1062: the claim that
 		//keeps the ring on the search box asks for a keyboard bound to THAT box.
 		//#1064: this is the shipping reader, and it is private on purpose. The
@@ -1420,12 +1432,21 @@ namespace Mesen.Windows
 			//cannot walk off the field it is filling and Back cannot close the
 			//sheet under it. What a press means is PadKeyboard's; this writes the
 			//draft into the field as it changes, so a search filters while typed.
-			private bool ApplyKeyboard(PadNavAction action)
+			private bool ApplyKeyboard(PadNavAction action) => ApplyKeyboardOutcome(action) is not null;
+
+			//The press with the keyboard's own answer, for the caller that has to tell a
+			//key the keyboard took from one it swallowed (#1281 review, finding 2):
+			//PadKeyboard answers None when it does nothing, and a full field is exactly
+			//that - the draft does not move. Null is "there is no keyboard", which is
+			//not an outcome of a press. Every other caller only asks whether the press
+			//was the keyboard's, which is what ApplyKeyboard above answers.
+			private PadKeyboardOutcome? ApplyKeyboardOutcome(PadNavAction action)
 			{
 				if(_keyboard is null || _keyboardField is null) {
-					return false;
+					return null;
 				}
-				switch(_keyboard.Press(action)) {
+				PadKeyboardOutcome outcome = _keyboard.Press(action);
+				switch(outcome) {
 					case PadKeyboardOutcome.Edited:
 						_keyboardField.Text = _keyboard.Draft;
 						_keyboardField.CaretIndex = _keyboard.Draft.Length;
@@ -1441,7 +1462,96 @@ namespace Mesen.Windows
 						CloseKeyboard(cancel: true);
 						break;
 				}
-				return true;
+				return outcome;
+			}
+
+			//#1281 (text.type): the string a GUI test run asks for, typed through the
+			//one on-screen keyboard this bridge owns. Every character is the two
+			//gestures a player makes - the D-pad walks the cursor onto its key, A
+			//presses it - fed through PadKeyboard and ApplyKeyboard, so nothing here
+			//is a second typing path and the field, the draft and the panel all move
+			//exactly as they do for a person. Returns null when the text was typed,
+			//otherwise why it was not.
+			public string? TypeOnKeyboard(string text)
+			{
+				if(text.Length == 0) {
+					return "text.type takes the text to type";
+				}
+				if(_keyboard is null || _keyboardField is null) {
+					return "no on-screen keyboard is open: focus a text field and press A first";
+				}
+				foreach(char c in text) {
+					if(_keyboard is null) {
+						return "the on-screen keyboard closed while typing";
+					}
+					string? why = TypeChar(c);
+					if(why is not null) {
+						return why;
+					}
+				}
+				return null;
+			}
+
+			private string? TypeChar(char c)
+			{
+				PadKeyboard keyboard = _keyboard!;
+				if(keyboard.IndexOf(c) < 0) {
+					return "the on-screen keyboard has no key for \"" + c + "\"";
+				}
+				//A capital letter is the keyboard's case key and then the letter: the
+				//pad keyboard types lower case unless its Shift is on (PadKeyboard).
+				bool upper = char.IsUpper(c) && keyboard.Keys.Any(k => k.Kind == PadKeyKind.Shift);
+				if(upper != keyboard.Shifted) {
+					bool shiftedBefore = keyboard.Shifted;
+					string? shifted = PressKeyAt(keyboard.Keys.ToList().FindIndex(k => k.Kind == PadKeyKind.Shift), out _);
+					if(shifted is not null) {
+						return shifted;
+					}
+					//The case key is the one press whose proof is not the draft: it
+					//toggles Shifted. A press that reports success and leaves the case
+					//where it was did not land, and the letter after it would be typed
+					//in the wrong case.
+					if(keyboard.Shifted == shiftedBefore) {
+						return "the on-screen keyboard did not accept the case key for \"" + c + "\"";
+					}
+				}
+				string? typed = PressKeyAt(_keyboard?.IndexOf(c) ?? -1, out PadKeyboardOutcome? outcome);
+				if(typed is not null) {
+					return typed;
+				}
+				if(outcome is not PadKeyboardOutcome.Edited) {
+					//#1281 review, finding 2: the press is reported done only when the
+					//field moved. PadKeyboard.PressKey answers None at the field's own
+					//MaxLength, and the draft - and so the field - is unchanged; a step
+					//that said "typed" there would be lying about a field the player
+					//can see.
+					return "the on-screen keyboard did not accept \"" + c + "\": the field holds no more characters";
+				}
+				return null;
+			}
+
+			//The key at `index`, pressed the way a player presses it: the D-pad walks
+			//the cursor onto it (Right wraps, so every key is reachable) and the pad's
+			//own confirm presses it. `outcome` is the keyboard's own answer to that
+			//confirm - null when there is no keyboard left to answer - which is how a
+			//caller tells a key it took from a press it swallowed.
+			private string? PressKeyAt(int index, out PadKeyboardOutcome? outcome)
+			{
+				outcome = null;
+				if(index < 0 || _keyboard is null) {
+					return "the on-screen keyboard is not there to press that key";
+				}
+				for(int steps = 0; _keyboard.Cursor != index; steps++) {
+					if(steps > _keyboard.Keys.Count) {
+						return "the on-screen keyboard never moved onto that key";
+					}
+					ApplyKeyboard(PadNavAction.Right);
+					if(_keyboard is null) {
+						return "the on-screen keyboard closed while the cursor walked";
+					}
+				}
+				outcome = ApplyKeyboardOutcome(PadNavAction.Confirm);
+				return null;
 			}
 
 			//The field declares its own shape (ADR-0262 Decision 2): its mask, or
