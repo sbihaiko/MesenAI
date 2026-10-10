@@ -12,23 +12,25 @@ merges second, and the cost is paid twice — once in the merge, once in the fix
 round that follows it.
 
 It is not hypothetical. PR #1285 spent three fix rounds on conflicts inside two
-hours (`review conflict` 18:22, `conflict` 19:07, `conflict` 19:22), against
-sibling PR #1391 editing the same files. The overlap had already been detected:
+hours, against sibling PR #1391 editing the same files (source: the PR's own
+fix-round history and the autopilot loop's log lines; ADR-0273 records the same
+PR as about two hours across five heads). The overlap had already been detected:
 `mkreq.sh`'s `slice_guard` named `UI/Logic/TestHook/TestHookProtocol.cs` and
 `UI/Logic/TestHook/TestHookPlayerState.cs` as also named by an open PR. It fired
 as a note appended to the child's own request, and a note inside the request is
 advice the child may ignore — which it did.
 
 ADR-0273 put GitHub's native merge queue out of its own scope (a change to the
-merge path and the `main gate` ruleset). Measured against the loop's logs, that
+merge path and the `main gate` ruleset). By reasoning about how it works, that
 merge queue does not address this overlap: it
 serializes *merges*, while the conflict is authored by parallel *edits*. No
 ordering of merges turns a file edited on both sides into a clean merge; it only
-decides who loses. What remained of its job is already done elsewhere — the
-autopilot loop merges one PR per pass, and `autopilot.sh` already refuses to
-spend a review on a head it knows is about to move (a `mergeable_state` of
-`dirty` queues a fix round instead of a reviewer). A queue on top of that adds
-starvation and ordering rules with no measurable gain at ten concurrent PRs.
+decides who loses. What remained of its job is already done elsewhere — `autopilot.sh`
+already refuses to spend a review on a head it knows is about to move (a
+`mergeable_state` of `dirty` queues a fix round instead of a reviewer; see the
+`mergeable_state` checks in `~/.claude/skills/squad-goal/scripts/autopilot.sh`).
+A queue on top of that adds starvation and ordering rules; the expectation, an
+assumption not measured here, is that it brings little gain at ten concurrent PRs.
 
 ## Decision
 
