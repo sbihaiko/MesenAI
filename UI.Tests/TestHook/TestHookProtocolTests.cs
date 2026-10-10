@@ -603,6 +603,22 @@ namespace Mesen.Tests.TestHook
 		}
 
 		[Fact]
+		public void A_pad_reconnected_without_a_family_is_read_as_the_default_one()
+		{
+			//#1281 review, finding 1: the family goes with the pad. Disconnect drops
+			//it and a later connect that names none is the default one - so a
+			//PlayStation pad plugged back in without a family has its buttons read as
+			//Xbox, which is what docs/agent-squad/gui-test-run-command.md's
+			//pad.disconnect row now says (it claimed the family came back).
+			Rig rig = new();
+			Assert.True(rig.Ask("{\"id\":19,\"token\":\"secret\",\"op\":\"inject\",\"action\":\"pad.connect\",\"args\":{\"index\":0,\"family\":\"playstation\"}}")["ok"]!.GetValue<bool>());
+			Assert.Equal(PadFamily.Ps4, rig.Pads.FamilyOf(0));
+			Assert.True(rig.Ask("{\"id\":20,\"token\":\"secret\",\"op\":\"inject\",\"action\":\"pad.disconnect\",\"args\":{\"index\":0}}")["ok"]!.GetValue<bool>());
+			Assert.True(rig.Ask("{\"id\":21,\"token\":\"secret\",\"op\":\"inject\",\"action\":\"pad.connect\",\"args\":{\"index\":0}}")["ok"]!.GetValue<bool>());
+			Assert.Equal(PadFamily.Xbox, rig.Pads.FamilyOf(0));
+		}
+
+		[Fact]
 		public void A_connect_without_a_family_is_the_default_one_and_a_stranger_is_refused()
 		{
 			Rig rig = new();

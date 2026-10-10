@@ -289,6 +289,39 @@ public class GuiTestHookInputActionsTests : IDisposable
 		}
 	}
 
+	[AvaloniaFact]
+	public void GuiTestHook_text_type_into_a_field_at_its_limit_fails_the_step()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, _) = ShowCheatsSearch();
+		PlayPadNavigationWiring.SetKeyLookupsForTest(BackendName, BackendCode);
+		TestHookKeys keys = NewKeys();
+		TestHookProtocol hook = NewHook(window, keys);
+		try {
+			//A field that is already full. The pad keyboard takes the draft it opens
+			//on (PadKeyboard), and PressKey answers None once the draft is at the
+			//field's own MaxLength - the key press is swallowed and the draft does not
+			//move. A step that reports the text as typed would be lying about a field
+			//the player can see is unchanged (#1281 review, finding 2).
+			TextBox field = window.FindNamed<TextBox>("CheatsSearchBox");
+			field.MaxLength = 5;
+			field.Text = "lives";
+			field.Focus();
+			Pump();
+			Press(window, PadNavAction.Confirm);
+			Assert.NotNull(PlayPadNavigationWiring.KeyboardForTest(window));
+
+			JsonObject refused = Step(hook, 1, "text.type", "{\"text\":\"z\"}");
+			Assert.False(refused["ok"]!.GetValue<bool>());
+			Assert.Contains("did not accept", refused["error"]!.GetValue<string>());
+			//And the field is exactly where it was: the step failed because nothing
+			//was typed, not because something else was.
+			Assert.Equal("lives", field.Text);
+		} finally {
+			keys.ReleaseAll();
+		}
+	}
+
 	//The simulated hot-plug, over the socket, through the production wiring
 	//(TestHookWiring.Start), because the count it swaps is the wiring's own: the
 	//window reads ConnectedGamepadCount every tick for the port lamps and the

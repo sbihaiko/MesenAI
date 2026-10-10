@@ -1432,12 +1432,21 @@ namespace Mesen.Windows
 			//cannot walk off the field it is filling and Back cannot close the
 			//sheet under it. What a press means is PadKeyboard's; this writes the
 			//draft into the field as it changes, so a search filters while typed.
-			private bool ApplyKeyboard(PadNavAction action)
+			private bool ApplyKeyboard(PadNavAction action) => ApplyKeyboardOutcome(action) is not null;
+
+			//The press with the keyboard's own answer, for the caller that has to tell a
+			//key the keyboard took from one it swallowed (#1281 review, finding 2):
+			//PadKeyboard answers None when it does nothing, and a full field is exactly
+			//that - the draft does not move. Null is "there is no keyboard", which is
+			//not an outcome of a press. Every other caller only asks whether the press
+			//was the keyboard's, which is what ApplyKeyboard above answers.
+			private PadKeyboardOutcome? ApplyKeyboardOutcome(PadNavAction action)
 			{
 				if(_keyboard is null || _keyboardField is null) {
-					return false;
+					return null;
 				}
-				switch(_keyboard.Press(action)) {
+				PadKeyboardOutcome outcome = _keyboard.Press(action);
+				switch(outcome) {
 					case PadKeyboardOutcome.Edited:
 						_keyboardField.Text = _keyboard.Draft;
 						_keyboardField.CaretIndex = _keyboard.Draft.Length;
@@ -1453,7 +1462,7 @@ namespace Mesen.Windows
 						CloseKeyboard(cancel: true);
 						break;
 				}
-				return true;
+				return outcome;
 			}
 
 			//#1281 (text.type): the string a GUI test run asks for, typed through the
@@ -1493,19 +1502,42 @@ namespace Mesen.Windows
 				//pad keyboard types lower case unless its Shift is on (PadKeyboard).
 				bool upper = char.IsUpper(c) && keyboard.Keys.Any(k => k.Kind == PadKeyKind.Shift);
 				if(upper != keyboard.Shifted) {
-					string? shifted = PressKeyAt(keyboard.Keys.ToList().FindIndex(k => k.Kind == PadKeyKind.Shift));
+					bool shiftedBefore = keyboard.Shifted;
+					string? shifted = PressKeyAt(keyboard.Keys.ToList().FindIndex(k => k.Kind == PadKeyKind.Shift), out _);
 					if(shifted is not null) {
 						return shifted;
 					}
+					//The case key is the one press whose proof is not the draft: it
+					//toggles Shifted. A press that reports success and leaves the case
+					//where it was did not land, and the letter after it would be typed
+					//in the wrong case.
+					if(keyboard.Shifted == shiftedBefore) {
+						return "the on-screen keyboard did not accept the case key for \"" + c + "\"";
+					}
 				}
-				return PressKeyAt(_keyboard?.IndexOf(c) ?? -1);
+				string? typed = PressKeyAt(_keyboard?.IndexOf(c) ?? -1, out PadKeyboardOutcome? outcome);
+				if(typed is not null) {
+					return typed;
+				}
+				if(outcome is not PadKeyboardOutcome.Edited) {
+					//#1281 review, finding 2: the press is reported done only when the
+					//field moved. PadKeyboard.PressKey answers None at the field's own
+					//MaxLength, and the draft - and so the field - is unchanged; a step
+					//that said "typed" there would be lying about a field the player
+					//can see.
+					return "the on-screen keyboard did not accept \"" + c + "\": the field holds no more characters";
+				}
+				return null;
 			}
 
 			//The key at `index`, pressed the way a player presses it: the D-pad walks
 			//the cursor onto it (Right wraps, so every key is reachable) and the pad's
-			//own confirm presses it.
-			private string? PressKeyAt(int index)
+			//own confirm presses it. `outcome` is the keyboard's own answer to that
+			//confirm - null when there is no keyboard left to answer - which is how a
+			//caller tells a key it took from a press it swallowed.
+			private string? PressKeyAt(int index, out PadKeyboardOutcome? outcome)
 			{
+				outcome = null;
 				if(index < 0 || _keyboard is null) {
 					return "the on-screen keyboard is not there to press that key";
 				}
@@ -1518,7 +1550,7 @@ namespace Mesen.Windows
 						return "the on-screen keyboard closed while the cursor walked";
 					}
 				}
-				ApplyKeyboard(PadNavAction.Confirm);
+				outcome = ApplyKeyboardOutcome(PadNavAction.Confirm);
 				return null;
 			}
 
