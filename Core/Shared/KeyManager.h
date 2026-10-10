@@ -18,6 +18,9 @@ private:
 	static SimpleLock _injectedLock;
 	static vector<uint16_t> _injectedKeys;
 
+	static bool IsInjected(uint16_t keyCode);
+	static vector<uint16_t> GetBackendPressedKeys();
+
 public:
 	static void RegisterKeyManager(IKeyManager* keyManager);
 	static void SetSettings(EmuSettings* settings);

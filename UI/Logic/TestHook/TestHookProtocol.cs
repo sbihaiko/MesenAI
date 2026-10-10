@@ -14,6 +14,8 @@ public sealed class TestHookProtocol
 	private readonly string _token;
 	private readonly ITestHookTarget _target;
 	private readonly TestHookKeys _keys;
+	private JsonNode? _lastCaptureId;
+	private JsonObject? _lastCapture;
 
 	public TestHookProtocol(string token, ITestHookTarget target, TestHookKeys keys)
 	{
@@ -30,7 +32,8 @@ public sealed class TestHookProtocol
 				return Fail(null, "a request is one JSON object");
 			}
 			id = request["id"]?.DeepClone();
-			if((request["token"]?.GetValue<string>() ?? "") != _token) {
+			string token = request["token"]?.GetValue<string>() ?? "";
+			if(token.Length == 0 || token != _token) {
 				return Fail(id, "unauthorized");
 			}
 			string op = request["op"]?.GetValue<string>() ?? "";
@@ -87,14 +90,23 @@ public sealed class TestHookProtocol
 		return new JsonObject();
 	}
 
+	//A repeated request id is a retry: it gets the original path, size and sha256
+	//back and writes nothing again (item 2). Only the last capture is kept.
 	private JsonObject Capture(JsonObject request)
 	{
+		JsonNode? id = request["id"];
+		if(id is not null && _lastCaptureId is not null && _lastCapture is not null && JsonNode.DeepEquals(id, _lastCaptureId)) {
+			return (JsonObject)_lastCapture.DeepClone();
+		}
 		string path = request["path"]?.GetValue<string>() ?? "";
 		if(path.Length == 0) {
 			throw new ArgumentException("capture needs a path");
 		}
 		CaptureResult shot = _target.Capture(path);
-		return new JsonObject { ["path"] = shot.Path, ["size"] = new JsonArray(shot.Width, shot.Height), ["sha256"] = shot.Sha256 };
+		JsonObject answer = new() { ["path"] = shot.Path, ["size"] = new JsonArray(shot.Width, shot.Height), ["sha256"] = shot.Sha256 };
+		_lastCaptureId = id?.DeepClone();
+		_lastCapture = (JsonObject)answer.DeepClone();
+		return answer;
 	}
 
 	private JsonObject Quit()

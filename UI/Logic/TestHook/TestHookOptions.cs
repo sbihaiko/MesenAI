@@ -13,7 +13,8 @@ public sealed record TestHookOptions(string Endpoint, string Token)
 	public const string TokenFlag = "--test-hook-token";
 
 	//Null when the flag is absent. The flag with no endpoint is an error, not a run
-	//that quietly goes on without the hook: the adapter is told "unavailable".
+	//that quietly goes on without the hook: the adapter is told "unavailable". The
+	//same for a missing or empty token, since every request has to carry one.
 	public static TestHookOptions? Parse(IReadOnlyList<string> args)
 	{
 		string? endpoint = null;
@@ -31,6 +32,9 @@ public sealed record TestHookOptions(string Endpoint, string Token)
 		}
 		if(endpoint.Length == 0) {
 			throw new ArgumentException(Flag + " needs an endpoint: " + Flag + "=<socket path or pipe name>");
+		}
+		if(token.Length == 0) {
+			throw new ArgumentException(Flag + " needs a token: " + TokenFlag + "=<secret every request carries>");
 		}
 		return new TestHookOptions(endpoint, token);
 	}

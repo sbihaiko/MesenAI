@@ -184,6 +184,23 @@ public class GuiTestHookTests : IDisposable
 	}
 
 	[AvaloniaFact]
+	public void An_injected_key_reads_as_pressed_through_IsKeyPressed_too()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		ushort code = BackendCode("Pad1 Up");
+		Assert.False(InputApi.IsKeyPressed(code));
+		InputApi.SetInjectedKey(code, true);
+		try {
+			//ShortcutKeyHandler and BaseControlDevice::SetPressedState probe this
+			//one, not the set: a press that only the set carries never reaches a game.
+			Assert.True(InputApi.IsKeyPressed(code));
+		} finally {
+			InputApi.SetInjectedKey(code, false);
+		}
+		Assert.False(InputApi.IsKeyPressed(code));
+	}
+
+	[AvaloniaFact]
 	public void Without_the_flag_the_hook_is_inert()
 	{
 		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");

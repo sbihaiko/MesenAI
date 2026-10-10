@@ -9,7 +9,7 @@ using System.Threading.Tasks;
 namespace Mesen.Logic.TestHook;
 
 //The local endpoint (the GUI test hook ADR, PR #1202, item 1): a Unix domain
-//socket on macOS and Linux (0700 directory, 0600 socket), a named pipe on
+//socket on macOS and Linux (0600 socket, in a 0700 directory when the hook creates it), a named pipe on
 //Windows. No TCP port is opened on loopback or anywhere else.
 public sealed class TestHookServer : IDisposable
 {
@@ -27,8 +27,13 @@ public sealed class TestHookServer : IDisposable
 			return;
 		}
 		string folder = Path.GetDirectoryName(Path.GetFullPath(endpoint))!;
-		Directory.CreateDirectory(folder, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
-		File.SetUnixFileMode(folder, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+		//Only a directory this process creates is locked to 0700; one that already
+		//exists (/tmp, a shared runner folder) is not ours to chmod, and the 0600
+		//socket is what keeps other users out of it.
+		if(!Directory.Exists(folder)) {
+			Directory.CreateDirectory(folder);
+			File.SetUnixFileMode(folder, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+		}
 		if(File.Exists(endpoint)) {
 			File.Delete(endpoint);
 		}

@@ -52,6 +52,11 @@ extern "C"
 	//The GUI test hook's door (the GUI test hook ADR, PR #1202, item 4): hold a
 	//code down in the host pressed-key set, or let it go. Only the hook calls it,
 	//and only when started with --test-hook.
+	DllExport bool __stdcall IsKeyPressed(uint16_t scanCode)
+	{
+		return KeyManager::IsKeyPressed(scanCode);
+	}
+
 	DllExport void __stdcall SetInjectedKey(uint16_t scanCode, bool pressed)
 	{
 		KeyManager::SetInjectedKey(scanCode, pressed);

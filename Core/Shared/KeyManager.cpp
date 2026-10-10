@@ -36,10 +36,16 @@ void KeyManager::SetSettings(EmuSettings* settings)
 
 bool KeyManager::IsKeyPressed(uint16_t keyCode)
 {
-	if(_keyManager != nullptr) {
-		return _settings->IsInputEnabled() && _keyManager->IsKeyPressed(keyCode);
+	//Input disabled (a dialog has focus) silences the overlay too, as it does the
+	//backend. A host with no backend registered still reads an injected code, the
+	//way GetPressedKeys does.
+	if(_settings != nullptr && !_settings->IsInputEnabled()) {
+		return false;
 	}
-	return false;
+	if(_keyManager != nullptr && _keyManager->IsKeyPressed(keyCode)) {
+		return true;
+	}
+	return IsInjected(keyCode);
 }
 
 optional<int16_t> KeyManager::GetAxisPosition(uint16_t keyCode)
@@ -72,7 +78,13 @@ void KeyManager::SetInjectedKey(uint16_t keyCode, bool pressed)
 	}
 }
 
-vector<uint16_t> KeyManager::GetPressedKeys()
+bool KeyManager::IsInjected(uint16_t keyCode)
+{
+	auto lock = _injectedLock.AcquireSafe();
+	return std::find(_injectedKeys.begin(), _injectedKeys.end(), keyCode) != _injectedKeys.end();
+}
+
+vector<uint16_t> KeyManager::GetBackendPressedKeys()
 {
 	vector<uint16_t> keys;
 	if(_keyManager != nullptr) {
@@ -83,8 +95,16 @@ vector<uint16_t> KeyManager::GetPressedKeys()
 		//ShortcutKeyHandler all read the same set: the shortcut handler, which
 		//reads the set's non-emptiness and its size as a key being down, is the one
 		//that cannot tell the sentinel from a key.
-		keys = IKeyManager::WithoutNoKey(_keyManager->GetPressedKeys());
+		return IKeyManager::WithoutNoKey(_keyManager->GetPressedKeys());
 	}
+	return keys;
+}
+
+//The backend's set with the test hook's overlay merged in at the exit, the same
+//overlay IsKeyPressed applies, so the two readers never disagree.
+vector<uint16_t> KeyManager::GetPressedKeys()
+{
+	vector<uint16_t> keys = GetBackendPressedKeys();
 	auto lock = _injectedLock.AcquireSafe();
 	for(uint16_t injected : _injectedKeys) {
 		if(std::find(keys.begin(), keys.end(), injected) == keys.end()) {

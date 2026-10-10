@@ -18,6 +18,7 @@ namespace Mesen.Tests.TestHook
 		{
 			public bool Quit_;
 			public string? CapturedTo;
+			public int Captures;
 
 			public JsonObject State() => new JsonObject {
 				["screen"] = "play.home",
@@ -28,6 +29,7 @@ namespace Mesen.Tests.TestHook
 			public CaptureResult Capture(string path)
 			{
 				CapturedTo = path;
+				Captures++;
 				return new CaptureResult(path, 10, 20, "abc");
 			}
 
@@ -181,6 +183,61 @@ namespace Mesen.Tests.TestHook
 			Assert.Equal(path, rig.Target.CapturedTo);
 			Assert.Equal("abc", answer["sha256"]!.GetValue<string>());
 			Assert.Equal(10, answer["size"]![0]!.GetValue<int>());
+		}
+
+		[Fact]
+		public void A_repeated_capture_id_replays_the_first_answer_and_writes_nothing_again()
+		{
+			Rig rig = new();
+			string first = Path.Combine(Path.GetTempPath(), "hook-first.png");
+			string second = Path.Combine(Path.GetTempPath(), "hook-second.png");
+			JsonObject one = rig.Ask("{\"id\":12,\"token\":\"secret\",\"op\":\"capture\",\"path\":" + JsonValue.Create(first)!.ToJsonString() + "}");
+			JsonObject again = rig.Ask("{\"id\":12,\"token\":\"secret\",\"op\":\"capture\",\"path\":" + JsonValue.Create(second)!.ToJsonString() + "}");
+			Assert.Equal(1, rig.Target.Captures);
+			Assert.Equal(first, again["path"]!.GetValue<string>());
+			Assert.Equal(one["sha256"]!.GetValue<string>(), again["sha256"]!.GetValue<string>());
+			Assert.Equal(one["size"]!.ToJsonString(), again["size"]!.ToJsonString());
+			rig.Ask("{\"id\":13,\"token\":\"secret\",\"op\":\"capture\",\"path\":" + JsonValue.Create(second)!.ToJsonString() + "}");
+			Assert.Equal(2, rig.Target.Captures);
+		}
+
+		[Fact]
+		public void A_missing_or_empty_request_token_is_unauthorized_even_when_the_hook_token_is_empty()
+		{
+			Rig rig = new();
+			Assert.Equal("unauthorized", rig.Ask("{\"id\":14,\"op\":\"quit\"}")["error"]!.GetValue<string>());
+			Assert.Equal("unauthorized", rig.Ask("{\"id\":15,\"token\":\"\",\"op\":\"quit\"}")["error"]!.GetValue<string>());
+			TestHookProtocol open = new("", rig.Target, rig.Keys);
+			Assert.Equal("unauthorized", JsonNode.Parse(open.Handle("{\"id\":16,\"op\":\"quit\"}"))!["error"]!.GetValue<string>());
+			Assert.False(rig.Target.Quit_);
+		}
+
+		[Fact]
+		public void The_flag_without_a_token_is_a_startup_failure()
+		{
+			Assert.Throws<ArgumentException>(() => TestHookOptions.Parse(new[] { "--test-hook=/tmp/x.sock" }));
+			Assert.Throws<ArgumentException>(() => TestHookOptions.Parse(new[] { "--test-hook=/tmp/x.sock", "--test-hook-token=" }));
+		}
+
+		[Fact]
+		public void An_existing_parent_directory_keeps_its_mode_and_only_the_socket_is_locked_down()
+		{
+			if(OperatingSystem.IsWindows()) {
+				return;
+			}
+			string folder = Path.Combine(Path.GetTempPath(), "hook-shared-" + Guid.NewGuid().ToString("N"));
+			UnixFileMode shared = UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute | UnixFileMode.GroupRead | UnixFileMode.GroupExecute | UnixFileMode.OtherRead | UnixFileMode.OtherExecute;
+			Directory.CreateDirectory(folder);
+			File.SetUnixFileMode(folder, shared);
+			try {
+				string endpoint = Path.Combine(folder, "hook.sock");
+				using(TestHookServer server = TestHookServer.Start(endpoint, line => line)) {
+					Assert.Equal(shared, File.GetUnixFileMode(folder));
+					Assert.Equal(UnixFileMode.UserRead | UnixFileMode.UserWrite, File.GetUnixFileMode(endpoint));
+				}
+			} finally {
+				Directory.Delete(folder, true);
+			}
 		}
 
 		[Fact]
