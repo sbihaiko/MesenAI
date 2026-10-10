@@ -55,17 +55,25 @@ namespace Mesen.Logic.TestHook
 
 		public static int[] Rect(int x, int y, int width, int height) => new[] { x, y, width, height };
 
-		//The rectangle the window manager puts on the display, in physical pixels:
-		//the window's own origin - the frame's, not the client area's - plus the
-		//frame size the platform reports, which is the client area plus the title bar
-		//and the borders. This, not the client area, is what has to fit on the
-		//display; the scale turns logical units into the pixels a display is measured
-		//in. Never zero on either axis: a rect a fraction of a pixel wide would read
-		//as "inside" everything.
-		public static int[] FrameRect(int x, int y, double frameWidth, double frameHeight, double scale)
+		//A window's rectangle, as the hook reports it: the window's own origin - the
+		//frame's, not the client area's - plus the size the platform reports, which
+		//is the frame size (the client area plus the title bar and the borders) for
+		//the rect that has to fit on the display, and the client size for the one
+		//the adapter falls back to.
+		//
+		//#1255: this is in the DISPLAY's unit, the unit Position and
+		//Screen.Bounds/WorkingArea are read in, so it can be compared against a
+		//display at all. The render scaling has no part in it: on the 2x Retina
+		//laptop the real-binary gate failed on, a 1100x700 window reports a 1100x700
+		//frame while its display reports 1440x900 - both already in the same unit -
+		//and folding the scaling in read the frame as 2200x1400, wider than the
+		//display it was on, so no placement could contain it and every launch was
+		//refused. Never zero on either axis: a rect a fraction of a unit wide would
+		//read as "inside" everything.
+		public static int[] WindowRect(int x, int y, double width, double height)
 			=> Rect(x, y,
-				Math.Max(1, (int)Math.Ceiling(frameWidth * scale)),
-				Math.Max(1, (int)Math.Ceiling(frameHeight * scale)));
+				Math.Max(1, (int)Math.Ceiling(width)),
+				Math.Max(1, (int)Math.Ceiling(height)));
 
 		//True when rect sits entirely inside area: a window half on a second display
 		//is not "inside the primary display".

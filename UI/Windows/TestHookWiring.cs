@@ -72,32 +72,32 @@ namespace Mesen.Windows
 			return KeepOnPrimaryDisplay(window);
 		}
 
-		//The window's client area in physical pixels - the same measurement the
-		//capture takes (WindowTarget.Capture renders Bounds), and the fallback for a
-		//platform that reports no frame.
+		//The window's client area in the display's own unit - the same unit the
+		//display's bounds and working area come back in, and the fallback for a
+		//platform that reports no frame. Not the capture's pixels: WindowTarget.Capture
+		//sizes its bitmap itself, from Bounds and the render scaling.
 		public static int[] WindowRect(Window window)
-		{
-			double scale = window.RenderScaling;
-			return TestHookPlacement.Rect(window.Position.X, window.Position.Y,
-				Math.Max(1, (int)Math.Ceiling(window.Bounds.Width * scale)),
-				Math.Max(1, (int)Math.Ceiling(window.Bounds.Height * scale)));
-		}
+			=> TestHookPlacement.WindowRect(window.Position.X, window.Position.Y,
+				window.Bounds.Width, window.Bounds.Height);
 
-		//The window's frame in physical pixels: Position plus FrameSize, the title
-		//bar and the borders included. This is the rectangle the window manager puts
-		//on the display, so it is the one that has to fit on it - a client rect that
-		//fits while the title bar hangs over the edge is still a window half off the
-		//display. Position is the frame's origin, the same reading WindowExtensions
-		//uses to center a child window (UI/Utilities/WindowExtensions.cs). Null when
-		//the platform reports no frame (a headless window), which is why the adapter
-		//falls back to position and size.
+		//The window's frame in the display's own unit: Position plus FrameSize, the
+		//title bar and the borders included. This is the rectangle the window manager
+		//puts on the display, so it is the one that has to fit on it - a client rect
+		//that fits while the title bar hangs over the edge is still a window half off
+		//the display. Position is the frame's origin, the same reading
+		//WindowExtensions uses to center a child window (UI/Utilities/WindowExtensions.cs),
+		//and FrameSize is the size the platform reports in the same unit - so this is
+		//Position plus FrameSize, with no render scaling anywhere (#1255: folding the
+		//scaling in made a 1100x700 window report 2200x1400 on a 1440x900 display, and
+		//every launch was refused). Null when the platform reports no frame (a
+		//headless window), which is why the adapter falls back to position and size.
 		public static int[]? WindowFrameRect(Window window)
 		{
 			Size? frame = window.FrameSize;
 			return frame is null
 				? null
-				: TestHookPlacement.FrameRect(window.Position.X, window.Position.Y,
-					frame.Value.Width, frame.Value.Height, window.RenderScaling);
+				: TestHookPlacement.WindowRect(window.Position.X, window.Position.Y,
+					frame.Value.Width, frame.Value.Height);
 		}
 
 		//Moves a window onto the primary display's working area when the OS put it
@@ -263,7 +263,8 @@ namespace Mesen.Windows
 					//stay inside. The adapter refuses a launch - or the step that
 					//opened one - whose window is not fully inside primaryBounds, so
 					//the rectangles and the display they were compared against travel
-					//together, in physical pixels.
+					//together, in ONE unit: the display's own, which is what
+					//Position and the screen rectangles are read in.
 					["window"] = new JsonObject {
 						["mode"] = _window.WindowState == WindowState.FullScreen ? "fullscreen" : "windowed",
 						["size"] = new JsonArray(MainRect[2], MainRect[3]),
