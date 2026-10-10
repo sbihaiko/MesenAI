@@ -3,14 +3,16 @@
 - Status: accepted (2026-10-09). The owner answered the three open points in
   session — "A/A/A (Recommended)" — and all three answers are folded into the
   Decision below (items 4, 5 and 7); the record of what was picked, and of the
-  alternatives that were not, is the "Owner's picks" section. The implementation
-  tickets read this as binding. Not implemented.
+  alternatives that were not, is the "Owner's picks" section. Listed as a slice
+  in `docs/roadmap/PRD-mesence-enhancement-ecosystem.md` (Part B §8, slice
+  T.0, tickets #1178, #1179, #1181, #1182, #1183). The implementation tickets
+  read this as binding. Not implemented.
 - Date: 2026-10-09
-- Related: ADR-0271 (the navigation decision this ADR is the surface of — its
-  Decision 6 is option A), which is accepted and carried by open PR #1201, so
-  `docs/adr/gui/0271-*.md` is not in `main` yet and `verify_adr_refs.py` reports
-  it as a citation of an id with no file until that PR lands. The squad spec
-  travels with the same PR. Prior art: ADR-0157 §1–§3 and
+- Related: the navigation decision on PR #1201 (Jev drives pad/keyboard
+  navigation from the hook's state; its option A is the one this ADR is the
+  surface of). It is accepted but not in `main` yet, so this file cites it by
+  PR; the Jev navigation ADR on PR #1201 gets its number cited here once both
+  are on main. The squad spec travels with the same PR. Prior art: ADR-0157 §1–§3 and
   §6, ADR-0150, ADR-0167 (superseded — folded into ADR-0157, which carries it),
   ADR-0249, ADR-0238, ADR-0123, ADR-0137, ADR-0003, ADR-0250, ADR-0255,
   ADR-0262.
@@ -50,7 +52,7 @@ do this job, and neither is replaced:
   makes a run depend on machine load. **§3** then says the headless path is a
   *runtime* mode, not a compile-time one — no `#ifdef` in `Core/`, because a
   second binary splits the harness from the shipped application. §3 carries
-  over verbatim: the hook's own switch is a runtime flag (§4 below), not a
+  over verbatim: the hook's own switch is a runtime flag (item 5), not a
   second build. What §2's input path does **not** carry over is the *layer*: as
   §4 states, `IInputProvider::SetInput` runs once per emulated frame from
   `BaseControlManager::UpdateInputState()` and feeds in-game input only, while
@@ -58,8 +60,8 @@ do this job, and neither is replaced:
   set instead (`InputApi.GetPressedKeys()` → `KeyManager::GetPressedKeys`). The
   hook therefore injects at both layers, each for what it feeds — frame-counted
   through `IInputProvider` for the running game, at the pressed-keys layer for
-  the GUI. What §3 does **not** decide is the application-side gate, which is the
-  owner's point P2.
+  the GUI. What §3 does **not** decide is the application-side gate, which is decided by
+  P2-A (item 5).
 - **ADR-0167** (folded into ADR-0157 §6) answers "did a toast appear" from the
   emulator's own HUD buffer, with no renderer and no checksum on faded pixels.
   The hook's `ui.*` checks are the GUI-layer counterpart — a toast is asked of
@@ -128,7 +130,7 @@ and `text` is carried for humans and for the vision model only, never for a
 check. A control with no id is invisible to the hook. `tick` is the
 application's UI update counter and `frames` the emulated frame counter
 (`0` when no game is loaded) — both are application-reported counters, and no
-wait may spend host time (ADR-0157 §1). ADR-0271 widens this snapshot beyond the
+wait may spend host time (ADR-0157 §1). The navigation decision on PR #1201 widens this snapshot beyond the
 active screen
 and the focused control to **visible controls and menu options**, which is what
 items 3 and 4 of that decision need; this ADR is that surface.
@@ -365,10 +367,14 @@ already weighed and why it lost.
   steps is local-only until the navigation decision says otherwise, and a CI run
   marks those steps `pending`; a script needing RAM reads waits for an amendment
   to this ADR.
+- **The agent-squad pieces start in a local fork.** With P1-A picked, the runner,
+  the script format and the dashboard belong to agent-squad, but there is no
+  write access to Korck-lab/agent-squad: until its owner accepts them they are
+  developed in a local fork of agent-squad and delivered upstream as a patch set.
 - **What this ADR does not test, and who carries it.** This is a documentation
   change. The squad's end-to-end suite **does not exist yet** — it is created
-  with the runner, in the runner's own ticket (#1179, the slice that builds the
-  runner, the format and the shared adapter contract suite). Issue #1178's
+  with the format validator, in its own ticket (#1179, the slice that builds the
+  format validator, the rendered Markdown and the squad's end-to-end suite). Issue #1178's
   acceptance criterion 5, "adds its own end-to-end case to the GUI test squad
   e2e suite, and the full suite stays green", is therefore **carried by #1179**
   and lands with that suite, not with this file: the case is a three-step script

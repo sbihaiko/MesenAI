@@ -2522,6 +2522,8 @@ trade-off is settled there rather than here. The per-ROM persisted choice
 needed no change: it keys off `pack_id`, which the adoption step now supplies
 for a local drop.
 
+**T.0 — GUI test squad: the test hook, the target adapter and the script format (ADR-0272).** Go-ahead: the owner's picks *"A/A/A (Recommended)"* (2026-10-09). Deliverable: #1178 is the decision (ADR-0272; nothing implemented there, its end-to-end criterion carried by #1179); #1179 the script format validator and rendered Markdown, with the pilot's first batch converted and the squad's end-to-end suite; #1181 the runner against a fake adapter; #1182 the in-emulator test hook (pad input, focus read, window capture); #1183 the emulator adapter (pad only) running three pilot steps. The runner, format and dashboard are developed in a local fork of agent-squad and delivered upstream as a patch set; the hook and adapter live in this repository. Stop rule: a three-step script runs against a fake adapter and the committed Markdown view matches its render.
+
 ### 9. ADR map
 
 | Topic | Status | Meaning |
