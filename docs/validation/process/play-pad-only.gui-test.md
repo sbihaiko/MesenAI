@@ -12,14 +12,27 @@
 
 ```json
 {
-  "note": "Control ids are provisional until the in-app AutomationIds land (#1182); steps use the HOME-01..06 wording of the manual script.",
+  "note": "Control ids are provisional until the in-app AutomationIds land (#1182); steps use the HOME-01..06 wording of the manual script. Library, Favorites and Game batches (#1193) follow LIB-01..09, FAV-01..02, GAME-01..04; ids under play.library.*, play.keyboard, play.select-rom, play.bios and play.game are provisional the same way.",
   "rom": {
     "path": "<library>/Contra (USA).nes",
     "sha1": "<no-intro sha1 per ADR-0003, filled when the adapter lands>"
   },
+  "rom-fds": {
+    "note": "an FDS image with disksys.rom not installed (GAME-04)",
+    "path": "<library>/Disk System Game.fds"
+  },
+  "rom-library-large": {
+    "note": "a folder with 100+ ROMs (LIB-02)",
+    "path": "<library-large>"
+  },
+  "rom-zip": {
+    "note": "an archive holding several ROMs (GAME-03)",
+    "path": "<library>/Multi ROM Pack.zip"
+  },
   "settings": {
     "profiles": {
       "fresh": "no play history, no favorites",
+      "history-no-favorite": "one game in play history (so Continue and Recent exist) and no favorites (FAV-01 starts from an empty Favorites shelf)",
       "history-one-favorite": "one game in play history (so Continue and Recent exist) and that game favorited (so Favorites exists, ADR-0268 Decision 4)"
     }
   }
@@ -78,3 +91,139 @@ Steps:
 | `after-game.contained-sideways-left` | under-test | `ui.focused == play.home.continue` | `pad.press(button="Left", ticks=12)` | within 12 ticks | `ui.focused(within="play.home")` | Left on the top row stays inside the Home host. | all | major | automated |
 | `after-game.contained-sideways-right` | under-test | `ui.focused == play.home.continue` | `pad.press(button="Right", ticks=12)` | within 12 ticks | `ui.focused(within="play.home")` | Right on the top row stays inside the Home host. | all | major | automated |
 | `after-game.contained-other-controls-gap` | under-test | `ui.screen == play.home` | — | — | — | From Favorites, Recent and Open a ROM, D-pad Left and Right keep focus inside Home (the automated steps press them from Continue only) | all | major | manual |
+
+## Batch `library`
+
+Setup:
+
+| ID | Role | Precondition | Action | Wait | Check | Expected | Variants | Severity | Mode |
+|---|---|---|---|---|---|---|---|---|---|
+| `lib.reach-library` | setup | `fixture rom and fixture settings.profiles.fresh` | `nav.goal(goal="ui.screen == play.library")` | `ui.screen == play.library` within 600 ticks | — | The library sheet (W-P19) is open with a focused tile (the LIB-01 precondition). | all | major | automated |
+
+Steps:
+
+| ID | Role | Precondition | Action | Wait | Check | Expected | Variants | Severity | Mode |
+|---|---|---|---|---|---|---|---|---|---|
+| `lib.open-screen` | under-test | `ui.screen == play.library` | — | `ui.screen == play.library` within 120 ticks | `ui.screen(is="play.library")` | LIB-01: the flat library grid is open. | all | major | automated |
+| `lib.first-tile-focused` | under-test | `ui.screen == play.library` | — | `ui.focused == play.library.tile` within 120 ticks | `ui.focused(is="play.library.tile")` | LIB-01: a tile is focused (ring on the grid's first tile). | all | major | automated |
+| `lib.header-footer-scan` | under-test | `ui.screen == play.library` | — | — | — | LIB-01: header reads "Your library · N games in M folders", the footer names A/B/Y/X/LB/RB in the pad's own words (ADR-0256 Decision 6), an animated indicator shows while scanning. | all | minor | manual |
+| `lib.hold-down-repeats` | under-test | `fixture rom folder with 100+ ROMs; ui.screen == play.library` | — | — | — | LIB-02: with 100+ ROMs, a held Down repeats after 400 ms then every 100 ms (ADR-0256 Decision 7) and the grid scrolls; judged by timing and eye. | all | major | manual |
+| `lib.tap-down-steps-once` | under-test | `ui.focused == play.library.tile` | `pad.press(button="Down", ticks=4)` | `ui.focused == play.library.tile` within 4 ticks | `ui.focused(is="play.library.tile")` | LIB-02: one tap steps the focus once and the focus stays in the grid. | all | major | automated |
+| `lib.up-enters-header` | under-test | `ui.focused == play.library.tile` | `pad.press(button="Up", ticks=4)` | `ui.focused == play.library.search` within 120 ticks | `ui.focused(is="play.library.search")` | LIB-03: Up from the top grid row enters the header row (search first, ADR-0264 Decision 3). | all | major | automated |
+| `lib.header-right-folders` | under-test | `ui.focused == play.library.search` | `pad.press(button="Right", ticks=4)` | `ui.focused == play.library.folders` within 120 ticks | `ui.focused(is="play.library.folders")` | LIB-03: Right moves to Library folders. | all | major | automated |
+| `lib.header-right-browse` | under-test | `ui.focused == play.library.folders` | `pad.press(button="Right", ticks=4)` | `ui.focused == play.library.browse` within 120 ticks | `ui.focused(is="play.library.browse")` | LIB-03: Right moves to Browse a file. | all | major | automated |
+| `lib.header-right-back` | under-test | `ui.focused == play.library.browse` | `pad.press(button="Right", ticks=4)` | `ui.focused == play.library.back` within 120 ticks | `ui.focused(is="play.library.back")` | LIB-03: Right moves to Back. | all | major | automated |
+| `lib.header-down-grid` | under-test | `ui.focused == play.library.back` | `pad.press(button="Down", ticks=4)` | `ui.focused == play.library.tile` within 120 ticks | `ui.focused(is="play.library.tile")` | LIB-03: Down from the header returns to the grid. | all | major | automated |
+| `lib.filter-rb-wraps` | under-test | `ui.screen == play.library and two consoles in the library` | — | — | — | LIB-04: RB steps All -> each console present -> All, wrapping; the grid narrows; never an empty filter (PlayerRomPickerViewModel.ConsoleFilter.cs). The filter is not a named control the hook reads. | all | minor | manual |
+| `lib.filter-lb-backwards` | under-test | `ui.screen == play.library and two consoles in the library` | — | — | — | LIB-04: LB walks the same ring backwards, wrapping at both ends. | all | minor | manual |
+| `lib.filter-chips-not-focusable` | under-test | `ui.screen == play.library` | — | — | — | KNOWN GAP: LIB-04 (#1134, KnownChipGaps = "Library"): the console chips cannot take focus; LB/RB is the only pad route. Record whether the current chip is obvious at couch distance. | all | major | manual |
+| `lib.search-y-focuses-field` | under-test | `ui.focused == play.library.tile` | `pad.press(button="Y", ticks=4)` | `ui.focused == play.library.search` within 120 ticks | `ui.focused(is="play.library.search")` | LIB-05: Y moves the ring to the search field. | all | major | automated |
+| `lib.search-a-opens-keyboard` | under-test | `ui.focused == play.library.search` | `pad.press(button="A", ticks=4)` | `ui.visible == play.keyboard` within 120 ticks | `ui.visible(is="play.keyboard")` | LIB-05: A opens the shared on-screen keyboard (ADR-0262) below the field; the sheet stays open. | all | major | automated |
+| `lib.search-type-filters` | under-test | `ui.visible == play.keyboard` | — | — | — | LIB-05: typing `zel` (or a prefix of an owned title) with D-pad + A filters the grid per letter; OK commits and focus returns to the field; an empty result shows "No games match" with a way to clear it. | all | minor | manual |
+| `lib.search-b-cancels` | under-test | `ui.visible == play.keyboard` | `pad.press(button="B", ticks=4)` | `ui.focused == play.library.search` within 8 ticks | `ui.focused(is="play.library.search")` | LIB-05: on a second Y, A, B the field returns to its previous text, focus returns to it, and the sheet does not close. | all | major | automated |
+| `lib.search-sheet-stays` | under-test | `ui.focused == play.library.search` | — | `ui.screen == play.library` within 4 ticks | `ui.screen(is="play.library")` | LIB-05: the library sheet is still open under the cancelled keyboard. | all | major | automated |
+| `lib.search-right-folders` | under-test | `ui.focused == play.library.search` | `pad.press(button="Right", ticks=4)` | `ui.focused == play.library.folders` within 8 ticks | `ui.focused(is="play.library.folders")` | LIB-06: Right from the search field reaches Library folders. | all | major | automated |
+| `lib.folders-open` | under-test | `ui.focused == play.library.folders` | `pad.press(button="A", ticks=4)` | `ui.screen == play.library.folders` within 120 ticks | `ui.screen(is="play.library.folders")` | LIB-06: A on Library folders opens the pad-reachable folder list (ADR-0264 Decision 8). | all | major | automated |
+| `lib.folders-no-native-dialog` | under-test | `ui.screen == play.library.folders` | — | within 4 ticks | `ui.dialogs(is=[])` | LIB-06: no native OS dialog is open over the folder list. | all | major | automated |
+| `lib.folders-add-remove` | under-test | `ui.screen == play.library.folders` | — | — | — | LIB-06: add a folder, remove it, add it back by pad; the header count updates. | all | major | manual |
+| `lib.folders-b-closes` | under-test | `ui.screen == play.library.folders` | `pad.press(button="B", ticks=4)` | `ui.screen == play.library` within 120 ticks | `ui.screen(is="play.library")` | LIB-06: B closes the folder list back to the library. | all | major | automated |
+| `lib.folders-right-browse` | under-test | `ui.focused == play.library.folders` | `pad.press(button="Right", ticks=4)` | `ui.focused == play.library.browse` within 8 ticks | `ui.focused(is="play.library.browse")` | LIB-07: Right from Library folders reaches Browse a file. | all | major | automated |
+| `lib.browse-open` | under-test | `ui.focused == play.library.browse` | `pad.press(button="A", ticks=4)` | `ui.screen == play.library.browse` within 120 ticks | `ui.screen(is="play.library.browse")` | LIB-07: A on Browse a file opens the folder browser (ADR-0256 Decision 9). | all | major | automated |
+| `lib.browse-walk` | under-test | `ui.screen == play.library.browse` | — | — | — | LIB-07: Confirm descends, B ascends; the action row leads the list but the ring never lands on it first (first-row guard); Make this my games folder inside a non-empty folder. | all | minor | manual |
+| `lib.browse-b-root-dismisses` | under-test | `ui.screen == play.library.browse` | `pad.press(button="B", ticks=4)` | `ui.screen == play.library` within 120 ticks | `ui.screen(is="play.library")` | LIB-07: B on the root dismisses with no load, back to the library. | all | major | automated |
+| `lib.box-art` | under-test | `ui.screen == play.library and online` | — | — | — | LIB-08: box art for known ROMs (lazy, visible tiles only), a generic console-colored cover carrying the title for unknown ones, nothing waits on the network; a visual check, record only if it blocks focus or scrolling. | all | minor | manual |
+| `lib.browse-down-grid` | under-test | `ui.focused == play.library.browse` | `pad.press(button="Down", ticks=4)` | `ui.focused == play.library.tile` within 8 ticks | `ui.focused(is="play.library.tile")` | LIB-09: Down from the header returns to the grid (LIB-09 starts from the grid). | all | major | automated |
+| `lib.back-to-home` | under-test | `ui.screen == play.library` | `pad.press(button="B", ticks=4)` | `ui.screen == play.home` within 120 ticks | `ui.screen(is="play.home")` | LIB-09: B from the grid goes back to Home. | all | major | automated |
+| `lib.back-ring-on-opener` | under-test | `ui.screen == play.home` | — | `ui.focused == play.home.open-rom` within 8 ticks | `ui.focused(is="play.home.open-rom")` | LIB-09: the ring is on the control that opened the sheet, Open a ROM. | all | major | automated |
+
+## Batch `favorites`
+
+Setup:
+
+| ID | Role | Precondition | Action | Wait | Check | Expected | Variants | Severity | Mode |
+|---|---|---|---|---|---|---|---|---|---|
+| `fav.reach-library` | setup | `fixture rom and fixture settings.profiles.history-no-favorite` | `nav.goal(goal="ui.screen == play.library")` | `ui.screen == play.library` within 600 ticks | — | The library sheet is open with a tile focused (the FAV-01 precondition). | all | major | automated |
+
+Steps:
+
+| ID | Role | Precondition | Action | Wait | Check | Expected | Variants | Severity | Mode |
+|---|---|---|---|---|---|---|---|---|---|
+| `fav.x-favorites-tile` | under-test | `ui.focused == play.library.tile` | `pad.press(button="X", ticks=4)` | `ui.focused == play.library.tile` within 4 ticks | `ui.focused(is="play.library.tile")` | FAV-01: X on the focused tile keeps the ring on the grid and toggles Favorite (ADR-0268). | all | major | automated |
+| `fav.footer-reads-unfavorite` | under-test | `ui.screen == play.library` | — | — | — | FAV-01: the footer's X entry now reads Unfavorite (it read Favorite before). | all | minor | manual |
+| `fav.back-to-home` | under-test | `ui.screen == play.library` | `pad.press(button="B", ticks=4)` | `ui.screen == play.home` within 120 ticks | `ui.screen(is="play.home")` | FAV-01: B returns to Home. | all | major | automated |
+| `fav.home-shelf-shown` | under-test | `ui.screen == play.home` | — | `ui.visible == play.home.favorites` within 8 ticks | `ui.visible(is="play.home.favorites")` | FAV-01: Home shows a Favorites shelf between Continue and Recent, newest favorite first. | all | major | automated |
+| `fav.library-again` | under-test | `ui.focused == play.home.open-rom` | `pad.press(button="A", ticks=4)` | `ui.screen == play.library` within 120 ticks | `ui.screen(is="play.library")` | FAV-01: A on Open a ROM returns to the library. | all | major | automated |
+| `fav.x-unfavorites-tile` | under-test | `ui.focused == play.library.tile` | `pad.press(button="X", ticks=4)` | `ui.focused == play.library.tile` within 4 ticks | `ui.focused(is="play.library.tile")` | FAV-01: X on the same tile unfavorites it; the ring stays on the grid. | all | major | automated |
+| `fav.back-home-again` | under-test | `ui.screen == play.library` | `pad.press(button="B", ticks=4)` | `ui.screen == play.home` within 120 ticks | `ui.screen(is="play.home")` | FAV-01: B returns to Home. | all | major | automated |
+| `fav.shelf-hides-when-empty` | under-test | `ui.screen == play.home` | — | — | — | FAV-01: with no favorite left the Favorites shelf is hidden. | all | minor | manual |
+
+## Batch `favorites-home`
+
+Setup:
+
+| ID | Role | Precondition | Action | Wait | Check | Expected | Variants | Severity | Mode |
+|---|---|---|---|---|---|---|---|---|---|
+| `fav2.reach-favorite-tile` | setup | `fixture rom and fixture settings.profiles.history-one-favorite` | `nav.goal(goal="ui.focused == play.home.favorite")` | `ui.focused == play.home.favorite` within 600 ticks | — | Home W-P2 with a Favorites shelf and the ring on a favorite tile (the FAV-02 precondition). | all | major | automated |
+
+Steps:
+
+| ID | Role | Precondition | Action | Wait | Check | Expected | Variants | Severity | Mode |
+|---|---|---|---|---|---|---|---|---|---|
+| `fav2.x-on-favorite-tile` | under-test | `ui.focused == play.home.favorite` | `pad.press(button="X", ticks=4)` | `ui.focused == play.home.favorite` within 4 ticks | `ui.focused(is="play.home.favorite")` | FAV-02: X acts on the focused cover; on a Home favorite tile it toggles that game and the ring stays on the shelf. | all | major | automated |
+| `fav2.up-to-continue` | under-test | `ui.focused == play.home.favorite` | `pad.press(button="Up", ticks=4)` | `ui.focused == play.home.continue` within 8 ticks | `ui.focused(is="play.home.continue")` | FAV-02: Up reaches the Continue card (focus order Continue -> Favorites -> Recent, ADR-0268 Decision 6). | all | major | automated |
+| `fav2.x-on-continue` | under-test | `ui.focused == play.home.continue` | `pad.press(button="X", ticks=4)` | `ui.focused == play.home.continue` within 4 ticks | `ui.focused(is="play.home.continue")` | FAV-02: X on the Continue card favorites the Continue game (ADR-0268 Decision 1); the ring stays on Continue. | all | major | automated |
+| `fav2.down-favorite` | under-test | `ui.focused == play.home.continue` | `pad.press(button="Down", ticks=4)` | `ui.focused == play.home.favorite` within 8 ticks | `ui.focused(is="play.home.favorite")` | FAV-02: Down returns to the Favorites shelf. | all | major | automated |
+| `fav2.down-recent` | under-test | `ui.focused == play.home.favorite` | `pad.press(button="Down", ticks=4)` | `ui.focused == play.home.recent` within 8 ticks | `ui.focused(is="play.home.recent")` | FAV-02: Down reaches the Recent grid. | all | major | automated |
+| `fav2.down-open-rom` | under-test | `ui.focused == play.home.recent` | `pad.press(button="Down", ticks=4)` | `ui.focused == play.home.open-rom` within 8 ticks | `ui.focused(is="play.home.open-rom")` | FAV-02: Down reaches Open a ROM. | all | major | automated |
+| `fav2.x-elsewhere-does-nothing` | under-test | `ui.focused == play.home.open-rom` | `pad.press(button="X", ticks=4)` | `ui.focused == play.home.open-rom` within 4 ticks | `ui.focused(is="play.home.open-rom")` | FAV-02: X on Open a ROM does nothing; the ring stays put. | all | major | automated |
+
+## Batch `game`
+
+Setup:
+
+| ID | Role | Precondition | Action | Wait | Check | Expected | Variants | Severity | Mode |
+|---|---|---|---|---|---|---|---|---|---|
+| `game.reach-library` | setup | `fixture rom and fixture settings.profiles.fresh` | `nav.goal(goal="ui.screen == play.library")` | `ui.screen == play.library` within 600 ticks | — | The library sheet is open with a tile focused (the GAME-01 precondition). | all | major | automated |
+
+Steps:
+
+| ID | Role | Precondition | Action | Wait | Check | Expected | Variants | Severity | Mode |
+|---|---|---|---|---|---|---|---|---|---|
+| `game.a-loads-game` | under-test | `ui.focused == play.library.tile` | `pad.press(button="A", ticks=4)` | `ui.screen == play.game` within 600 ticks | `ui.screen(is="play.game")` | GAME-01: A on a tile closes the sheet and the game runs. | all | major | automated |
+| `game.load-card-and-toast` | under-test | `ui.screen == play.game` | — | — | — | GAME-01: a load card with a moving indicator shows; for the first three starts the entry toast ends with the menu hint naming the pad's chord, e.g. "· Select+Start for the menu" (ADR-0251 §2), not "Esc". | all | minor | manual |
+| `game.pad-is-the-consoles` | under-test | `ui.screen == play.game` | `pad.press(button="Right", ticks=600)` | `ui.screen == play.game` within 600 ticks | `ui.screen(is="play.game")` | GAME-02: playing 10 s with the D-pad leaves the game running; the pad is the console's (ADR-0256 Decision 1). | all | major | automated |
+| `game.no-menu-feedback` | under-test | `ui.screen == play.game` | — | — | — | GAME-02: no menu sound, no focus ring, no haptic tick, nothing in the GUI reacts; the status bar and lamps are hidden (ADR-0261 Consequences). | all | minor | manual |
+
+## Batch `game-archive`
+
+Setup:
+
+| ID | Role | Precondition | Action | Wait | Check | Expected | Variants | Severity | Mode |
+|---|---|---|---|---|---|---|---|---|---|
+| `game-archive.reach-library` | setup | `fixture rom and fixture settings.profiles.fresh` | `nav.goal(goal="ui.screen == play.library")` | `ui.screen == play.library` within 600 ticks | — | The library sheet is open with the multi-ROM archive tile focused (fixture rom-zip). | all | major | automated |
+
+Steps:
+
+| ID | Role | Precondition | Action | Wait | Check | Expected | Variants | Severity | Mode |
+|---|---|---|---|---|---|---|---|---|---|
+| `game-archive.a-opens-select-sheet` | under-test | `ui.focused == play.library.tile and fixture rom-zip` | `pad.press(button="A", ticks=4)` | `ui.screen == play.select-rom` within 120 ticks | `ui.screen(is="play.select-rom")` | GAME-03: A on the archive tile opens the "which game" sheet (PlaySelectRomSheet). | all | major | automated |
+| `game-archive.b-cancels-back` | under-test | `ui.screen == play.select-rom` | `pad.press(button="B", ticks=4)` | `ui.screen == play.library` within 120 ticks | `ui.screen(is="play.library")` | GAME-03: B cancels back to the library. | all | major | automated |
+| `game-archive.a-reopens` | under-test | `ui.focused == play.library.tile` | `pad.press(button="A", ticks=4)` | `ui.screen == play.select-rom` within 120 ticks | `ui.screen(is="play.select-rom")` | GAME-03: A on the archive tile opens the sheet again. | all | major | automated |
+| `game-archive.a-picks-a-game` | under-test | `ui.screen == play.select-rom` | `pad.press(button="A", ticks=4)` | `ui.screen == play.game` within 600 ticks | `ui.screen(is="play.game")` | GAME-03: D-pad + A picks a game and it loads. | all | major | automated |
+
+## Batch `game-bios`
+
+Setup:
+
+| ID | Role | Precondition | Action | Wait | Check | Expected | Variants | Severity | Mode |
+|---|---|---|---|---|---|---|---|---|---|
+| `game-bios.reach-library` | setup | `fixture rom and fixture settings.profiles.fresh` | `nav.goal(goal="ui.screen == play.library")` | `ui.screen == play.library` within 600 ticks | — | The library sheet is open with the FDS tile focused (fixture rom-fds, disksys.rom not installed). | all | major | automated |
+
+Steps:
+
+| ID | Role | Precondition | Action | Wait | Check | Expected | Variants | Severity | Mode |
+|---|---|---|---|---|---|---|---|---|---|
+| `game-bios.a-opens-bios-sheet` | under-test | `ui.focused == play.library.tile and fixture rom-fds` | `pad.press(button="A", ticks=4)` | `ui.screen == play.bios` within 120 ticks | `ui.screen(is="play.bios")` | GAME-04: A on the FDS image shows the BIOS sheet (W-P13). | all | major | automated |
+| `game-bios.b-cancels` | under-test | `ui.screen == play.bios` | `pad.press(button="B", ticks=4)` | `ui.screen == play.library` within 120 ticks | `ui.screen(is="play.library")` | GAME-04: B/Cancel backs out cleanly to the library. | all | major | automated |
+| `game-bios.status-names-bios` | under-test | `ui.screen == play.library` | — | — | — | GAME-04: the status line names the missing BIOS. | all | minor | manual |
+| `game-bios.choose-file-native` | under-test | `ui.screen == play.bios` | — | — | — | KNOWN GAP: GAME-04: Choose File... on the BIOS sheet is a native dialog (ADR-0256 Decision 9 refusals). Expected FAIL; record that Cancel still backs out. | all | major | manual |
