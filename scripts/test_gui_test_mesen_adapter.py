@@ -382,6 +382,24 @@ class HeadlessRunnerRealCall(unittest.TestCase):
         self.assertEqual(runner.main(["x"]), 1)
         self.assertLess(time.monotonic() - began, 10)
 
+    def test_a_hung_grandchild_is_killed_with_the_process_group(self):
+        pidfile = self.tmp / "grandchild.pid"
+        self.dotnet(f"sleep 30 &\necho $! > {pidfile}\nwait")
+        runner.TIMEOUT_SECONDS, old = 0.5, runner.TIMEOUT_SECONDS
+        self.addCleanup(lambda: setattr(runner, "TIMEOUT_SECONDS", old))
+        began = time.monotonic()
+        self.assertEqual(runner.main(["x"]), 1)
+        self.assertLess(time.monotonic() - began, 10)
+        pid = int(pidfile.read_text())
+        for _ in range(50):
+            try:
+                os.kill(pid, 0)
+            except ProcessLookupError:
+                return
+            time.sleep(0.1)
+        os.kill(pid, 9)
+        self.fail("the grandchild outlived the timeout")
+
     def test_without_the_core_library_the_call_fails(self):
         del os.environ["MESEN_CORE_LIB"]
         self.assertEqual(runner.main(["x"]), 2)
