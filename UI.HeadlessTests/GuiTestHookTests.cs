@@ -144,6 +144,37 @@ public class GuiTestHookTests : IDisposable
 		return (window, model);
 	}
 
+	//The first-run home (W-P1): no play history at all, so its one action is
+	//Open a ROM - the state the pad-only script's first batch starts from.
+	private (MainWindow Window, MainWindowViewModel Model) ShowFirstRunHome()
+	{
+		string recents = ConfigManager.RecentGamesFolder;
+		Directory.CreateDirectory(recents);
+		foreach(string file in Directory.GetFiles(recents, "*.rgd")) {
+			File.Delete(file);
+		}
+
+		PreferencesConfig prefs = ConfigManager.Config.Preferences;
+		prefs.UiMode = UiMode.Player;
+		prefs.Workspace = Workspace.Play;
+		prefs.ConfirmExitResetPower = false;
+		prefs.PauseWhenInBackground = false;
+		prefs.PauseWhenInMenusAndConfig = false;
+
+		MainWindow window = new();
+		window.ShowStarted();
+		_windows.Add(window);
+		MainWindowViewModel model = Assert.IsType<MainWindowViewModel>(window.DataContext);
+		WaitFor(() => model.MainMenu.HelpMenuItems.Count > 0, "MainWindow never finished building its menus.");
+		model.ConnectedGamepadCount = () => 1;
+		//The library the sheet would open on, with nothing configured: this case is
+		//about what the surface is named, never about the disk this suite runs on.
+		model.RomPicker.LibraryFolderSource = () => Array.Empty<string>();
+		model.RecentGames.Init(GameScreenMode.RecentGames);
+		WaitFor(() => Focus(window, model) == "play.home.open-rom", "the first-run home opened without Open a ROM focused");
+		return (window, model);
+	}
+
 	private static string? Focus(MainWindow window, MainWindowViewModel model)
 	{
 		return new TestHookWiring.WindowTarget(window).State()["focus"]?.GetValue<string>();
@@ -182,6 +213,34 @@ public class GuiTestHookTests : IDisposable
 			Assert.Equal("play.home", state["screen"]!.GetValue<string>());
 			Assert.Equal(2, state["tick"]!.GetValue<long>());
 			Assert.Contains(state["controls"]!.AsArray(), c => c!["id"]!.GetValue<string>() == "play.home.open-rom" && c["focused"]!.GetValue<bool>());
+		} finally {
+			keys.ReleaseAll();
+		}
+	}
+
+	//#1231: the pad-only script's `home.open-library` step - A on Open a ROM opens
+	//the library sheet (LIB-01) - waited on `ui.screen == play.library` and timed
+	//out. The sheet itself does open from a pad press (the home's own Confirm is
+	//the sheet's door), so what the step could not read is the surface's name: the
+	//hook named the screen only when the id was the home's, and no control carried
+	//the library's own id.
+	[AvaloniaFact]
+	public void Injected_A_on_the_first_run_home_opens_the_library_named_play_library()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model) = ShowFirstRunHome();
+		TestHookKeys keys = NewKeys();
+		TestHookProtocol hook = new("t", new TestHookWiring.WindowTarget(window), keys);
+		try {
+			JsonObject answer = JsonNode.Parse(hook.Handle("{\"id\":1,\"token\":\"t\",\"op\":\"inject\",\"action\":\"pad.press\",\"args\":{\"button\":\"A\",\"ticks\":4}}"))!.AsObject();
+			Assert.True(answer["ok"]!.GetValue<bool>(), answer.ToJsonString());
+			//The step's own action: held for its four ticks, then the release edge.
+			for(int tick = 0; tick < 6; tick++) {
+				Tick(window, keys);
+			}
+			Assert.True(model.RomPicker.IsVisible, "the pad's A on Open a ROM opened no library sheet");
+			JsonObject state = JsonNode.Parse(hook.Handle("{\"id\":2,\"token\":\"t\",\"op\":\"state\"}"))!.AsObject();
+			Assert.Equal("play.library", state["screen"]?.GetValue<string>());
 		} finally {
 			keys.ReleaseAll();
 		}

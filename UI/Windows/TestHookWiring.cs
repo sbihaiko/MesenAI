@@ -9,6 +9,7 @@ using Avalonia.VisualTree;
 using Mesen.Interop;
 using Mesen.Logic.TestHook;
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
@@ -98,14 +99,14 @@ namespace Mesen.Windows
 				JsonArray controls = new();
 				JsonArray visible = new();
 				JsonArray options = new();
-				string? screen = null;
+				List<string> visibleIds = new();
 				foreach(Control control in _window.GetVisualDescendants().OfType<Control>()) {
 					string? id = AutomationProperties.GetAutomationId(control);
 					if(id is null || id.Length == 0) {
 						continue;
 					}
-					if(control.IsEffectivelyVisible && id == "play.home") {
-						screen = id;
+					if(control.IsEffectivelyVisible) {
+						visibleIds.Add(id);
 					}
 					controls.Add(new JsonObject {
 						["id"] = id,
@@ -138,8 +139,13 @@ namespace Mesen.Windows
 						});
 					}
 				}
+				//#1231: the screen is the surface drawn last, read off the ids this
+				//walk just collected in draw order (TestHookScreens): the home stays
+				//on screen behind the sheet opened from it, so naming the home by
+				//name left the library sheet with no screen at all - and the
+				//pad-only script's `home.open-library` step waits on `play.library`.
 				return new JsonObject {
-					["screen"] = screen,
+					["screen"] = TestHookScreens.Active(visibleIds),
 					["dialogs"] = new JsonArray(),
 					["focus"] = FocusedId(),
 					["controls"] = controls,

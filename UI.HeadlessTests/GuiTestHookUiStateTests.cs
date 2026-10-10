@@ -71,6 +71,28 @@ public class GuiTestHookUiStateTests
 		Assert.True(Option(options, "menu.settings.display.scale")["visible"]!.GetValue<bool>());
 	}
 
+	//#1231: the screen is the surface drawn last, not the home by name. The library
+	//sheet opens over the home (ADR-0256 Decision 9's own layout, ADR-0272 item 3),
+	//so while it is up the state has to name IT - the pad-only script's
+	//`home.open-library` step waits on exactly that.
+	[AvaloniaFact]
+	public void State_names_the_surface_drawn_over_the_home()
+	{
+		StackPanel root = new();
+		root.Children.Add(Named(new Border(), "play.home"));
+		root.Children.Add(Named(new Border(), "play.home.open-rom"));
+		root.Children.Add(Named(new Border(), "play.library"));
+		Window window = new() { Content = root };
+		window.Show();
+		TestHookWiring.WindowTarget target = new(window, () => false);
+
+		Assert.Equal("play.library", target.State()["screen"]?.GetValue<string>());
+
+		//And back: with nothing over it, the home is the screen again.
+		root.Children[2].IsVisible = false;
+		Assert.Equal("play.home", target.State()["screen"]?.GetValue<string>());
+	}
+
 	private static JsonObject Option(JsonArray options, string id) =>
 		options.Select(o => o!.AsObject()).First(o => o["id"]!.GetValue<string>() == id);
 
