@@ -6,7 +6,7 @@ Durable documentation for this fork: open specs, execution plans, and the enhanc
 
 ## Ownership
 
-Owns `docs/specs/` (CC0), `docs/roadmap/` (the consolidated PRD), `docs/adr/` (the decision register, moved here from `.dev-squad/adr/` on 2026-09-03 and split into the seven area subfolders `packs/`, `sprites/`, `recorder/`, `ci-build/`, `audio/`, `gui/`, `core/` on 2026-10-05 — the area is the decision's subject, and ids are never reused, so a citation is by `ADR-NNNN`, not by path), `docs/media/`, `docs/validation/` (dated acceptance/measurement logs, grouped by what the record IS: `issues/`, `slices/`, `adr/`, `measurements/`, `process/`; plus one JSON fixture; no scripts), `docs/community-packs/` (the errata store read by `scripts/mep_errata.py` and the validate workflow, ADR-0152), `docs/releases/` (release-zip READMEs copied by `scripts/release_macos.sh`, gated by `scripts/checks/verify_release_asset_names.sh`), `docs/reviews/` (point-in-time review reports), and top-level ecosystem notes. Does not own `AGENTS.md` files in other trees or Core/UI source.
+Owns `docs/specs/` (CC0), `docs/roadmap/` (the consolidated PRD), `docs/adr/` (the decision register, moved here from `.dev-squad/adr/` on 2026-09-03 and split into the seven area subfolders `packs/`, `sprites/`, `recorder/`, `ci-build/`, `audio/`, `gui/`, `core/` on 2026-10-05 — the area is the decision's subject, and ids are never reused, so a citation is by `ADR-NNNN`, not by path), `docs/media/`, `docs/validation/` (dated acceptance/measurement logs, grouped by what the record IS: `issues/`, `slices/`, `adr/`, `measurements/`, `process/`; plus one JSON fixture; no scripts), `docs/community-packs/` (the errata store read by `scripts/mep_errata.py` and the validate workflow, ADR-0152), `docs/releases/` (release-zip READMEs copied by `scripts/release_macos.sh`, gated by `scripts/checks/verify_release_asset_names.sh`), `docs/reviews/` (point-in-time review reports), `docs/agent-squad/` (the GUI test squad spec and the Play couch GUI ratification questionnaire), `docs/squad/` (squad run notes and workflow graphs), and top-level ecosystem notes. Does not own `AGENTS.md` files in other trees or Core/UI source.
 
 ## Local Contracts
 
@@ -103,3 +103,5 @@ Owns `docs/specs/` (CC0), `docs/roadmap/` (the consolidated PRD), `docs/adr/` (t
 - media/ — short demo excerpts and the generated `gui-redesign/` wireframe PNGs
 - releases/ — READMEs shipped inside the release zips
 - reviews/ — point-in-time review reports (fork/upstream inherited-code review)
+- agent-squad/ — GUI test squad spec and the Play couch GUI ratification questionnaire
+- squad/ — squad run notes (`router-model-overrun.md`) and `workflows/` graphs
