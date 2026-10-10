@@ -23,9 +23,9 @@ A single command runs a script end to end on the GUI test infrastructure and wri
 13. As a maintainer, I want a run that executed no step reported as a failure, so that an empty run is never a pass.
 14. As a maintainer, I want the process to exit non-zero when any step failed, and zero otherwise, so that CI can gate on it.
 15. As a maintainer, I want `needs review` and `pending` steps to leave the exit code at zero and be listed in the output, so that they never turn a build red and never go unseen.
-16. As a developer, I want the run to write one results file in the `gui-test-results/1` format, including the run's bug URL, so that the write-back can link it without guessing and the two sides can be built and tested apart. (Original wording: "with a frozen schema".) , so that the run and the write-back can be built and tested apart.
-17. As a developer, I want the results file to carry run id, script name and sha, platform, build SHA and start and finish times, so that a run is reproducible and comparable.
-18. As a developer, I want each step result to carry id, batch, variant, verdict, expected, observed and an optional evidence reference, so that the write-back needs nothing else.
+16. As a developer, I want the run to write one results file in the `gui-test-results/1` format, including the run's bug URL, so that the write-back can link it without guessing and the run and the write-back can be built and tested apart.
+17. As a developer, I want the results file to carry run id, adapter name, script path/sha256/name, platform, build SHA, start time and status, so that a run is reproducible and comparable.
+18. As a developer, I want each step result to carry id, batch, mode, role, expect, verdict, capture and held, so that the write-back needs nothing else — reading the expected value from `expect` and the observed value from the verdict text.
 19. As a developer, I want a malformed results file rejected with the reason, so that a broken run never half-updates issues.
 20. As a security reviewer, I want every screenshot to pass the privacy gate before it leaves the machine, so that nothing private reaches an issue.
 21. As a security reviewer, I want a screenshot not released by the gate to be named as withheld in the result, never uploaded and never dropped silently, so that a reviewer knows evidence exists.
