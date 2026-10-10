@@ -7,7 +7,6 @@
       "pad.press",
       "pad.release",
       "pad.chord",
-      "window.mode",
       "nav.goal"
     ],
     "checks": [
@@ -58,25 +57,12 @@
             "window.mode": "windowed"
           },
           "severity": "major",
-          "mode": "automated",
-          "action": {
-            "name": "window.mode",
-            "args": {
-              "mode": "windowed"
-            }
-          }
+          "mode": "automated"
         },
         {
           "id": "launch.open-rom-focused",
           "role": "under-test",
           "precondition": "ui.screen == play.home",
-          "action": {
-            "name": "pad.press",
-            "args": {
-              "button": "Right",
-              "ticks": 1
-            }
-          },
           "wait": {
             "check": "ui.focused == play.home.open-rom",
             "timeout_ticks": 120
@@ -291,54 +277,6 @@
           "mode": "automated"
         },
         {
-          "id": "home.contained-up",
-          "role": "under-test",
-          "precondition": "ui.screen == play.home",
-          "action": {
-            "name": "pad.press",
-            "args": {
-              "button": "Up",
-              "ticks": 12
-            }
-          },
-          "wait": {
-            "timeout_ticks": 12
-          },
-          "check": {
-            "name": "ui.focused",
-            "args": {
-              "within": "play.home"
-            }
-          },
-          "expect": "Repeated D-pad Up never leaves the Home host for the header's Profile or Tools buttons (#1137, #1166).",
-          "severity": "major",
-          "mode": "automated"
-        },
-        {
-          "id": "home.contained-sideways",
-          "role": "under-test",
-          "precondition": "ui.screen == play.home",
-          "action": {
-            "name": "pad.press",
-            "args": {
-              "button": "Left",
-              "ticks": 12
-            }
-          },
-          "wait": {
-            "timeout_ticks": 12
-          },
-          "check": {
-            "name": "ui.focused",
-            "args": {
-              "within": "play.home"
-            }
-          },
-          "expect": "Left and Right on the top row stay inside the Home host.",
-          "severity": "major",
-          "mode": "automated"
-        },
-        {
           "id": "home.chord-opens-nothing",
           "role": "under-test",
           "precondition": "ui.screen == play.home",
@@ -404,18 +342,18 @@
         {
           "id": "after-game.reach-home",
           "role": "setup",
-          "precondition": "game == loaded",
+          "precondition": "library.rom == present and game == none",
           "action": {
             "name": "nav.goal",
             "args": {
-              "goal": "play GAME-01 for a moment, power off, land on Home W-P2"
+              "goal": "ui.screen == play.home"
             }
           },
           "wait": {
             "check": "ui.screen == play.home",
             "timeout_ticks": 600
           },
-          "expect": "Home W-P2 with at least one game played (the HOME-03 precondition).",
+          "expect": "Home W-P2 (Continue / Favorites / Recent) with at least one game played (the HOME-03 precondition).",
           "severity": "major",
           "mode": "automated"
         }
@@ -447,9 +385,34 @@
           "mode": "automated"
         },
         {
-          "id": "after-game.order-recent",
+          "id": "after-game.order-favorites",
           "role": "under-test",
           "precondition": "ui.focused == play.home.continue",
+          "action": {
+            "name": "pad.press",
+            "args": {
+              "button": "Down",
+              "ticks": 4
+            }
+          },
+          "wait": {
+            "check": "ui.focused == play.home.favorites",
+            "timeout_ticks": 4
+          },
+          "check": {
+            "name": "ui.focused",
+            "args": {
+              "is": "play.home.favorites"
+            }
+          },
+          "expect": "Favorites follows Continue when the shelf exists (ADR-0268 Decision 6).",
+          "severity": "major",
+          "mode": "automated"
+        },
+        {
+          "id": "after-game.order-recent",
+          "role": "under-test",
+          "precondition": "ui.focused == play.home.favorites",
           "action": {
             "name": "pad.press",
             "args": {
@@ -462,12 +425,12 @@
             "timeout_ticks": 4
           },
           "check": {
-            "name": "ui.visible",
+            "name": "ui.focused",
             "args": {
-              "id": "play.home.recent"
+              "is": "play.home.recent"
             }
           },
-          "expect": "The Recent grid is reachable after Continue (and after Favorites when a shelf exists; ADR-0268 Decision 6).",
+          "expect": "Recent follows Favorites (Continue, Favorites, Recent; ADR-0268 Decision 6).",
           "severity": "major",
           "mode": "automated"
         },
@@ -503,6 +466,102 @@
           "expect": "The ring is on exactly one control at a time (ADR-0256 Decision 3); with a Favorites shelf present the order is Continue, Favorites, Recent. Both are judged by eye.",
           "severity": "minor",
           "mode": "manual"
+        },
+        {
+          "id": "after-game.contained-up-continue",
+          "role": "under-test",
+          "precondition": "ui.focused == play.home.continue",
+          "action": {
+            "name": "pad.press",
+            "args": {
+              "button": "Up",
+              "ticks": 12
+            }
+          },
+          "wait": {
+            "timeout_ticks": 12
+          },
+          "check": {
+            "name": "ui.focused",
+            "args": {
+              "within": "play.home"
+            }
+          },
+          "expect": "Repeated D-pad Up from Continue never leaves the Home host for the header's Profile or Tools buttons (#1137, #1166).",
+          "severity": "major",
+          "mode": "automated"
+        },
+        {
+          "id": "after-game.contained-up-recent",
+          "role": "under-test",
+          "precondition": "ui.focused == play.home.recent",
+          "action": {
+            "name": "pad.press",
+            "args": {
+              "button": "Up",
+              "ticks": 12
+            }
+          },
+          "wait": {
+            "timeout_ticks": 12
+          },
+          "check": {
+            "name": "ui.focused",
+            "args": {
+              "within": "play.home"
+            }
+          },
+          "expect": "Repeated D-pad Up from Recent never leaves the Home host for the header's Profile or Tools buttons (#1137, #1166).",
+          "severity": "major",
+          "mode": "automated"
+        },
+        {
+          "id": "after-game.contained-sideways-left",
+          "role": "under-test",
+          "precondition": "ui.focused == play.home.continue",
+          "action": {
+            "name": "pad.press",
+            "args": {
+              "button": "Left",
+              "ticks": 12
+            }
+          },
+          "wait": {
+            "timeout_ticks": 12
+          },
+          "check": {
+            "name": "ui.focused",
+            "args": {
+              "within": "play.home"
+            }
+          },
+          "expect": "Left on the top row stays inside the Home host.",
+          "severity": "major",
+          "mode": "automated"
+        },
+        {
+          "id": "after-game.contained-sideways-right",
+          "role": "under-test",
+          "precondition": "ui.focused == play.home.continue",
+          "action": {
+            "name": "pad.press",
+            "args": {
+              "button": "Right",
+              "ticks": 12
+            }
+          },
+          "wait": {
+            "timeout_ticks": 12
+          },
+          "check": {
+            "name": "ui.focused",
+            "args": {
+              "within": "play.home"
+            }
+          },
+          "expect": "Right on the top row stays inside the Home host.",
+          "severity": "major",
+          "mode": "automated"
         }
       ]
     }
