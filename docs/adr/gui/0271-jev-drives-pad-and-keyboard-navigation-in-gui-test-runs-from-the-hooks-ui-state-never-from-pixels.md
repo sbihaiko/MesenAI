@@ -6,8 +6,7 @@
   implemented. It is listed as slices T.1–T.2 (#1199, #1200) in
   `docs/roadmap/PRD-mesence-enhancement-ecosystem.md` Part B §8.
 - Date: 2026-10-09
-- Related: GUI test squad spec (steps 9b and 9c, tickets #1178–#1198),
-  ADR-0238, ADR-0242, ADR-0247, ADR-0157
+- Related: GUI test squad spec (steps 9b #1199 and 9c #1200; the rest of the squad is #1178–#1198), ADR-0238, ADR-0242, ADR-0247, ADR-0157
 - Supersedes / amends: amends the scope of ADR-0238 (Jev outside the recorder
   stall helper); ADR-0238's recorder use is unchanged.
 
