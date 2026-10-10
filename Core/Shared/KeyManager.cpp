@@ -12,6 +12,8 @@ double KeyManager::_xMouseMovement;
 double KeyManager::_yMouseMovement;
 EmuSettings* KeyManager::_settings = nullptr;
 SimpleLock KeyManager::_lock;
+SimpleLock KeyManager::_injectedLock;
+vector<uint16_t> KeyManager::_injectedKeys;
 
 void KeyManager::RegisterKeyManager(IKeyManager* keyManager)
 {
@@ -56,8 +58,23 @@ bool KeyManager::IsMouseButtonPressed(MouseButton button)
 	return false;
 }
 
+//The GUI test hook's overlay (the GUI test hook ADR, PR #1202, item 4): codes a
+//run asked to hold down, read as pressed on top of whatever the backend reports.
+//Empty unless the host started with --test-hook, so a normal run never differs.
+void KeyManager::SetInjectedKey(uint16_t keyCode, bool pressed)
+{
+	auto lock = _injectedLock.AcquireSafe();
+	auto it = std::find(_injectedKeys.begin(), _injectedKeys.end(), keyCode);
+	if(pressed && it == _injectedKeys.end()) {
+		_injectedKeys.push_back(keyCode);
+	} else if(!pressed && it != _injectedKeys.end()) {
+		_injectedKeys.erase(it);
+	}
+}
+
 vector<uint16_t> KeyManager::GetPressedKeys()
 {
+	vector<uint16_t> keys;
 	if(_keyManager != nullptr) {
 		//#902: a backend's set can carry the "no key" sentinel - macOS recorded it
 		//for any key code its table cannot name, and SetKeyState is a host export
@@ -66,9 +83,15 @@ vector<uint16_t> KeyManager::GetPressedKeys()
 		//ShortcutKeyHandler all read the same set: the shortcut handler, which
 		//reads the set's non-emptiness and its size as a key being down, is the one
 		//that cannot tell the sentinel from a key.
-		return IKeyManager::WithoutNoKey(_keyManager->GetPressedKeys());
+		keys = IKeyManager::WithoutNoKey(_keyManager->GetPressedKeys());
 	}
-	return vector<uint16_t>();
+	auto lock = _injectedLock.AcquireSafe();
+	for(uint16_t injected : _injectedKeys) {
+		if(std::find(keys.begin(), keys.end(), injected) == keys.end()) {
+			keys.push_back(injected);
+		}
+	}
+	return keys;
 }
 
 string KeyManager::GetKeyName(uint16_t keyCode)

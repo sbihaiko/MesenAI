@@ -30,7 +30,7 @@
 			<!--G.2 (PRD Part B §13.5.2): the Play home (W-P1 first run, W-P2 with
 			recents) and, unchanged, the classic grid for Advanced's game selection
 			and the Save/Load state screens.-->
-			<v:PlayHomeView />
+			<v:PlayHomeView AutomationProperties.AutomationId="play.home" />
 		</DataTemplate>
 	</Window.DataTemplates>
 	

@@ -15,6 +15,8 @@ private:
 	static double _yMouseMovement;
 	static EmuSettings* _settings;
 	static SimpleLock _lock;
+	static SimpleLock _injectedLock;
+	static vector<uint16_t> _injectedKeys;
 
 public:
 	static void RegisterKeyManager(IKeyManager* keyManager);
@@ -25,6 +27,7 @@ public:
 	static optional<int16_t> GetAxisPosition(uint16_t keyCode);
 	static bool IsMouseButtonPressed(MouseButton button);
 	static vector<uint16_t> GetPressedKeys();
+	static void SetInjectedKey(uint16_t keyCode, bool pressed);
 	static string GetKeyName(uint16_t keyCode);
 	static uint16_t GetKeyCode(string keyName);
 

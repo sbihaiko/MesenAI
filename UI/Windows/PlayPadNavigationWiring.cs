@@ -95,6 +95,18 @@ namespace Mesen.Windows
 		//authority rule, PadNavRepeat's timing, and the focus application in
 		//Apply/Activate. Public for the same reason ShortcutHandler.InputBarcode is;
 		//the production caller is the no-argument Tick above.
+		private static Func<ushort, string>? _keyNameForTest;
+		private static Func<string, ushort>? _keyCodeForTest;
+
+		//The same two backend lookups for the production timer's own tick, so a case
+		//that drives the real timer end to end (the GUI test hook's e2e) reads the
+		//pad names a headless build cannot answer. Null puts the backend's back.
+		public static void SetKeyLookupsForTest(Func<ushort, string>? keyName, Func<string, ushort>? keyCode)
+		{
+			_keyNameForTest = keyName;
+			_keyCodeForTest = keyCode;
+		}
+
 		public static void TickForTest(MainWindow window, IReadOnlyCollection<ushort> pressed, TimeSpan delta, Func<ushort, string>? keyName = null, Func<string, ushort>? keyCode = null)
 		{
 			if(Installed.TryGetValue(window, out Bridge? bridge)) {
@@ -815,7 +827,14 @@ namespace Mesen.Windows
 			private IReadOnlyList<PlayBarEntry>? BarDeclaration()
 				=> InPlayDoor ? PlayFocusOnOpen.Of(_window)?.Declared() : null;
 
-			public void Tick() => Tick(InputApi.GetPressedKeys(), null);
+			public void Tick()
+			{
+				Tick(InputApi.GetPressedKeys(), null);
+				//One UI tick for the GUI test hook's holds, counted after the set was
+				//read so a press of N ticks is seen by N ticks. A no-op without
+				//--test-hook.
+				TestHookWiring.Advance();
+			}
 
 			//The tick itself, with the host's inputs passed in: what is pressed
 			//now, how long since the last tick, and the backend's two lookups. All
@@ -824,8 +843,8 @@ namespace Mesen.Windows
 			//passes the real ones. TickForTest is the only other caller.
 			public void Tick(IReadOnlyCollection<ushort> pressed, TimeSpan? delta, Func<ushort, string>? keyName = null, Func<string, ushort>? keyCode = null)
 			{
-				keyName ??= InputApi.GetKeyName;
-				keyCode ??= InputApi.GetKeyCode;
+				keyName ??= _keyNameForTest ?? InputApi.GetKeyName;
+				keyCode ??= _keyCodeForTest ?? InputApi.GetKeyCode;
 
 				//Which pad is in the player's hand, off the last new press. Asked
 				//every tick, authority or not: the pad in hand is also what names
