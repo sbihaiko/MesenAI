@@ -7,26 +7,26 @@ in-app hook it speaks to (UI/Logic/TestHook, a line-per-JSON-object protocol ove
 a local Unix socket). Pad only: the hook implements the input actions below and
 the `ui.*` snapshot, and capabilities() advertises exactly that.
 
-Actions (#1281), each one executed by the hook in process - never by an OS input
-synthesiser, so a run never needs an accessibility permission and never types
-into another application:
+Actions (#1281), each one a `pad.*` action of ADR-0272 item 7's hook namespace and
+each one executed by the hook in process - never by an OS input synthesiser, so a
+run never needs an accessibility permission and never types into another
+application:
 
 - `pad.press` - a button down for `ticks` (or `frames` while the emulated clock
   runs), ADR-0272 item 4.
-- `pad.hold` - a button down for `ticks`, which is the only unit a hold has: the
-  GUI's own tick never freezes, so a hold is expressible while a game runs too.
+- `pad.hold` - the same, named as the gesture it is: a button that stays down for
+  the duration the state allows - `frames` while the emulated clock runs, `ticks`
+  otherwise (ADR-0272 item 4 binds that family for every timed step).
 - `pad.release` - let a held button go now, which is what a two-button gesture
   (hold A, press B) is written with.
-- `text.type` - a string typed through the on-screen keyboard the application
-  shows (the pad keyboard, ADR-0262): every character walks that keyboard's grid
-  and presses its key, so the field receives the text the way a player types it.
 - `pad.connect` / `pad.disconnect` - a pad hot-plugged on a port, which is what
   the port lamps and the pad-loss pause are read from.
 
 Every pad action takes a `pad` index - 0 is the pad in hand, 1 the second pad -
-and the adapter writes it on the wire even when a step leaves it out. A `text.*`
-namespace is not an OS keyboard: `text.type` drives the application's own pad
-keyboard, so the only input family a run needs is still the pad.
+and the adapter writes it on the wire even when a step leaves it out. The only
+input family a run needs is the pad: `text.*` and `pointer.*` belong to the
+real-window mode ADR-0272 item 7 parks for step 7, so this hook implements
+neither.
 
 Contract, per ADR-0272 item 6: launch() resolves fixtures first and FAILS on a
 missing one, never skips; check() is an objective read of the hook's snapshot and
@@ -65,7 +65,7 @@ from pathlib import Path
 
 HEADLESS_E2E_CASE = "GuiTestHookTests.GuiTestHook_e2e_a_runner_drives_the_Home_over_the_socket"
 PAD_ACTIONS = ["pad.press", "pad.hold", "pad.release"]
-ACTIONS = PAD_ACTIONS + ["text.type", "pad.connect", "pad.disconnect"]
+ACTIONS = PAD_ACTIONS + ["pad.connect", "pad.disconnect"]
 # The pad families a script can hot-plug (#1281), as the two names a person uses:
 # the Xbox-shaped button table and the PlayStation one (PadFamily.Xbox / Ps4).
 PAD_FAMILIES = ("xbox", "playstation")
@@ -195,17 +195,9 @@ def action_args(action, args):
         if not isinstance(button, str) or not button:
             raise AdapterError(f"{action}: a step names the button it drives (args.button), not {button!r}")
         args["pad"] = _pad_index(args, action)
-        if action == "pad.hold":
-            ticks = args.get("ticks")
-            if not isinstance(ticks, int) or isinstance(ticks, bool) or ticks < 1:
-                raise AdapterError(f"pad.hold: a hold is a duration in ticks (args.ticks >= 1), not {ticks!r}")
-            if "frames" in args:
-                raise AdapterError("pad.hold: a hold is counted in ticks; the emulated frame counter is pad.press's unit")
-        return args
-    if action == "text.type":
-        text = args.get("text")
-        if not isinstance(text, str) or not text:
-            raise AdapterError(f"text.type: a step names the text to type (args.text), not {text!r}")
+        # `pad.hold`'s duration family is the state's (ADR-0272 item 4), which only
+        # the hook can see: which of `ticks`/`frames` this step owes is its ruling,
+        # exactly as it is for `pad.press`.
         return args
     if action in ("pad.connect", "pad.disconnect"):
         index = args.get("index")

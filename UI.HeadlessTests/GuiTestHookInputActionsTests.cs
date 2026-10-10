@@ -23,15 +23,14 @@ using Xunit.Sdk;
 
 namespace Mesen.HeadlessTests;
 
-//#1281: the input actions beside pad.press, wired to a real MainWindow - pad.hold,
-//pad.release, text.type and the simulated hot-plug of pad.connect/pad.disconnect.
-//The protocol's own reading of them (the wire shape, the refusals, the tick
-//counter) is pinned host-free in UI.Tests/TestHook; what only a window can show is
-//that a hold really reaches the pad bridge and moves the ring, that a release
-//stops it, that text.type goes through the application's OWN on-screen keyboard
-//(ADR-0262) and into the field the player sees, and that a script's connect moves
-//the connected-pad count the window itself polls - the port lamps and the pad-loss
-//pause read that count, so it is read back off the view model here.
+//#1281: the pad actions beside pad.press, wired to a real MainWindow - pad.hold,
+//pad.release and the simulated hot-plug of pad.connect/pad.disconnect. The
+//protocol's own reading of them (the wire shape, the refusals, the tick counter)
+//is pinned host-free in UI.Tests/TestHook; what only a window can show is that a
+//hold really reaches the pad bridge and moves the ring, that a release stops it,
+//and that a script's connect moves the connected-pad count the window itself
+//polls - the port lamps and the pad-loss pause read that count, so it is read
+//back off the view model here.
 //
 //Needs a MainWindow (EmuApi.InitDll in its constructor), so every case self-skips
 //on the core-less CI runner; the evidence for them is a local run with
@@ -152,37 +151,6 @@ public class GuiTestHookInputActionsTests : IDisposable
 		return new TestHookWiring.WindowTarget(window).State()["focus"]?.GetValue<string>();
 	}
 
-	//The Cheats sheet with its search field shown - the text field the pad's A
-	//opens the on-screen keyboard on (ADR-0262), which is what text.type drives.
-	private (MainWindow Window, MainWindowViewModel Model) ShowCheatsSearch()
-	{
-		PreferencesConfig prefs = ConfigManager.Config.Preferences;
-		prefs.UiMode = UiMode.Player;
-		prefs.PauseWhenInBackground = false;
-		prefs.PauseWhenInMenusAndConfig = false;
-		MainWindow window = new();
-		window.ShowStarted();
-		_windows.Add(window);
-		MainWindowViewModel model = Assert.IsType<MainWindowViewModel>(window.DataContext);
-		WaitFor(() => model.MainMenu.HelpMenuItems.Count > 0, "MainWindow never finished building its menus.");
-		model.RomInfo = new RomInfo() { ConsoleType = ConsoleType.Nes, Format = RomFormat.iNes };
-		model.CommunityCheatsLastKnown = () => Array.Empty<CommunityCheatGame>();
-		model.CommunityCheatsSource = () => Task.FromResult<IReadOnlyList<CommunityCheatGame>?>(Array.Empty<CommunityCheatGame>());
-		CheatDbGame contra = new("Contra (USA)", "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", new[] { new CheatDbCode("Infinite lives - 1P game", "SZKGPAVG") });
-		model.CheatsSheet.Open(ConsoleType.Nes, contra.Sha1, new[] { contra }, Array.Empty<StoredCheat>(), recordingArt: false, disableAll: false, _ => { });
-		Pump();
-		Assert.True(window.FindNamed<TextBox>("CheatsSearchBox").IsOnScreen(), "the Cheats sheet did not open");
-		return (window, model);
-	}
-
-	private void Press(MainWindow window, PadNavAction action)
-	{
-		PadNavMapping mapping = PadNavControls.Resolve(PadFamily.Xbox, 0, BackendCode) ?? throw new XunitException("the stand-in table does not answer the Xbox preset's names");
-		PlayPadNavigationWiring.TickForTest(window, new ushort[] { PlayPadNavigation.CodeOf(mapping, action) }, TimeSpan.FromMilliseconds(50), BackendName, BackendCode);
-		PlayPadNavigationWiring.TickForTest(window, Array.Empty<ushort>(), TimeSpan.FromMilliseconds(50), BackendName, BackendCode);
-		Pump();
-	}
-
 	[AvaloniaFact]
 	public void GuiTestHook_hold_goes_down_and_lets_go_on_its_own_after_its_ticks()
 	{
@@ -255,68 +223,6 @@ public class GuiTestHookInputActionsTests : IDisposable
 			//(asserted above) - that is the release ending the hold, not the hold
 			//running out.
 			Assert.Equal("play.home.open-rom", Focus(window));
-		} finally {
-			keys.ReleaseAll();
-		}
-	}
-
-	[AvaloniaFact]
-	public void GuiTestHook_text_type_goes_through_the_on_screen_keyboard_into_the_field()
-	{
-		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
-		(MainWindow window, _) = ShowCheatsSearch();
-		PlayPadNavigationWiring.SetKeyLookupsForTest(BackendName, BackendCode);
-		TestHookKeys keys = NewKeys();
-		TestHookProtocol hook = NewHook(window, keys);
-		try {
-			window.FindNamed<TextBox>("CheatsSearchBox").Focus();
-			Pump();
-			//A on the text field is what opens the pad keyboard, exactly as a player does it.
-			Press(window, PadNavAction.Confirm);
-			Assert.NotNull(PlayPadNavigationWiring.KeyboardForTest(window));
-
-			Assert.True(Step(hook, 1, "text.type", "{\"text\":\"lives\"}")["ok"]!.GetValue<bool>());
-			//The value comes from the field the player sees, not from a pixel.
-			Assert.Equal("lives", window.FindNamed<TextBox>("CheatsSearchBox").Text);
-
-			//And a step the keyboard has no key for fails the step instead of typing
-			//something else (the on-screen keyboard is the only path there is).
-			JsonObject refused = Step(hook, 2, "text.type", "{\"text\":\"日本\"}");
-			Assert.False(refused["ok"]!.GetValue<bool>());
-			Assert.Contains("no key", refused["error"]!.GetValue<string>());
-		} finally {
-			keys.ReleaseAll();
-		}
-	}
-
-	[AvaloniaFact]
-	public void GuiTestHook_text_type_into_a_field_at_its_limit_fails_the_step()
-	{
-		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
-		(MainWindow window, _) = ShowCheatsSearch();
-		PlayPadNavigationWiring.SetKeyLookupsForTest(BackendName, BackendCode);
-		TestHookKeys keys = NewKeys();
-		TestHookProtocol hook = NewHook(window, keys);
-		try {
-			//A field that is already full. The pad keyboard takes the draft it opens
-			//on (PadKeyboard), and PressKey answers None once the draft is at the
-			//field's own MaxLength - the key press is swallowed and the draft does not
-			//move. A step that reports the text as typed would be lying about a field
-			//the player can see is unchanged (#1281 review, finding 2).
-			TextBox field = window.FindNamed<TextBox>("CheatsSearchBox");
-			field.MaxLength = 5;
-			field.Text = "lives";
-			field.Focus();
-			Pump();
-			Press(window, PadNavAction.Confirm);
-			Assert.NotNull(PlayPadNavigationWiring.KeyboardForTest(window));
-
-			JsonObject refused = Step(hook, 1, "text.type", "{\"text\":\"z\"}");
-			Assert.False(refused["ok"]!.GetValue<bool>());
-			Assert.Contains("did not accept", refused["error"]!.GetValue<string>());
-			//And the field is exactly where it was: the step failed because nothing
-			//was typed, not because something else was.
-			Assert.Equal("lives", field.Text);
 		} finally {
 			keys.ReleaseAll();
 		}

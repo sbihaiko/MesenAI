@@ -46,28 +46,19 @@ public sealed class TestHookKeys
 	//Null when the press was taken, otherwise why it was not.
 	public string? Press(int pad, string button, int? ticks, int? frames)
 	{
-		return StartHold(CodeOfButton(pad, button), Unknown(pad, button), ticks, frames, null);
+		return StartHold(CodeOfButton(pad, button), Unknown(pad, button), ticks, frames, null, "press");
 	}
 
-	//`pad.hold`: the button goes down and stays down for that many ticks. The unit
-	//is always the tick and never the emulated frame (#1281): a hold is a gesture of
-	//the clock the GUI itself runs on, and that one never freezes - which is why a
-	//hold is expressible while a game runs, where pad.press demands frames.
-	public string? HoldDown(int pad, string button, int ticks)
+	//`pad.hold`: the button goes down and stays down for the duration the state
+	//allows. The family is the one ADR-0272 item 4 binds every timed step to, a hold
+	//included: `frames` while the emulated clock advances, `ticks` on any other
+	//state, and the wrong one is the step's own error - a hold counted in ticks
+	//inside a running game would let go by a clock the game's own counter does not
+	//move. What a hold adds beside `pad.press` is the pair: `pad.release` ends it
+	//before its duration runs out (#1281).
+	public string? HoldDown(int pad, string button, int? ticks, int? frames)
 	{
-		ushort code = CodeOfButton(pad, button);
-		if(code == 0) {
-			return Unknown(pad, button);
-		}
-		if(ticks < 1) {
-			return "a hold is a duration in ticks (at least 1), not " + ticks;
-		}
-		//The hold goes in on the tick counter whatever the emulated clock is doing:
-		//a hold has no frame form, so the counter pad.press insists on (and which
-		//freezes on a pause) is not what ends this one.
-		_holds.Add(new Hold(code, Tick + ticks, null, null, null));
-		_setKey(code, true);
-		return null;
+		return StartHold(CodeOfButton(pad, button), Unknown(pad, button), ticks, frames, null, "hold");
 	}
 
 	//`pad.release`: the button goes up now, before the hold it is under has run out
@@ -97,10 +88,12 @@ public sealed class TestHookKeys
 	//A literal key name, as the backend names it (ADR-0272 item 4, key.*).
 	public string? PressKey(string key, int? ticks, int? frames)
 	{
-		return StartHold(_codeOf(key), "unknown key " + key, ticks, frames, key);
+		return StartHold(_codeOf(key), "unknown key " + key, ticks, frames, key, "press");
 	}
 
-	private string? StartHold(ushort code, string unknown, int? ticks, int? frames, string? key)
+	//verb: what the step called this, so the error names the action the script
+	//wrote ("write the hold in frames") rather than a press it never asked for.
+	private string? StartHold(ushort code, string unknown, int? ticks, int? frames, string? key, string verb)
 	{
 		if(code == 0) {
 			return unknown;
@@ -108,12 +101,12 @@ public sealed class TestHookKeys
 		long? now = _frames();
 		if(now.HasValue) {
 			if(frames is not int heldFrames || heldFrames < 1) {
-				return "the emulated clock is running: write the press in frames";
+				return "the emulated clock is running: write the " + verb + " in frames";
 			}
 			_holds.Add(new Hold(code, 0, now.Value + heldFrames, now.Value, key));
 		} else {
 			if(ticks is not int heldTicks || heldTicks < 1) {
-				return "the emulated clock is not running: write the press in ticks";
+				return "the emulated clock is not running: write the " + verb + " in ticks";
 			}
 			_holds.Add(new Hold(code, Tick + heldTicks, null, null, key));
 		}

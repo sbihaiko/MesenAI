@@ -69,10 +69,10 @@ public sealed class TestHookProtocol
 		foreach(string op in Ops) {
 			ops.Add((JsonNode?)JsonValue.Create(op));
 		}
-		//The namespaces an action can be written in. `text` (#1281) is the
-		//application's OWN on-screen keyboard, driven through the pad - not an OS
-		//keyboard and not `pointer.*`, which stay out of this hook.
-		return new JsonObject { ["hook"] = Version, ["ops"] = ops, ["namespaces"] = new JsonArray("pad", "key", "text", "ui") };
+		//The namespaces an action can be written in: the ones ADR-0272 item 7 gives
+		//this hook. `text.*` and `pointer.*` are the real-window mode's (step 7) and
+		//the hook implements neither (#1281 review).
+		return new JsonObject { ["hook"] = Version, ["ops"] = ops, ["namespaces"] = new JsonArray("pad", "key", "ui") };
 	}
 
 	private JsonObject State()
@@ -102,11 +102,12 @@ public sealed class TestHookProtocol
 		string button = args["button"]?.GetValue<string>() ?? "";
 		string? error = action switch {
 			"pad.press" => _keys.Press(pad, button, ticks, frames),
-			//A hold takes its ticks as given: a missing one is what Hold itself refuses.
-			"pad.hold" => _keys.HoldDown(pad, button, ticks ?? 0),
+			//A hold takes the family the state allows and nothing else: a missing
+			//duration, or one written in the family this state does not use, is what
+			//HoldDown refuses (ADR-0272 item 4).
+			"pad.hold" => _keys.HoldDown(pad, button, ticks, frames),
 			"pad.release" => _keys.Release(pad, button),
 			"key.press" => _keys.PressKey(args["key"]?.GetValue<string>() ?? "", ticks, frames),
-			"text.type" => TypeText(args["text"]?.GetValue<string>() ?? ""),
 			"pad.connect" => Pads().Connect(args["index"]?.GetValue<int>() ?? -1, args["family"]?.GetValue<string>()),
 			"pad.disconnect" => Pads().Disconnect(args["index"]?.GetValue<int>() ?? -1),
 			_ => throw new ArgumentException("unknown action " + action)
@@ -115,15 +116,6 @@ public sealed class TestHookProtocol
 			throw new ArgumentException(error);
 		}
 		return new JsonObject();
-	}
-
-	//An empty string is a step that asks for nothing, and it is refused here rather
-	//than handed to the application, which would open the keyboard and type nothing.
-	private string? TypeText(string text)
-	{
-		return text.Length == 0
-			? "text.type takes the text to type"
-			: _target.TypeText(text);
 	}
 
 	private TestHookPads Pads()

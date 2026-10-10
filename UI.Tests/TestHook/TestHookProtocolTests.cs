@@ -22,19 +22,6 @@ namespace Mesen.Tests.TestHook
 			public string? CapturedTo;
 			public int Captures;
 			public string? CaptureError;
-			//#1281 (text.type): what the application was asked to type through its
-			//own on-screen keyboard, and why it could not when it could not.
-			public readonly List<string> Typed = new();
-			public string? TypeError;
-
-			public string? TypeText(string text)
-			{
-				if(TypeError is not null) {
-					return TypeError;
-				}
-				Typed.Add(text);
-				return null;
-			}
 
 			//#1282: how many steps the protocol declared. The counts a step's own
 			//check reads restart here, so a run proves the request that started the
@@ -493,20 +480,30 @@ namespace Mesen.Tests.TestHook
 			Assert.Contains("game is loaded", answer["error"]!.GetValue<string>());
 		}
 
-		//#1281: the actions beside pad.press - hold, release, text and the two
-		//hot-plug ones. The hook is what executes them; no step reaches an OS input
-		//path, and the pad index every pad action takes is a device index: 0 is the
-		//pad in the hand (ADR-0272 section 4's "device 0"), 1 the second pad.
+		//#1281: the actions beside pad.press that ADR-0272's `pad.*` namespace already
+		//covers - hold, release and the two hot-plug ones. The hook is what executes
+		//them; no step reaches an OS input path, and the pad index every pad action
+		//takes is a device index: 0 is the pad in the hand (ADR-0272 section 4's
+		//"device 0"), 1 the second pad.
 		[Fact]
-		public void The_namespaces_advertise_the_text_actions_beside_pad_key_and_ui()
+		public void The_namespaces_are_pad_key_and_ui_and_a_text_action_is_not_this_hook_s()
 		{
+			//ADR-0272 item 7 places `text.*` with `pointer.*` in the real-window mode
+			//(step 7), never in this hook: the namespaces stay pad, key and ui, and a
+			//step that writes `text.type` is an unknown action rather than a silent
+			//pass. The ADR is accepted and this change does not amend it, so the hook
+			//implements the namespaces it names and nothing beside them (#1281 review).
 			Rig rig = new();
-			JsonObject answer = rig.Ask("{\"id\":1,\"token\":\"secret\",\"op\":\"hello\"}");
+			JsonObject hello = rig.Ask("{\"id\":1,\"token\":\"secret\",\"op\":\"hello\"}");
 			List<string> namespaces = new();
-			foreach(JsonNode? one in answer["namespaces"]!.AsArray()) {
+			foreach(JsonNode? one in hello["namespaces"]!.AsArray()) {
 				namespaces.Add(one!.GetValue<string>());
 			}
-			Assert.Equal(new[] { "key", "pad", "text", "ui" }, System.Linq.Enumerable.OrderBy(namespaces, n => n, StringComparer.Ordinal));
+			Assert.Equal(new[] { "key", "pad", "ui" }, Enumerable.OrderBy(namespaces, n => n, StringComparer.Ordinal));
+			JsonObject typed = rig.Ask("{\"id\":2,\"token\":\"secret\",\"op\":\"inject\",\"action\":\"text.type\",\"args\":{\"text\":\"zel\"}}");
+			Assert.False(typed["ok"]!.GetValue<bool>());
+			Assert.Contains("unknown action text.type", typed["error"]!.GetValue<string>());
+			Assert.Empty(rig.Calls);
 		}
 
 		[Fact]
@@ -546,26 +543,43 @@ namespace Mesen.Tests.TestHook
 		}
 
 		[Fact]
-		public void A_hold_is_counted_in_ticks_even_while_the_emulated_clock_runs()
+		public void A_hold_is_written_in_the_unit_the_emulated_clock_allows_like_a_press()
 		{
+			//ADR-0272 items 4 and 7 key the duration family of every timed step to
+			//whether the emulated clock advances, and a hold is one of them: while a
+			//game runs it is written in frames, on any other state in ticks, and the
+			//wrong family is the step's own error - never a hold that spins on a
+			//counter its unit does not measure (#1281 review).
 			Rig rig = new();
 			rig.Frames = 500;
-			//The clock running is what makes pad.press refuse ticks; a hold has no
-			//frame form at all - the GUI's tick never freezes - so it is still valid.
-			Assert.True(rig.Ask("{\"id\":6,\"token\":\"secret\",\"op\":\"inject\",\"action\":\"pad.hold\",\"args\":{\"button\":\"Right\",\"ticks\":2}}")["ok"]!.GetValue<bool>());
+			JsonObject inTicks = rig.Ask("{\"id\":6,\"token\":\"secret\",\"op\":\"inject\",\"action\":\"pad.hold\",\"args\":{\"button\":\"Right\",\"ticks\":2}}");
+			Assert.False(inTicks["ok"]!.GetValue<bool>());
+			Assert.Contains("write the hold in frames", inTicks["error"]!.GetValue<string>());
+			Assert.True(rig.Ask("{\"id\":7,\"token\":\"secret\",\"op\":\"inject\",\"action\":\"pad.hold\",\"args\":{\"button\":\"Right\",\"frames\":2}}")["ok"]!.GetValue<bool>());
+			Assert.Equal(new[] { ((ushort)0x1011, true) }, rig.Calls);
+			//Two UI ticks with no frame advanced: the button is still down, because a
+			//frames hold is counted by the core's counter, not by the GUI's tick.
 			rig.Keys.Advance();
-			rig.Frames = 900;
+			rig.Keys.Advance();
+			Assert.Single(rig.Calls);
+			rig.Frames = 502;
 			rig.Keys.Advance();
 			Assert.Equal(new[] { ((ushort)0x1011, true), ((ushort)0x1011, false) }, rig.Calls);
+			//No game loaded: the same action is a ticks hold, and frames is refused.
+			rig.Frames = null;
+			JsonObject inFrames = rig.Ask("{\"id\":8,\"token\":\"secret\",\"op\":\"inject\",\"action\":\"pad.hold\",\"args\":{\"button\":\"Right\",\"frames\":4}}");
+			Assert.False(inFrames["ok"]!.GetValue<bool>());
+			Assert.Contains("write the hold in ticks", inFrames["error"]!.GetValue<string>());
+			Assert.True(rig.Ask("{\"id\":9,\"token\":\"secret\",\"op\":\"inject\",\"action\":\"pad.hold\",\"args\":{\"button\":\"Right\",\"ticks\":3}}")["ok"]!.GetValue<bool>());
 		}
 
 		[Fact]
 		public void A_hold_without_a_duration_and_a_release_of_no_button_are_errors()
 		{
 			Rig rig = new();
-			JsonObject noTicks = rig.Ask("{\"id\":7,\"token\":\"secret\",\"op\":\"inject\",\"action\":\"pad.hold\",\"args\":{\"button\":\"Right\"}}");
+			JsonObject noTicks = rig.Ask("{\"id\":22,\"token\":\"secret\",\"op\":\"inject\",\"action\":\"pad.hold\",\"args\":{\"button\":\"Right\"}}");
 			Assert.False(noTicks["ok"]!.GetValue<bool>());
-			Assert.Contains("ticks", noTicks["error"]!.GetValue<string>());
+			Assert.Contains("write the hold in ticks", noTicks["error"]!.GetValue<string>());
 			JsonObject noButton = rig.Ask("{\"id\":8,\"token\":\"secret\",\"op\":\"inject\",\"action\":\"pad.release\",\"args\":{}}");
 			Assert.False(noButton["ok"]!.GetValue<bool>());
 			Assert.Contains("unknown button", noButton["error"]!.GetValue<string>());
@@ -580,31 +594,6 @@ namespace Mesen.Tests.TestHook
 			//name and not a failed step.
 			Assert.True(rig.Ask("{\"id\":9,\"token\":\"secret\",\"op\":\"inject\",\"action\":\"pad.release\",\"args\":{\"button\":\"Right\"}}")["ok"]!.GetValue<bool>());
 			Assert.Equal(new[] { ((ushort)0x1011, false) }, rig.Calls);
-		}
-
-		[Fact]
-		public void Text_type_goes_to_the_application_s_own_on_screen_keyboard()
-		{
-			Rig rig = new();
-			Assert.True(rig.Ask("{\"id\":10,\"token\":\"secret\",\"op\":\"inject\",\"action\":\"text.type\",\"args\":{\"text\":\"zel\"}}")["ok"]!.GetValue<bool>());
-			Assert.Equal(new[] { "zel" }, rig.Target.Typed);
-			//Nothing reached a key code: the text is typed through the keyboard the
-			//application shows, not by pressing keys into it.
-			Assert.Empty(rig.Calls);
-		}
-
-		[Fact]
-		public void A_text_the_application_cannot_type_is_the_step_s_own_failure()
-		{
-			Rig rig = new();
-			rig.Target.TypeError = "no on-screen keyboard is open: focus a text field and press A first";
-			JsonObject answer = rig.Ask("{\"id\":11,\"token\":\"secret\",\"op\":\"inject\",\"action\":\"text.type\",\"args\":{\"text\":\"zel\"}}");
-			Assert.False(answer["ok"]!.GetValue<bool>());
-			Assert.Contains("no on-screen keyboard is open", answer["error"]!.GetValue<string>());
-			//An empty text is a step that asks for nothing.
-			JsonObject empty = rig.Ask("{\"id\":12,\"token\":\"secret\",\"op\":\"inject\",\"action\":\"text.type\",\"args\":{\"text\":\"\"}}");
-			Assert.False(empty["ok"]!.GetValue<bool>());
-			Assert.Empty(rig.Target.Typed);
 		}
 
 		[Fact]

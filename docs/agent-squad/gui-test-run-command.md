@@ -46,16 +46,14 @@ is).
 
 A step's `inject` carries one of these (#1281). Every one of them is a pad the
 application simulates in its own input path - the same pressed-key set a real pad
-writes, or the application's own on-screen keyboard - never a synthetic OS event,
-and the step's effect is read back from the application's state, never from a
-pixel (ADR-0271).
+writes - never a synthetic OS event, and the step's effect is read back from the
+application's state, never from a pixel (ADR-0271).
 
 | Action | Args | Meaning |
 | --- | --- | --- |
 | `pad.press` | `button`, `pad` (0), `ticks` \| `frames` | one press and its release. The duration unit is the state's: while the emulated clock runs the press is written in `frames`, otherwise in `ticks`. |
-| `pad.hold` | `button`, `pad` (0), `ticks` | the button goes down and stays down for that many ticks - the GUI's own tick, which never freezes, so a hold is always written in `ticks` and never in `frames`. |
+| `pad.hold` | `button`, `pad` (0), `ticks` \| `frames` | the button goes down and stays down for that duration before letting go on its own. The unit is the state's, exactly as `pad.press`'s is (ADR-0272 item 4): `frames` while the emulated clock runs, `ticks` otherwise, and the family the state does not use is a failed step rather than a hold counted by a clock that is not moving. |
 | `pad.release` | `button`, `pad` (0) | the button goes up now, before the hold it is under has run out - a two-button gesture is written `pad.hold` then `pad.release`. A button no hold is keeping down is put up anyway: a release never fails a step. |
-| `text.type` | `text` | types through the on-screen keyboard the application itself shows (the one pad keyboard, ADR-0262), by walking its grid and pressing each key. A keyboard that is not open, or a character it has no key for, fails the step. |
 | `pad.connect` | `index`, `family` (`xbox` \| `playstation`, default `xbox`) | hot-plugs a simulated pad on that device index. While a run is up the connected-pad count the window polls for its port lamps and its pad-loss pause is the hook's, so a script's connect is seen the way a real pad's is; until a script touches it, that count is the backend's own. |
 | `pad.disconnect` | `index` | unplugs the pad on that index. The family goes with the pad: a `pad.connect` after a disconnect, with no `family`, is the default one (`xbox`), never the family the unplugged pad had - a PlayStation pad put back without `family` has its buttons read as Xbox, so name the family again on the reconnect. |
 
@@ -65,11 +63,15 @@ backend's key names as `Pad<pad+1>` / `Joy<pad+1>`. A button is named the way th
 (ADR-0272 item 4): `Up`, `Down`, `Left`, `Right`, `A`, `B`, `Start`, ... in the
 family the pad on that index was connected with.
 
-ADR-0272 is an accepted ADR and is **not amended** by any of this: the actions
-above are the emulator side's implementation of the interface it pins, and this
-document is where they are written down - including the two places the actions
-run ahead of the ADR's text, `pad.hold`/`pad.release` and `text.*` being
-documented here rather than folded into its step inventory.
+Every action above is a `pad.*` action, the namespace ADR-0272 item 7 gives this
+hook, and the ADR is accepted and **not amended** by any of this: the actions are
+the emulator side's implementation of the interface it pins, and the new names
+inside that namespace are written down here. `text.*` and `pointer.*` are
+deliberately **not** here: item 7 places both in the real-window mode (step 7),
+so a step that writes `text.type` gets `unknown action text.type` back from the
+hook. Typing on the application's own pad keyboard (ADR-0262) stays a product
+feature a player drives, not a script action, until an amendment to that item
+puts it somewhere a run may use.
 
 ## What a check may read
 

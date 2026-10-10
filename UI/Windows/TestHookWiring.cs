@@ -485,17 +485,6 @@ namespace Mesen.Windows
 				return null;
 			}
 
-			//#1281 (text.type): the string typed through the on-screen keyboard the
-			//application shows - the pad keyboard the bridge owns - never an OS input
-			//path and never a pixel: the field's own text is what changes, and the
-			//keyboard panel is repainted the way a player's own presses repaint it.
-			public string? TypeText(string text)
-			{
-				return _window is MainWindow main
-					? PlayPadNavigationWiring.TypeOnKeyboard(main, text)
-					: "the window this hook was started for has no pad bridge";
-			}
-
 			//Rendered from the window's own visual tree, so the desktop and every
 			//other application stay out of it by construction. The game picture is the
 			//native renderer's, not a visual in this tree (ADR-0167, ADR-0157 section
