@@ -1,14 +1,19 @@
+using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json.Nodes;
+using Avalonia;
 using Avalonia.Automation;
 using Avalonia.Controls;
+using Avalonia.Data;
 using Avalonia.LogicalTree;
 using Avalonia.Headless.XUnit;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using Mesen.Config;
 using Mesen.Logic;
 using Mesen.Interop;
 using Mesen.ViewModels;
+using Mesen.Views;
 using Mesen.Windows;
 using System;
 using System.Threading;
@@ -69,6 +74,65 @@ public class GuiTestHookUiStateTests
 		display.IsSubMenuOpen = true;
 		options = target.State()["options"]!.AsArray();
 		Assert.True(Option(options, "menu.settings.display.scale")["visible"]!.GetValue<bool>());
+	}
+
+	//#1236: `screen` is the ACTIVE screen, and a surface drawn over another one is
+	//the active one. Both stay effectively visible (the library sheet is drawn
+	//over the home, which keeps painting under it), so a hook that answers with
+	//every visible screen id and no order answers `play.home` forever - and the
+	//pilot's `home.open-library` step, which waits for `ui.screen == play.library`,
+	//could never be met however well the sheet opened.
+	[AvaloniaFact]
+	public void State_reports_the_surface_drawn_over_another_as_the_active_screen()
+	{
+		StackPanel root = new();
+		root.Children.Add(Named(new Border(), "play.home"));
+		Border library = new() { IsVisible = false };
+		root.Children.Add(Named(library, "play.library"));
+		Window window = new() { Content = root };
+		window.Show();
+		TestHookWiring.WindowTarget target = new(window, () => false);
+
+		Assert.Equal("play.home", target.State()["screen"]!.GetValue<string>());
+
+		library.IsVisible = true;
+		Assert.Equal("play.library", target.State()["screen"]!.GetValue<string>());
+
+		//...and the home underneath is still reported as visible: the screen is
+		//which one is active, not which one is drawn.
+		Assert.Contains("play.home", target.State()["visible"]!.AsArray().Select(n => n!.GetValue<string>()));
+	}
+
+	//#1236, the app's own side of the same rule: the library surface the home's
+	//*Open a ROM…* opens carries the id the pilot names it by, so the screen the
+	//hook answers while the sheet is up is `play.library`. The host's binding is
+	//repeated here because the view is drawn by MainWindow, which needs the native
+	//core; everything read below is the shipped XAML's.
+	[AvaloniaFact]
+	public void State_reports_the_real_library_sheet_as_the_active_screen()
+	{
+		PlayerRomPickerViewModel model = new() {
+			RunScanInline = true,
+			RunLibraryScanInline = true,
+			LibraryFolderSource = () => new List<string>(),
+			SuggestionSource = _ => Array.Empty<RomPickerHit>()
+		};
+		PlayerRomPickerView picker = new() { DataContext = model };
+		picker.Bind(Visual.IsVisibleProperty, new Binding(nameof(PlayerRomPickerViewModel.IsVisible)));
+		StackPanel root = new();
+		root.Children.Add(Named(new Border(), "play.home"));
+		root.Children.Add(picker);
+		Window window = new() { Width = 1100, Height = 740, Content = root };
+		window.Show();
+		Dispatcher.UIThread.RunJobs();
+		TestHookWiring.WindowTarget target = new(window, () => false);
+
+		Assert.Equal("play.home", target.State()["screen"]!.GetValue<string>());
+
+		model.Open();
+		Dispatcher.UIThread.RunJobs();
+		Assert.Equal("play.library", target.State()["screen"]!.GetValue<string>());
+		Assert.Contains("play.library", target.State()["visible"]!.AsArray().Select(n => n!.GetValue<string>()));
 	}
 
 	private static JsonObject Option(JsonArray options, string id) =>

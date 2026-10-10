@@ -9,6 +9,7 @@ using Avalonia.VisualTree;
 using Mesen.Interop;
 using Mesen.Logic.TestHook;
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
@@ -98,14 +99,11 @@ namespace Mesen.Windows
 				JsonArray controls = new();
 				JsonArray visible = new();
 				JsonArray options = new();
-				string? screen = null;
+				List<string> visibleIds = new();
 				foreach(Control control in _window.GetVisualDescendants().OfType<Control>()) {
 					string? id = AutomationProperties.GetAutomationId(control);
 					if(id is null || id.Length == 0) {
 						continue;
-					}
-					if(control.IsEffectivelyVisible && id == "play.home") {
-						screen = id;
 					}
 					controls.Add(new JsonObject {
 						["id"] = id,
@@ -114,9 +112,15 @@ namespace Mesen.Windows
 						["focused"] = control.IsFocused
 					});
 					if(control.IsEffectivelyVisible) {
+						visibleIds.Add(id);
 						visible.Add((JsonNode?)JsonValue.Create(id));
 					}
 				}
+				//#1236: the ACTIVE screen, not the first one found. The Play door's
+				//surfaces stack - both the home and the library sheet drawn over it
+				//are effectively visible - so which one wins is the order in
+				//TestHookScreens, read here off every id that is on screen.
+				string? screen = TestHookScreens.Active(visibleIds);
 				//Menu entries and list choices are the options a pad or key can pick
 				//(ADR-0271), each with its visible text (ADR-0272 §3). Submenu items
 				//live in the logical tree until their menu opens, and count as visible

@@ -175,8 +175,13 @@
 				<Panel>
 					<!--(1) The library: the grid, and the one named empty state
 					(Decision 8) - a sentence with the next step, never a blank
-					grid.-->
-					<DockPanel IsVisible="{Binding IsLibrarySurfaceVisible}">
+					grid.
+					#1236 (ADR-0272 item 3): this surface is the screen the pilot
+					names `play.library`, and its id sits here rather than on the
+					sheet, because the same sheet also draws the browser and the
+					folders list - a screen id on the sheet would answer
+					`play.library` while the player is looking at a folder walk.-->
+					<DockPanel AutomationProperties.AutomationId="play.library" IsVisible="{Binding IsLibrarySurfaceVisible}">
 						<!--#1037 (ADR-0264 Decision 9): the scan is visible while it
 						runs. The indeterminate bar IS the animation (#734: every
 						wait the player can see shows a moving one), and it goes when

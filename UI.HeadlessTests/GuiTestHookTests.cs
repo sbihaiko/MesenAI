@@ -187,6 +187,39 @@ public class GuiTestHookTests : IDisposable
 		}
 	}
 
+	//#1236: the pilot's `home.open-library` step, end to end - A on the home's
+	//*Open a ROM…* opens the sheet, and the screen the hook answers for it is
+	//`play.library`. The step waits on exactly that id, and the hook used to
+	//answer `play.home` for every Play surface (the home is drawn under the sheet
+	//and stays effectively visible), so the wait timed out however well the sheet
+	//opened. The library's own id is on the surface that is the screen, not on the
+	//sheet that also draws the folder browser (PlayerRomPickerView.axaml).
+	[AvaloniaFact]
+	public void Injected_A_on_the_home_opens_the_library_and_the_hook_names_its_screen()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model) = ShowHome();
+		TestHookKeys keys = NewKeys();
+		TestHookProtocol hook = new("t", new TestHookWiring.WindowTarget(window), keys);
+		try {
+			hook.Handle("{\"id\":1,\"token\":\"t\",\"op\":\"inject\",\"action\":\"pad.press\",\"args\":{\"button\":\"Up\",\"ticks\":1}}");
+			Tick(window, keys);
+			Assert.Equal("play.home.open-rom", Focus(window, model));
+
+			hook.Handle("{\"id\":2,\"token\":\"t\",\"op\":\"inject\",\"action\":\"pad.press\",\"args\":{\"button\":\"A\",\"ticks\":4}}");
+			Tick(window, keys);
+			Assert.True(model.RomPicker.IsVisible, "A on Open a ROM… did not open the library sheet");
+
+			JsonObject state = JsonNode.Parse(hook.Handle("{\"id\":3,\"token\":\"t\",\"op\":\"state\"}"))!.AsObject();
+			Assert.Equal("play.library", state["screen"]!.GetValue<string>());
+			//And the home underneath is still on screen, so the screen read above is
+			//the ACTIVE surface and not "the only one drawn".
+			Assert.Contains("play.home", state["visible"]!.AsArray().Select(n => n!.GetValue<string>()));
+		} finally {
+			keys.ReleaseAll();
+		}
+	}
+
 	//The GUI keyboard reads Avalonia KeyDown/KeyUp, not the pressed set (MainWindow
 	//OnPreviewKeyDown): a key.press that only reached the set moved no focus.
 	[AvaloniaFact]
