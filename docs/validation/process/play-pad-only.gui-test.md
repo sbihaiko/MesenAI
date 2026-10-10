@@ -12,7 +12,7 @@
 
 ```json
 {
-  "note": "Control ids are provisional until the in-app AutomationIds land (#1182); steps use the HOME-01..06 wording of the manual script. Library, Favorites and Game batches (#1193) follow LIB-01..09, FAV-01..02, GAME-01..04; ids under play.library.*, play.keyboard, play.select-rom, play.bios and play.game are provisional the same way.",
+  "note": "Control ids are provisional until the in-app AutomationIds land (#1182); steps use the HOME-01..06 wording of the manual script. Library, Favorites and Game batches (#1193) follow LIB-01..09, FAV-01..02, GAME-01..04; Controller sheet, port lamps and loss batches (#1195) follow CTL-01..05, LAMP-01..03 and LOSS-01..04; ids under play.controller.* are provisional the same way. Ids under play.library.*, play.keyboard, play.select-rom, play.bios and play.game are provisional the same way.",
   "pack": {
     "note": "exactly one installed pack matching the fixture ROM, so A on Pack opens the detail sheet W-P6 (P4-06)",
     "path": "<library>/EnhancementPacks/<one installed pack for the fixture ROM>"
@@ -441,3 +441,118 @@ Steps:
 |---|---|---|---|---|---|---|---|---|---|
 | `settings-menu-sounds.menu-sounds-toggle` | under-test | `ui.focused == play.settings.menu-sounds` | `pad.press(button="A", ticks=4)` | `ui.focused == play.settings.menu-sounds` within 8 ticks | `ui.focused(is="play.settings.menu-sounds")` | SET-03: A toggles Menu sounds on; the focus stays on the row. | all | major | automated |
 | `settings-menu-sounds.menu-sounds-blips` | under-test | `ui.focused == play.settings.menu-sounds` | — | — | — | SET-03: a soft blip on move, confirm and back at a fixed low level, never while a game runs unpaused (MenuSounds.ShouldPlay); the game's own audio is unaffected (ADR-0270). Judged by ear. | all | major | manual |
+
+## Batch `controller`
+
+Setup:
+
+| ID | Role | Precondition | Action | Wait | Check | Expected | Variants | Severity | Mode |
+|---|---|---|---|---|---|---|---|---|---|
+| `ctl.reach-more-in-options` | setup | `fixture rom and fixture settings.profiles.fresh` | `nav.goal(goal="ui.focused == play.settings.more-in-options")` | `ui.focused == play.settings.more-in-options` within 600 ticks | — | Settings is open on the Controls tab with More in Options focused (the CTL-01 precondition: SET-01, Controls tab, game loaded). | all | major | automated |
+
+Steps:
+
+| ID | Role | Precondition | Action | Wait | Check | Expected | Variants | Severity | Mode |
+|---|---|---|---|---|---|---|---|---|---|
+| `ctl.open-sheet` | under-test | `ui.focused == play.settings.more-in-options` | `pad.press(button="A", ticks=4)` | `ui.screen == play.controller` within 120 ticks | `ui.screen(is="play.controller")` | CTL-01: A on More in Options opens the Play Controller sheet over the paused game, not the classic ConfigWindow. | all | major | automated |
+| `ctl.sheet-holds-focus` | under-test | `ui.screen == play.controller` | — | within 4 ticks | `ui.focused(within="play.controller")` | CTL-01: the sheet holds the pad's focus (Done reachability is the next steps' under-test check, ctl.done-reachable-by-pad). | all | major | automated |
+| `ctl.pad-drawing-lights` | under-test | `ui.screen == play.controller` | — | — | — | CTL-01: the live pad drawing lights the buttons you press; the hook does not read the drawing, judged by eye on a real pad. | all | minor | manual |
+| `ctl.arm-row` | under-test | `ui.focused == play.controller.row-first` | `pad.press(button="A", ticks=4)` | `ui.visible == play.controller.capture-armed` within 120 ticks | `ui.visible(is="play.controller.capture-armed")` | CTL-02: A on a console-control row arms the capture. | all | major | automated |
+| `ctl.arm-waits-release` | under-test | `ui.visible == play.controller.capture-armed` | — | — | — | CTL-02: arming waits for the first button to be released, then the next pad button pressed maps and lights the two lights (pad side / port side); needs a real pad. | all | major | manual |
+| `ctl.nav-control-refused` | under-test | `ui.visible == play.controller.capture-armed` | — | — | — | CTL-02: pressing a navigation control (A, B or a D-pad direction) while armed is refused visibly (ADR-0256 Decision 4); the refusal is not exposed by the hook and A/B are the pad's own presses. | all | major | manual |
+| `ctl.b-cancels-capture` | under-test | `ui.visible == play.controller.capture-armed` | `pad.press(button="B", ticks=4)` | `ui.visible != play.controller.capture-armed` within 8 ticks | `ui.visible(is="play.controller.capture-armed", visible=false)` | CTL-02: B cancels the capture: the armed prompt is gone (a refused B would leave it up); the pad regains authority (HasAuthority gains !IsControllerCapturing). | all | major | automated |
+| `ctl.focus-stays-on-row-after-cancel` | under-test | `ui.screen == play.controller` | — | `ui.focused == play.controller.row-first` within 8 ticks | `ui.focused(is="play.controller.row-first")` | CTL-02: after the cancel the focus stays on the row that was armed. | all | major | automated |
+| `ctl.sheet-stays-after-cancel` | under-test | `ui.focused == play.controller.row-first` | — | within 4 ticks | `ui.screen(is="play.controller")` | CTL-02: the sheet is still open and drivable after the cancelled capture. | all | major | automated |
+| `ctl.done-reachable-by-pad` | under-test | `ui.screen == play.controller` | `nav.goal(goal="ui.focused == play.controller.done")` | `ui.focused == play.controller.done` within 600 ticks | `ui.focused(is="play.controller.done")` | CTL-01: Done is reachable by pad from the sheet. | all | major | automated |
+| `ctl.bind-extra-button` | under-test | `ui.screen == play.controller` | — | — | — | CTL-04: bind a spare button (a paddle or the right stick click) to Rewind, B to the game, press it while playing: the binding takes and the action fires in game (engine third key set, ADR-0255 slice 4); navigation controls are not offered in the list. Needs a real pad with a spare button. | all | major | manual |
+
+## Batch `controller-done`
+
+Setup:
+
+| ID | Role | Precondition | Action | Wait | Check | Expected | Variants | Severity | Mode |
+|---|---|---|---|---|---|---|---|---|---|
+| `controller-done.reach` | setup | `fixture rom and fixture settings.profiles.fresh` | `nav.goal(goal="ui.focused == play.controller.done")` | `ui.focused == play.controller.done` within 600 ticks | — | The Controller sheet is open with Done focused (the CTL-03 precondition: CTL-01). | all | major | automated |
+
+Steps:
+
+| ID | Role | Precondition | Action | Wait | Check | Expected | Variants | Severity | Mode |
+|---|---|---|---|---|---|---|---|---|---|
+| `controller-done.leaves` | under-test | `ui.focused == play.controller.done` | `pad.press(button="A", ticks=4)` | `ui.screen == play.pause` within 120 ticks | `ui.screen(is="play.pause")` | CTL-03: A on Done leaves the sheet to W-P4. | all | major | automated |
+| `controller-done.pad-still-moves` | under-test | `ui.screen == play.pause` | `pad.press(button="Down", ticks=4)` | `ui.focused == play.pause.quit-game` within 8 ticks | `ui.focused(is="play.pause.quit-game")` | CTL-03: no capture stays armed after close; the pad still moves focus on W-P4. | all | major | automated |
+
+## Batch `controller-b`
+
+Setup:
+
+| ID | Role | Precondition | Action | Wait | Check | Expected | Variants | Severity | Mode |
+|---|---|---|---|---|---|---|---|---|---|
+| `controller-b.reach` | setup | `fixture rom and fixture settings.profiles.fresh` | `nav.goal(goal="ui.focused == play.controller.row-first")` | `ui.focused == play.controller.row-first` within 600 ticks | — | The Controller sheet is open with a row focused (the CTL-03 precondition: CTL-01). | all | major | automated |
+
+Steps:
+
+| ID | Role | Precondition | Action | Wait | Check | Expected | Variants | Severity | Mode |
+|---|---|---|---|---|---|---|---|---|---|
+| `controller-b.leaves` | under-test | `ui.focused == play.controller.row-first` | `pad.press(button="B", ticks=4)` | `ui.screen == play.pause` within 120 ticks | `ui.screen(is="play.pause")` | CTL-03: B instead of Done leaves the sheet to W-P4. | all | major | automated |
+| `controller-b.pad-still-moves` | under-test | `ui.screen == play.pause` | `pad.press(button="Down", ticks=4)` | `ui.focused == play.pause.quit-game` within 8 ticks | `ui.focused(is="play.pause.quit-game")` | CTL-03: no capture stays armed after close; the pad still moves focus on W-P4. | all | major | automated |
+
+## Batch `controller-no-game`
+
+Setup:
+
+| ID | Role | Precondition | Action | Wait | Check | Expected | Variants | Severity | Mode |
+|---|---|---|---|---|---|---|---|---|---|
+| `ctl-no-game.reach-home` | setup | `fixture settings.profiles.fresh` | `nav.goal(goal="ui.screen == play.home")` | `ui.screen == play.home` within 600 ticks | — | Home with no game loaded (the CTL-05 precondition). | all | major | automated |
+
+Steps:
+
+| ID | Role | Precondition | Action | Wait | Check | Expected | Variants | Severity | Mode |
+|---|---|---|---|---|---|---|---|---|---|
+| `ctl.no-game-gap` | under-test | `ui.screen == play.home` | — | — | — | CTL-05: KNOWN GAP, expected FAIL. Settings is not reachable by pad with no game (HOME-06, bug #1177), so neither is the Controller sheet. With Settings reached by keyboard, Controls > More in Options opens the classic Options window's Input page because OpenControllerSheet() returns false with no game loaded (ADR-0256 Decision 5 note). Record what the player sees. | all | major | manual |
+
+## Batch `lamps`
+
+Setup:
+
+| ID | Role | Precondition | Action | Wait | Check | Expected | Variants | Severity | Mode |
+|---|---|---|---|---|---|---|---|---|---|
+| `lamps.reach-home` | setup | `fixture settings.profiles.fresh` | `nav.goal(goal="ui.screen == play.home")` | `ui.screen == play.home` within 600 ticks | — | Home with the pad port lamps on the status line (the LAMP-01 precondition: one pad). | all | major | automated |
+
+Steps:
+
+| ID | Role | Precondition | Action | Wait | Check | Expected | Variants | Severity | Mode |
+|---|---|---|---|---|---|---|---|---|---|
+| `lamp.four-lamps-p1` | under-test | `ui.screen == play.home` | — | — | — | LAMP-01: the status line shows four lamps, P1 lit and the others dim; the number is the label and the pad name is the tooltip; the hook exposes neither lamps nor tooltips, judged by eye. | all | minor | manual |
+| `lamp.second-pad-hotplug` | under-test | `ui.screen == play.home` | — | — | — | LAMP-02: plug a second pad in (or power it on over Bluetooth), wait 2 s, power it off: the second lamp lights within about 1 s (1 s poll) and dims again, nothing else moves, the ring stays where it was; the W-P15 pill "New controller …" on its first press is expected. A real plug is physical-only and is not simulated. | all | major | manual |
+
+## Batch `lamps-game`
+
+Setup:
+
+| ID | Role | Precondition | Action | Wait | Check | Expected | Variants | Severity | Mode |
+|---|---|---|---|---|---|---|---|---|---|
+| `lamps-game.reach-game` | setup | `fixture rom and fixture settings.profiles.fresh` | `nav.goal(goal="ui.screen == play.game")` | `ui.screen == play.game` within 600 ticks | — | A game is running unpaused (the LAMP-03 precondition). | all | major | automated |
+
+Steps:
+
+| ID | Role | Precondition | Action | Wait | Check | Expected | Variants | Severity | Mode |
+|---|---|---|---|---|---|---|---|---|---|
+| `lamp.game-unpaused` | under-test | `ui.screen == play.game` | — | within 4 ticks | `ui.screen(is="play.game")` | LAMP-03: the game runs unpaused, the state in which the status line and lamps must be hidden. | all | minor | automated |
+| `lamp.bar-hidden-in-game` | under-test | `ui.screen == play.game` | — | — | — | LAMP-03: the status bar and lamps are hidden while the game runs; a pack-install pill over a running game keeps the bar (sheetOpen), record only if observed; the hook does not read the bar. | all | minor | manual |
+
+## Batch `loss`
+
+Setup:
+
+| ID | Role | Precondition | Action | Wait | Check | Expected | Variants | Severity | Mode |
+|---|---|---|---|---|---|---|---|---|---|
+| `loss.reach-game` | setup | `fixture rom and fixture settings.profiles.fresh` | `nav.goal(goal="ui.screen == play.game")` | `ui.screen == play.game` within 600 ticks | — | A game is running unpaused with PauseWhenInBackground at its default (on). | all | major | automated |
+
+Steps:
+
+| ID | Role | Precondition | Action | Wait | Check | Expected | Variants | Severity | Mode |
+|---|---|---|---|---|---|---|---|---|---|
+| `loss.focus-lost-pauses` | under-test | `ui.screen == play.game` | — | — | — | LOSS-01: another app takes focus: W-P4 opens with "Paused — …" naming the lost focus; regaining focus stays paused (ADR-0254 answer 1) and only Resume or the chord resumes. Taking focus by pad is not possible on macOS without a keyboard, so this is BLOCKED unless a second machine or remote switch exists; the keyboard (Cmd-Tab) may be used if noted. | all | major | manual |
+| `loss.pad-unplug-pauses` | under-test | `ui.screen == play.game` | — | — | — | LOSS-02: unplug the pad, then replug it: W-P4 opens with "Paused — controller disconnected" (ADR-0254 amendment, always on in Play, not gated by PauseWhenInBackground); replugging rewrites the line to "Controller reconnected" and does not resume; the action bar names the pad still connected, or the keyboard with none. Then record whether the replugged pad resumes (chord or A on Resume). A real unplug is not simulated. | all | major | manual |
+| `loss.pad-off-mid-menu` | under-test | `ui.screen == play.pause` | — | — | — | LOSS-03 (pass 3): with W-P4 open and a Bluetooth second pad, power it off, on again, press a direction: no second pause (already paused); on return the pad drives focus again and the footer names the right control. | all | minor | manual |
+| `loss.pad-sleep` | under-test | `ui.screen == play.game` | — | — | — | LOSS-04 (pass 3): leave a Bluetooth pad idle until it sleeps (vendor timeout, typically 10-15 min), then wake it: sleep is a disconnect, W-P4 opens as in LOSS-02, and waking reconnects so the pad can navigate W-P4 and resume. Not covered by any repo test; observation only. | all | minor | manual |
