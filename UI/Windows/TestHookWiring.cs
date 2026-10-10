@@ -1,6 +1,7 @@
 using Avalonia;
 using Avalonia.Automation;
 using Avalonia.Controls;
+using Avalonia.Input;
 using Avalonia.Media.Imaging;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
@@ -48,8 +49,9 @@ namespace Mesen.Windows
 			if(options is null) {
 				return null;
 			}
-			TestHookKeys keys = new(InputApi.SetInjectedKey, keyCode ?? InputApi.GetKeyCode, RunningFrames);
-			TestHookProtocol protocol = new(options.Token, new WindowTarget(window), keys);
+			WindowTarget target = new(window);
+			TestHookKeys keys = new(InputApi.SetInjectedKey, keyCode ?? InputApi.GetKeyCode, RunningFrames, target.RaiseKey);
+			TestHookProtocol protocol = new(options.Token, target, keys);
 			_server = TestHookServer.Start(options.Endpoint, line => Dispatcher.UIThread.InvokeAsync(() => protocol.Handle(line)).GetAwaiter().GetResult());
 			_keys = keys;
 			TestHookServer server = _server;
@@ -152,6 +154,26 @@ namespace Mesen.Windows
 				Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
 				bitmap.Save(path, PngBitmapEncoderOptions.Default);
 				return new CaptureResult(path, width, height, Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(path))).ToLowerInvariant());
+			}
+
+			//KeyDown / KeyUp of a literal key on the focused element (the window when
+			//nothing has focus), so the GUI keyboard - OnPreviewKeyDown, the
+			//keyboard navigation - sees the press as it sees a person's. The backend's
+			//keyboard codes ARE Avalonia Key values (KeyDefinitions.h: Enter = 6,
+			//Esc = 13, Up Arrow = 24); pad, joystick and mouse codes (0x1FF and up)
+			//reach the pressed set only.
+			public void RaiseKey(ushort code, bool down)
+			{
+				Key key = (Key)code;
+				if(code == 0 || code >= 0x1FF || !Enum.IsDefined(key)) {
+					return;
+				}
+				InputElement target = _window.FocusManager?.GetFocusedElement() as InputElement ?? _window;
+				target.RaiseEvent(new KeyEventArgs {
+					RoutedEvent = down ? InputElement.KeyDownEvent : InputElement.KeyUpEvent,
+					Key = key,
+					Source = target
+				});
 			}
 
 			public void Quit() => _window.Close();

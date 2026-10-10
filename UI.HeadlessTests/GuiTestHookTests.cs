@@ -53,6 +53,10 @@ public class GuiTestHookTests : IDisposable
 	private static readonly Dictionary<ushort, string> Backend = ButtonNames.Select((name, i) => (Code: (ushort)(0x1000 + i), Name: "Pad1 " + name)).ToDictionary(p => p.Code, p => p.Name);
 	private static readonly Dictionary<string, ushort> BackendCodes = Backend.ToDictionary(p => p.Value, p => p.Key);
 
+	//The backend's real keyboard names and codes (Core/Shared/KeyDefinitions.h).
+	private static readonly Dictionary<string, ushort> KeyboardCodes = new() { { "Up Arrow", 24 }, { "Down Arrow", 26 }, { "Enter", 6 }, { "Esc", 13 }, { "1", 35 } };
+	private static ushort KeyboardCode(string name) => KeyboardCodes.TryGetValue(name, out ushort code) ? code : BackendCode(name);
+
 	private static string BackendName(ushort code) => Backend.TryGetValue(code, out string? name) ? name : "";
 	private static ushort BackendCode(string name) => BackendCodes.TryGetValue(name, out ushort code) ? code : (ushort)0;
 
@@ -178,6 +182,27 @@ public class GuiTestHookTests : IDisposable
 			Assert.Equal("play.home", state["screen"]!.GetValue<string>());
 			Assert.Equal(2, state["tick"]!.GetValue<long>());
 			Assert.Contains(state["controls"]!.AsArray(), c => c!["id"]!.GetValue<string>() == "play.home.open-rom" && c["focused"]!.GetValue<bool>());
+		} finally {
+			keys.ReleaseAll();
+		}
+	}
+
+	//The GUI keyboard reads Avalonia KeyDown/KeyUp, not the pressed set (MainWindow
+	//OnPreviewKeyDown): a key.press that only reached the set moved no focus.
+	[AvaloniaFact]
+	public void Injected_key_presses_move_the_Home_focus_through_the_GUI_keyboard()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model) = ShowHome();
+		TestHookWiring.WindowTarget target = new(window);
+		TestHookKeys keys = new(InputApi.SetInjectedKey, KeyboardCode, () => null, target.RaiseKey);
+		TestHookProtocol hook = new("t", target, keys);
+		try {
+			JsonObject answer = JsonNode.Parse(hook.Handle("{\"id\":1,\"token\":\"t\",\"op\":\"inject\",\"action\":\"key.press\",\"args\":{\"key\":\"Up Arrow\",\"ticks\":1}}"))!.AsObject();
+			Assert.True(answer["ok"]!.GetValue<bool>(), answer.ToJsonString());
+			Pump();
+			Tick(window, keys);
+			Assert.Equal("play.home.open-rom", Focus(window, model));
 		} finally {
 			keys.ReleaseAll();
 		}

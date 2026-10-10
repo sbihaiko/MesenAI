@@ -49,9 +49,9 @@ namespace Mesen.Tests.TestHook
 			public readonly TestHookKeys Keys;
 			public readonly TestHookProtocol Protocol;
 
-			public Rig()
+			public Rig(List<(ushort Key, bool Down)>? raised = null)
 			{
-				Keys = new TestHookKeys((code, down) => Calls.Add((code, down)), name => name switch { "Pad1 Right" => (ushort)0x1011, _ => (ushort)0 }, () => Frames);
+				Keys = new TestHookKeys((code, down) => Calls.Add((code, down)), name => name switch { "Pad1 Right" => (ushort)0x1011, "Enter" => (ushort)0x0D, "Up Arrow" => (ushort)24, "1" => (ushort)35, _ => (ushort)0 }, () => Frames, raised is null ? null : (key, down) => raised.Add((key, down)));
 				Protocol = new TestHookProtocol("secret", Target, Keys);
 			}
 
@@ -165,6 +165,67 @@ namespace Mesen.Tests.TestHook
 			JsonObject ticks = rig.Ask("{\"id\":7,\"token\":\"secret\",\"op\":\"inject\",\"action\":\"pad.press\",\"args\":{\"button\":\"Right\",\"ticks\":4}}");
 			Assert.False(ticks["ok"]!.GetValue<bool>());
 			Assert.Empty(rig.Calls);
+		}
+
+		[Fact]
+		public void A_key_press_raises_the_key_on_the_GUI_when_it_starts_and_ends_but_a_pad_press_does_not()
+		{
+			List<(ushort Key, bool Down)> raised = new();
+			Rig rig = new(raised);
+			rig.Ask("{\"id\":16,\"token\":\"secret\",\"op\":\"inject\",\"action\":\"key.press\",\"args\":{\"key\":\"Enter\",\"ticks\":1}}");
+			Assert.Equal(new[] { ((ushort)0x0D, true) }, raised);
+			rig.Keys.Advance();
+			Assert.Equal(new[] { ((ushort)0x0D, true), ((ushort)0x0D, false) }, raised);
+			raised.Clear();
+			//The code goes through, not the name: "Up Arrow" and "1" are not Avalonia names.
+			rig.Ask("{\"id\":18,\"token\":\"secret\",\"op\":\"inject\",\"action\":\"key.press\",\"args\":{\"key\":\"Up Arrow\",\"ticks\":1}}");
+			rig.Ask("{\"id\":19,\"token\":\"secret\",\"op\":\"inject\",\"action\":\"key.press\",\"args\":{\"key\":\"1\",\"ticks\":1}}");
+			Assert.Equal(new[] { ((ushort)24, true), ((ushort)35, true) }, raised);
+			rig.Keys.Advance();
+			raised.Clear();
+			rig.Ask("{\"id\":17,\"token\":\"secret\",\"op\":\"inject\",\"action\":\"pad.press\",\"args\":{\"button\":\"Right\",\"ticks\":1}}");
+			rig.Keys.Advance();
+			Assert.Empty(raised);
+		}
+
+		[Fact]
+		public void A_key_press_holds_the_literal_key_for_its_ticks_then_lets_go()
+		{
+			Rig rig = new();
+			JsonObject answer = rig.Ask("{\"id\":10,\"token\":\"secret\",\"op\":\"inject\",\"action\":\"key.press\",\"args\":{\"key\":\"Enter\",\"ticks\":1}}");
+			Assert.True(answer["ok"]!.GetValue<bool>());
+			Assert.Equal(new[] { ((ushort)0x0D, true) }, rig.Calls);
+			rig.Keys.Advance();
+			Assert.Equal(new[] { ((ushort)0x0D, true), ((ushort)0x0D, false) }, rig.Calls);
+		}
+
+		[Fact]
+		public void A_key_press_follows_the_duration_family_of_the_clock_and_names_an_unknown_key()
+		{
+			Rig rig = new();
+			JsonObject unknown = rig.Ask("{\"id\":11,\"token\":\"secret\",\"op\":\"inject\",\"action\":\"key.press\",\"args\":{\"key\":\"Hyper\",\"ticks\":1}}");
+			Assert.False(unknown["ok"]!.GetValue<bool>());
+			Assert.Contains("Hyper", unknown["error"]!.GetValue<string>());
+			rig.Frames = 100;
+			JsonObject ticks = rig.Ask("{\"id\":12,\"token\":\"secret\",\"op\":\"inject\",\"action\":\"key.press\",\"args\":{\"key\":\"Enter\",\"ticks\":1}}");
+			Assert.False(ticks["ok"]!.GetValue<bool>());
+			Assert.Empty(rig.Calls);
+			JsonObject frames = rig.Ask("{\"id\":14,\"token\":\"secret\",\"op\":\"inject\",\"action\":\"key.press\",\"args\":{\"key\":\"Enter\",\"frames\":2}}");
+			Assert.True(frames["ok"]!.GetValue<bool>());
+			Assert.Contains(((ushort)0x0D, true), rig.Calls);
+			rig.Frames = null;
+			rig.Calls.Clear();
+			JsonObject stopped = rig.Ask("{\"id\":15,\"token\":\"secret\",\"op\":\"inject\",\"action\":\"key.press\",\"args\":{\"key\":\"Enter\",\"frames\":2}}");
+			Assert.False(stopped["ok"]!.GetValue<bool>());
+			Assert.Empty(rig.Calls);
+		}
+
+		[Fact]
+		public void Hello_advertises_the_key_namespace()
+		{
+			Rig rig = new();
+			JsonObject hello = rig.Ask("{\"id\":13,\"token\":\"secret\",\"op\":\"hello\"}");
+			Assert.Contains("key", hello["namespaces"]!.AsArray().Select(n => n!.GetValue<string>()));
 		}
 
 		[Fact]

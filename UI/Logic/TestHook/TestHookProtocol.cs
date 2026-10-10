@@ -64,7 +64,7 @@ public sealed class TestHookProtocol
 		foreach(string op in Ops) {
 			ops.Add((JsonNode?)JsonValue.Create(op));
 		}
-		return new JsonObject { ["hook"] = Version, ["ops"] = ops, ["namespaces"] = new JsonArray("pad", "ui") };
+		return new JsonObject { ["hook"] = Version, ["ops"] = ops, ["namespaces"] = new JsonArray("pad", "key", "ui") };
 	}
 
 	private JsonObject State()
@@ -78,12 +78,15 @@ public sealed class TestHookProtocol
 	private JsonObject Inject(JsonObject request)
 	{
 		string action = request["action"]?.GetValue<string>() ?? "";
-		if(action != "pad.press") {
+		if(action != "pad.press" && action != "key.press") {
 			throw new ArgumentException("unknown action " + action);
 		}
 		JsonObject args = request["args"]?.AsObject() ?? new JsonObject();
-		string button = args["button"]?.GetValue<string>() ?? "";
-		string? error = _keys.Press(args["pad"]?.GetValue<int>() ?? 1, button, args["ticks"]?.GetValue<int>(), args["frames"]?.GetValue<int>());
+		int? ticks = args["ticks"]?.GetValue<int>();
+		int? frames = args["frames"]?.GetValue<int>();
+		string? error = action == "key.press"
+			? _keys.PressKey(args["key"]?.GetValue<string>() ?? "", ticks, frames)
+			: _keys.Press(args["pad"]?.GetValue<int>() ?? 1, args["button"]?.GetValue<string>() ?? "", ticks, frames);
 		if(error is not null) {
 			throw new ArgumentException(error);
 		}
