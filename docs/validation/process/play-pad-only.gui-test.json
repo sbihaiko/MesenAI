@@ -2969,6 +2969,14 @@
           "mode": "manual"
         },
         {
+          "id": "pause.pack-show-folder-gap",
+          "role": "under-test",
+          "precondition": "ui.visible == play.pack",
+          "expect": "KNOWN GAP (P4-06): Show pack folder is expected FAIL; Finder takes the foreground and the pad cannot bring MesenAI back. PASS only if the pad still drives Play afterwards with no keyboard or mouse. The hook cannot observe the OS foreground.",
+          "severity": "major",
+          "mode": "manual"
+        },
+        {
           "id": "pause.pack-b-to-pause",
           "role": "under-test",
           "precondition": "ui.visible == play.pack",
@@ -2992,14 +3000,6 @@
           "expect": "P4-06: B closes back to W-P4; focus returns to play.pause.pack.",
           "severity": "major",
           "mode": "automated"
-        },
-        {
-          "id": "pause.pack-show-folder-gap",
-          "role": "under-test",
-          "precondition": "ui.visible == play.pack",
-          "expect": "KNOWN GAP (P4-06): Show pack folder is expected FAIL; Finder takes the foreground and the pad cannot bring MesenAI back. PASS only if the pad still drives Play afterwards with no keyboard or mouse. The hook cannot observe the OS foreground.",
-          "severity": "major",
-          "mode": "manual"
         },
         {
           "id": "pause.enh-focus",
