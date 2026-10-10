@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """Fail when a GUI test script's `requires.actions` drifts from the actions its steps use.
 
-Two rules, per `docs/**/*.gui-test.json`:
+Three rules, per `docs/**/*.gui-test.json`:
   - the set of action names used by setup and steps equals `requires.actions`;
   - no `under-test` step runs `nav.goal` (ADR-0271 section 3: navigation is setup,
-    never the behavior under test).
+    never the behavior under test);
+  - no batch opens with a step that presses the pad (#1232).
 
 Usage:
   python3 scripts/checks/verify_gui_test_actions.py
@@ -20,17 +21,34 @@ import sys
 from pathlib import Path
 
 
+#Actions that put a button down. A batch opens at a fresh launch, and nothing is
+#focused until the application's own focus arbiter has placed the ring - measured
+#on the real first-run home, the ring lands 8-16 ticks after launch, past the
+#4-tick window a holds step waits in. A press sent before that is dropped, and the
+#step's check then reads the state before the ring instead of the behavior under
+#test (#1232: `home.focus-holds-up` failed with `expected play.home.open-rom,
+#observed None`). So the first automated step of a batch observes; it does not act.
+PRESS_ACTIONS = {"pad.press", "pad.chord"}
+
+
 def check_script(doc: dict, name: str) -> list[str]:
     errors: list[str] = []
     used: set[str] = set()
     for batch in doc.get("batches", []):
+        opening = None
         for step in batch.get("setup", []) + batch.get("steps", []):
             action = step.get("action")
+            if step.get("mode") == "automated" and opening is None:
+                opening = step
             if not action:
                 continue
             used.add(action["name"])
             if step.get("role") == "under-test" and action["name"] == "nav.goal":
                 errors.append(f"{name}: step {step['id']} is under-test but runs nav.goal")
+        if opening is not None and (opening.get("action") or {}).get("name") in PRESS_ACTIONS:
+            errors.append(f"{name}: batch {batch['id']} opens with step {opening['id']}, which "
+                          f"presses the pad ({opening['action']['name']}) before the batch has observed "
+                          f"anything: the ring is not up yet at a fresh launch, so the press is dropped (#1232)")
     required = set(doc.get("requires", {}).get("actions", []))
     if used != required:
         errors.append(f"{name}: actions used differ from requires.actions "

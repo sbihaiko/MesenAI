@@ -68,6 +68,12 @@ Steps:
 
 ## Batch `home`
 
+Setup:
+
+| ID | Role | Precondition | Action | Wait | Check | Expected | Variants | Severity | Mode |
+|---|---|---|---|---|---|---|---|---|---|
+| `home.ring-at-launch` | setup | `fixture settings.profiles.fresh` | — | `ui.focused == play.home.open-rom` within 120 ticks | `ui.focused(is="play.home.open-rom")` | The home has settled with the ring on its one action before the batch presses anything: at a fresh launch the ring is not up yet (measured 8-16 ticks on the real app), so a press sent first is dropped and the holds steps below then read None (#1232). | all | major | automated |
+
 Steps:
 
 | ID | Role | Precondition | Action | Wait | Check | Expected | Variants | Severity | Mode |
