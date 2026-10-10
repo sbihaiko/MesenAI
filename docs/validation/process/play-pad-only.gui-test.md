@@ -4,7 +4,7 @@
 
 - Format: `gui-test/1`
 - Target: `mesen-gui`
-- Requires actions: `pad.press`, `pad.release`, `pad.chord`, `nav.goal`
+- Requires actions: `pad.press`, `pad.release`, `pad.chord`, `nav.goal`, `nav.sweep`
 - Requires checks: `ui.screen`, `ui.focused`, `ui.visible`, `ui.dialogs`
 - Variant `window.mode`: `windowed`, `fullscreen`
 
@@ -242,3 +242,17 @@ Steps:
 | `game-bios.choose-file-native` | under-test | `ui.screen == play.bios` | — | — | — | KNOWN GAP: GAME-04: Choose File... on the BIOS sheet is a native dialog (ADR-0256 Decision 9 refusals). Expected FAIL; record that Cancel still backs out. | all | major | manual |
 | `game-bios.b-cancels` | under-test | `ui.screen == play.bios` | `pad.press(button="B", ticks=4)` | `ui.screen == play.library` within 120 ticks | `ui.screen(is="play.library")` | GAME-04: B/Cancel backs out cleanly to the library. | all | major | automated |
 | `game-bios.status-names-bios` | under-test | `ui.screen == play.library` | — | — | — | GAME-04: the status line names the missing BIOS. | all | minor | manual |
+
+## Batch `dialogs`
+
+Setup:
+
+| ID | Role | Precondition | Action | Wait | Check | Expected | Variants | Severity | Mode |
+|---|---|---|---|---|---|---|---|---|---|
+| `dialogs.reach-home` | setup | `fixture settings.profiles.fresh` | `nav.goal(goal="ui.screen == play.home")` | `ui.screen == play.home` within 600 ticks | — | Home W-P2 is on screen, the precondition of the dialogs sweep. | all | major | automated |
+
+Steps:
+
+| ID | Role | Precondition | Action | Wait | Check | Expected | Variants | Severity | Mode |
+|---|---|---|---|---|---|---|---|---|---|
+| `dialogs.no-trap` | under-test | `ui.screen == play.home` | `nav.sweep(input="pad", scope="dialogs", bound=60)` | within 600 ticks | — | Jev walks Home by pad toward screens it has not visited; every dialog it reaches has a pad move that leaves it (no trap), within 60 moves. | all | major | automated |

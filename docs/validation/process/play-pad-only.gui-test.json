@@ -7,7 +7,8 @@
       "pad.press",
       "pad.release",
       "pad.chord",
-      "nav.goal"
+      "nav.goal",
+      "nav.sweep"
     ],
     "checks": [
       "ui.screen",
@@ -2045,6 +2046,51 @@
         }
       ],
       "teardown": []
+    },
+    {
+      "id": "dialogs",
+      "setup": [
+        {
+          "id": "dialogs.reach-home",
+          "role": "setup",
+          "precondition": "fixture settings.profiles.fresh",
+          "action": {
+            "name": "nav.goal",
+            "args": {
+              "goal": "ui.screen == play.home"
+            }
+          },
+          "wait": {
+            "check": "ui.screen == play.home",
+            "timeout_ticks": 600
+          },
+          "expect": "Home W-P2 is on screen, the precondition of the dialogs sweep.",
+          "severity": "major",
+          "mode": "automated"
+        }
+      ],
+      "teardown": [],
+      "steps": [
+        {
+          "id": "dialogs.no-trap",
+          "role": "under-test",
+          "precondition": "ui.screen == play.home",
+          "action": {
+            "name": "nav.sweep",
+            "args": {
+              "input": "pad",
+              "scope": "dialogs",
+              "bound": 60
+            }
+          },
+          "wait": {
+            "timeout_ticks": 600
+          },
+          "expect": "Jev walks Home by pad toward screens it has not visited; every dialog it reaches has a pad move that leaves it (no trap), within 60 moves.",
+          "severity": "major",
+          "mode": "automated"
+        }
+      ]
     }
   ]
 }
