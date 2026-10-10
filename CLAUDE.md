@@ -241,7 +241,9 @@ rules are summarized in `docs/squad/README.md`.
   name it); en-US; no `Co-Authored-By` and no "Generated with Claude Code" line.
 - **Fix runs** on an existing PR: check out `origin/<branch>`, push to the same
   branch, no new PR.
-- **Review chain**: GPT Terra (fast) → GPT 6.1 Sol → Claude Opus 5.5.
+- **Review chain**: the `review_models` list in the same `models.json`, tried
+  top to bottom (`review.sh` calls each through its own CLI: codex, grok, agy
+  or claude); never a chain typed from memory.
 - **Owner carve-outs** stay with the owner: money, credentials, access,
   permanent deletion, external publication.
 - **Dashboards**: no per-run dashboard tab, ever; the hub is the only page.
