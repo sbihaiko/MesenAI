@@ -36,13 +36,13 @@ void KeyManager::SetSettings(EmuSettings* settings)
 
 bool KeyManager::IsKeyPressed(uint16_t keyCode)
 {
-	//Input disabled (a dialog has focus) silences the overlay too, as it does the
-	//backend. A host with no backend registered still reads an injected code, the
-	//way GetPressedKeys does.
-	if(_settings != nullptr && !_settings->IsInputEnabled()) {
-		return false;
-	}
-	if(_keyManager != nullptr && _keyManager->IsKeyPressed(keyCode)) {
+	//#1278: input disabled (a dialog has focus) silences the backend, never the
+	//test hook's overlay - the overlay reads as pressed on every screen, which is
+	//what GetPressedKeys already does, and the two readers must not disagree (the
+	//GUI test hook ADR, item 4). The gate is on the backend call alone, not on the
+	//return, so an injected code reads as pressed whether or not a backend is
+	//registered.
+	if(_keyManager != nullptr && (_settings == nullptr || _settings->IsInputEnabled()) && _keyManager->IsKeyPressed(keyCode)) {
 		return true;
 	}
 	return IsInjected(keyCode);
