@@ -10,6 +10,7 @@ never a pass.
 """
 import os
 import re
+import signal
 import subprocess
 import sys
 from pathlib import Path
@@ -33,18 +34,24 @@ def verdict(output):
 
 def run(rid, core_lib):
     env = {**os.environ, "MESEN_CORE_LIB": core_lib}
+    # Own session: a timeout kills the whole group, so a grandchild (testhost) cannot hold the pipes open.
+    proc = subprocess.Popen(
+        ["dotnet", "test", "UI.HeadlessTests", f"-p:RuntimeIdentifier={rid}", "--filter", f"FullyQualifiedName~{CASE}"],
+        cwd=ROOT, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, start_new_session=True,
+    )
     try:
-        done = subprocess.run(
-            ["dotnet", "test", "UI.HeadlessTests", f"-p:RuntimeIdentifier={rid}", "--filter", f"FullyQualifiedName~{CASE}"],
-            cwd=ROOT, env=env, capture_output=True, text=True, timeout=TIMEOUT_SECONDS,
-        )
-    except subprocess.TimeoutExpired as ex:
-        partial = ex.stdout.decode(errors="replace") if isinstance(ex.stdout, bytes) else (ex.stdout or "")
-        return [f"dotnet test did not finish within {TIMEOUT_SECONDS}s"], partial
-    output = done.stdout + done.stderr
+        stdout, stderr = proc.communicate(timeout=TIMEOUT_SECONDS)
+    except subprocess.TimeoutExpired:
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        stdout, stderr = proc.communicate()
+        return [f"dotnet test did not finish within {TIMEOUT_SECONDS}s"], (stdout or "") + (stderr or "")
+    output = stdout + stderr
     reasons = verdict(output)
-    if done.returncode != 0:
-        reasons.append(f"dotnet test exited {done.returncode}")
+    if proc.returncode != 0:
+        reasons.append(f"dotnet test exited {proc.returncode}")
     return reasons, output
 
 
