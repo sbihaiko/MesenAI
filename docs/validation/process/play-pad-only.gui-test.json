@@ -5069,7 +5069,7 @@
           "mode": "manual"
         },
         {
-          "id": "ctl.b-cancels-capture",
+          "id": "ctl.b-refused-capture-stays-armed",
           "role": "under-test",
           "precondition": "ui.visible == play.controller.capture-armed",
           "action": {
@@ -5080,54 +5080,35 @@
             }
           },
           "wait": {
-            "check": "ui.visible != play.controller.capture-armed",
+            "check": "ui.visible == play.controller.capture-armed",
             "timeout_ticks": 8
           },
           "check": {
             "name": "ui.visible",
             "args": {
               "is": "play.controller.capture-armed",
-              "visible": false
+              "visible": true
             }
           },
-          "expect": "CTL-02: B cancels the capture: the armed prompt is gone (a refused B would leave it up); the pad regains authority (HasAuthority gains !IsControllerCapturing).",
+          "expect": "CTL-02: B is a navigation control and is refused; the capture stays armed (ADR-0256 Decision 4); the refusal note is not exposed by the hook",
           "severity": "major",
           "mode": "automated"
         },
         {
           "id": "ctl.focus-stays-on-row-after-cancel",
           "role": "under-test",
-          "precondition": "ui.screen == play.controller",
-          "wait": {
-            "check": "ui.focused == play.controller.row-first",
-            "timeout_ticks": 8
-          },
-          "check": {
-            "name": "ui.focused",
-            "args": {
-              "is": "play.controller.row-first"
-            }
-          },
-          "expect": "CTL-02: after the cancel the focus stays on the row that was armed.",
+          "precondition": "ui.visible == play.controller.capture-armed",
+          "expect": "CTL-02: Esc cancels the capture (ADR-0255 slice 3); the focus stays on the armed row and the sheet stays open. Esc is keyboard-only, outside the pad-only vocabulary",
           "severity": "major",
-          "mode": "automated"
+          "mode": "manual"
         },
         {
           "id": "ctl.sheet-stays-after-cancel",
           "role": "under-test",
-          "precondition": "ui.focused == play.controller.row-first",
-          "wait": {
-            "timeout_ticks": 4
-          },
-          "check": {
-            "name": "ui.screen",
-            "args": {
-              "is": "play.controller"
-            }
-          },
-          "expect": "CTL-02: the sheet is still open and drivable after the cancelled capture.",
+          "precondition": "ui.visible == play.controller.capture-armed",
+          "expect": "CTL-02: Esc cancels the capture (ADR-0255 slice 3); the focus stays on the armed row and the sheet stays open. Esc is keyboard-only, outside the pad-only vocabulary",
           "severity": "major",
-          "mode": "automated"
+          "mode": "manual"
         },
         {
           "id": "ctl.bind-extra-button",
