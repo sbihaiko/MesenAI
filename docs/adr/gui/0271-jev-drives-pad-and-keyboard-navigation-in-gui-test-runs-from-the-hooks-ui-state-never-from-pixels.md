@@ -72,10 +72,9 @@ product's own Jev features (ADR-0242, ADR-0247).
 
 ## Consequences
 
-- The hook must expose visible controls and menu options, not only the
-  focused control and the active screen. The hook's state surface is decided
-  by the hook ADR on the open pull request #1202 (not on `main` yet), and
-  Decision 1 depends on it.
+- The hook's UI state must include active screen, focused control, visible
+  controls and menu options. This ADR requires those four fields, and the
+  hook ADR (open PR #1202) must provide them.
 - Scripts written with goals survive layout changes on the path; a
   regression *on* that path is caught only by the steps that test it with a
   fixed action, so scripts keep those steps.

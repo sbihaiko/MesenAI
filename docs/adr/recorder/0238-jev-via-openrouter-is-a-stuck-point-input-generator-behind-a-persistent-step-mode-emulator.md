@@ -39,7 +39,7 @@ Both searches launch one `headless_record` per candidate (`subprocess.run` in th
 
 So Jev as the default player is slower than real time; its value is confined to the stall points. The published "~100 ms" latency did not reproduce from here — the python.org Python on the maintainer's Mac has no CA bundle (`CERTIFICATE_VERIFY_FAILED`), while `curl` works.
 
-Non-goals: Jev is not the default recorder and does not replace the searches; no real-time play (the emulator is paused while Jev decides); Jev never sees ROM bytes, screenshots or any pixel (its state is RAM-derived numbers only); no CI job calls Jev and no key lives in CI.
+Non-goals: Jev is not the default recorder and does not replace the searches; no real-time play (the emulator is paused while Jev decides); Jev never sees ROM bytes, screenshots or any pixel (its state is RAM-derived numbers only (amended 2026-10-09 by ADR-0271: in GUI test runs Jev's state is the test hook's UI-state JSON, still never pixels; no CI call and no CI key still hold under its Decision 6 = A)); no CI job calls Jev and no key lives in CI.
 
 ## Decision
 
