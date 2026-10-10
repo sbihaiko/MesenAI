@@ -47,10 +47,7 @@ public enum PadSheetControl
 	Search,
 	//#1110 (ADR-0268): X toggles Favorite on a focused cover - a surface's own
 	//control, so it lives here and not among the six the pad navigates with.
-	Favorite,
-	//#1177: Start opens Settings from the home, whose layout has no room for a
-	//button to it (ADR-0241) - a surface's own control, like Y and X.
-	Settings
+	Favorite
 }
 
 public static class PadNavControls
@@ -190,8 +187,7 @@ public static class PadNavControls
 	//button the pad prints Y on, whichever preset the first run applied.
 	public static readonly (PadSheetControl Control, string Xbox, string Ps4)[] SheetControls = {
 		(PadSheetControl.Search, "Y", "But4"),
-		(PadSheetControl.Favorite, "X", "But1"),
-		(PadSheetControl.Settings, "Start", "But10")
+		(PadSheetControl.Favorite, "X", "But1")
 	};
 
 	//The names to ask the host for one sheet control, the family's own spelling

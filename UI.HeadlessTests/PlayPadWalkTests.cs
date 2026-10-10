@@ -738,12 +738,6 @@ public class PlayPadWalkTests : IDisposable
 		if(root != window && root.Name != "PlayHomeHost") {
 			available.Add(PlayAction.Back);
 		}
-		//#1177: Start opens Settings while the home is what the window shows - the
-		//same rule the wiring asks (PlayHome.PadOpensSettings), over the live model.
-		if(window.DataContext is MainWindowViewModel model
-			&& PlayHome.PadOpensSettings(model.IsPlayWorkspace && model.RecentGames.Visible, model.RecentGames.ShowFirstRunHome, model.RecentGames.ShowRecentsHome)) {
-			available.Add(PlayAction.Settings);
-		}
 		bool Visible(string name) => root.GetVisualDescendants().OfType<Control>().Any(c => c.Name == name && c.IsEffectivelyVisible);
 		if(Visible("RomPickerSearch")) {
 			available.Add(PlayAction.Search);

@@ -2257,7 +2257,6 @@
 		<!--#1104: the shared action bar's labels (UI/Logic/PlayBarDeclarations); the control is named by PlayActionBar.-->
 		<Message ID="BarPlay">Play</Message>
 		<Message ID="BarOpenGame">Open a game</Message>
-		<Message ID="BarSettings">Settings</Message>
 		<Message ID="BarSelect">Select</Message>
 		<Message ID="BarResume">Resume</Message>
 		<Message ID="BarBack">Back</Message>

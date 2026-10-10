@@ -37,13 +37,6 @@ public enum LastPlayedKind
 
 public static class PlayHome
 {
-	//#1177: Start opens Settings only while the home (W-P1 or W-P2) is what the
-	//Play workspace shows; over a game or a sheet the press is not the home's.
-	public static bool PadOpensSettings(bool isPlayWorkspace, bool showFirstRunHome, bool showRecentsHome)
-	{
-		return isPlayWorkspace && (showFirstRunHome || showRecentsHome);
-	}
-
 	//W-P2's pack badge on a tile: the game has an HD pack where the Core looks
 	//for it, HdPacks/<ROM file name>/hires.txt (HdPackLoader). The recent-game
 	//file is named after the ROM, so its name is the folder's. Packs found by

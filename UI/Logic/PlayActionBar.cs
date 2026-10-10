@@ -20,8 +20,6 @@ public enum PlayAction
 	Favorite,
 	Search,
 	ConsoleFilter,
-	//#1177: the home's door to Settings - Start on a pad, which has no key.
-	Settings,
 	Back
 }
 
@@ -81,7 +79,6 @@ public static class PlayActionBar
 				PlayAction.Favorite => "X",
 				PlayAction.Search => "Y",
 				PlayAction.ConsoleFilter => "LB / RB",
-				PlayAction.Settings => "Start",
 				_ => "B"
 			},
 			PadFamily.Ps4 => action switch {
@@ -90,7 +87,6 @@ public static class PlayActionBar
 				PlayAction.Favorite => "Square",
 				PlayAction.Search => "Triangle",
 				PlayAction.ConsoleFilter => "L1 / R1",
-				PlayAction.Settings => "Options",
 				_ => "Circle"
 			},
 			_ => ""

@@ -331,8 +331,8 @@ namespace Mesen.Windows
 				 nameof(RecentGamesViewModel.ShowPlainGrid), nameof(RecentGamesViewModel.ShowHomeGrid)],
 				() => ContentFocus(window, model),
 				() => model.IsPlayWorkspace && model.RecentGames.Visible
-					? model.RecentGames.ShowFirstRunHome ? PlayBarDeclarations.WithSettings(PlayBarDeclarations.HomeFirstRun)
-					: model.RecentGames.ShowRecentsHome ? PlayBarDeclarations.WithSettings(HomeDeclaration(window, model))
+					? model.RecentGames.ShowFirstRunHome ? PlayBarDeclarations.HomeFirstRun
+					: model.RecentGames.ShowRecentsHome ? HomeDeclaration(window, model)
 					: PlayBarDeclarations.None
 					: PlayBarDeclarations.None,
 				() => ContentRoot(window));
@@ -925,16 +925,6 @@ namespace Mesen.Windows
 				if(authority && InPlayDoor && _keyboard is null
 					&& PlayPadNavigation.IsSheetEdge(PadNavControls.SheetCode(pad?.Family, pad?.Device ?? -1, PadSheetControl.Favorite, keyCode), pressed, _previous)) {
 					PlayFavoriteCover.Toggle(_model, _window.FocusManager?.GetFocusedElement() as Control);
-				}
-
-				//#1177: Start opens Settings from the home. The home has no button to it
-				//(ADR-0241 fixes its controls) and the header is unpadded (#1137), so a
-				//pad with no game loaded reaches Settings by this press, which the home's
-				//bar names. Read off the pressed sets like Y and X.
-				if(authority && InPlayDoor && _keyboard is null
-					&& PlayHome.PadOpensSettings(_model.IsPlayWorkspace && _model.RecentGames.Visible, _model.RecentGames.ShowFirstRunHome, _model.RecentGames.ShowRecentsHome)
-					&& PlayPadNavigation.IsSheetEdge(PadNavControls.SheetCode(pad?.Family, pad?.Device ?? -1, PadSheetControl.Settings, keyCode), pressed, _previous)) {
-					_window.OpenPlayerSettingsSheet();
 				}
 
 				//#1034 (ADR-0264 Decision 3): LB/RB cycle the library's console
