@@ -4,6 +4,7 @@
 - Date: 2026-10-10
 - Related: ADR-0193 (the `main gate` ruleset's rules, its bypass actors and its required checks — unchanged by this decision), ADR-0163 (fork–upstream coexistence; the loop's merge target), `.github/AGENTS.md`, `docs/squad/README.md`
 - Supersedes / amends: nothing. This is the first record of what the squad's review verdict means.
+- Merge-queue question closed by ADR-0274 (GitHub's merge queue is not enabled: overlapping slices are refused at dispatch instead).
 
 ## Context
 
