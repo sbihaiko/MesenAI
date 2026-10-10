@@ -47,7 +47,7 @@ namespace Mesen.ViewModels
 		[ObservableProperty] public partial IReadOnlyList<PadPortLamp> PadLamps { get; private set; } = PadPortLamps.Empty.Lamps;
 		//#1282: the whole strip the lamps were built in - the lamps and how many
 		//pads the backend reported beyond the ports - which is what the GUI test
-		//hook's `pad.lamps` reads. PadLamps above is the list the status line
+		//hook's `ui.lamps` reads. PadLamps above is the list the status line
 		//draws; this is the same strip the poll assigned.
 		public PadPortStrip PadPorts => _padPorts;
 		[ObservableProperty] public partial string PadLampNote { get; private set; } = "";

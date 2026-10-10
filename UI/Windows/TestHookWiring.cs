@@ -236,7 +236,7 @@ namespace Mesen.Windows
 
 			//gameLoaded: whether an emulated picture is on screen; the headless suite
 			//passes its own, the way Start takes its own keyCode. paused: what
-			//`emu.paused` reads - the window's own model, which the same suite drives.
+			//`ui.paused` reads - the window's own model, which the same suite drives.
 			//shell: the status line the lamps come from, for a window whose data
 			//context is not the application's (a headless one). haptics: the recorder
 			//the counts are kept in, which is the one Start installs on the tick seam.

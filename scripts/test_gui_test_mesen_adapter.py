@@ -149,10 +149,10 @@ class AdapterContract(Base):
         self.assertTrue(self.session.check("ui.ring", {"is": "play.home.open-rom"})["passed"])
         self.assertTrue(self.session.check("ui.footer", {"is": "confirm,settings"})["passed"])
         self.assertTrue(self.session.check("ui.surface", {"is": "none"})["passed"])
-        self.assertTrue(self.session.check("emu.paused", {"is": False})["passed"])
-        self.assertTrue(self.session.check("pad.lamps", {"port": 1, "is": "lit"})["passed"])
+        self.assertTrue(self.session.check("ui.paused", {"is": False})["passed"])
+        self.assertTrue(self.session.check("ui.lamps", {"port": 1, "is": "lit"})["passed"])
         self.assertTrue(self.session.check("ui.items", {"contains": "play.home.recent.Contra (USA).nes"})["passed"])
-        self.assertTrue(self.session.check("pad.haptics", {"pad": 1, "at_least": 1})["passed"])
+        self.assertTrue(self.session.check("ui.haptics", {"pad": 1, "at_least": 1})["passed"])
 
     def test_a_duplicated_id_is_visible_when_any_copy_is_visible(self):
         # First-run Home: the Primary Open ROM is on screen, the hidden Secondary (PlayHomeWithRecents) comes later in the tree.
@@ -207,6 +207,20 @@ class PlayerVisibleChecks(Base):
         self.assertEqual(result, {"passed": True, "observed": "none"})
         self.assertFalse(self.session.check("ui.ring", {"is": "play.home.continue"})["passed"])
 
+    def test_a_visible_ring_with_no_id_is_none_never_a_missing_target(self):
+        """The adapter mirrors `TestHookRing.Observed`, not just its happy path.
+
+        `Observed(true, null)` is `none` (UI/Logic/TestHook/TestHookPlayerState.cs:32-33, pinned by
+        `UI.Tests/TestHook/TestHookPlayerStateTests.cs` `No_ring_is_none`): `:focus-visible` is a class
+        the focused control either has or does not, so a control that took it without an AutomationId
+        paints a ring the hook cannot name. Reading the target raw answers `None`, which is neither the
+        `none` the application's own Observed answers nor a name a check can match."""
+        self.hook.focus = None  # :focus-visible on a control the application never named
+        self.assertEqual(self.session.check("ui.ring", {"is": "none"})["observed"], "none")
+        self.assertTrue(self.session.check("ui.ring", {"is": "none"})["passed"])
+        self.hook.focus = ""  # Observed's own test: `target is { Length: > 0 }`, so an empty id is no id
+        self.assertEqual(self.session.check("ui.ring", {"is": "none"})["observed"], "none")
+
     def test_a_ring_on_an_unknown_id_is_unknown_id(self):
         with self.assertRaises(adapter.UnknownId):
             self.session.check("ui.ring", {"is": "play.home.renamed"})
@@ -230,28 +244,28 @@ class PlayerVisibleChecks(Base):
             self.session.check("ui.surface", {"is": "play.renamed"})
 
     def test_paused_reads_the_emulator_state_the_shell_reads(self):
-        self.assertTrue(self.session.check("emu.paused", {"is": False})["passed"])
+        self.assertTrue(self.session.check("ui.paused", {"is": False})["passed"])
         self.hook.paused = True
-        self.assertTrue(self.session.check("emu.paused", {"is": True})["passed"])
-        self.assertFalse(self.session.check("emu.paused", {"is": False})["passed"])
-        self.assertTrue(self.session.check("emu.paused", {"is": True})["observed"])
+        self.assertTrue(self.session.check("ui.paused", {"is": True})["passed"])
+        self.assertFalse(self.session.check("ui.paused", {"is": False})["passed"])
+        self.assertTrue(self.session.check("ui.paused", {"is": True})["observed"])
 
     def test_a_lamp_that_is_not_drawn_is_hidden_and_never_dim(self):
         self.hook.lit_ports = [1, 2]
-        self.assertEqual(self.session.check("pad.lamps", {"port": 2, "is": "lit"})["observed"], "lit")
-        self.assertEqual(self.session.check("pad.lamps", {"port": 3, "is": "dim"})["observed"], "dim")
+        self.assertEqual(self.session.check("ui.lamps", {"port": 2, "is": "lit"})["observed"], "lit")
+        self.assertEqual(self.session.check("ui.lamps", {"port": 3, "is": "dim"})["observed"], "dim")
         self.hook.bar_shown = False  # the game runs unpaused: the bar and its lamps are not drawn (ADR-0261)
-        self.assertEqual(self.session.check("pad.lamps", {"port": 3, "is": "hidden"})["observed"], "hidden")
-        self.assertFalse(self.session.check("pad.lamps", {"port": 3, "is": "dim"})["passed"])
+        self.assertEqual(self.session.check("ui.lamps", {"port": 3, "is": "hidden"})["observed"], "hidden")
+        self.assertFalse(self.session.check("ui.lamps", {"port": 3, "is": "dim"})["passed"])
 
     def test_a_port_that_is_not_one_of_the_four_is_unknown_id(self):
         for bad in (0, 5, "1", True):
             with self.assertRaises(adapter.UnknownId):
-                self.session.check("pad.lamps", {"port": bad, "is": "lit"})
+                self.session.check("ui.lamps", {"port": bad, "is": "lit"})
             with self.assertRaises(adapter.UnknownId):
-                self.session.check("pad.haptics", {"pad": bad, "is": 1})
+                self.session.check("ui.haptics", {"pad": bad, "is": 1})
         with self.assertRaises(adapter.UnknownId):
-            self.session.check("pad.lamps", {"port": 1, "is": "on"})
+            self.session.check("ui.lamps", {"port": 1, "is": "on"})
 
     def test_the_items_are_the_focused_lists_entry_ids(self):
         self.hook.items = ["play.home.recent.Contra (USA).nes", "play.home.recent.Metroid (USA).nes"]
@@ -264,11 +278,11 @@ class PlayerVisibleChecks(Base):
 
     def test_the_haptics_are_the_ticks_the_menu_asked_for_on_one_pad(self):
         self.hook.haptics = [{"pad": 1, "count": 3}, {"pad": 2, "count": 1}]
-        self.assertEqual(self.session.check("pad.haptics", {"pad": 1, "is": 3})["observed"], 3)
-        self.assertTrue(self.session.check("pad.haptics", {"pad": 2, "at_least": 1})["passed"])
-        self.assertFalse(self.session.check("pad.haptics", {"pad": 1, "at_least": 4})["passed"])
+        self.assertEqual(self.session.check("ui.haptics", {"pad": 1, "is": 3})["observed"], 3)
+        self.assertTrue(self.session.check("ui.haptics", {"pad": 2, "at_least": 1})["passed"])
+        self.assertFalse(self.session.check("ui.haptics", {"pad": 1, "at_least": 4})["passed"])
         # A pad the menu never ticked reads zero, which is a failed check and not a missing answer.
-        self.assertEqual(self.session.check("pad.haptics", {"pad": 4, "at_least": 1})["observed"], 0)
+        self.assertEqual(self.session.check("ui.haptics", {"pad": 4, "at_least": 1})["observed"], 0)
 
     def test_wait_is_met_when_the_condition_holds_in_ticks(self):
         self.session.inject("pad.press", {"button": "Up", "ticks": 2})

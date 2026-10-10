@@ -24,7 +24,7 @@ namespace Mesen.Tests.TestHook
 
 			//#1282: how many steps the protocol declared. The counts a step's own
 			//check reads restart here, so a run proves the request that started the
-			//step - and only it - is what a `pad.haptics` check measures.
+			//step - and only it - is what a `ui.haptics` check measures.
 			public int Steps;
 
 			public JsonObject State() => new JsonObject {
@@ -144,7 +144,7 @@ namespace Mesen.Tests.TestHook
 			Assert.Equal(new[] { ((ushort)0x1011, true), ((ushort)0x1011, false) }, rig.Calls);
 		}
 
-		//#1282: the counts a `pad.haptics` check reads are "since the last step", and
+		//#1282: the counts a `ui.haptics` check reads are "since the last step", and
 		//the step is the request that starts it - an inject, and nothing else. A
 		//state read is what a wait polls (ADR-0272 item 4), so it must never look
 		//like a step boundary: draining there would lose the ticks a step caused.

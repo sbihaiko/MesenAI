@@ -58,20 +58,23 @@ fails the run loudly rather than answering `false`.
 | `ui.ring` | `{"is":"<id>"}` / `{"is":"none"}` | the focus ring PlayerTheme paints on `:focus-visible`; `none` is a control focused with no ring - the state a pad player must never be left in (#824, #1232). |
 | `ui.footer` | `{"is":"confirm,settings"}` / `{"contains":"back"}` | the action bar the focused surface declared (`PlayBarDeclarations`), in order, as `PlayAction` ids. Any other word is `unknown id`. |
 | `ui.surface` | `{"is":"play.pause"}` / `{"is":"none"}` | the topmost open sheet or overlay, from the focus arbiter's own claim order (`PlayFocusOnOpen`, ADR-0249), or `none` when none is up. The ids are `TestHookSurfaces`. |
-| `emu.paused` | `{"is":true}` | the application's own paused flag. |
-| `pad.lamps` | `{"port":1,"is":"lit"\|"dim"\|"hidden"}` | one port of the status line's four lamps (ADR-0249/ADR-0255). `hidden` is the bar not being drawn at all - the game running unpaused (ADR-0261) - and a lamp that is not drawn is never read as `dim`. A port outside 1-4 is `unknown id`. |
+| `ui.paused` | `{"is":true}` | the application's own paused flag. |
+| `ui.lamps` | `{"port":1,"is":"lit"\|"dim"\|"hidden"}` | one port of the status line's four lamps (ADR-0249/ADR-0255). `hidden` is the bar not being drawn at all - the game running unpaused (ADR-0261) - and a lamp that is not drawn is never read as `dim`. A port outside 1-4 is `unknown id`. |
 | `ui.items` | `{"is":[<ids>]}` / `{"contains":"<id>"}` | the entries of the list the focus is in, in the order it draws them. The whole list compares as ids, never as one joined string: a game title can carry a comma. |
-| `pad.haptics` | `{"pad":1,"is":2}` / `{"pad":1,"at_least":1}` | the haptic tick requests the menu made on that pad since the last step, recorded at `HapticTickOutput` (#1106) while a hook runs. It is evidence of the request, never of a vibration: no motor is involved. A pad the menu never ticked reads `0`. |
+| `ui.haptics` | `{"pad":1,"is":2}` / `{"pad":1,"at_least":1}` | the haptic tick requests the menu made on that pad since the last step, recorded at `HapticTickOutput` (#1106) while a hook runs. It is evidence of the request, never of a vibration: no motor is involved. A pad the menu never ticked reads `0`. |
 
-A step's own `inject` is what starts a step, so a `pad.haptics` check reads what
+A step's own `inject` is what starts a step, so a `ui.haptics` check reads what
 that step caused and the state reads of a `wait` in between consume nothing.
 
-`emu.paused`, `pad.lamps` and `pad.haptics` are named by issue #1282, and two of
-the three names sit outside ADR-0272 item 7's closed vocabulary: `emu.*` is
-reserved there for the emulator's RAM (and not part of v1) and `pad.*` is the
-action namespace. They are implemented under the names the issue asks for; the
-ADR is not amended, and the mismatch is flagged for the owner rather than
-resolved unilaterally.
+`ui.paused`, `ui.lamps` and `ui.haptics` all read the application's own UI state
+under ADR-0272 item 7's closed check vocabulary: checks are `ui.*` (from the
+hook's snapshot) or `fs.*`/`log.*` (evaluated by the runner), `emu.*` is reserved
+there for the emulator's RAM and is not part of v1, and `pad.*` is the action
+namespace. Issue #1282 asks for the paused flag, the port lamps and the haptic
+ticks and names no namespace for them, so they are `ui.*` - a script naming
+`emu.paused`, `pad.lamps` or `pad.haptics` is refused by both the format
+validator (`unknown check namespace`) and this adapter (an unadvertised check),
+and the accepted ADR is unchanged.
 
 ## Running the emulator-side checks
 

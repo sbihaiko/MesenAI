@@ -127,7 +127,7 @@ public class GuiTestHookPlayerStateTests
 			items.Select(item => item!.GetValue<string>()).ToArray());
 	}
 
-	//`pad.haptics` counts the tick requests the menu made on the pad in hand, recorded at the
+	//`ui.haptics` counts the tick requests the menu made on the pad in hand, recorded at the
 	//HapticTickOutput seam (#1106), and "since the last step" means since the request that
 	//started it: a state read in between (a wait polls state, ADR-0272 item 4) consumes nothing.
 	[AvaloniaFact]

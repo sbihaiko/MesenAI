@@ -327,7 +327,7 @@
           "id": "after-game.order-favorites",
           "role": "under-test",
           "precondition": "by hand: the ring is on play.home.continue",
-          "expect": "Favorites follows Continue when the shelf exists (ADR-0268 Decision 6). (manual: needs control play.home.favorites, which mesen-gui does not advertise)",
+          "expect": "Favorites follows Continue when the shelf exists (ADR-0268 Decision 6). (manual: needs variant settings.profile=history-one-favorite, which mesen-gui does not advertise - the shelf's own id `play.home.favorites` exists, but only that seeded profile puts a game on it)",
           "severity": "major",
           "mode": "manual"
         },
@@ -335,7 +335,7 @@
           "id": "after-game.order-recent",
           "role": "under-test",
           "precondition": "by hand: the ring is on play.home.favorites",
-          "expect": "Recent follows Favorites (Continue, Favorites, Recent; ADR-0268 Decision 6). (manual: needs control play.home.recent, control play.home.favorites, which mesen-gui does not advertise)",
+          "expect": "Recent follows Favorites (Continue, Favorites, Recent; ADR-0268 Decision 6). (manual: needs variant settings.profile=history-one-favorite, which mesen-gui does not advertise - the ids `play.home.favorites` and `play.home.recent` exist, but only that seeded profile puts a game on them)",
           "severity": "major",
           "mode": "manual"
         },
@@ -343,7 +343,7 @@
           "id": "after-game.order-open-rom",
           "role": "under-test",
           "precondition": "by hand: the ring is on play.home.recent",
-          "expect": "Open a ROM is reachable last. (manual: needs control play.home.recent, which mesen-gui does not advertise)",
+          "expect": "Open a ROM is reachable last. (manual: needs variant settings.profile=history-one-favorite, which mesen-gui does not advertise - the id `play.home.recent` exists, but only that seeded profile puts a game on it)",
           "severity": "major",
           "mode": "manual"
         },
@@ -367,7 +367,7 @@
           "id": "after-game.contained-up-recent",
           "role": "under-test",
           "precondition": "by hand: the ring is on play.home.recent",
-          "expect": "Repeated D-pad Up from Recent never leaves the Home host for the header's Profile or Tools buttons (#1137, #1166). (manual: needs control play.home.recent, which mesen-gui does not advertise)",
+          "expect": "Repeated D-pad Up from Recent never leaves the Home host for the header's Profile or Tools buttons (#1137, #1166). (manual: needs variant settings.profile=history-one-favorite, which mesen-gui does not advertise - the id `play.home.recent` exists, but only that seeded profile puts a game on it)",
           "severity": "major",
           "mode": "manual"
         },
@@ -375,7 +375,7 @@
           "id": "after-game.contained-up-favorites",
           "role": "under-test",
           "precondition": "by hand: the ring is on play.home.favorites",
-          "expect": "Repeated D-pad Up from Favorites never leaves the Home host for the header's Profile or Tools buttons (#1137, #1166). (manual: needs control play.home.favorites, which mesen-gui does not advertise)",
+          "expect": "Repeated D-pad Up from Favorites never leaves the Home host for the header's Profile or Tools buttons (#1137, #1166). (manual: needs variant settings.profile=history-one-favorite, which mesen-gui does not advertise - the id `play.home.favorites` exists, but only that seeded profile puts a game on it)",
           "severity": "major",
           "mode": "manual"
         },
@@ -822,7 +822,7 @@
           "id": "fav.home-shelf-shown",
           "role": "under-test",
           "precondition": "by hand: the screen is play.home",
-          "expect": "FAV-01: Home shows a Favorites shelf between Continue and Recent, newest favorite first. (manual: needs control play.home.favorites, which mesen-gui does not advertise)",
+          "expect": "FAV-01: Home shows a Favorites shelf between Continue and Recent, newest favorite first. (manual: needs variant settings.profile=history-one-favorite, which mesen-gui does not advertise - the shelf's own id `play.home.favorites` exists, but only that seeded profile shows it)",
           "severity": "major",
           "mode": "manual"
         },
@@ -878,7 +878,7 @@
           "id": "fav2.x-on-favorite-tile",
           "role": "under-test",
           "precondition": "by hand: the ring is on play.home.favorite",
-          "expect": "FAV-02: X acts on the focused cover; on a Home favorite tile it toggles that game, the ring stays on the shelf and the Favorites shelf stays visible (two favorites, so the shelf survives the toggle; ADR-0268 Decision 4). (manual: needs control play.home.favorites, control play.home.favorite, which mesen-gui does not advertise)",
+          "expect": "FAV-02: X acts on the focused cover; on a Home favorite tile it toggles that game, the ring stays on the shelf and the Favorites shelf stays visible (two favorites, so the shelf survives the toggle; ADR-0268 Decision 4). (manual: needs variant settings.profile=history-two-favorites, control play.home.favorite, which mesen-gui does not advertise - the shelf's own id `play.home.favorites` exists, but only that seeded profile puts two favorites on it)",
           "severity": "major",
           "mode": "manual"
         },
@@ -918,7 +918,7 @@
           "id": "fav2.down-recent",
           "role": "under-test",
           "precondition": "by hand: the ring is on play.home.favorite",
-          "expect": "FAV-02: Down reaches the Recent grid. (manual: needs control play.home.recent, control play.home.favorite, which mesen-gui does not advertise)",
+          "expect": "FAV-02: Down reaches the Recent grid. (manual: needs variant settings.profile=history-two-favorites, control play.home.favorite, which mesen-gui does not advertise - the id `play.home.recent` exists, but only that seeded profile puts a game on it)",
           "severity": "major",
           "mode": "manual"
         },
@@ -926,7 +926,7 @@
           "id": "fav2.down-open-rom",
           "role": "under-test",
           "precondition": "by hand: the ring is on play.home.recent",
-          "expect": "FAV-02: Down reaches Open a ROM. (manual: needs control play.home.recent, which mesen-gui does not advertise)",
+          "expect": "FAV-02: Down reaches Open a ROM. (manual: needs variant settings.profile=history-two-favorites, which mesen-gui does not advertise - the id `play.home.recent` exists, but only that seeded profile puts a game on it)",
           "severity": "major",
           "mode": "manual"
         },
