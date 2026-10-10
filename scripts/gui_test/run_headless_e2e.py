@@ -16,6 +16,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 CASE = "GuiTestHook_e2e_a_runner_drives_the_Home_over_the_socket"
+TIMEOUT_SECONDS = 900  # a hung dotnet must fail the run, never block it
 SUMMARY = re.compile(r"(Passed|Failed)!\s*-\s*Failed:\s*(\d+),\s*Passed:\s*(\d+),\s*Skipped:\s*(\d+),\s*Total:\s*(\d+)")
 
 
@@ -32,11 +33,19 @@ def verdict(output):
 
 def run(rid, core_lib):
     env = {**os.environ, "MESEN_CORE_LIB": core_lib}
-    done = subprocess.run(
-        ["dotnet", "test", "UI.HeadlessTests", f"-p:RuntimeIdentifier={rid}", "--filter", f"FullyQualifiedName~{CASE}"],
-        cwd=ROOT, env=env, capture_output=True, text=True,
-    )
-    return verdict(done.stdout + done.stderr), done.stdout + done.stderr
+    try:
+        done = subprocess.run(
+            ["dotnet", "test", "UI.HeadlessTests", f"-p:RuntimeIdentifier={rid}", "--filter", f"FullyQualifiedName~{CASE}"],
+            cwd=ROOT, env=env, capture_output=True, text=True, timeout=TIMEOUT_SECONDS,
+        )
+    except subprocess.TimeoutExpired as ex:
+        partial = ex.stdout.decode(errors="replace") if isinstance(ex.stdout, bytes) else (ex.stdout or "")
+        return [f"dotnet test did not finish within {TIMEOUT_SECONDS}s"], partial
+    output = done.stdout + done.stderr
+    reasons = verdict(output)
+    if done.returncode != 0:
+        reasons.append(f"dotnet test exited {done.returncode}")
+    return reasons, output
 
 
 def main(argv):

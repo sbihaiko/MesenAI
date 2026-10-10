@@ -28,6 +28,9 @@ CHECKS = ["ui.screen", "ui.focused", "ui.visible", "ui.dialogs"]
 PROFILES = ["fresh"]
 FIXTURE_KINDS = {"settings", "rom", "files", "note"}
 LISTENING = "test hook listening on"
+ASK_TIMEOUT = 30  # seconds a single hook answer may take before the step fails (ADR-0272 item 4: no wait may hang the run)
+WAIT_HOST_TIMEOUT = 60  # host-time watchdog of a wait(), whatever the tick counter does
+PRESS_GRACE = 10  # the key manager registers a moment after the window opens: a first press may see "unknown button"
 
 
 class AdapterError(Exception):
@@ -94,28 +97,36 @@ def resolve_fixtures(fixtures, workdir, binary):
             raise FixtureError(f"rom fixture {path} sha1 {have} is not the expected {want}")
     launched = _clone_app_folder(binary, Path(workdir) / "app")
     home = launched.parent
-    settings = {}  # portable mode, fresh profile: LibraryFolders stays absent so the first run starts at Home
+    # A settings.json that exists without a UiMode key is the upgrade path (Advanced), which leaves Play Home; a
+    # missing file is the fresh-unzip path (Player) but the clone must carry one, so the key is written.
+    # LibraryFolders stays absent without a rom, so the first run starts at Home.
+    settings = {"Preferences": {"UiMode": "Player"}}
     if rom is not None:
         # Only through the profile, never argv (ADR-0272 item 6): the ROM is a library tile.
         library = home / "library"
         library.mkdir(parents=True, exist_ok=True)
         (library / path.name).write_bytes(path.read_bytes())
-        settings["Preferences"] = {"LibraryFolders": [str(library)]}  # PreferencesConfig.LibraryFolders, PascalCase keys
-    (home / "settings.json").write_text(json.dumps(settings, indent=2) + "\n" if settings else "{}\n")
+        settings["Preferences"]["LibraryFolders"] = [str(library)]  # PreferencesConfig.LibraryFolders, PascalCase keys
+    (home / "settings.json").write_text(json.dumps(settings, indent=2) + "\n")
     for item in fixtures.get("files") or []:
         src = Path(item.get("src", ""))
         if not src.is_file():
             raise FixtureError(f"file fixture missing: {src}")
-        dest = home / item["dest"]
+        rel = item.get("dest")
+        if not rel or Path(rel).is_absolute() or ".." in Path(rel).parts:
+            raise FixtureError(f"file fixture destination must be a relative path inside the app home: {rel!r}")
+        dest = home / rel
         dest.parent.mkdir(parents=True, exist_ok=True)
         dest.write_bytes(src.read_bytes())
     return launched
 
 
 class MesenGuiAdapter:
-    def __init__(self, binary=None, workdir=None, connect_timeout=30):
+    def __init__(self, binary=None, workdir=None, connect_timeout=30, out_dir=None):
         self.binary = binary or os.environ.get("MESEN_GUI_BINARY", "")
-        self.workdir = Path(workdir) if workdir else None
+        # out_dir: the fork's supervised worker names the run's output folder; it is the workdir unless one is given.
+        self.workdir = Path(workdir) if workdir else (Path(out_dir) if out_dir else None)
+        self.out_dir = Path(out_dir) if out_dir else None
         self.connect_timeout = connect_timeout
 
     def capabilities(self):
@@ -158,6 +169,7 @@ class Session:
         self._sock = None
         self._file = None
         self._id = 0
+        self.press_grace = PRESS_GRACE
         if process is None:
             self.connect(5)
 
@@ -175,6 +187,7 @@ class Session:
                 if time.monotonic() > deadline:
                     raise Unavailable("the hook did not answer on " + self.endpoint)
                 time.sleep(0.05)
+        sock.settimeout(ASK_TIMEOUT)
         self._sock = sock
         self._file = sock.makefile("rw", encoding="utf-8", newline="\n")
         hello = self._ask("hello")
@@ -191,7 +204,10 @@ class Session:
         self._id += 1
         self._file.write(json.dumps({"id": self._id, "token": self.token, "op": op, **fields}) + "\n")
         self._file.flush()
-        line = self._file.readline()
+        try:
+            line = self._file.readline()
+        except (TimeoutError, socket.timeout):
+            raise AdapterError(f"{op}: the hook did not answer within {ASK_TIMEOUT}s")
         if not line:
             raise AdapterError("the hook closed the connection (process crash?)")
         answer = json.loads(line)
@@ -202,7 +218,16 @@ class Session:
     def inject(self, action, args):
         if action not in ACTIONS:
             raise AdapterError(f"action {action!r} is not advertised by mesen-gui")
-        self._ask("inject", action=action, args=args)
+        deadline = time.monotonic() + self.press_grace
+        while True:
+            try:
+                self._ask("inject", action=action, args=args)
+                return
+            except AdapterError as ex:
+                # Right after launch the backend's key lookup answers nothing yet; that is not a wrong button.
+                if "unknown button" not in str(ex) or time.monotonic() > deadline:
+                    raise
+                time.sleep(0.1)
 
     def check(self, name, args):
         if name not in CHECKS:
@@ -234,19 +259,27 @@ class Session:
         if ident not in ids:
             raise UnknownId(ident)
 
-    def wait(self, condition, timeout_ticks):
-        match = re.fullmatch(r"(ui\.screen|ui\.focused) == (\S+)", condition.strip())
-        if not match:
-            raise AdapterError(f"unsupported wait condition {condition!r}")
-        key = "screen" if match.group(1) == "ui.screen" else "focus"
+    def wait(self, condition, timeout_ticks, host_timeout=WAIT_HOST_TIMEOUT):
+        """condition None is a tick-only wait: "met" once timeout_ticks have passed. Either way a frozen
+        tick counter cannot hang the run: host_timeout seconds end the wait as "timeout"."""
+        key = want = None
+        if condition is not None:
+            match = re.fullmatch(r"(ui\.screen|ui\.focused) == (\S+)", condition.strip())
+            if not match:
+                raise AdapterError(f"unsupported wait condition {condition!r}")
+            key = "screen" if match.group(1) == "ui.screen" else "focus"
+            want = match.group(2)
+        deadline = time.monotonic() + host_timeout
         start = None
         while True:
             state = self._ask("state")
-            if state.get(key) == match.group(2):
+            if key is not None and state.get(key) == want:
                 return "met"
             if start is None:
                 start = state["tick"]
             if state["tick"] >= start + timeout_ticks:
+                return "met" if key is None else "timeout"
+            if time.monotonic() > deadline:
                 return "timeout"
             time.sleep(0.02)
 

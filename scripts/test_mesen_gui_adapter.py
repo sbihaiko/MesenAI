@@ -68,6 +68,35 @@ class PlaceFixtures(unittest.TestCase):
         launched = adapter.resolve_fixtures({}, self.work, self.exe)
         self.assertNotIn("LibraryFolders", (launched.parent / "settings.json").read_text())
 
+    def test_the_fresh_profile_starts_in_player_mode_so_the_app_stays_on_play_home(self):
+        # An existing settings.json without UiMode is the upgrade path (Advanced), which leaves Play Home.
+        launched = adapter.resolve_fixtures({}, self.work, self.exe)
+        settings = json.loads((launched.parent / "settings.json").read_text())
+        self.assertEqual(settings["Preferences"]["UiMode"], "Player")
+
+    def test_a_rom_fixture_keeps_player_mode_next_to_the_library_folder(self):
+        rom = self.root / "g.nes"
+        rom.write_bytes(b"abc")
+        launched = adapter.resolve_fixtures({"rom": {"path": str(rom), "sha1": hashlib.sha1(b"abc").hexdigest()}}, self.work, self.exe)
+        settings = json.loads((launched.parent / "settings.json").read_text())
+        self.assertEqual(settings["Preferences"]["UiMode"], "Player")
+
+    def test_a_files_destination_outside_the_home_is_refused(self):
+        src = self.root / "a.txt"
+        src.write_text("x")
+        for dest in ("../escape.txt", "/tmp/escape-1183.txt", "a/../../escape.txt"):
+            with self.subTest(dest=dest):
+                with self.assertRaises(adapter.FixtureError):
+                    adapter.resolve_fixtures({"files": [{"src": str(src), "dest": dest}]}, self.work, self.exe)
+        self.assertFalse((self.work / "escape.txt").exists())
+        self.assertFalse(Path("/tmp/escape-1183.txt").exists())
+
+    def test_a_files_item_without_a_destination_is_a_fixture_error(self):
+        src = self.root / "a.txt"
+        src.write_text("x")
+        with self.assertRaises(adapter.FixtureError):
+            adapter.resolve_fixtures({"files": [{"src": str(src)}]}, self.work, self.exe)
+
     def test_rom_fixture_with_the_wrong_sha1_is_refused(self):
         rom = self.root / "g.nes"
         rom.write_bytes(b"abc")

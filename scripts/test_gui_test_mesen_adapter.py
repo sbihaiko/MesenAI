@@ -14,6 +14,7 @@ import sys
 import tempfile
 import textwrap
 import threading
+import time
 import unittest
 from pathlib import Path
 
@@ -36,6 +37,8 @@ class FakeHook:
         self.tick = 0
         self.known = ["play.home", "play.home.continue", "play.home.open-rom"]
         self.requests = []
+        self.frozen = False  # a stalled UI thread: the hook answers but the tick never moves
+        self.unknown_presses = 0  # the first N presses answer like a key manager that is not up yet
         self.extra_controls = []  # controls appended after `known`, e.g. a hidden twin of an id
         self.quit = threading.Event()
         self.server = socket.socket(socket.AF_UNIX)
@@ -64,7 +67,7 @@ class FakeHook:
         if op == "hello":
             out.update(hook=1, ops=["hello", "state", "inject", "capture", "quit"], namespaces=["pad", "ui"])
         elif op == "state":
-            self.tick += 3
+            self.tick += 0 if self.frozen else 3
             out.update(
                 screen="play.home", dialogs=[], focus=self.focus, tick=self.tick, frames=0,
                 controls=[{"id": i, "enabled": True, "visible": True, "focused": i == self.focus} for i in self.known] + self.extra_controls,
@@ -72,6 +75,9 @@ class FakeHook:
         elif op == "inject":
             if req["action"] != "pad.press":
                 return {"id": req["id"], "ok": False, "error": "unknown action " + req["action"]}
+            if self.unknown_presses > 0:
+                self.unknown_presses -= 1
+                return {"id": req["id"], "ok": False, "error": "unknown button " + req["args"]["button"] + " on pad 1"}
             if req["args"]["button"] == "Up":
                 self.focus = "play.home.open-rom"
         elif op == "capture":
@@ -146,6 +152,32 @@ class AdapterContract(Base):
     def test_wait_times_out_without_raising_and_counts_ticks_not_seconds(self):
         self.assertEqual(self.session.wait("ui.focused == play.home.open-rom", 9), "timeout")
         self.assertLessEqual(self.hook.tick, 9 + 3 * 2)
+
+    def test_a_tick_only_wait_counts_ticks_and_is_met(self):
+        before = self.hook.tick
+        self.assertEqual(self.session.wait(None, 9), "met")
+        self.assertGreaterEqual(self.hook.tick, before + 9)
+
+    def test_wait_has_a_host_time_deadline_when_the_tick_never_advances(self):
+        self.hook.frozen = True
+        began = time.monotonic()
+        self.assertEqual(self.session.wait("ui.focused == play.home.open-rom", 50, host_timeout=0.3), "timeout")
+        self.assertLess(time.monotonic() - began, 5)
+
+    def test_a_tick_only_wait_also_has_the_host_deadline(self):
+        self.hook.frozen = True
+        self.assertEqual(self.session.wait(None, 50, host_timeout=0.3), "timeout")
+
+    def test_the_first_press_waits_for_the_key_manager_instead_of_failing(self):
+        self.hook.unknown_presses = 2
+        self.session.inject("pad.press", {"button": "Up", "ticks": 2})
+        self.assertEqual(self.session.wait("ui.focused == play.home.open-rom", 120), "met")
+
+    def test_a_button_that_stays_unknown_fails_after_the_grace_period(self):
+        self.hook.unknown_presses = 10**6
+        self.session.press_grace = 0.3
+        with self.assertRaises(adapter.AdapterError):
+            self.session.inject("pad.press", {"button": "Nope", "ticks": 2})
 
     def test_capture_is_a_png_with_path_size_and_sha256(self):
         shot = self.session.capture(self.tmp / "a.png")
@@ -222,7 +254,7 @@ class AdapterE2E(unittest.TestCase):
             # HOME does not isolate the app; the fresh profile is a settings.json next to the cloned binary.
             clone = Path(session.argv[0])
             self.assertEqual(clone.parent, self.tmp / "run" / "app")
-            self.assertEqual((clone.parent / "settings.json").read_text(), "{}\n")
+            self.assertEqual(json.loads((clone.parent / "settings.json").read_text()), {"Preferences": {"UiMode": "Player"}})
             self.assertTrue(session.log_text().startswith("test hook listening on"))
         finally:
             session.teardown()
@@ -307,6 +339,52 @@ class HeadlessRunnerVerdict(unittest.TestCase):
     def test_the_case_name_matches_the_adapters_headless_case(self):
         self.assertEqual("GuiTestHookTests." + runner.CASE, adapter.HEADLESS_E2E_CASE)
         self.assertIn(runner.CASE, (ROOT / "UI.HeadlessTests" / "GuiTestHookTests.cs").read_text())
+
+
+class HeadlessRunnerRealCall(unittest.TestCase):
+    """run() really spawns `dotnet`: a stand-in on PATH proves the exit code, the timeout and the skip rule end to end."""
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp(prefix="g1183r-", dir="/tmp"))
+        self.addCleanup(lambda: __import__("shutil").rmtree(self.tmp, True))
+        self.lib = self.tmp / "core.lib"
+        self.lib.write_bytes(b"x")
+        old = dict(os.environ)
+        self.addCleanup(lambda: (os.environ.clear(), os.environ.update(old)))
+        os.environ["PATH"] = str(self.tmp) + os.pathsep + os.environ["PATH"]
+        os.environ["MESEN_CORE_LIB"] = str(self.lib)
+
+    def dotnet(self, body, code=0):
+        exe = self.tmp / "dotnet"
+        exe.write_text("#!/bin/sh\n" + body + f"\nexit {code}\n")
+        exe.chmod(0o755)
+
+    def summary(self, failed, passed, skipped):
+        return HeadlessRunnerVerdict.line(failed, passed, skipped)
+
+    def test_a_passing_summary_exits_zero(self):
+        self.dotnet(f"echo '{self.summary(0, 1, 0)}'")
+        self.assertEqual(runner.main(["x"]), 0)
+
+    def test_a_passing_summary_with_a_failing_exit_code_fails(self):
+        self.dotnet(f"echo '{self.summary(0, 1, 0)}'", code=1)
+        self.assertEqual(runner.main(["x"]), 1)
+
+    def test_a_skipped_case_fails_the_call(self):
+        self.dotnet(f"echo '{self.summary(0, 0, 1)}'")
+        self.assertEqual(runner.main(["x"]), 1)
+
+    def test_a_hung_dotnet_is_killed_and_fails(self):
+        self.dotnet("sleep 30")
+        runner.TIMEOUT_SECONDS, old = 0.5, runner.TIMEOUT_SECONDS
+        self.addCleanup(lambda: setattr(runner, "TIMEOUT_SECONDS", old))
+        began = time.monotonic()
+        self.assertEqual(runner.main(["x"]), 1)
+        self.assertLess(time.monotonic() - began, 10)
+
+    def test_without_the_core_library_the_call_fails(self):
+        del os.environ["MESEN_CORE_LIB"]
+        self.assertEqual(runner.main(["x"]), 2)
 
 
 class HeadlessWiring(unittest.TestCase):
