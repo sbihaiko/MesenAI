@@ -68,6 +68,7 @@ namespace Mesen.Tests.Play
 		{
 			PadWalkObservation o = Clean() with {
 				IsRoot = true, BackLeft = false,
+				Available = new HashSet<PlayAction> { PlayAction.Confirm, PlayAction.Settings },
 				BarByFocus = new[] { ("Continue", (IReadOnlyList<PlayBarEntry>?)PlayBarDeclarations.Home, false) },
 			};
 			Assert.Empty(PadWalk.Judge(o));

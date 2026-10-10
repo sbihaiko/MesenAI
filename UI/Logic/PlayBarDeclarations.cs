@@ -10,17 +10,20 @@ namespace Mesen.Logic;
 //Each list is a statement about code that exists: Home's A starts Continue (or
 //opens the library on a first run); the library's Y, LB/RB and B are the bridge's
 //(ADR-0264 Decision 3); W-P4's A presses a row and its B resumes. Home has no
-//Back - the pad's B does nothing there, as Esc does.
+//Back - the pad's B does nothing there, as Esc does. Both homes name Y Settings
+//(#1177): with no game loaded it opens the Settings sheet (W-P8).
 public static class PlayBarDeclarations
 {
 	public static readonly IReadOnlyList<PlayBarEntry> None = Array.Empty<PlayBarEntry>();
 
 	public static readonly IReadOnlyList<PlayBarEntry> HomeFirstRun = new[] {
 		new PlayBarEntry(PlayAction.Confirm, "BarOpenGame"),
+		new PlayBarEntry(PlayAction.Settings, "BarSettings"),
 	};
 
 	public static readonly IReadOnlyList<PlayBarEntry> Home = new[] {
 		new PlayBarEntry(PlayAction.Confirm, "BarPlay"),
+		new PlayBarEntry(PlayAction.Settings, "BarSettings"),
 	};
 
 	public static readonly IReadOnlyList<PlayBarEntry> Library = new[] {

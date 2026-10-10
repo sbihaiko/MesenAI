@@ -2265,6 +2265,7 @@
 		<Message ID="BarAddFolder">Add</Message>
 		<Message ID="BarRemoveFolder">Remove</Message>
 		<Message ID="BarSearch">Search</Message>
+		<Message ID="BarSettings">Settings</Message>
 		<Message ID="BarFavorite">Favorite</Message>
 		<Message ID="BarUnfavorite">Unfavorite</Message>
 		<Message ID="BarClearSearch">Clear search</Message>

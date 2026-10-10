@@ -918,6 +918,19 @@ namespace Mesen.Windows
 					FocusLibrarySearch();
 				}
 
+				//#1177 (ADR-0256, W-P8): Y on the Play home, with no game loaded, opens
+				//the Settings sheet - the pad's way to it, since the home draws no
+				//Settings control. Read off the same Y code the library's Search uses;
+				//the two never fire together because the library sheet being up is
+				//"another surface up" here. B from the sheet returns home through the
+				//Esc router the pad's B shares.
+				if(authority && _keyboard is null
+					&& PlayPadNavigation.OpensSettingsFromHome(InPlayDoor, _model.RecentGames.Visible, _model.RomInfo.Format != RomFormat.Unknown,
+						_model.RomPicker.IsVisible || _model.IsPlaySurfaceOverGame || _model.IsPlayerSettingsVisible)
+					&& PlayPadNavigation.IsSheetEdge(PadNavControls.SheetCode(pad?.Family, pad?.Device ?? -1, PadSheetControl.Search, keyCode), pressed, _previous)) {
+					_window.OpenPlayerSettingsSheet();
+				}
+
 				//#1110 (ADR-0268 Decision 1): X toggles Favorite on the cover the ring is
 				//on - a library tile, a Home tile or Continue. A second sheet control,
 				//read off the pressed sets like Y; PlayFavoriteCover answers null (and

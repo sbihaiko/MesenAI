@@ -738,6 +738,11 @@ public class PlayPadWalkTests : IDisposable
 		if(root != window && root.Name != "PlayHomeHost") {
 			available.Add(PlayAction.Back);
 		}
+		//#1177: Y opens Settings from the home itself, a wiring with no control of
+		//its own to look up (PlayHomePadSettingsTests proves the press).
+		if(root.Name == "PlayHomeHost") {
+			available.Add(PlayAction.Settings);
+		}
 		bool Visible(string name) => root.GetVisualDescendants().OfType<Control>().Any(c => c.Name == name && c.IsEffectivelyVisible);
 		if(Visible("RomPickerSearch")) {
 			available.Add(PlayAction.Search);

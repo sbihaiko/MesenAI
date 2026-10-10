@@ -52,6 +52,15 @@ public static class PlayPadNavigation
 		return isPlayerMode && isPlayWorkspace;
 	}
 
+	//#1177 (ADR-0256, W-P8): with no game loaded the pad's Y on the Play home
+	//opens the Settings sheet. Y is the library sheet's Search while that sheet is
+	//up (ADR-0264 Decision 3) and the game's own while one is loaded, so the press
+	//is the home's only when nothing else holds the screen.
+	public static bool OpensSettingsFromHome(bool inPlayDoor, bool homeVisible, bool gameLoaded, bool otherSurfaceUp)
+	{
+		return inPlayDoor && homeVisible && !gameLoaded && !otherSurfaceUp;
+	}
+
 	//Decisions 1 and 2, stated as the predicate they actually are: the pad drives
 	//the GUI while the console is not in the player's hands. Three things say it
 	//is not, and each is a named surface - never the coarse "something is drawn

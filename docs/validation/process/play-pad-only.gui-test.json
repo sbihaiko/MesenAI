@@ -333,7 +333,7 @@
           "id": "home.settings-by-pad-gap",
           "role": "under-test",
           "precondition": "ui.screen == play.home",
-          "expect": "KNOWN GAP (P0-2, bug #1177): Settings cannot be reached by pad with no game loaded. Expected FAIL; record exactly what was tried.",
+          "expect": "Y opens the Settings sheet from Home with no game loaded (bug #1177, ADR-0256 W-P8); B returns to Home.",
           "severity": "major",
           "mode": "manual"
         }
