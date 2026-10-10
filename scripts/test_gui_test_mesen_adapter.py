@@ -21,6 +21,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts" / "gui_test"))
 
 import mesen_gui_adapter as adapter  # noqa: E402
+import run_headless_e2e as runner  # noqa: E402
 
 PNG = b"\x89PNG\r\n\x1a\nfake"
 TOKEN = "s3"
@@ -35,6 +36,7 @@ class FakeHook:
         self.tick = 0
         self.known = ["play.home", "play.home.continue", "play.home.open-rom"]
         self.requests = []
+        self.extra_controls = []  # controls appended after `known`, e.g. a hidden twin of an id
         self.quit = threading.Event()
         self.server = socket.socket(socket.AF_UNIX)
         self.server.bind(str(path))
@@ -65,7 +67,7 @@ class FakeHook:
             self.tick += 3
             out.update(
                 screen="play.home", dialogs=[], focus=self.focus, tick=self.tick, frames=0,
-                controls=[{"id": i, "enabled": True, "visible": True, "focused": i == self.focus} for i in self.known],
+                controls=[{"id": i, "enabled": True, "visible": True, "focused": i == self.focus} for i in self.known] + self.extra_controls,
             )
         elif op == "inject":
             if req["action"] != "pad.press":
@@ -103,6 +105,18 @@ class AdapterContract(Base):
         self.assertTrue(self.session.check("ui.screen", {"is": "play.home"})["passed"])
         self.assertTrue(self.session.check("ui.focused", {"is": "play.home.open-rom"})["passed"])
         self.assertTrue(self.session.check("ui.visible", {"is": "play.home.continue"})["passed"])
+
+    def test_a_duplicated_id_is_visible_when_any_copy_is_visible(self):
+        # First-run Home: the Primary Open ROM is on screen, the hidden Secondary (PlayHomeWithRecents) comes later in the tree.
+        self.hook.known = ["play.home", "play.home.open-rom"]
+        self.hook.extra_controls = [{"id": "play.home.open-rom", "enabled": True, "visible": False, "focused": False}]
+        result = self.session.check("ui.visible", {"is": "play.home.open-rom"})
+        self.assertEqual(result, {"passed": True, "observed": True})
+
+    def test_a_duplicated_id_that_is_hidden_everywhere_is_not_visible(self):
+        self.hook.known = ["play.home"]
+        self.hook.extra_controls = [{"id": "play.home.open-rom", "enabled": True, "visible": False, "focused": False}] * 2
+        self.assertFalse(self.session.check("ui.visible", {"is": "play.home.open-rom"})["passed"])
         self.assertTrue(self.session.check("ui.dialogs", {"is": []})["passed"])
 
     def test_inject_carries_the_token_and_is_acknowledged(self):
@@ -172,7 +186,8 @@ class AdapterE2E(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp(prefix="g1183e-", dir="/tmp"))
         self.addCleanup(lambda: __import__("shutil").rmtree(self.tmp, True))
-        self.app = self.tmp / "fake-app"
+        (self.tmp / "appdir").mkdir()  # the app folder is cloned into self.tmp/run, so it cannot be self.tmp itself
+        self.app = self.tmp / "appdir" / "fake-app"
         self.app.write_text(FAKE_APP.format(python=sys.executable, tests=str(ROOT / "scripts")))
         self.app.chmod(self.app.stat().st_mode | stat.S_IXUSR)
         self.rom = self.tmp / "Contra (USA).nes"
@@ -261,11 +276,37 @@ class AdapterE2E(unittest.TestCase):
             self.launch({**self.fixtures, "pack": {"path": "x"}})
 
     def test_a_binary_that_never_opens_the_hook_is_unavailable(self):
-        quiet = self.tmp / "quiet"
+        (self.tmp / "quietdir").mkdir()
+        quiet = self.tmp / "quietdir" / "quiet"
         quiet.write_text("#!/bin/sh\nexit 3\n")
         quiet.chmod(0o755)
         with self.assertRaises(adapter.Unavailable):
             adapter.MesenGuiAdapter(binary=str(quiet), workdir=self.tmp / "q", connect_timeout=2).launch(self.fixtures)
+
+
+class HeadlessRunnerVerdict(unittest.TestCase):
+    """run_headless_e2e.py reads the summary line: a skipped case must never read as a pass."""
+
+    @staticmethod
+    def line(failed, passed, skipped):
+        word = "Passed" if not failed else "Failed"
+        return f"{word}!  - Failed:     {failed}, Passed:     {passed}, Skipped:     {skipped}, Total:     {failed + passed + skipped}, Duration: 3 s"
+
+    def test_exactly_one_passed_and_none_skipped_is_a_pass(self):
+        self.assertEqual(runner.verdict(self.line(0, 1, 0)), [])
+
+    def test_a_skipped_case_is_a_failure(self):
+        self.assertTrue(runner.verdict(self.line(0, 0, 1)))
+
+    def test_a_failed_case_is_a_failure(self):
+        self.assertTrue(runner.verdict(self.line(1, 0, 0)))
+
+    def test_a_filter_that_matches_nothing_is_a_failure(self):
+        self.assertTrue(runner.verdict("No test matches the given testcase filter"))
+
+    def test_the_case_name_matches_the_adapters_headless_case(self):
+        self.assertEqual("GuiTestHookTests." + runner.CASE, adapter.HEADLESS_E2E_CASE)
+        self.assertIn(runner.CASE, (ROOT / "UI.HeadlessTests" / "GuiTestHookTests.cs").read_text())
 
 
 class HeadlessWiring(unittest.TestCase):

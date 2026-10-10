@@ -208,7 +208,10 @@ class Session:
         if name not in CHECKS:
             raise AdapterError(f"check {name!r} is not advertised by mesen-gui")
         state = self._ask("state")
-        ids = {c["id"]: c for c in state.get("controls", [])}
+        ids = {}
+        for c in state.get("controls", []):  # an id can sit on several controls (first-run vs recents Open ROM): any visible copy counts
+            seen = ids.get(c["id"])
+            ids[c["id"]] = c if seen is None or (c["visible"] and not seen["visible"]) else seen
         if name == "ui.dialogs":
             observed = state.get("dialogs", [])
             return {"passed": observed == args["is"], "observed": observed}
