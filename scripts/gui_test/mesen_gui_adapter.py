@@ -4,8 +4,29 @@
 The runner, the script format and the dashboard live in the agent-squad fork
 (item 6, P1-A); this repository owns the emulator side: this adapter and the
 in-app hook it speaks to (UI/Logic/TestHook, a line-per-JSON-object protocol over
-a local Unix socket). Pad only: the hook implements `pad.press` and the `ui.*`
-snapshot, and capabilities() advertises exactly that.
+a local Unix socket). Pad only: the hook implements the input actions below and
+the `ui.*` snapshot, and capabilities() advertises exactly that.
+
+Actions (#1281), each one executed by the hook in process - never by an OS input
+synthesiser, so a run never needs an accessibility permission and never types
+into another application:
+
+- `pad.press` - a button down for `ticks` (or `frames` while the emulated clock
+  runs), ADR-0272 item 4.
+- `pad.hold` - a button down for `ticks`, which is the only unit a hold has: the
+  GUI's own tick never freezes, so a hold is expressible while a game runs too.
+- `pad.release` - let a held button go now, which is what a two-button gesture
+  (hold A, press B) is written with.
+- `text.type` - a string typed through the on-screen keyboard the application
+  shows (the pad keyboard, ADR-0262): every character walks that keyboard's grid
+  and presses its key, so the field receives the text the way a player types it.
+- `pad.connect` / `pad.disconnect` - a pad hot-plugged on a port, which is what
+  the port lamps and the pad-loss pause are read from.
+
+Every pad action takes a `pad` index - 0 is the pad in hand, 1 the second pad -
+and the adapter writes it on the wire even when a step leaves it out. A `text.*`
+namespace is not an OS keyboard: `text.type` drives the application's own pad
+keyboard, so the only input family a run needs is still the pad.
 
 Contract, per ADR-0272 item 6: launch() resolves fixtures first and FAILS on a
 missing one, never skips; check() is an objective read of the hook's snapshot and
@@ -43,7 +64,11 @@ import time
 from pathlib import Path
 
 HEADLESS_E2E_CASE = "GuiTestHookTests.GuiTestHook_e2e_a_runner_drives_the_Home_over_the_socket"
-ACTIONS = ["pad.press"]
+PAD_ACTIONS = ["pad.press", "pad.hold", "pad.release"]
+ACTIONS = PAD_ACTIONS + ["text.type", "pad.connect", "pad.disconnect"]
+# The pad families a script can hot-plug (#1281), as the two names a person uses:
+# the Xbox-shaped button table and the PlayStation one (PadFamily.Xbox / Ps4).
+PAD_FAMILIES = ("xbox", "playstation")
 CHECKS = ["ui.screen", "ui.focused", "ui.visible", "ui.dialogs"]
 PROFILES = ["fresh"]
 FIXTURE_KINDS = {"settings", "rom", "files", "note"}
@@ -124,6 +149,52 @@ def is_size(value):
     """True when value is [width, height] with both above zero - a size, unlike the two numbers a truncated rect leaves."""
     numbers = _whole_numbers(value, 2)
     return numbers is not None and numbers[0] > 0 and numbers[1] > 0
+
+
+def _pad_index(args, action):
+    """The pad index of a pad action: 0 - the pad in hand - when the step leaves it out."""
+    pad = args.get("pad", 0)
+    if not isinstance(pad, int) or isinstance(pad, bool) or pad < 0:
+        raise AdapterError(f"{action}: pad is a pad index (0 = the pad in hand, 1 = the second pad), not {pad!r}")
+    return pad
+
+
+def action_args(action, args):
+    """The args of one action, validated here rather than left to the hook.
+
+    A malformed step is refused before the socket, the way a wrong window mode is
+    (#1255): the hook answers an error for most of these too, but a run that has
+    already launched should fail the step that was written wrong, not spend a
+    launch finding out. `pad` is written out even when a step leaves it out, so
+    the wire always says which pad an action is for."""
+    args = dict(args or {})
+    if action in PAD_ACTIONS:
+        button = args.get("button")
+        if not isinstance(button, str) or not button:
+            raise AdapterError(f"{action}: a step names the button it drives (args.button), not {button!r}")
+        args["pad"] = _pad_index(args, action)
+        if action == "pad.hold":
+            ticks = args.get("ticks")
+            if not isinstance(ticks, int) or isinstance(ticks, bool) or ticks < 1:
+                raise AdapterError(f"pad.hold: a hold is a duration in ticks (args.ticks >= 1), not {ticks!r}")
+            if "frames" in args:
+                raise AdapterError("pad.hold: a hold is counted in ticks; the emulated frame counter is pad.press's unit")
+        return args
+    if action == "text.type":
+        text = args.get("text")
+        if not isinstance(text, str) or not text:
+            raise AdapterError(f"text.type: a step names the text to type (args.text), not {text!r}")
+        return args
+    if action in ("pad.connect", "pad.disconnect"):
+        index = args.get("index")
+        if not isinstance(index, int) or isinstance(index, bool) or index < 0:
+            raise AdapterError(f"{action}: a step names the pad index it acts on (args.index >= 0), not {index!r}")
+        if "family" in args and args["family"] is not None and args["family"] not in PAD_FAMILIES:
+            raise AdapterError(f"{action}: family is one of {', '.join(PAD_FAMILIES)}, not {args['family']!r}")
+        if action == "pad.disconnect" and "family" in args:
+            raise AdapterError("pad.disconnect: the family a pad was is pad.connect's to say; a disconnect names the index")
+        return args
+    return args
 
 
 def _sha1_of_rom(path):
@@ -379,10 +450,11 @@ class Session:
     def inject(self, action, args):
         if action not in ACTIONS:
             raise AdapterError(f"action {action!r} is not advertised by mesen-gui")
+        payload = action_args(action, args)  # a malformed step fails before the socket
         deadline = time.monotonic() + self.press_grace
         while True:
             try:
-                self._ask("inject", action=action, args=args)
+                self._ask("inject", action=action, args=payload)
                 return
             except AdapterError as ex:
                 # Right after launch the backend's key lookup answers nothing yet; that is not a wrong button.

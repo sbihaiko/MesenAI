@@ -144,6 +144,18 @@ namespace Mesen.Windows
 			return Installed.TryGetValue(window, out Bridge? bridge) ? bridge.Keyboard : null;
 		}
 
+		//#1281 (text.type): the GUI test hook's door onto the same keyboard. It is
+		//production's path, not a test seam - the hook ships in every build and is
+		//inert without --test-hook - and it types through the keyboard the window
+		//already shows rather than opening one: what a step types into is the field
+		//the run put the ring on, exactly as a person would find it.
+		public static string? TypeOnKeyboard(MainWindow window, string text)
+		{
+			return Installed.TryGetValue(window, out Bridge? bridge)
+				? bridge.TypeOnKeyboard(text)
+				: "the pad bridge is not attached to this window";
+		}
+
 		//The field the open keyboard types into, or null - #1062: the claim that
 		//keeps the ring on the search box asks for a keyboard bound to THAT box.
 		//#1064: this is the shipping reader, and it is private on purpose. The
@@ -1442,6 +1454,72 @@ namespace Mesen.Windows
 						break;
 				}
 				return true;
+			}
+
+			//#1281 (text.type): the string a GUI test run asks for, typed through the
+			//one on-screen keyboard this bridge owns. Every character is the two
+			//gestures a player makes - the D-pad walks the cursor onto its key, A
+			//presses it - fed through PadKeyboard and ApplyKeyboard, so nothing here
+			//is a second typing path and the field, the draft and the panel all move
+			//exactly as they do for a person. Returns null when the text was typed,
+			//otherwise why it was not.
+			public string? TypeOnKeyboard(string text)
+			{
+				if(text.Length == 0) {
+					return "text.type takes the text to type";
+				}
+				if(_keyboard is null || _keyboardField is null) {
+					return "no on-screen keyboard is open: focus a text field and press A first";
+				}
+				foreach(char c in text) {
+					if(_keyboard is null) {
+						return "the on-screen keyboard closed while typing";
+					}
+					string? why = TypeChar(c);
+					if(why is not null) {
+						return why;
+					}
+				}
+				return null;
+			}
+
+			private string? TypeChar(char c)
+			{
+				PadKeyboard keyboard = _keyboard!;
+				if(keyboard.IndexOf(c) < 0) {
+					return "the on-screen keyboard has no key for \"" + c + "\"";
+				}
+				//A capital letter is the keyboard's case key and then the letter: the
+				//pad keyboard types lower case unless its Shift is on (PadKeyboard).
+				bool upper = char.IsUpper(c) && keyboard.Keys.Any(k => k.Kind == PadKeyKind.Shift);
+				if(upper != keyboard.Shifted) {
+					string? shifted = PressKeyAt(keyboard.Keys.ToList().FindIndex(k => k.Kind == PadKeyKind.Shift));
+					if(shifted is not null) {
+						return shifted;
+					}
+				}
+				return PressKeyAt(_keyboard?.IndexOf(c) ?? -1);
+			}
+
+			//The key at `index`, pressed the way a player presses it: the D-pad walks
+			//the cursor onto it (Right wraps, so every key is reachable) and the pad's
+			//own confirm presses it.
+			private string? PressKeyAt(int index)
+			{
+				if(index < 0 || _keyboard is null) {
+					return "the on-screen keyboard is not there to press that key";
+				}
+				for(int steps = 0; _keyboard.Cursor != index; steps++) {
+					if(steps > _keyboard.Keys.Count) {
+						return "the on-screen keyboard never moved onto that key";
+					}
+					ApplyKeyboard(PadNavAction.Right);
+					if(_keyboard is null) {
+						return "the on-screen keyboard closed while the cursor walked";
+					}
+				}
+				ApplyKeyboard(PadNavAction.Confirm);
+				return null;
 			}
 
 			//The field declares its own shape (ADR-0262 Decision 2): its mask, or

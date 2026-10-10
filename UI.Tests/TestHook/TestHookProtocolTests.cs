@@ -5,6 +5,7 @@ using System.Linq;
 using System.Net.Sockets;
 using System.Text;
 using System.Text.Json.Nodes;
+using Mesen.Logic;
 using Mesen.Logic.TestHook;
 using Xunit;
 
@@ -21,6 +22,19 @@ namespace Mesen.Tests.TestHook
 			public string? CapturedTo;
 			public int Captures;
 			public string? CaptureError;
+			//#1281 (text.type): what the application was asked to type through its
+			//own on-screen keyboard, and why it could not when it could not.
+			public readonly List<string> Typed = new();
+			public string? TypeError;
+
+			public string? TypeText(string text)
+			{
+				if(TypeError is not null) {
+					return TypeError;
+				}
+				Typed.Add(text);
+				return null;
+			}
 
 			public JsonObject State() => new JsonObject {
 				["screen"] = "play.home",
@@ -46,13 +60,18 @@ namespace Mesen.Tests.TestHook
 			public readonly List<(ushort Code, bool Down)> Calls = new();
 			public readonly FakeTarget Target = new();
 			public long? Frames;
+			//#1281: the pads a script hot-plugs, and the count the application would
+			//read - 2, as a machine with two real pads on it.
+			public uint RealPads = 2;
+			public readonly TestHookPads Pads;
 			public readonly TestHookKeys Keys;
 			public readonly TestHookProtocol Protocol;
 
 			public Rig(List<(ushort Key, bool Down)>? raised = null)
 			{
-				Keys = new TestHookKeys((code, down) => Calls.Add((code, down)), name => name switch { "Pad1 Right" => (ushort)0x1011, "Enter" => (ushort)0x0D, "Up Arrow" => (ushort)24, "1" => (ushort)35, _ => (ushort)0 }, () => Frames, raised is null ? null : (key, down) => raised.Add((key, down)));
-				Protocol = new TestHookProtocol("secret", Target, Keys);
+				Pads = new TestHookPads(() => RealPads);
+				Keys = new TestHookKeys((code, down) => Calls.Add((code, down)), name => name switch { "Pad1 Right" => (ushort)0x1011, "Enter" => (ushort)0x0D, "Up Arrow" => (ushort)24, "1" => (ushort)35, _ => (ushort)0 }, () => Frames, raised is null ? null : (key, down) => raised.Add((key, down)), Pads.FamilyOf);
+				Protocol = new TestHookProtocol("secret", Target, Keys, Pads);
 			}
 
 			public JsonObject Ask(string json) => JsonNode.Parse(Protocol.Handle(json))!.AsObject();
@@ -344,8 +363,8 @@ namespace Mesen.Tests.TestHook
 		public void An_overlapping_hold_on_one_code_keeps_it_pressed_until_the_longest_ends()
 		{
 			Rig rig = new();
-			Assert.Null(rig.Keys.Press(1, "Right", 10, null));
-			Assert.Null(rig.Keys.Press(1, "Right", 2, null));
+			Assert.Null(rig.Keys.Press(0, "Right", 10, null));
+			Assert.Null(rig.Keys.Press(0, "Right", 2, null));
 			rig.Calls.Clear();
 			for(int i = 0; i < 2; i++) {
 				rig.Keys.Advance();
@@ -411,11 +430,11 @@ namespace Mesen.Tests.TestHook
 			List<(ushort Code, bool Down)> calls = new();
 			//Only the DirectInput spelling exists on this backend.
 			TestHookKeys keys = new((code, down) => calls.Add((code, down)), name => name == "Joy1 DPad Up" ? (ushort)0x2001 : name == "Joy1 But2" ? (ushort)0x2002 : name == "Joy1 But3" ? (ushort)0x2003 : (ushort)0, () => null);
-			Assert.Null(keys.Press(1, "Up", 1, null));
-			Assert.Null(keys.Press(1, "Confirm", 1, null));
-			Assert.Null(keys.Press(1, "Back", 1, null));
+			Assert.Null(keys.Press(0, "Up", 1, null));
+			Assert.Null(keys.Press(0, "Confirm", 1, null));
+			Assert.Null(keys.Press(0, "Back", 1, null));
 			Assert.Equal(new ushort[] { 0x2001, 0x2002, 0x2003 }, calls.Select(c => c.Code));
-			Assert.NotNull(keys.Press(1, "Nonsense", 1, null));
+			Assert.NotNull(keys.Press(0, "Nonsense", 1, null));
 		}
 
 		[Fact]
@@ -423,7 +442,7 @@ namespace Mesen.Tests.TestHook
 		{
 			Rig rig = new();
 			rig.Frames = 100;
-			Assert.Null(rig.Keys.Press(1, "Right", null, 10));
+			Assert.Null(rig.Keys.Press(0, "Right", null, 10));
 			rig.Frames = null;
 			rig.Keys.Advance();
 			Assert.Equal(new[] { ((ushort)0x1011, true), ((ushort)0x1011, false) }, rig.Calls);
@@ -434,7 +453,7 @@ namespace Mesen.Tests.TestHook
 		{
 			Rig rig = new();
 			rig.Frames = 5000;
-			Assert.Null(rig.Keys.Press(1, "Right", null, 10));
+			Assert.Null(rig.Keys.Press(0, "Right", null, 10));
 			rig.Frames = 3;
 			rig.Keys.Advance();
 			Assert.Equal(new[] { ((ushort)0x1011, true), ((ushort)0x1011, false) }, rig.Calls);
@@ -448,6 +467,167 @@ namespace Mesen.Tests.TestHook
 			JsonObject answer = rig.Ask("{\"id\":9,\"token\":\"secret\",\"op\":\"capture\",\"path\":\"/tmp/x.png\"}");
 			Assert.False(answer["ok"]!.GetValue<bool>());
 			Assert.Contains("game is loaded", answer["error"]!.GetValue<string>());
+		}
+
+		//#1281: the actions beside pad.press - hold, release, text and the two
+		//hot-plug ones. The hook is what executes them; no step reaches an OS input
+		//path, and the pad index every pad action takes is a device index: 0 is the
+		//pad in the hand (ADR-0272 section 4's "device 0"), 1 the second pad.
+		[Fact]
+		public void The_namespaces_advertise_the_text_actions_beside_pad_key_and_ui()
+		{
+			Rig rig = new();
+			JsonObject answer = rig.Ask("{\"id\":1,\"token\":\"secret\",\"op\":\"hello\"}");
+			List<string> namespaces = new();
+			foreach(JsonNode? one in answer["namespaces"]!.AsArray()) {
+				namespaces.Add(one!.GetValue<string>());
+			}
+			Assert.Equal(new[] { "key", "pad", "text", "ui" }, System.Linq.Enumerable.OrderBy(namespaces, n => n, StringComparer.Ordinal));
+		}
+
+		[Fact]
+		public void The_pad_index_is_the_device_index_and_zero_is_the_pad_in_the_hand()
+		{
+			Rig rig = new();
+			//No pad named: device 0, the pad in hand, which the backend calls "Pad1".
+			Assert.True(rig.Ask("{\"id\":2,\"token\":\"secret\",\"op\":\"inject\",\"action\":\"pad.press\",\"args\":{\"button\":\"Right\",\"ticks\":1}}")["ok"]!.GetValue<bool>());
+			Assert.Equal(new[] { ((ushort)0x1011, true) }, rig.Calls);
+			//Pad 1 is the second pad: another device, whose buttons this backend has
+			//no name for, so the press is refused rather than sent to the wrong pad.
+			JsonObject second = rig.Ask("{\"id\":3,\"token\":\"secret\",\"op\":\"inject\",\"action\":\"pad.press\",\"args\":{\"pad\":1,\"button\":\"Right\",\"ticks\":1}}");
+			Assert.False(second["ok"]!.GetValue<bool>());
+			Assert.Contains("pad 2", second["error"]!.GetValue<string>());
+			Assert.Single(rig.Calls);
+		}
+
+		[Fact]
+		public void A_hold_keeps_the_button_down_for_its_ticks_and_a_release_ends_it_early()
+		{
+			Rig rig = new();
+			Assert.True(rig.Ask("{\"id\":4,\"token\":\"secret\",\"op\":\"inject\",\"action\":\"pad.hold\",\"args\":{\"button\":\"Right\",\"ticks\":5}}")["ok"]!.GetValue<bool>());
+			Assert.Equal(new[] { ((ushort)0x1011, true) }, rig.Calls);
+			rig.Keys.Advance();
+			rig.Keys.Advance();
+			Assert.Single(rig.Calls);
+			//A release lets the same button go before its hold ran out - one press of
+			//a two-button gesture (hold A, press B) ends this way.
+			Assert.True(rig.Ask("{\"id\":5,\"token\":\"secret\",\"op\":\"inject\",\"action\":\"pad.release\",\"args\":{\"button\":\"Right\"}}")["ok"]!.GetValue<bool>());
+			Assert.Equal(new[] { ((ushort)0x1011, true), ((ushort)0x1011, false) }, rig.Calls);
+			//The hold that was let go does not let go a second time when its ticks
+			//would have run out.
+			rig.Keys.Advance();
+			rig.Keys.Advance();
+			rig.Keys.Advance();
+			Assert.Equal(2, rig.Calls.Count);
+		}
+
+		[Fact]
+		public void A_hold_is_counted_in_ticks_even_while_the_emulated_clock_runs()
+		{
+			Rig rig = new();
+			rig.Frames = 500;
+			//The clock running is what makes pad.press refuse ticks; a hold has no
+			//frame form at all - the GUI's tick never freezes - so it is still valid.
+			Assert.True(rig.Ask("{\"id\":6,\"token\":\"secret\",\"op\":\"inject\",\"action\":\"pad.hold\",\"args\":{\"button\":\"Right\",\"ticks\":2}}")["ok"]!.GetValue<bool>());
+			rig.Keys.Advance();
+			rig.Frames = 900;
+			rig.Keys.Advance();
+			Assert.Equal(new[] { ((ushort)0x1011, true), ((ushort)0x1011, false) }, rig.Calls);
+		}
+
+		[Fact]
+		public void A_hold_without_a_duration_and_a_release_of_no_button_are_errors()
+		{
+			Rig rig = new();
+			JsonObject noTicks = rig.Ask("{\"id\":7,\"token\":\"secret\",\"op\":\"inject\",\"action\":\"pad.hold\",\"args\":{\"button\":\"Right\"}}");
+			Assert.False(noTicks["ok"]!.GetValue<bool>());
+			Assert.Contains("ticks", noTicks["error"]!.GetValue<string>());
+			JsonObject noButton = rig.Ask("{\"id\":8,\"token\":\"secret\",\"op\":\"inject\",\"action\":\"pad.release\",\"args\":{}}");
+			Assert.False(noButton["ok"]!.GetValue<bool>());
+			Assert.Contains("unknown button", noButton["error"]!.GetValue<string>());
+			Assert.Empty(rig.Calls);
+		}
+
+		[Fact]
+		public void A_release_puts_a_button_up_that_no_hold_is_keeping_down()
+		{
+			Rig rig = new();
+			//A button the hook never held: the release is a no-op, not a wrong button
+			//name and not a failed step.
+			Assert.True(rig.Ask("{\"id\":9,\"token\":\"secret\",\"op\":\"inject\",\"action\":\"pad.release\",\"args\":{\"button\":\"Right\"}}")["ok"]!.GetValue<bool>());
+			Assert.Equal(new[] { ((ushort)0x1011, false) }, rig.Calls);
+		}
+
+		[Fact]
+		public void Text_type_goes_to_the_application_s_own_on_screen_keyboard()
+		{
+			Rig rig = new();
+			Assert.True(rig.Ask("{\"id\":10,\"token\":\"secret\",\"op\":\"inject\",\"action\":\"text.type\",\"args\":{\"text\":\"zel\"}}")["ok"]!.GetValue<bool>());
+			Assert.Equal(new[] { "zel" }, rig.Target.Typed);
+			//Nothing reached a key code: the text is typed through the keyboard the
+			//application shows, not by pressing keys into it.
+			Assert.Empty(rig.Calls);
+		}
+
+		[Fact]
+		public void A_text_the_application_cannot_type_is_the_step_s_own_failure()
+		{
+			Rig rig = new();
+			rig.Target.TypeError = "no on-screen keyboard is open: focus a text field and press A first";
+			JsonObject answer = rig.Ask("{\"id\":11,\"token\":\"secret\",\"op\":\"inject\",\"action\":\"text.type\",\"args\":{\"text\":\"zel\"}}");
+			Assert.False(answer["ok"]!.GetValue<bool>());
+			Assert.Contains("no on-screen keyboard is open", answer["error"]!.GetValue<string>());
+			//An empty text is a step that asks for nothing.
+			JsonObject empty = rig.Ask("{\"id\":12,\"token\":\"secret\",\"op\":\"inject\",\"action\":\"text.type\",\"args\":{\"text\":\"\"}}");
+			Assert.False(empty["ok"]!.GetValue<bool>());
+			Assert.Empty(rig.Target.Typed);
+		}
+
+		[Fact]
+		public void A_hot_plug_moves_the_connected_count_the_application_reads()
+		{
+			Rig rig = new();
+			//A run that never touches this reads the backend's own count: nothing here
+			//replaces a real pad.
+			Assert.Equal(2u, rig.Pads.Count);
+			Assert.True(rig.Ask("{\"id\":13,\"token\":\"secret\",\"op\":\"inject\",\"action\":\"pad.connect\",\"args\":{\"index\":0,\"family\":\"xbox\"}}")["ok"]!.GetValue<bool>());
+			Assert.Equal(1u, rig.Pads.Count);
+			Assert.Equal(PadFamily.Xbox, rig.Pads.FamilyOf(0));
+			Assert.True(rig.Ask("{\"id\":14,\"token\":\"secret\",\"op\":\"inject\",\"action\":\"pad.connect\",\"args\":{\"index\":1,\"family\":\"playstation\"}}")["ok"]!.GetValue<bool>());
+			Assert.Equal(2u, rig.Pads.Count);
+			Assert.True(rig.Ask("{\"id\":15,\"token\":\"secret\",\"op\":\"inject\",\"action\":\"pad.disconnect\",\"args\":{\"index\":0}}")["ok"]!.GetValue<bool>());
+			Assert.Equal(1u, rig.Pads.Count);
+			//A disconnected pad is back to the default family, never left naming the
+			//buttons of a pad that is gone.
+			Assert.Equal(PadFamily.Xbox, rig.Pads.FamilyOf(0));
+		}
+
+		[Fact]
+		public void A_connect_without_a_family_is_the_default_one_and_a_stranger_is_refused()
+		{
+			Rig rig = new();
+			Assert.True(rig.Ask("{\"id\":16,\"token\":\"secret\",\"op\":\"inject\",\"action\":\"pad.connect\",\"args\":{\"index\":0}}")["ok"]!.GetValue<bool>());
+			Assert.Equal(PadFamily.Xbox, rig.Pads.FamilyOf(0));
+			JsonObject stranger = rig.Ask("{\"id\":17,\"token\":\"secret\",\"op\":\"inject\",\"action\":\"pad.connect\",\"args\":{\"index\":1,\"family\":\"nintendo\"}}");
+			Assert.False(stranger["ok"]!.GetValue<bool>());
+			Assert.Contains("nintendo", stranger["error"]!.GetValue<string>());
+			JsonObject noIndex = rig.Ask("{\"id\":18,\"token\":\"secret\",\"op\":\"inject\",\"action\":\"pad.disconnect\",\"args\":{}}");
+			Assert.False(noIndex["ok"]!.GetValue<bool>());
+		}
+
+		[Fact]
+		public void A_playstation_pad_resolves_its_own_directinput_spelling_first()
+		{
+			//A backend that defines both spellings, as Windows does: the family a pad
+			//was connected with is the one its buttons are read in.
+			List<(ushort Code, bool Down)> calls = new();
+			TestHookPads pads = new(() => 0);
+			Assert.Null(pads.Connect(0, "playstation"));
+			TestHookKeys keys = new((code, down) => calls.Add((code, down)), name => name switch {
+				"Pad1 Up" => (ushort)0x1001, "Joy1 DPad Up" => (ushort)0x2001, _ => (ushort)0
+			}, () => null, null, pads.FamilyOf);
+			Assert.Null(keys.Press(0, "Up", 1, null));
+			Assert.Equal(new[] { ((ushort)0x2001, true) }, calls);
 		}
 
 		[Fact]

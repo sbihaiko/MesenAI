@@ -40,6 +40,12 @@ class FakeHook:
         self.frozen = False  # a stalled UI thread: the hook answers but the tick never moves
         self.unknown_presses = 0  # the first N presses answer like a key manager that is not up yet
         self.extra_controls = []  # controls appended after `known`, e.g. a hidden twin of an id
+        # #1281: the input actions beside pad.press. `pads` is the simulated hot-plug
+        # set the hook's pad bridge would carry, `typed` every string text.type asked
+        # the on-screen keyboard for, `held` the buttons the hook is holding down.
+        self.pads = {}
+        self.typed = []
+        self.held = set()
         #1255: where the run's windows are, and the display they must stay inside. The
         #env knobs let a launched stand-in app report a window the adapter must refuse.
         self.window_position = [int(os.environ.get("FAKE_WINDOW_X", 40)), int(os.environ.get("FAKE_WINDOW_Y", 60))]
@@ -76,7 +82,7 @@ class FakeHook:
         out = {"id": req["id"], "ok": True}
         op = req["op"]
         if op == "hello":
-            out.update(hook=1, ops=["hello", "state", "inject", "capture", "quit"], namespaces=["pad", "ui"])
+            out.update(hook=1, ops=["hello", "state", "inject", "capture", "quit"], namespaces=["pad", "key", "text", "ui"])
         elif op == "state":
             self.tick += 0 if self.frozen else 3
             out.update(
@@ -91,16 +97,46 @@ class FakeHook:
                           "frame": self.window_frame}] + self.windows,
             )
         elif op == "inject":
-            if req["action"] != "pad.press":
-                return {"id": req["id"], "ok": False, "error": "unknown action " + req["action"]}
-            if self.unknown_presses > 0:
-                self.unknown_presses -= 1
-                return {"id": req["id"], "ok": False, "error": "unknown button " + req["args"]["button"] + " on pad 1"}
-            if req["args"]["button"] == "Up":
-                self.focus = "play.home.open-rom"
+            return self.inject(req, out)
         elif op == "capture":
             Path(req["path"]).write_bytes(PNG)
             out.update(path=req["path"], size=[2, 2], sha256=hashlib.sha256(PNG).hexdigest())
+        return out
+
+    def inject(self, req, out):
+        """The hook's `inject` (UI/Logic/TestHook/TestHookProtocol.Inject), refused the way it refuses."""
+        action, args = req["action"], req["args"]
+
+        def refuse(error):
+            return {"id": req["id"], "ok": False, "error": error}
+
+        if action == "text.type":
+            self.typed.append(args["text"])
+            return out
+        if action in ("pad.connect", "pad.disconnect"):
+            index = args["index"]
+            if action == "pad.connect":
+                self.pads[index] = args.get("family") or "xbox"
+            else:
+                self.pads.pop(index, None)
+            return out
+        if action not in ("pad.press", "pad.hold", "pad.release"):
+            return refuse("unknown action " + action)
+        pad = args.get("pad", 0)
+        if self.unknown_presses > 0 and action != "pad.release":
+            self.unknown_presses -= 1
+            return refuse("unknown button " + args["button"] + " on pad " + str(pad + 1))
+        key = (pad, args["button"])
+        if action == "pad.press" and "ticks" not in args and "frames" not in args:
+            return refuse("the emulated clock is not running: write the press in ticks")
+        if action == "pad.hold" and args.get("ticks", 0) < 1:
+            return refuse("pad.hold takes a duration in ticks")
+        if action == "pad.release":
+            self.held.discard(key)
+        else:
+            self.held.add(key)
+            if args["button"] == "Up" and pad == 0:
+                self.focus = "play.home.open-rom"
         return out
 
 
@@ -114,10 +150,26 @@ class Base(unittest.TestCase):
         self.addCleanup(self.session.close)
 
 
+# One valid step per advertised action, so "every advertised action runs" is asked
+# of each one with the args its own signature takes (#1281) rather than one shape
+# guessed for all of them.
+ACTION_ARGS = {
+    "pad.press": {"button": "Up", "ticks": 2},
+    "pad.hold": {"button": "Up", "ticks": 8},
+    "pad.release": {"button": "Up"},
+    "text.type": {"text": "zel"},
+    "pad.connect": {"index": 1, "family": "playstation"},
+    "pad.disconnect": {"index": 1},
+}
+
+
 class AdapterContract(Base):
-    def test_capabilities_are_pad_only_and_name_only_what_is_implemented(self):
+    def test_capabilities_are_the_input_actions_the_hook_implements_and_nothing_else(self):
         caps = adapter.MesenGuiAdapter().capabilities()
-        self.assertEqual(caps["actions"], ["pad.press"])
+        self.assertEqual(caps["actions"], ["pad.press", "pad.hold", "pad.release",
+                                           "text.type", "pad.connect", "pad.disconnect"])
+        # text.type drives the app's own on-screen keyboard (the pad keyboard), so the
+        # only input family a run needs is still the pad: no OS keyboard, no pointer.
         self.assertEqual(caps["input_families"], ["pad"])
         self.assertEqual(set(caps["checks"]), set(adapter.CHECKS))
         self.assertEqual(caps["variants"], {"window.mode": ["windowed"]})
@@ -125,7 +177,7 @@ class AdapterContract(Base):
     def test_every_advertised_action_and_check_runs(self):
         caps = adapter.MesenGuiAdapter().capabilities()
         for action in caps["actions"]:
-            self.session.inject(action, {"button": "Up", "ticks": 2})
+            self.session.inject(action, dict(ACTION_ARGS[action]))
         self.assertTrue(self.session.check("ui.screen", {"is": "play.home"})["passed"])
         self.assertTrue(self.session.check("ui.focused", {"is": "play.home.open-rom"})["passed"])
         self.assertTrue(self.session.check("ui.visible", {"is": "play.home.continue"})["passed"])
@@ -212,6 +264,128 @@ class AdapterContract(Base):
     def test_teardown_sends_quit_and_reports_nothing_unrestored(self):
         self.assertEqual(self.session.teardown(), [])
         self.assertTrue(self.hook.quit.wait(5))
+
+
+class InputActions(Base):
+    """#1281: pad.hold, pad.release, text.type and the two pad hot-plug actions.
+
+    Every one of them is a step the run command writes and the hook executes: the
+    adapter validates the args, the wire carries them, and the hook - not an OS
+    input synthesiser - is what acts on them. The fake hook answers like the real
+    protocol does, so a shape the hook would refuse is refused here too.
+    """
+
+    def injects(self, action, args):
+        """The inject request this call put on the wire - the last one the hook saw."""
+        before = len(self.hook.requests)
+        self.session.inject(action, args)
+        sent = [r for r in self.hook.requests[before:] if r["op"] == "inject"]
+        self.assertEqual(len(sent), 1, f"{action} did not reach the hook exactly once")
+        return sent[0]
+
+    def test_pad_hold_carries_the_button_the_duration_in_ticks_and_the_pad(self):
+        sent = self.injects("pad.hold", {"button": "Down", "ticks": 8})
+        self.assertEqual(sent["action"], "pad.hold")
+        # The pad index is always on the wire, 0 when the step did not name one: 0 is
+        # the pad in hand, which is what a one-pad script drives.
+        self.assertEqual(sent["args"], {"button": "Down", "ticks": 8, "pad": 0})
+        self.assertEqual(self.hook.held, {(0, "Down")})
+
+    def test_the_second_pad_is_index_one(self):
+        sent = self.injects("pad.hold", {"pad": 1, "button": "Up", "ticks": 4})
+        self.assertEqual(sent["args"]["pad"], 1)
+        self.assertEqual(self.hook.held, {(1, "Up")})
+        # Pad 1 is another device: its Up is not the pad-in-hand's, so the ring does not move.
+        self.assertEqual(self.hook.focus, "play.home.continue")
+
+    def test_pad_hold_holds_the_button_down_for_the_ticks_it_was_given(self):
+        self.injects("pad.hold", {"button": "Down", "ticks": 3})
+        self.assertIn((0, "Down"), self.hook.held)
+
+    def test_pad_release_lets_the_held_button_go(self):
+        self.injects("pad.hold", {"button": "A", "ticks": 100})
+        self.assertEqual(self.hook.held, {(0, "A")})
+        self.injects("pad.release", {"button": "A"})
+        self.assertEqual(self.hook.held, set())
+
+    def test_pad_release_names_the_pad_it_releases(self):
+        self.injects("pad.hold", {"pad": 1, "button": "A", "ticks": 100})
+        self.injects("pad.release", {"pad": 1, "button": "A"})
+        self.assertEqual(self.hook.held, set())
+
+    def test_text_type_sends_the_string_to_the_on_screen_keyboard(self):
+        sent = self.injects("text.type", {"text": "zel"})
+        self.assertEqual(sent["args"], {"text": "zel"})
+        self.assertEqual(self.hook.typed, ["zel"])
+
+    def test_pad_connect_carries_the_index_and_the_family(self):
+        sent = self.injects("pad.connect", {"index": 1, "family": "playstation"})
+        self.assertEqual(sent["args"], {"index": 1, "family": "playstation"})
+        self.assertEqual(self.hook.pads, {1: "playstation"})
+
+    def test_pad_connect_without_a_family_is_the_default_one(self):
+        self.injects("pad.connect", {"index": 0})
+        self.assertEqual(self.hook.pads, {0: "xbox"})
+
+    def test_pad_disconnect_removes_the_pad_it_names(self):
+        self.injects("pad.connect", {"index": 0})
+        self.injects("pad.disconnect", {"index": 0})
+        self.assertEqual(self.hook.pads, {})
+
+    def test_a_pad_action_with_no_button_is_refused_before_the_socket(self):
+        for action in ("pad.press", "pad.hold", "pad.release"):
+            with self.assertRaises(adapter.AdapterError) as raised:
+                self.session.inject(action, {"ticks": 2})
+            self.assertIn("button", str(raised.exception))
+        self.assertEqual([r for r in self.hook.requests if r["op"] == "inject"], [])
+
+    def test_a_hold_without_a_duration_is_refused_before_the_socket(self):
+        for args in ({"button": "Down"}, {"button": "Down", "ticks": 0}, {"button": "Down", "frames": 4}):
+            with self.assertRaises(adapter.AdapterError) as raised:
+                self.session.inject("pad.hold", dict(args))
+            self.assertIn("ticks", str(raised.exception))
+        self.assertEqual([r for r in self.hook.requests if r["op"] == "inject"], [])
+
+    def test_a_pad_index_that_is_not_a_whole_number_is_refused(self):
+        for pad in (-1, "1", 1.5, True):
+            with self.assertRaises(adapter.AdapterError) as raised:
+                self.session.inject("pad.hold", {"button": "Up", "ticks": 2, "pad": pad})
+            self.assertIn("pad", str(raised.exception))
+        self.assertEqual([r for r in self.hook.requests if r["op"] == "inject"], [])
+
+    def test_text_type_without_text_is_refused_before_the_socket(self):
+        for args in ({}, {"text": ""}, {"text": 3}):
+            with self.assertRaises(adapter.AdapterError) as raised:
+                self.session.inject("text.type", dict(args))
+            self.assertIn("text", str(raised.exception))
+        self.assertEqual([r for r in self.hook.requests if r["op"] == "inject"], [])
+
+    def test_a_family_the_hook_does_not_know_is_refused_before_the_socket(self):
+        with self.assertRaises(adapter.AdapterError) as raised:
+            self.session.inject("pad.connect", {"index": 0, "family": "nintendo"})
+        self.assertIn("nintendo", str(raised.exception))
+        self.assertEqual([r for r in self.hook.requests if r["op"] == "inject"], [])
+
+    def test_connect_and_disconnect_need_an_index_and_disconnect_takes_no_family(self):
+        with self.assertRaises(adapter.AdapterError) as raised:
+            self.session.inject("pad.connect", {"family": "xbox"})
+        self.assertIn("index", str(raised.exception))
+        with self.assertRaises(adapter.AdapterError) as raised:
+            self.session.inject("pad.disconnect", {"index": 0, "family": "xbox"})
+        self.assertIn("family", str(raised.exception))
+        self.assertEqual([r for r in self.hook.requests if r["op"] == "inject"], [])
+
+    def test_a_hold_the_hook_refuses_is_the_step_s_failure_not_a_silent_pass(self):
+        """A button the backend has no code for: refused by the hook, and the run fails the step."""
+        self.hook.unknown_presses = 10**6
+        self.session.press_grace = 0.3
+        with self.assertRaises(adapter.AdapterError) as raised:
+            self.session.inject("pad.hold", {"button": "Nope", "ticks": 2})
+        self.assertIn("unknown button", str(raised.exception))
+
+    def test_the_module_docstring_names_the_actions_it_advertises(self):
+        for action in adapter.ACTIONS:
+            self.assertIn(action, adapter.__doc__ or "", f"{action} is not documented in the adapter's own docstring")
 
 
 class WindowMode(unittest.TestCase):

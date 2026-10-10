@@ -181,8 +181,16 @@ namespace Mesen.Windows
 			//shown without activation, so a person typing elsewhere keeps typing.
 			TestHookActivation.Confine(window);
 			WindowTarget target = new(window);
-			TestHookKeys keys = new(InputApi.SetInjectedKey, keyCode ?? InputApi.GetKeyCode, RunningFrames, target.RaiseKey);
-			TestHookProtocol protocol = new(options.Token, target, keys);
+			//#1281 (pad.connect / pad.disconnect): the pads a script hot-plugs. The
+			//window reads the count back off this one function, so the port lamps and
+			//the pad-loss pause see a step's connect the way they see a real pad's -
+			//and until a script touches it, it is the backend's own count (the
+			//function captured here), so nothing about a real pad changes.
+			Func<uint>? backendCount = PadCount(window);
+			TestHookPads pads = new(backendCount);
+			TestHookKeys keys = new(InputApi.SetInjectedKey, keyCode ?? InputApi.GetKeyCode, RunningFrames, target.RaiseKey, pads.FamilyOf);
+			TestHookProtocol protocol = new(options.Token, target, keys, pads);
+			SetPadCount(window, () => pads.Count);
 			_server = TestHookServer.Start(options.Endpoint, line => Dispatcher.UIThread.InvokeAsync(() => protocol.Handle(line)).GetAwaiter().GetResult());
 			_keys = keys;
 			TestHookServer server = _server;
@@ -193,8 +201,29 @@ namespace Mesen.Windows
 				server.Dispose();
 				_keys = null;
 				_server = null;
+				if(backendCount is not null) {
+					SetPadCount(window, backendCount);
+				}
 			});
 		}
+
+		//#1281: the connected-pad count the application reads (the shell's port lamps
+		//and the pad-loss pause both poll it), swapped for the hook's own while a run
+		//is up and put back when it ends. Null on a window that has no view model -
+		//nothing to swap, and a script's own count still works.
+		private static Func<uint>? PadCount(Window window)
+		{
+			return ViewModel(window)?.ConnectedGamepadCount;
+		}
+
+		private static void SetPadCount(Window window, Func<uint> count)
+		{
+			if(ViewModel(window) is ViewModels.MainWindowViewModel model) {
+				model.ConnectedGamepadCount = count;
+			}
+		}
+
+		private static ViewModels.MainWindowViewModel? ViewModel(Window window) => window.DataContext as ViewModels.MainWindowViewModel;
 
 		private sealed class Stopper : IDisposable
 		{
@@ -345,6 +374,17 @@ namespace Mesen.Windows
 					at = at.GetVisualParent();
 				}
 				return null;
+			}
+
+			//#1281 (text.type): the string typed through the on-screen keyboard the
+			//application shows - the pad keyboard the bridge owns - never an OS input
+			//path and never a pixel: the field's own text is what changes, and the
+			//keyboard panel is repainted the way a player's own presses repaint it.
+			public string? TypeText(string text)
+			{
+				return _window is MainWindow main
+					? PlayPadNavigationWiring.TypeOnKeyboard(main, text)
+					: "the window this hook was started for has no pad bridge";
 			}
 
 			//Rendered from the window's own visual tree, so the desktop and every
