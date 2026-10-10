@@ -90,6 +90,7 @@
 			<Control ID="lblPlayHomeDropTitle">Drop a game here</Control>
 			<Control ID="lblPlayHomeDropSubtitle">or open one.</Control>
 			<Control ID="btnPlayHomeOpenRom">Open a ROM…</Control>
+			<Control ID="btnPlayHomeSettings">Settings</Control>
 			<Control ID="lblPlayHomeContinueHeader">Continue playing</Control>
 			<Control ID="btnPlayHomeContinue">Continue</Control>
 			<Control ID="lblPlayHomeRecentHeader">Recent</Control>

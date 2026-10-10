@@ -293,6 +293,33 @@ public class PlayPadWalkTests : IDisposable
 		Assert.Equal(ClaimsInWiring, new Arbiter(window).ClaimCount);
 	}
 
+	//#1177: with no game loaded the pad drives the GUI (ADR-0256 Decision 2), and
+	//#1137 left the header unpadded, so Settings needs a door inside the home host.
+	//Pad presses only: walk the ring until it lands on the Settings button, then
+	//press Confirm.
+	[AvaloniaTheory]
+	[InlineData("Home")]
+	[InlineData("HomeFirstRun")]
+	public void A_pad_alone_opens_Settings_from_the_home(string surface)
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		(MainWindow window, MainWindowViewModel model, _, _) = Open(surface);
+		//Home: Up from Continue to the header row, then along it. First run: one press Down.
+		PadNavAction[] walk = surface == "Home"
+			? new[] { PadNavAction.Up, PadNavAction.Right, PadNavAction.Right }
+			: new[] { PadNavAction.Down };
+		bool OnSettings() => (window.FocusManager?.GetFocusedElement() as Control)?.Name?.StartsWith("PlayHomeSettings") == true;
+		foreach(PadNavAction action in walk) {
+			if(!OnSettings()) {
+				Press(window, action);
+			}
+		}
+		bool reached = OnSettings();
+		Assert.True(reached, $"{surface}: the pad never landed on PlayHomeSettings; it ended on {(window.FocusManager?.GetFocusedElement() as Control)?.Name}");
+		Press(window, PadNavAction.Confirm);
+		Assert.True(WaitUntil(() => model.IsPlayerSettingsVisible), $"{surface}: Confirm on PlayHomeSettings did not open Settings");
+	}
+
 	private (MainWindow Window, MainWindowViewModel Model, Func<bool> IsUp, bool IsRoot) Open(string surface)
 	{
 		if(surface == "Home" || surface == "HomeFirstRun") {

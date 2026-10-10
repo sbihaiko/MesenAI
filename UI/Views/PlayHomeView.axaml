@@ -20,13 +20,18 @@
 
 		<!--W-P1, true first run (no recents): one primary action (rule 2: 1
 		control), and a sentence that says what happens next (rule 10).-->
-		<StackPanel Name="PlayHomeFirstRun" Width="460" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0 0 0 70" IsVisible="{Binding ShowFirstRunHome}">
+		<StackPanel Name="PlayHomeFirstRun" Width="460" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0 0 0 26" IsVisible="{Binding ShowFirstRunHome}">
 			<Border Name="PlayHomeFirstRunBadge" Classes="badge large" HorizontalAlignment="Center">
 				<PathIcon Data="{StaticResource PlayerIconPlay}" />
 			</Border>
 			<TextBlock Name="PlayHomeDropTitle" Classes="large-title" Text="{l:Translate lblPlayHomeDropTitle}" HorizontalAlignment="Center" Margin="0 32 0 0" />
 			<TextBlock Classes="headline secondary" FontWeight="Normal" Text="{l:Translate lblPlayHomeDropSubtitle}" HorizontalAlignment="Center" Margin="0 8 0 0" />
 			<Button Name="PlayHomeOpenRomPrimary" Classes="primary large" Width="220" Content="{l:Translate btnPlayHomeOpenRom}" HorizontalAlignment="Center" Margin="0 26 0 0" Click="OnOpenRom" />
+			<!--#1177: the pad's door to Settings. The header is unpadded (#1137), so a
+			pad with no game loaded reaches Settings from inside the home host. The
+			panel's bottom margin gave back this button's height (70 -> 26), so the
+			primary action keeps its place on screen.-->
+			<Button Name="PlayHomeSettings" Classes="secondary" Width="220" Content="{l:Translate btnPlayHomeSettings}" HorizontalAlignment="Center" Margin="0 12 0 0" Click="OnOpenSettings" />
 			<TextBlock Name="PlayHomeOrientation" Classes="secondary" Text="{Binding FirstRunOrientation}" IsVisible="{Binding FirstRunOrientation.Length}" TextWrapping="Wrap" LineHeight="18" Margin="0 46 0 0" />
 		</StackPanel>
 
@@ -58,7 +63,9 @@
 				</Style>
 			</DockPanel.Styles>
 			<DockPanel DockPanel.Dock="Top" Margin="0 0 0 14">
-				<Button Name="PlayHomeOpenRomSecondary" AutomationProperties.AutomationId="play.home.open-rom" Classes="secondary" DockPanel.Dock="Right" VerticalAlignment="Top" Click="OnOpenRom">
+<!--#1177: the pad's door to Settings, beside Open a ROM… (see the first run).-->
+				<Button Name="PlayHomeSettingsSecondary" Classes="secondary" DockPanel.Dock="Right" VerticalAlignment="Top" Margin="10 0 0 0" Content="{l:Translate btnPlayHomeSettings}" Click="OnOpenSettings" />
+								<Button Name="PlayHomeOpenRomSecondary" AutomationProperties.AutomationId="play.home.open-rom" Classes="secondary" DockPanel.Dock="Right" VerticalAlignment="Top" Click="OnOpenRom">
 					<StackPanel Orientation="Horizontal">
 						<PathIcon Classes="leading" Data="{StaticResource PlayerIconFolder}" />
 						<TextBlock Text="{l:Translate btnPlayHomeOpenRom}" />

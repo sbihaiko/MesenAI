@@ -57,6 +57,13 @@ namespace Mesen.Views
 			}
 		}
 
+		//#1177: Settings from the home, for a pad with no game loaded. The same
+		//sheet the Tools menu and W-P4 open, through the window that owns it.
+		private void OnOpenSettings(object? sender, RoutedEventArgs e)
+		{
+			(TopLevel.GetTopLevel(this) as Mesen.Windows.MainWindow)?.OpenPlayerSettingsSheet();
+		}
+
 		//The window this home belongs to. The home's own DataContext is the
 		//recent-games list, so the sheet - one per window - is reached through
 		//the window's; a home drawn outside a MainWindow (a render, a preview)
