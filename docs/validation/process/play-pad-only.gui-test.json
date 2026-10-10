@@ -7,7 +7,8 @@
       "pad.press",
       "pad.release",
       "pad.chord",
-      "nav.goal"
+      "nav.goal",
+      "nav.sweep"
     ],
     "checks": [
       "ui.screen",
@@ -4854,12 +4855,10 @@
           "expect": "Settings is open on the Audio tab (the SET-03 precondition).",
           "severity": "major",
           "mode": "automated"
-        }
-      ],
-      "steps": [
+        },
         {
-          "id": "settings.menu-sounds-focus",
-          "role": "under-test",
+          "id": "settings-menu-sounds.menu-sounds-focus",
+          "role": "setup",
           "precondition": "ui.screen == play.settings and ui.visible == play.settings.menu-sounds",
           "action": {
             "name": "nav.goal",
@@ -4880,9 +4879,11 @@
           "expect": "SET-03: focus Menu sounds on the Audio tab; if the host has no Menu sounds row this step fails and stops only this batch.",
           "severity": "major",
           "mode": "automated"
-        },
+        }
+      ],
+      "steps": [
         {
-          "id": "settings.menu-sounds-toggle",
+          "id": "settings-menu-sounds.menu-sounds-toggle",
           "role": "under-test",
           "precondition": "ui.focused == play.settings.menu-sounds",
           "action": {
@@ -4907,7 +4908,7 @@
           "mode": "automated"
         },
         {
-          "id": "settings.menu-sounds-blips",
+          "id": "settings-menu-sounds.menu-sounds-blips",
           "role": "under-test",
           "precondition": "ui.focused == play.settings.menu-sounds",
           "expect": "SET-03: a soft blip on move, confirm and back at a fixed low level, never while a game runs unpaused (MenuSounds.ShouldPlay); the game's own audio is unaffected (ADR-0270). Judged by ear.",

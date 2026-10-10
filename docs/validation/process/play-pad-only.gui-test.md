@@ -4,7 +4,7 @@
 
 - Format: `gui-test/1`
 - Target: `mesen-gui`
-- Requires actions: `pad.press`, `pad.release`, `pad.chord`, `nav.goal`
+- Requires actions: `pad.press`, `pad.release`, `pad.chord`, `nav.goal`, `nav.sweep`
 - Requires checks: `ui.screen`, `ui.focused`, `ui.visible`, `ui.dialogs`
 - Variant `window.mode`: `windowed`, `fullscreen`
 
@@ -433,11 +433,11 @@ Setup:
 | ID | Role | Precondition | Action | Wait | Check | Expected | Variants | Severity | Mode |
 |---|---|---|---|---|---|---|---|---|---|
 | `settings-menu-sounds.reach-audio` | setup | `fixture rom and fixture settings.profiles.fresh` | `nav.goal(goal="ui.focused == play.settings.tab-audio")` | `ui.focused == play.settings.tab-audio` within 600 ticks | — | Settings is open on the Audio tab (the SET-03 precondition). | all | major | automated |
+| `settings-menu-sounds.menu-sounds-focus` | setup | `ui.screen == play.settings and ui.visible == play.settings.menu-sounds` | `nav.goal(goal="ui.focused == play.settings.menu-sounds")` | `ui.focused == play.settings.menu-sounds` within 120 ticks | `ui.focused(is="play.settings.menu-sounds")` | SET-03: focus Menu sounds on the Audio tab; if the host has no Menu sounds row this step fails and stops only this batch. | all | major | automated |
 
 Steps:
 
 | ID | Role | Precondition | Action | Wait | Check | Expected | Variants | Severity | Mode |
 |---|---|---|---|---|---|---|---|---|---|
-| `settings.menu-sounds-focus` | under-test | `ui.screen == play.settings and ui.visible == play.settings.menu-sounds` | `nav.goal(goal="ui.focused == play.settings.menu-sounds")` | `ui.focused == play.settings.menu-sounds` within 120 ticks | `ui.focused(is="play.settings.menu-sounds")` | SET-03: focus Menu sounds on the Audio tab; if the host has no Menu sounds row this step fails and stops only this batch. | all | major | automated |
-| `settings.menu-sounds-toggle` | under-test | `ui.focused == play.settings.menu-sounds` | `pad.press(button="A", ticks=4)` | `ui.focused == play.settings.menu-sounds` within 8 ticks | `ui.focused(is="play.settings.menu-sounds")` | SET-03: A toggles Menu sounds on; the focus stays on the row. | all | major | automated |
-| `settings.menu-sounds-blips` | under-test | `ui.focused == play.settings.menu-sounds` | — | — | — | SET-03: a soft blip on move, confirm and back at a fixed low level, never while a game runs unpaused (MenuSounds.ShouldPlay); the game's own audio is unaffected (ADR-0270). Judged by ear. | all | major | manual |
+| `settings-menu-sounds.menu-sounds-toggle` | under-test | `ui.focused == play.settings.menu-sounds` | `pad.press(button="A", ticks=4)` | `ui.focused == play.settings.menu-sounds` within 8 ticks | `ui.focused(is="play.settings.menu-sounds")` | SET-03: A toggles Menu sounds on; the focus stays on the row. | all | major | automated |
+| `settings-menu-sounds.menu-sounds-blips` | under-test | `ui.focused == play.settings.menu-sounds` | — | — | — | SET-03: a soft blip on move, confirm and back at a fixed low level, never while a game runs unpaused (MenuSounds.ShouldPlay); the game's own audio is unaffected (ADR-0270). Judged by ear. | all | major | manual |
