@@ -101,6 +101,18 @@ internal sealed class PlayFocusOnOpen
 		Watch(source, properties);
 	}
 
+	//The headless suite's own way in, reached through
+	//PlayPadNavigationWiring.ContentForTest (#1232): the launch window - the
+	//content area ON SCREEN with its first control not resolvable yet - is a race
+	//against the window's own startup task, which classifies the home on a
+	//background thread, so a case that needs that state exactly asks for it there
+	//instead of racing for it. It registers the same three things the wiring does,
+	//through the same call.
+	internal void ContentForTest(INotifyPropertyChanged source, string[] properties, Func<Control?> target, Func<Control?>? root)
+	{
+		Content(source, properties, target, null, root);
+	}
+
 	private void Watch(INotifyPropertyChanged source, string[] properties)
 	{
 		source.PropertyChanged += (s, e) => {
@@ -118,7 +130,9 @@ internal sealed class PlayFocusOnOpen
 
 	//Re-arbitrate: the topmost open surface takes the focus, else the content
 	//area, else the renderer (the game's own surface, which is what has the
-	//focus while a game runs with nothing over it). Posted, because a control
+	//focus while a game runs with nothing over it) - and NOT the renderer while
+	//the content area is on screen with its first control not resolvable yet,
+	//which is a wait rather than a fallback (see Apply, #1235). Posted, because a control
 	//that is only now visible cannot take the focus in the same turn. Loaded, and
 	//NOT later: measured, a control can be found, focusable, enabled and still not
 	//yet *effectively visible* under this priority, which is why the retry below
@@ -166,7 +180,35 @@ internal sealed class PlayFocusOnOpen
 			Retry(attempt, held);
 			return;
 		}
-		if(Enter(target ?? _content?.Invoke() ?? _window.GetControl<Panel>("RendererPanel"))) {
+		if(claim is null) {
+			target = _content?.Invoke();
+			if(target is null && _contentRoot?.Invoke() is not null) {
+				//The same rule for the content half, and the same defect read the
+				//other way round (#1235). The content area is ON SCREEN - the root
+				//is what its own press stays inside, so a root that answers is a
+				//screen the player is looking at - and its first control is not
+				//resolvable yet. That is exactly what the launch window looks like:
+				//`RecentGames.Visible` is the constructor's own Player-mode `true`
+				//while the startup task has not classified the home yet, so the
+				//content area resolves to nothing at all while the home is drawn
+				//(measured: `ui.focused` reads None for the first second).
+				//
+				//Its last resort below, the renderer panel, is a focusable panel
+				//UNDER that screen, so Focus() succeeds on it while the ring is on
+				//a surface the player cannot see - the decision reads as landed, so
+				//nothing re-places the ring and a press there leaves the home
+				//without one for good. Waiting is what the surface half already
+				//does, and it is the same bounded wait: the content area's first
+				//control lands within the watch's own window in every measured case.
+				//
+				//A root that answers null is the other state - a game running with
+				//nothing over it, or a door with no content area at all - and the
+				//renderer really is the surface then: the fallback below stands.
+				Retry(attempt, held);
+				return;
+			}
+		}
+		if(Enter(target ?? _window.GetControl<Panel>("RendererPanel"))) {
 			return;
 		}
 		//#824: the retry is for whichever half of the decision produced the
