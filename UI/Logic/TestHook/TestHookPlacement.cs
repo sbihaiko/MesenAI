@@ -28,10 +28,15 @@ namespace Mesen.Logic.TestHook
 		public static bool IsAny(string? value) => value == Any;
 
 		//AppKit's activation policy only means something to a process that really
-		//has an NSWindow behind it: a headless (or non-macOS) process must not have
-		//its own activation policy retargeted.
-		public static bool NeedsActivationPolicy(bool isMacOS, string? platformDescriptor)
-			=> isMacOS && platformDescriptor == "NSWindow";
+		//owns the window server's notion of an application: the desktop app, on macOS.
+		//A headless (or non-macOS) process must not have its own activation policy
+		//retargeted, and the decision is made on what the process IS - the platform
+		//plus whether it runs the desktop lifetime - never on the platform handle's
+		//descriptor. That string is backend-private, and it is read here before the
+		//window is shown, where the backend may report nothing at all; keying off it
+		//would silently skip the policy and no test would notice.
+		public static bool NeedsActivationPolicy(bool isMacOS, bool isDesktopLifetime)
+			=> isMacOS && isDesktopLifetime;
 
 		public static int[] Rect(int x, int y, int width, int height) => new[] { x, y, width, height };
 

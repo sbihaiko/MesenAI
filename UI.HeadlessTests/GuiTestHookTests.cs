@@ -8,6 +8,7 @@ using System.Text;
 using System.Text.Json.Nodes;
 using System.Threading;
 using System.Threading.Tasks;
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
 using Avalonia.Threading;
@@ -325,9 +326,12 @@ public class GuiTestHookTests : IDisposable
 		(MainWindow window, MainWindowViewModel model) = ShowHome();
 		string endpoint = Path.Combine("/tmp", "m1255-" + Guid.NewGuid().ToString("N").Substring(0, 8), "hook.sock");
 		List<int> applied = new();
-		Func<Window, (bool, string?)> platform = TestHookActivation.DescribePlatformForTest;
+		Func<(bool, bool)> platform = TestHookActivation.DescribePlatformForTest;
 		Action<int> policy = TestHookActivation.ApplyPolicyForTest;
-		TestHookActivation.DescribePlatformForTest = _ => (true, "NSWindow");
+		//A real macOS desktop application is what the policy is for. What the
+		//process really is on this platform is pinned by
+		//A_headless_test_host_is_not_a_desktop_application below.
+		TestHookActivation.DescribePlatformForTest = () => (true, true);
 		TestHookActivation.ApplyPolicyForTest = applied.Add;
 		window.ReleaseCore = () => { };
 		try {
@@ -341,25 +345,47 @@ public class GuiTestHookTests : IDisposable
 		}
 	}
 
-	//A headless or non-macOS process has no NSWindow behind it: the test host's own
-	//activation policy is not ours to retarget.
+	//A headless or non-macOS process has no window of its own: the test host's own
+	//activation policy is not ours to retarget. Both halves of the rule are pinned,
+	//because either one alone leaves the policy applied where it does not belong.
 	[AvaloniaFact]
-	public void A_window_with_no_native_macos_handle_is_left_out_of_the_policy()
+	public void A_process_that_is_not_the_desktop_application_is_left_out_of_the_policy()
 	{
 		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
 		(MainWindow window, MainWindowViewModel model) = ShowHome();
 		List<int> applied = new();
-		Func<Window, (bool, string?)> platform = TestHookActivation.DescribePlatformForTest;
+		Func<(bool, bool)> platform = TestHookActivation.DescribePlatformForTest;
 		Action<int> policy = TestHookActivation.ApplyPolicyForTest;
-		TestHookActivation.DescribePlatformForTest = _ => (false, "Headless");
 		TestHookActivation.ApplyPolicyForTest = applied.Add;
 		try {
+			TestHookActivation.DescribePlatformForTest = () => (true, false);  // macOS, no desktop window
+			TestHookActivation.Confine(window);
+			TestHookActivation.DescribePlatformForTest = () => (false, true);  // a desktop window, not macOS
 			TestHookActivation.Confine(window);
 			Assert.Empty(applied);
 		} finally {
 			TestHookActivation.DescribePlatformForTest = platform;
 			TestHookActivation.ApplyPolicyForTest = policy;
 		}
+	}
+
+	//#1255, the real half of the rule: the decision is read off what this process
+	//IS, with no stub, on the platform the test runs on. A headless test host has
+	//no window server notion of an application, so it must never be treated as the
+	//desktop app whose activation policy is retargeted - the #1255 review's finding:
+	//a rule keyed off a platform-handle descriptor is applied or skipped by a
+	//backend-private string and no test notices which.
+	[AvaloniaFact]
+	public void A_headless_test_host_is_not_a_desktop_application()
+	{
+		Assert.SkipWhen(!NativeCore.IsAvailable, NativeCore.SkipReason ?? "");
+		//The application has to be there for the answer to mean anything: a null
+		//Application.Current would make "is not the desktop lifetime" true by
+		//accident, which is the failing mode this test exists to catch.
+		Assert.NotNull(Application.Current);
+		(bool isMacOS, bool isDesktopLifetime) = TestHookActivation.Platform;
+		Assert.Equal(OperatingSystem.IsMacOS(), isMacOS);
+		Assert.False(isDesktopLifetime, "the headless lifetime is not the desktop one, so no policy is applied here");
 	}
 
 	[AvaloniaFact]

@@ -109,16 +109,20 @@ namespace Mesen.Tests.TestHook
 		}
 
 		//The process with --test-hook opens its windows without activating. An
-		//activation policy is an AppKit notion, so it is asked for only when the
-		//process really has an NSWindow behind it: a headless run has none, and
-		//retargeting the test host's own activation policy is a change nobody asked for.
+		//activation policy is an AppKit notion, so it is asked for only by a real
+		//macOS desktop application: a headless run has no window server and no
+		//window of its own, and retargeting the test host's own activation policy
+		//is a change nobody asked for. The decision is the platform plus the kind
+		//of application this process is - never a platform-handle descriptor, which
+		//is a backend-private string that may differ (or be null) before a window is
+		//shown, so keying off it silently skips the policy.
 		[Fact]
-		public void The_activation_policy_is_only_applied_to_a_real_macos_window()
+		public void The_activation_policy_is_only_applied_by_a_desktop_app_on_macos()
 		{
-			Assert.True(TestHookPlacement.NeedsActivationPolicy(true, "NSWindow"));
-			Assert.False(TestHookPlacement.NeedsActivationPolicy(false, "NSWindow"));
-			Assert.False(TestHookPlacement.NeedsActivationPolicy(true, "Headless"));
-			Assert.False(TestHookPlacement.NeedsActivationPolicy(true, null));
+			Assert.True(TestHookPlacement.NeedsActivationPolicy(true, true));
+			Assert.False(TestHookPlacement.NeedsActivationPolicy(true, false));
+			Assert.False(TestHookPlacement.NeedsActivationPolicy(false, true));
+			Assert.False(TestHookPlacement.NeedsActivationPolicy(false, false));
 		}
 
 		[Fact]
