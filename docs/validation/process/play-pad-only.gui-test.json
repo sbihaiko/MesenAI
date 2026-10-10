@@ -55,6 +55,14 @@
       "path": "<library-large>",
       "sha1": "<no-intro sha1 per ADR-0003, filled when the adapter lands>",
       "note": "a folder with 100+ ROMs (LIB-02)"
+    },
+    "pack": {
+      "path": "<library>/EnhancementPacks/<one installed pack for the fixture ROM>",
+      "note": "exactly one installed pack matching the fixture ROM, so A on Pack opens the detail sheet W-P6 (P4-06)"
+    },
+    "pack-multi": {
+      "path": "<library>/EnhancementPacks/<two or more installed packs for the fixture ROM>",
+      "note": "2+ installed packs matching the fixture ROM, so A on Pack opens the picker W-P5 (P4-06 variant)"
     }
   },
   "batches": [
@@ -2097,7 +2105,7 @@
         {
           "id": "pause.reach-game",
           "role": "setup",
-          "precondition": "fixture rom and fixture settings.profiles.fresh",
+          "precondition": "fixture rom, fixture pack and fixture settings.profiles.fresh",
           "action": {
             "name": "nav.goal",
             "args": {
@@ -2126,12 +2134,12 @@
                 "Select",
                 "Start"
               ],
-              "ticks": 4
+              "frames": 4
             }
           },
           "wait": {
             "check": "ui.screen == play.pause",
-            "timeout_ticks": 120
+            "timeout_frames": 120
           },
           "check": {
             "name": "ui.screen",
@@ -2335,12 +2343,12 @@
                 "Select",
                 "Start"
               ],
-              "ticks": 4
+              "frames": 4
             }
           },
           "wait": {
             "check": "ui.screen == play.pause",
-            "timeout_ticks": 120
+            "timeout_frames": 120
           },
           "check": {
             "name": "ui.screen",
@@ -2388,12 +2396,12 @@
                 "Select",
                 "Start"
               ],
-              "ticks": 4
+              "frames": 4
             }
           },
           "wait": {
             "check": "ui.screen == play.pause",
-            "timeout_ticks": 120
+            "timeout_frames": 120
           },
           "check": {
             "name": "ui.screen",
@@ -2581,26 +2589,52 @@
           "mode": "automated"
         },
         {
-          "id": "pause.left-right-contained",
+          "id": "pause.left-contained",
+          "role": "under-test",
+          "precondition": "ui.focused == play.pause.quit-game",
+          "action": {
+            "name": "pad.press",
+            "args": {
+              "button": "Left",
+              "ticks": 4
+            }
+          },
+          "wait": {
+            "check": "ui.focused == play.pause.quit-game",
+            "timeout_ticks": 8
+          },
+          "check": {
+            "name": "ui.focused",
+            "args": {
+              "is": "play.pause.quit-game"
+            }
+          },
+          "expect": "P4-03: Left keeps focus on the last row, no escape from W-P4.",
+          "severity": "major",
+          "mode": "automated"
+        },
+        {
+          "id": "pause.right-contained",
           "role": "under-test",
           "precondition": "ui.focused == play.pause.quit-game",
           "action": {
             "name": "pad.press",
             "args": {
               "button": "Right",
-              "ticks": 8
+              "ticks": 4
             }
           },
           "wait": {
-            "timeout_ticks": 12
+            "check": "ui.focused == play.pause.quit-game",
+            "timeout_ticks": 8
           },
           "check": {
             "name": "ui.focused",
             "args": {
-              "within": "play.pause"
+              "is": "play.pause.quit-game"
             }
           },
-          "expect": "P4-03: Left and Right keep focus inside W-P4, no escape.",
+          "expect": "P4-03: Right keeps focus on the last row, no escape from W-P4.",
           "severity": "major",
           "mode": "automated"
         },
@@ -2904,7 +2938,7 @@
         {
           "id": "pause.pack-opens",
           "role": "under-test",
-          "precondition": "ui.focused == play.pause.pack and a pack installed",
+          "precondition": "ui.focused == play.pause.pack and fixture pack",
           "action": {
             "name": "pad.press",
             "args": {
@@ -2946,16 +2980,16 @@
             }
           },
           "wait": {
-            "check": "ui.screen == play.pause",
+            "check": "ui.focused == play.pause.pack",
             "timeout_ticks": 120
           },
           "check": {
-            "name": "ui.screen",
+            "name": "ui.focused",
             "args": {
-              "is": "play.pause"
+              "is": "play.pause.pack"
             }
           },
-          "expect": "P4-06: B closes back to W-P4.",
+          "expect": "P4-06: B closes back to W-P4; focus returns to play.pause.pack.",
           "severity": "major",
           "mode": "automated"
         },
@@ -3167,16 +3201,16 @@
             }
           },
           "wait": {
-            "check": "ui.screen == play.cheats",
+            "check": "ui.focused == play.cheats.add-code",
             "timeout_ticks": 8
           },
           "check": {
-            "name": "ui.screen",
+            "name": "ui.focused",
             "args": {
-              "is": "play.cheats"
+              "is": "play.cheats.add-code"
             }
           },
-          "expect": "P4-08: B cancels a field without closing the sheet.",
+          "expect": "P4-08: B cancels a field without closing the sheet; focus returns to play.cheats.add-code.",
           "severity": "major",
           "mode": "automated"
         },
@@ -3274,16 +3308,16 @@
             }
           },
           "wait": {
-            "check": "ui.screen == play.pause",
+            "check": "ui.focused == play.pause.quit-game",
             "timeout_ticks": 8
           },
           "check": {
-            "name": "ui.screen",
+            "name": "ui.focused",
             "args": {
-              "is": "play.pause"
+              "is": "play.pause.quit-game"
             }
           },
-          "expect": "P4-09: B on the confirm dismisses it and stays on W-P4 (keep playing).",
+          "expect": "P4-09: B on the confirm dismisses it and stays on W-P4 (keep playing); focus returns to play.pause.quit-game.",
           "severity": "major",
           "mode": "automated"
         },
@@ -3451,7 +3485,7 @@
         {
           "id": "settings.display-done-reachable",
           "role": "under-test",
-          "precondition": "ui.focused within play.settings.page",
+          "precondition": "ui.screen == play.settings",
           "action": {
             "name": "pad.press",
             "args": {
@@ -3500,7 +3534,7 @@
         {
           "id": "settings.display-back-to-tab",
           "role": "setup",
-          "precondition": "ui.focused within play.settings.page",
+          "precondition": "ui.screen == play.settings",
           "action": {
             "name": "nav.goal",
             "args": {
@@ -3547,6 +3581,56 @@
           "mode": "automated"
         },
         {
+          "id": "settings.tab-left-display",
+          "role": "under-test",
+          "precondition": "ui.focused == play.settings.tab-look",
+          "action": {
+            "name": "pad.press",
+            "args": {
+              "button": "Left",
+              "ticks": 4
+            }
+          },
+          "wait": {
+            "check": "ui.focused == play.settings.tab-display",
+            "timeout_ticks": 8
+          },
+          "check": {
+            "name": "ui.focused",
+            "args": {
+              "is": "play.settings.tab-display"
+            }
+          },
+          "expect": "SET-01: Left on the tab strip goes back to display.",
+          "severity": "major",
+          "mode": "automated"
+        },
+        {
+          "id": "settings.tab-right-look-again",
+          "role": "setup",
+          "precondition": "ui.focused == play.settings.tab-display",
+          "action": {
+            "name": "pad.press",
+            "args": {
+              "button": "Right",
+              "ticks": 4
+            }
+          },
+          "wait": {
+            "check": "ui.focused == play.settings.tab-look",
+            "timeout_ticks": 8
+          },
+          "check": {
+            "name": "ui.focused",
+            "args": {
+              "is": "play.settings.tab-look"
+            }
+          },
+          "expect": "SET-01 (setup): back to the look tab for the next step.",
+          "severity": "major",
+          "mode": "automated"
+        },
+        {
           "id": "settings.look-down-into-page",
           "role": "under-test",
           "precondition": "ui.focused == play.settings.tab-look",
@@ -3573,7 +3657,7 @@
         {
           "id": "settings.look-done-reachable",
           "role": "under-test",
-          "precondition": "ui.focused within play.settings.page",
+          "precondition": "ui.screen == play.settings",
           "action": {
             "name": "pad.press",
             "args": {
@@ -3622,7 +3706,7 @@
         {
           "id": "settings.look-back-to-tab",
           "role": "setup",
-          "precondition": "ui.focused within play.settings.page",
+          "precondition": "ui.screen == play.settings",
           "action": {
             "name": "nav.goal",
             "args": {
@@ -3695,7 +3779,7 @@
         {
           "id": "settings.audio-done-reachable",
           "role": "under-test",
-          "precondition": "ui.focused within play.settings.page",
+          "precondition": "ui.screen == play.settings",
           "action": {
             "name": "pad.press",
             "args": {
@@ -3769,7 +3853,7 @@
         {
           "id": "settings.audio-back-to-tab",
           "role": "setup",
-          "precondition": "ui.focused within play.settings.page",
+          "precondition": "ui.screen == play.settings",
           "action": {
             "name": "nav.goal",
             "args": {
@@ -3842,7 +3926,7 @@
         {
           "id": "settings.controls-done-reachable",
           "role": "under-test",
-          "precondition": "ui.focused within play.settings.page",
+          "precondition": "ui.screen == play.settings",
           "action": {
             "name": "pad.press",
             "args": {
@@ -3916,7 +4000,7 @@
         {
           "id": "settings.controls-back-to-tab",
           "role": "setup",
-          "precondition": "ui.focused within play.settings.page",
+          "precondition": "ui.screen == play.settings",
           "action": {
             "name": "nav.goal",
             "args": {
@@ -3989,7 +4073,7 @@
         {
           "id": "settings.system-done-reachable",
           "role": "under-test",
-          "precondition": "ui.focused within play.settings.page",
+          "precondition": "ui.screen == play.settings",
           "action": {
             "name": "pad.press",
             "args": {
@@ -4038,7 +4122,7 @@
         {
           "id": "settings.system-back-to-tab",
           "role": "setup",
-          "precondition": "ui.focused within play.settings.page",
+          "precondition": "ui.screen == play.settings",
           "action": {
             "name": "nav.goal",
             "args": {
@@ -4312,7 +4396,7 @@
         {
           "id": "settings.size-applies-scrolls",
           "role": "under-test",
-          "precondition": "ui.focused == play.settings.interface-size",
+          "precondition": "ui.screen == play.settings",
           "expect": "SET-02: each value applies at once and only Play chrome scales, never the game picture; at Extra large the rows scroll with nothing clipped (guaranteed at 1024x640 and 512x505); record legibility at couch distance per size in the rubric. The hook exposes no values or geometry.",
           "severity": "major",
           "mode": "manual"
@@ -4328,7 +4412,7 @@
         {
           "id": "settings.menu-sounds-focus",
           "role": "setup",
-          "precondition": "ui.screen == play.settings",
+          "precondition": "ui.screen == play.settings and ui.visible == play.settings.menu-sounds",
           "action": {
             "name": "nav.goal",
             "args": {
@@ -4624,18 +4708,9 @@
           "id": "settings.system-no-native-dialog",
           "role": "under-test",
           "precondition": "ui.screen == play.settings",
-          "wait": {
-            "timeout_ticks": 4
-          },
-          "check": {
-            "name": "ui.dialogs",
-            "args": {
-              "is": []
-            }
-          },
-          "expect": "SET-06: no native OS dialog opens on the System tab.",
+          "expect": "KNOWN GAP: SET-06: no native OS dialog opens on the System tab. A native panel is not an Avalonia control, so the hook's dialogs list (app sheets, ADR-0272 §3) cannot see it; verify by eye or with the vision fallback.",
           "severity": "major",
-          "mode": "automated"
+          "mode": "manual"
         },
         {
           "id": "settings.system-rows-restart",
