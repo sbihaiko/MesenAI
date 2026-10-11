@@ -83,6 +83,25 @@ File one when you (or a subagent) find a real, reproducible bug that is
 user asks to "open a bug" / "file an issue". Architecture/trade-off decisions
 are not bugs; they go through `/adr`.
 
+**Rule — a bug is fixed ASAP and sits outside the waves** (owner decision,
+2026-10-11: bugs do not belong to waves and are fixed ASAP, and they need
+neither the `ready-for-agent` nor a `wave:NN` label):
+
+- A MesenAI product bug carries the `bug` label and nothing else from the
+  ticket vocabulary: no `wave:NN`, no `ready-for-agent`. A wave orders the
+  slices of a spec; a defect is not a slice and never waits for one.
+- The squad loop's `autobug` dispatches every open `bug` issue into the next
+  free slot, in parallel with the frontier; `autofrontier` only excludes bugs
+  from its own pick and does not pause the frontier while a bug is open. The
+  TDD RED output is posted on the issue.
+- Routing of a fork-side (agent-squad) bug is by the `fork-only` label — that
+  is the loop's live authority (`contrib/squad-goal/SKILL.md`), because without
+  it the label rule cannot protect the ticket from being dispatched as MesenAI
+  work. A fork-side bug still carries `bug` and still has no `wave:NN` and no
+  `ready-for-agent`; it also carries `fork-only`. Keep a `Fork-only work: ...`
+  line in the body as human-readable context, but do not treat that prose as
+  the routing key (a later edit can delete it silently).
+
 Use the helper rather than manual `gh` commands — it sets the initial Status
 and Priority with the board's correct IDs:
 
@@ -101,7 +120,7 @@ moving further along the board is human triage.
 ## Tickets from a spec (`/to-tickets`)
 
 Work broken out of a spec or plan with `/to-tickets` is published as GitHub
-Issues that each carry:
+Issues. Every issue that is a slice of the spec carries:
 
 - a `## Blocked by` section listing the gating issues (the squad loop and
   `scripts/stack.sh` of the `squad-goal` skill read it);
@@ -110,8 +129,9 @@ Issues that each carry:
   blockers, otherwise one more than the highest wave among its blockers. A
   wave's issues can run in parallel once the earlier waves are done; the
   squad hub sorts board cards by it. When an edge changes, move the label.
-- a type label from the repo's vocabulary when one fits (`bug` for a defect;
-  real bugs still go through `scripts/report-bug.sh`, above).
+- a type label from the repo's vocabulary when one fits. A defect is not a
+  slice: it is filed as a bug (`scripts/report-bug.sh`, above), carries no
+  wave and no `ready-for-agent`, and is fixed ASAP.
 
 The personal copy of the skill (`~/.agents/skills/to-tickets/SKILL.md`)
 carries these steps; the agent-squad fork re-vendors it into
