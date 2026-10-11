@@ -56,25 +56,27 @@ The tree is four levels deep (scenario, area, container, run or case), well insi
   - Its sub-issues are its areas, never cases.
   - Its body holds the purpose, the script link, an Areas table (area, objective in one line, case count, latest result) and the dashboard (§5).
   - It is the only issue on the board.
-  - It keeps its labels, `ready-for-agent` included.
+  - It keeps its labels, `ready-for-agent` included, and gains the type label `Test-Scenario`.
 - **Area issue.**
-  - Title: `<verdict> Area: <key>`. Label: `testarea`.
+  - Title: `<verdict> Area: <key>`. Type label: `Test-Area` (was `testarea`).
   - Body: the area's objective (§2), then a Cases table (id, expect truncated to 160 characters, action → check, severity, mode, record link), then the area dashboard (§5).
   - Its sub-issues are its containers.
 - **📋 Cases container.**
-  - Title: `📋 Cases`, or `📋 Cases (1/2)`, `📋 Cases (2/2)` and so on. No label, and never a verdict emoji.
+  - Title: `📋 Cases`, or `📋 Cases (1/2)`, `📋 Cases (2/2)` and so on. Type label: `Test-Group`, and never a verdict emoji.
   - Its sub-issues are the area's permanent case records, one issue per case.
   - Over 100 cases, the container splits by batch; a batch is never split.
 - **Case record.**
-  - Title: `<verdict> <case title>`, starting at ⚪. Labels: `testcase` and `wave:NN`, as today.
+  - Title: `<verdict> <case title>`, starting at ⚪. Labels: the type label `Test-Case` (was `testcase`) and `wave:NN`.
   - Its state follows §6.
 - **📅 Runs YYYY-MM container.**
-  - Title: `📅 Runs YYYY-MM`, the month taken from the run's `started` time in UTC. No label.
+  - Title: `📅 Runs YYYY-MM`, the month taken from the run's `started` time in UTC. Type label: `Test-Group`.
   - When a month passes 100 runs, a `📅 Runs YYYY-MM (2)` container follows.
 - **Run issue.**
-  - Label: `testrun`.
+  - Type label: `Test-Run` (was `testrun`).
   - Written once, when the run ends, and closed as completed. A re-run is a new run issue; runs are never edited after the fact.
   - A case is a row in the run issue, never a new issue per run. The owner's pick: "Linhas na issue do run".
+
+GitHub issue types are not available on a user-owned repository, so the type of an issue is a `Test-<Kind>` label, one per issue. A refresh removes the old labels (`testcase`, `testarea`, `testrun`, `gui-test-run`), so a re-publish converges. The owner chose the scheme: "assinale a issue pai como Test-Scenario e as filhas e outros subitens como Test-??? (no ??? vc escolhe o melhor termo para o nome do tipo de subitem)" (2026-10-11). It ships as fork ticket #1481.
 
 No area, container, run or record issue carries `ready-for-agent`, so the squad loop never dispatches one.
 
@@ -297,6 +299,6 @@ The Publish step's "only the parent goes on the board" stays.
 - **Cost per run.** A run costs one issue per area touched, plus one per newly failing case, instead of one comment per case. Per-case history moves from scattered comments to run issues and trend tables.
 - **Flaky bugs.** Closing a bug on the first green run means a flaky case can close and reopen bugs repeatedly. The Flaky list is the counterweight: a case that appears there needs a fix of the case, not of the product.
 - **Manual cases.** Manual records are a person's to close, so an automated run never makes a 👤 case look passed. The cost is that a scenario of mostly manual cases reads 👤 overall until it is walked.
-- **#1286 migration.** It is a one-time, resumable migration. Its body before the hand-written dashboard is saved by the coordinator. Until slice D lands, `publish` refuses the full plan through the cap check, which is today's behaviour.
+- **#1286 migration.** The owner asked for it once the slices are built: "ao final, migre a 1286 para o novo formato" (2026-10-11), after earlier choosing "Não migrar agora". It is a one-time, resumable migration. Its body before the hand-written dashboard is saved by the coordinator. Until slice D lands, `publish` refuses the full plan through the cap check, which is today's behaviour.
 - **Machine-written blocks.** Dashboards and `gui-test:run` blocks are machine-written. A hand edit of a run block corrupts that area's trend until the run issue is fixed.
-- **Mock-ups.** Example tree #1422 (label `example-layout`) and run #1420 are throwaway mock-ups. Deleting them is permanent deletion, so it waits for the owner's decision.
+- **Mock-ups.** Example tree #1422 (label `example-layout`) and run #1420 are throwaway mock-ups. The owner authorized deleting them: "apague os mockups" (2026-10-11).
