@@ -15,7 +15,9 @@ Three rules, deliberately narrow so each reads a declaration and not a mention:
       index bullet. The index is how a reader discovers an operational
       constraint they were not looking for, so a record missing from it is
       invisible — and so is a record only named inside a sentence, which is
-      why the rule reads the bullet and not the file's prose.
+      why the rule reads the bullet and not the file's prose. The bullet's
+      *entry* is the name it carries, so a name that only appears inside
+      another entry's description lists nothing either.
   (b) No en-GB spelling in `docs/squad/`, README.md included: the language
       rule is en-US for everything versioned, and the index is the one file
       every reader opens first. The rule set is the productive en-GB families
@@ -43,10 +45,12 @@ The markers of rule (c) are sentence shapes — `is merged into`, `is not merged
 into` — and never a bare mention of a merge or a deployment: a body recounting
 that the mid-work tip *was* merged into the base is describing the defect the
 record was written about, not declaring the fix live. Each marker counts only
-when its own sentence names the live tree (`local/next`, or `the live tree`): a
-fix deployed to a fork's staging branch or merged into a scratch branch is the
-state a pending Status block already claims, and reading those as live made the
-block and the body contradict each other when they in fact agree.
+when the live tree (`local/next`, or `the live tree`) directly follows it, at
+most one preposition away: a fix deployed to a fork's staging branch or merged
+into a scratch branch is the state a pending Status block already claims, and a
+live-tree word in a later clause — negated, or after a comma — is a different
+claim from the marker's own, so reading those as live made the block and the
+body contradict each other when they in fact agree.
 
 The scan is whole-file, code fences included: a record anywhere in the folder is
 the artifact under the en-US rule, and a fence is not an exemption from it.
@@ -148,10 +152,12 @@ def en_gb_spellings(line: str) -> list[str]:
 #as live got wrong.
 LIVE_TREE = r"(?:(?:the live )?`?local/next`?|(?:the )?live tree)"
 
-#The run between a marker and its target: within the marker's own sentence and no
-#further, so a '.'/':'/';' ends the search rather than letting a later mention of
-#the live tree vouch for an earlier clause about a scratch branch.
-BETWEEN_MARKER_AND_TARGET = r"[^.:;]*?"
+#Nothing sits between a marker and its target but a single optional preposition:
+#the target must directly follow the marker, so a later negated or comma-separated
+#mention of the live tree never counts. `is not merged into the fork, but the live
+#tree carries it` is a claim about the fork, and `is deployed to staging, not the
+#live tree` denies the live tree rather than naming it — reading either as the
+#marker's own target turned agreeing records into contradictions.
 
 #The body sentence that makes a Status block's `fixed` a contradiction. Narrow on
 #purpose, in two ways at once: the fix's own state, present tense, and the target
@@ -168,10 +174,10 @@ LANDED_BODY = ("is merged into", "has landed in", "is deployed to", "is deployed
 
 
 def marker_sentences(markers: tuple[str, ...]) -> tuple[tuple[str, re.Pattern[str]], ...]:
-    """Every marker with the one sentence shape that makes it count: the marker, then a live-tree
-    target inside the same sentence. One compiled pattern per marker, shared by both directions."""
+    """Every marker with the one shape that makes it count: the marker, an optional preposition, then
+    the live-tree target itself. One compiled pattern per marker, shared by both directions."""
     return tuple(
-        (marker, re.compile(re.escape(marker) + BETWEEN_MARKER_AND_TARGET + LIVE_TREE))
+        (marker, re.compile(re.escape(marker) + r"(?:\s+(?:in|into|to|on))?\s+" + LIVE_TREE))
         for marker in markers
     )
 
@@ -190,7 +196,8 @@ def body_marker(markers: tuple[tuple[str, re.Pattern[str]], ...], body: str) -> 
 PENDING_STATUS = ("pending deployment", "not deployed", "not merged", "not yet landed")
 
 #An index bullet: a list item, not the file's prose. `- `name.md` — what it is`
-#is a reader's route to the record; the same name inside a sentence is not.
+#is a reader's route to the record; the same name inside a sentence is not, and
+#neither is a name buried in another bullet's description.
 INDEX_BULLET = re.compile(r"^\s*[-*+]\s")
 
 
@@ -224,14 +231,27 @@ def body_after_status(text: str) -> str:
     return "\n".join(lines[end:])
 
 
+def index_entry(line: str) -> str | None:
+    """The record a bullet enters, read from the bullet's own first token — the backticked name after the list marker.
+
+    A name anywhere in the bullet is not an entry: a bullet whose *description* names another record neither lists nor
+    links it, so a substring test let an omitted record pass on a mention inside someone else's entry.
+    """
+    marker = INDEX_BULLET.match(line)
+    if marker is None:
+        return None
+    match = re.match(r"\s*`([^`]+)`", line[marker.end():])
+    return match.group(1) if match else None
+
+
 def check_index(squad: Path, index: Path, records: list[Path]) -> list[str]:
     if not index.is_file():
         return [f"{index.name} is missing: the folder has no index for its {len(records)} record(s)"]
-    bullets = [line for line in read(index).splitlines() if INDEX_BULLET.match(line)]
+    entries = {entry for entry in (index_entry(line) for line in read(index).splitlines()) if entry}
     return [
         f"{path.name} is not listed in {index.name}: a reader cannot discover it from the index"
         for path in records
-        if not any(f"`{path.name}`" in bullet for bullet in bullets)
+        if path.name not in entries
     ]
 
 
