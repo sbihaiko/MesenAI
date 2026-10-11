@@ -157,7 +157,7 @@
 				some 800 px from the box on a 1100 px sheet - and read as a
 				sheet-wide control instead of this field's way out.-->
 				<StackPanel DockPanel.Dock="Top" Orientation="Horizontal" HorizontalAlignment="Left" Margin="0 12 0 0" IsVisible="{Binding IsLibrarySurfaceVisible}">
-					<TextBox Name="RomPickerSearch" MinWidth="140" MaxWidth="240" Margin="0 0 8 0" VerticalAlignment="Center" Text="{Binding SearchQuery}" PlaceholderText="{l:Translate lblRomPickerSearchPlaceholder}" />
+					<TextBox Name="RomPickerSearch" AutomationProperties.AutomationId="play.library.search" MinWidth="140" MaxWidth="240" Margin="0 0 8 0" VerticalAlignment="Center" Text="{Binding SearchQuery}" PlaceholderText="{l:Translate lblRomPickerSearchPlaceholder}" />
 					<Button Name="RomPickerSearchClear" Classes="secondary regular" VerticalAlignment="Center" Content="{l:Translate btnRomPickerSearchClear}" Click="OnClearSearch" IsVisible="{Binding ShowSearchClear}" />
 				</StackPanel>
 				<TextBlock Classes="subhead secondary" DockPanel.Dock="Top" Text="{l:Translate lblRomPickerHint}" TextWrapping="Wrap" IsVisible="{Binding IsBrowseMode}" />

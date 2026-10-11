@@ -30,6 +30,7 @@ UI_VIEW = """<UserControl xmlns="https://github.com/avaloniaui">
     <Button AutomationId="play.home" />
     <Button AutomationId="play.home.open-rom" />
     <Button AutomationId="play.library" />
+    <TextBox AutomationId="play.library.search" />
   </StackPanel>
 </UserControl>
 """
@@ -87,6 +88,35 @@ class VerifyGuiTestAdapterSurface(unittest.TestCase):
         self.assertEqual(code, 1, out)
         self.assertIn("play.home.gone", out)
         self.assertIn("declares as an AutomationId", out)
+
+    def test_a_state_check_value_is_not_a_control_id(self):
+        # `ui.surface`, `ui.footer` and `ui.lamps` compare a value the hook reports, which no
+        # AutomationId declares (#1283); `ui.ring` still names a control.
+        doc = self.pilot()
+        steps = self.batch(doc, "home")["steps"]
+        step = [s for s in steps if s["id"] == "home.settings-by-pad-gap"][0]
+        self.assertEqual(step["check"]["name"], "ui.surface")
+        step["check"]["args"] = {"is": "play.settings"}
+        self.write(doc)
+        code, out = run_check(self.tmp)
+        self.assertEqual(code, 0, out)
+        ring = [s for s in steps if s["id"] == "home.ring-visible"][0]
+        ring["check"]["args"] = {"is": "play.nowhere"}
+        self.write(doc)
+        code, out = run_check(self.tmp)
+        self.assertEqual(code, 1, out)
+        self.assertIn("play.nowhere", out)
+
+    def test_an_unrecognised_check_name_still_gets_its_id_checked(self):
+        # The state checks are the allow-list of checks that do NOT name a control; every other check
+        # does, so a check added to the adapter later is never skipped silently (#1283).
+        doc = self.pilot()
+        step = [s for s in self.batch(doc, "home")["steps"] if s["id"] == "home.ring-visible"][0]
+        step["check"] = {"name": "ui.future-check", "args": {"is": "play.nowhere"}}
+        self.write(doc)
+        code, out = run_check(self.tmp)
+        self.assertEqual(code, 1, out)
+        self.assertIn("play.nowhere", out)
 
     def test_unsupported_settings_profile_is_red(self):
         doc = self.pilot()

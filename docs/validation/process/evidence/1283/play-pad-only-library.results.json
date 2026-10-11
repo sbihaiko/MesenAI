@@ -1,0 +1,471 @@
+{
+  "format": "gui-test-results/1",
+  "run_id": "20261011T055705-3d98ce",
+  "adapter": "mesen_gui_adapter:MesenGuiAdapter",
+  "adapter_name": "mesen-gui",
+  "script": {
+    "path": "docs/validation/process/play-pad-only.gui-test.json",
+    "sha256": "89de073fc601e2eb4045a33fe1297dee84576ffe262682cb6aa123e192a48e1d",
+    "name": "play-pad-only"
+  },
+  "platform": "darwin-arm64",
+  "build_sha": "7f8e5b4be6df8c3dc29df30628861e49ea36f27f",
+  "started": "2026-10-11T05:57:05-0300",
+  "status": "passed",
+  "reasons": [],
+  "steps": [
+    {
+      "id": "lib.home-ring",
+      "batch": "library",
+      "mode": "automated",
+      "role": "setup",
+      "expect": "HOME-01 - the batch opens on a settled home before it presses anything; the ring is not up yet at a fresh launch, so a press sent first is dropped and the step below reads None (#1232).",
+      "verdict": "passed",
+      "capture": {
+        "path": "/tmp/p1283-out/play-pad-only-library.results.json.artifacts/capture-1.png",
+        "size": [
+          2200,
+          1400
+        ],
+        "sha256": "0308c7d0c1ed0692d049aa4292d0bd5d87c87b1817f03c4c6150ce12ddd84859"
+      },
+      "held": false
+    },
+    {
+      "id": "lib.reach-library",
+      "batch": "library",
+      "mode": "automated",
+      "role": "setup",
+      "expect": "LIB-01 - A on the Home's focused Open a ROM opens the Library W-P19 by pad alone, on a fresh settings folder",
+      "verdict": "passed",
+      "capture": {
+        "path": "/tmp/p1283-out/play-pad-only-library.results.json.artifacts/capture-2.png",
+        "size": [
+          2200,
+          1400
+        ],
+        "sha256": "e86ded58b247c9a387f075224a68fa3ce776a5653e8f400c6fcf25b07f3c2416"
+      },
+      "held": false
+    },
+    {
+      "id": "lib.open-screen",
+      "batch": "library",
+      "mode": "automated",
+      "role": "under-test",
+      "expect": "LIB-01: the flat library grid is open.",
+      "verdict": "passed",
+      "capture": {
+        "path": "/tmp/p1283-out/play-pad-only-library.results.json.artifacts/capture-3.png",
+        "size": [
+          2200,
+          1400
+        ],
+        "sha256": "4a1d23e33a4fa3487d23877a2a796cafee5ea3c675b9127b77e2a0b6b135dd5e"
+      },
+      "held": false
+    },
+    {
+      "id": "lib.first-tile-focused",
+      "batch": "library",
+      "mode": "manual",
+      "role": "under-test",
+      "expect": "LIB-01: a tile is focused (ring on the grid's first tile). (manual: needs control play.library.tile, which mesen-gui does not advertise)",
+      "verdict": "pending",
+      "capture": null,
+      "held": false
+    },
+    {
+      "id": "lib.header-footer-scan",
+      "batch": "library",
+      "mode": "manual",
+      "role": "under-test",
+      "expect": "LIB-01: header reads \"Your library \u00b7 N games in M folders\", the footer names A/B/Y/X/LB/RB in the pad's own words (ADR-0256 Decision 6), an animated indicator shows while scanning. (manual: the header text and the scanning indicator are read by eye; the hook reads the action bar's ids, not its words)",
+      "verdict": "pending",
+      "capture": null,
+      "held": false
+    },
+    {
+      "id": "lib.hold-down-repeats",
+      "batch": "library",
+      "mode": "manual",
+      "role": "under-test",
+      "expect": "LIB-02: with 100+ ROMs, a held Down repeats after 400 ms then every 100 ms (ADR-0256 Decision 7) and the grid scrolls; judged by timing and eye. Part 2 (same with Right) is the next step. (manual: no 100+ ROM library is committed and the repeat rate is judged by timing)",
+      "verdict": "pending",
+      "capture": null,
+      "held": false
+    },
+    {
+      "id": "lib.hold-right-repeats",
+      "batch": "library",
+      "mode": "manual",
+      "role": "under-test",
+      "expect": "LIB-02: the same with Right: a held Right repeats after 400 ms then every 100 ms and the focus walks the row, wrapping onto the next row. (manual: no 100+ ROM library is committed and the repeat rate is judged by timing)",
+      "verdict": "pending",
+      "capture": null,
+      "held": false
+    },
+    {
+      "id": "lib.tap-down-steps-once",
+      "batch": "library",
+      "mode": "manual",
+      "role": "under-test",
+      "expect": "LIB-02: one tap steps the focus once and the focus stays in the grid. (manual: needs control play.library.tile, which mesen-gui does not advertise)",
+      "verdict": "pending",
+      "capture": null,
+      "held": false
+    },
+    {
+      "id": "lib.up-back-to-row-one",
+      "batch": "library",
+      "mode": "manual",
+      "role": "under-test",
+      "expect": "LIB-03 setup: Up returns the focus from row 2 to the top grid row, ready to enter the header. (manual: needs control play.library.tile, which mesen-gui does not advertise)",
+      "verdict": "pending",
+      "capture": null,
+      "held": false
+    },
+    {
+      "id": "lib.up-enters-header",
+      "batch": "library",
+      "mode": "manual",
+      "role": "under-test",
+      "expect": "LIB-03: Up from the top grid row enters the header row (search first, ADR-0264 Decision 3). (manual: needs control play.library.tile, which mesen-gui does not advertise)",
+      "verdict": "pending",
+      "capture": null,
+      "held": false
+    },
+    {
+      "id": "lib.header-right-folders",
+      "batch": "library",
+      "mode": "manual",
+      "role": "under-test",
+      "expect": "LIB-03: Right moves to Library folders. (manual: needs control play.library.folders, which mesen-gui does not advertise)",
+      "verdict": "pending",
+      "capture": null,
+      "held": false
+    },
+    {
+      "id": "lib.header-right-browse",
+      "batch": "library",
+      "mode": "manual",
+      "role": "under-test",
+      "expect": "LIB-03: Right moves to Browse a file. (manual: needs control play.library.browse, control play.library.folders, which mesen-gui does not advertise)",
+      "verdict": "pending",
+      "capture": null,
+      "held": false
+    },
+    {
+      "id": "lib.header-right-back",
+      "batch": "library",
+      "mode": "manual",
+      "role": "under-test",
+      "expect": "LIB-03: Right moves to Back. (manual: needs control play.library.back, control play.library.browse, which mesen-gui does not advertise)",
+      "verdict": "pending",
+      "capture": null,
+      "held": false
+    },
+    {
+      "id": "lib.header-left-across",
+      "batch": "library",
+      "mode": "manual",
+      "role": "under-test",
+      "expect": "LIB-03: Left walks back across the header row (Back -> Browse), mirroring the Right walk. (manual: needs control play.library.browse, control play.library.back, which mesen-gui does not advertise)",
+      "verdict": "pending",
+      "capture": null,
+      "held": false
+    },
+    {
+      "id": "lib.header-down-grid",
+      "batch": "library",
+      "mode": "manual",
+      "role": "under-test",
+      "expect": "LIB-03: Down from the header returns to the grid. (manual: needs control play.library.tile, control play.library.browse, which mesen-gui does not advertise)",
+      "verdict": "pending",
+      "capture": null,
+      "held": false
+    },
+    {
+      "id": "lib.filter-rb-wraps",
+      "batch": "library",
+      "mode": "manual",
+      "role": "under-test",
+      "expect": "LIB-04: RB steps All -> each console present -> All, wrapping at both ends, the grid narrows, and the ring lands on the segment the press selected (PlayerRomPickerViewModel.ConsoleFilter.cs; ADR-0264 amendment 2026-10-09, #1108), never an empty filter. Record whether the segment the ring is on is obvious at couch distance. The row is not a named control the hook reads, so the landing is judged by eye. (manual: the chip row is not a named control and a fresh library has no console to step through)",
+      "verdict": "pending",
+      "capture": null,
+      "held": false
+    },
+    {
+      "id": "lib.filter-lb-backwards",
+      "batch": "library",
+      "mode": "manual",
+      "role": "under-test",
+      "expect": "LIB-04: LB walks the same ring backwards, wrapping at both ends, and lands the ring on the segment it moved (ADR-0264 amendment 2026-10-09, #1108). (manual: the chip row is not a named control and a fresh library has no console to step through)",
+      "verdict": "pending",
+      "capture": null,
+      "held": false
+    },
+    {
+      "id": "lib.filter-segment-focus",
+      "batch": "library",
+      "mode": "manual",
+      "role": "under-test",
+      "expect": "LIB-04 (ADR-0264 amendment 2026-10-09, #1108): after a shoulder press the ring is ON the chip row, on the segment the press selected - the row is one element, so its Left/Right step the same ring one console at a time, its Up leaves for the header and its Down returns to the grid it filters, and the footer names the shoulders and no Play (ADR-0256 Decision 6). The landing is skipped only where the sheet's own claim outranks it: while a restore is in flight (IsRestorePending / IsRestoreLanding) the ring lands on the remembered game, and the search box keeps the ring as it always did. FAIL if the ring does not reach the row outside those two. The row is not a named control the hook reads, so this is judged by eye. Record whether the ring on the row is obvious at couch distance. (manual: the chip row is not a named control and a fresh library has no console to step through)",
+      "verdict": "pending",
+      "capture": null,
+      "held": false
+    },
+    {
+      "id": "lib.search-a-opens-keyboard",
+      "batch": "library",
+      "mode": "manual",
+      "role": "under-test",
+      "expect": "LIB-05: A opens the shared on-screen keyboard (ADR-0262) below the field; the sheet stays open. (manual: needs control play.keyboard, which mesen-gui does not advertise)",
+      "verdict": "pending",
+      "capture": null,
+      "held": false
+    },
+    {
+      "id": "lib.search-type-filters",
+      "batch": "library",
+      "mode": "manual",
+      "role": "under-test",
+      "expect": "LIB-05: typing `zel` (or a prefix of an owned title) with D-pad + A filters the grid per letter; OK commits and focus returns to the field; an empty result shows \"No games match\" with a way to clear it. (manual: needs control play.keyboard, which mesen-gui does not advertise)",
+      "verdict": "pending",
+      "capture": null,
+      "held": false
+    },
+    {
+      "id": "lib.search-b-cancels",
+      "batch": "library",
+      "mode": "manual",
+      "role": "under-test",
+      "expect": "LIB-05: B on the open keyboard closes it, focus returns to the search field and the sheet does not close. The text revert on a second Y, A, B is judged by eye (next step). (manual: needs control play.keyboard, which mesen-gui does not advertise)",
+      "verdict": "pending",
+      "capture": null,
+      "held": false
+    },
+    {
+      "id": "lib.search-second-cancel-reverts",
+      "batch": "library",
+      "mode": "manual",
+      "role": "under-test",
+      "expect": "LIB-05: after typing, a second Y, A, B returns the field to its previous text; focus returns to it and the sheet does not close (typing is manual, so the text revert is manual). (manual: the typed text is read from the on-screen keyboard, which the hook does not read)",
+      "verdict": "pending",
+      "capture": null,
+      "held": false
+    },
+    {
+      "id": "lib.search-sheet-stays",
+      "batch": "library",
+      "mode": "manual",
+      "role": "under-test",
+      "expect": "LIB-05: the library sheet is still open under the cancelled keyboard. (manual: the keyboard is a sheet over the library that the hook does not read)",
+      "verdict": "pending",
+      "capture": null,
+      "held": false
+    },
+    {
+      "id": "lib.search-right-folders",
+      "batch": "library",
+      "mode": "manual",
+      "role": "under-test",
+      "expect": "LIB-06: Right from the search field reaches Library folders. (manual: needs control play.library.folders, which mesen-gui does not advertise)",
+      "verdict": "pending",
+      "capture": null,
+      "held": false
+    },
+    {
+      "id": "lib.folders-open",
+      "batch": "library",
+      "mode": "manual",
+      "role": "under-test",
+      "expect": "LIB-06: A on Library folders opens the pad-reachable folder list (ADR-0264 Decision 8). (manual: needs control play.library.folders, which mesen-gui does not advertise)",
+      "verdict": "pending",
+      "capture": null,
+      "held": false
+    },
+    {
+      "id": "lib.folders-no-native-dialog",
+      "batch": "library",
+      "mode": "manual",
+      "role": "under-test",
+      "expect": "LIB-06: no native OS dialog is open over the folder list. (manual: needs control play.library.folders, which mesen-gui does not advertise)",
+      "verdict": "pending",
+      "capture": null,
+      "held": false
+    },
+    {
+      "id": "lib.folders-add-remove",
+      "batch": "library",
+      "mode": "manual",
+      "role": "under-test",
+      "expect": "LIB-06: add a folder, remove it, add it back by pad; the header count updates. (manual: needs control play.library.folders, which mesen-gui does not advertise)",
+      "verdict": "pending",
+      "capture": null,
+      "held": false
+    },
+    {
+      "id": "lib.folders-b-closes",
+      "batch": "library",
+      "mode": "manual",
+      "role": "under-test",
+      "expect": "LIB-06: B closes the folder list back to the library. (manual: needs control play.library.folders, which mesen-gui does not advertise)",
+      "verdict": "pending",
+      "capture": null,
+      "held": false
+    },
+    {
+      "id": "lib.folders-right-browse",
+      "batch": "library",
+      "mode": "manual",
+      "role": "under-test",
+      "expect": "LIB-07: Right from Library folders reaches Browse a file. (manual: needs control play.library.browse, control play.library.folders, which mesen-gui does not advertise)",
+      "verdict": "pending",
+      "capture": null,
+      "held": false
+    },
+    {
+      "id": "lib.browse-open",
+      "batch": "library",
+      "mode": "manual",
+      "role": "under-test",
+      "expect": "LIB-07: A on Browse a file opens the folder browser (ADR-0256 Decision 9). (manual: needs control play.library.browse, which mesen-gui does not advertise)",
+      "verdict": "pending",
+      "capture": null,
+      "held": false
+    },
+    {
+      "id": "lib.browse-walk",
+      "batch": "library",
+      "mode": "manual",
+      "role": "under-test",
+      "expect": "LIB-07: Confirm descends, B ascends; the action row leads the list but the ring never lands on it first (first-row guard); Make this my games folder inside a non-empty folder. (manual: needs control play.library.browse, which mesen-gui does not advertise)",
+      "verdict": "pending",
+      "capture": null,
+      "held": false
+    },
+    {
+      "id": "lib.browse-b-root-dismisses",
+      "batch": "library",
+      "mode": "manual",
+      "role": "under-test",
+      "expect": "LIB-07: B on the root dismisses with no load, back to the library. (manual: needs control play.library.browse, which mesen-gui does not advertise)",
+      "verdict": "pending",
+      "capture": null,
+      "held": false
+    },
+    {
+      "id": "lib.box-art",
+      "batch": "library",
+      "mode": "manual",
+      "role": "under-test",
+      "expect": "LIB-08: box art for known ROMs (lazy, visible tiles only), a generic console-colored cover carrying the title for unknown ones, nothing waits on the network; a visual check, record only if it blocks focus or scrolling. (manual: box art is a visual check)",
+      "verdict": "pending",
+      "capture": null,
+      "held": false
+    },
+    {
+      "id": "lib.browse-down-grid",
+      "batch": "library",
+      "mode": "manual",
+      "role": "under-test",
+      "expect": "LIB-09: Down from the header returns to the grid (LIB-09 starts from the grid). (manual: needs control play.library.tile, control play.library.browse, which mesen-gui does not advertise)",
+      "verdict": "pending",
+      "capture": null,
+      "held": false
+    },
+    {
+      "id": "lib.back-to-home",
+      "batch": "library",
+      "mode": "automated",
+      "role": "under-test",
+      "expect": "LIB-09: B from the grid goes back to Home.",
+      "verdict": "passed",
+      "capture": {
+        "path": "/tmp/p1283-out/play-pad-only-library.results.json.artifacts/capture-4.png",
+        "size": [
+          2200,
+          1400
+        ],
+        "sha256": "9465a8d0ae5a34e2e582460d742415da7089e4931b981e8ae3fcae8b0d1aeb68"
+      },
+      "held": false
+    },
+    {
+      "id": "lib.back-ring-on-opener",
+      "batch": "library",
+      "mode": "automated",
+      "role": "under-test",
+      "expect": "LIB-09: the ring is on the control that opened the sheet, Open a ROM.",
+      "verdict": "passed",
+      "capture": {
+        "path": "/tmp/p1283-out/play-pad-only-library.results.json.artifacts/capture-5.png",
+        "size": [
+          2200,
+          1400
+        ],
+        "sha256": "0308c7d0c1ed0692d049aa4292d0bd5d87c87b1817f03c4c6150ce12ddd84859"
+      },
+      "held": false
+    },
+    {
+      "id": "lib.reopen-for-search",
+      "batch": "library",
+      "mode": "automated",
+      "role": "under-test",
+      "expect": "LIB-05 (setup): A on Open a ROM opens the library sheet again, so the search step starts from the grid.",
+      "verdict": "passed",
+      "capture": {
+        "path": "/tmp/p1283-out/play-pad-only-library.results.json.artifacts/capture-6.png",
+        "size": [
+          2200,
+          1400
+        ],
+        "sha256": "e86ded58b247c9a387f075224a68fa3ce776a5653e8f400c6fcf25b07f3c2416"
+      },
+      "held": false
+    },
+    {
+      "id": "lib.search-y-focuses-field",
+      "batch": "library",
+      "mode": "automated",
+      "role": "under-test",
+      "expect": "LIB-05: Y moves the ring to the search field (play.library.search), read as the focused control (a fresh settings folder has an empty library, so the grid has no tile to start from).",
+      "verdict": "passed",
+      "capture": {
+        "path": "/tmp/p1283-out/play-pad-only-library.results.json.artifacts/capture-7.png",
+        "size": [
+          2200,
+          1400
+        ],
+        "sha256": "206f95ed5d664e91b02f3eaa821efb6cf97cc22858f9e56e4144378fe5b306f3"
+      },
+      "held": false
+    }
+  ],
+  "batches": [
+    {
+      "id": "library",
+      "verdict": "passed",
+      "teardown": []
+    }
+  ],
+  "bug": {
+    "filed": false,
+    "reason": "no bug was asked for: filing is opt-in (--file-bug)"
+  },
+  "selection": {
+    "kind": "batch",
+    "value": "library"
+  },
+  "summary": {
+    "passed": 7,
+    "failed": 0,
+    "needs review": 0,
+    "pending": 31,
+    "not executed": 0,
+    "steps": 38,
+    "executed": 7
+  }
+}

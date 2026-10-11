@@ -4,11 +4,17 @@
   "target": "mesen-gui",
   "requires": {
     "actions": [
+      "pad.connect",
+      "pad.disconnect",
       "pad.press"
     ],
     "checks": [
       "ui.focused",
-      "ui.screen"
+      "ui.footer",
+      "ui.lamps",
+      "ui.ring",
+      "ui.screen",
+      "ui.surface"
     ]
   },
   "variants": {
@@ -79,15 +85,51 @@
           "content_hash": "1807981d2ae2a79be28fde659ec565aff84b33f9f3bc8309373f1b6d58a4e704"
         },
         {
-          "id": "launch.port-lamp-p1",
+          "id": "launch.ring-on-open-rom",
           "role": "under-test",
-          "precondition": "by hand: the screen is play.home",
-          "expect": "The ring is visible on Open a ROM and the pad port lamps show P1 lit (ADR-0261); judged by eye, the hook exposes neither.",
+          "precondition": "ui.screen == play.home",
+          "wait": {
+            "timeout_ticks": 4
+          },
+          "check": {
+            "name": "ui.ring",
+            "args": {
+              "is": "play.home.open-rom"
+            }
+          },
+          "expect": "The focus ring is visible on Open a ROM at launch (ADR-0261).",
           "variants": {
             "window.mode": "windowed"
           },
           "severity": "minor",
-          "mode": "manual",
+          "mode": "automated"
+        },
+        {
+          "id": "launch.port-lamp-p1",
+          "role": "under-test",
+          "precondition": "ui.screen == play.home",
+          "action": {
+            "name": "pad.connect",
+            "args": {
+              "index": 0
+            }
+          },
+          "wait": {
+            "timeout_ticks": 180
+          },
+          "check": {
+            "name": "ui.lamps",
+            "args": {
+              "port": 1,
+              "is": "lit"
+            }
+          },
+          "expect": "With the pad in the hand connected (simulated through the hook) the pad port lamps show P1 lit (ADR-0261).",
+          "variants": {
+            "window.mode": "windowed"
+          },
+          "severity": "minor",
+          "mode": "automated",
           "content_hash": "56efbe4b6af0dad32a598aa10f8c4e5dc6d99b4f45314cea4730e2077e79550a"
         }
       ]
@@ -220,10 +262,19 @@
         {
           "id": "home.ring-visible",
           "role": "under-test",
-          "precondition": "by hand: the ring is on play.home.open-rom",
-          "expect": "The focus ring never disappears through the four presses.",
+          "precondition": "ui.focused == play.home.open-rom",
+          "wait": {
+            "timeout_ticks": 4
+          },
+          "check": {
+            "name": "ui.ring",
+            "args": {
+              "is": "play.home.open-rom"
+            }
+          },
+          "expect": "The focus ring never disappears through the four presses: the ring (ui.ring) is still on Open a ROM after the last one.",
           "severity": "minor",
-          "mode": "manual",
+          "mode": "automated",
           "content_hash": "2c38a82920e9c95bed37b30dd048d98b1948544f6fbf82875e97ed03c0a0f246"
         },
         {
@@ -318,11 +369,35 @@
         {
           "id": "home.settings-by-pad-gap",
           "role": "under-test",
-          "precondition": "by hand: the screen is play.home",
-          "expect": "Y opens the Settings sheet from Home with no game loaded (bug #1177, ADR-0256 W-P8); B returns to Home.",
+          "precondition": "ui.focused == play.home.open-rom",
+          "action": {
+            "name": "pad.press",
+            "args": {
+              "button": "Y",
+              "ticks": 4
+            }
+          },
+          "wait": {
+            "timeout_ticks": 8
+          },
+          "check": {
+            "name": "ui.surface",
+            "args": {
+              "is": "play.settings"
+            }
+          },
+          "expect": "Y opens the Settings sheet from Home with no game loaded (bug #1177, ADR-0256 W-P8); the surface is play.settings.",
           "severity": "major",
-          "mode": "manual",
+          "mode": "automated",
           "content_hash": "a8172b9cc539b1ff59f5737be9d7e3c0f80a697dc129b149a70d71df68eadef5"
+        },
+        {
+          "id": "home.settings-b-returns",
+          "role": "under-test",
+          "precondition": "by hand: the Settings sheet is open over play.home",
+          "expect": "B on the Settings sheet returns to Home (bug #1177, ADR-0256 W-P8). (manual: the hook reads ui.surface == play.pause after B with no game loaded, not none; judged by eye until bug #1485 is fixed)",
+          "severity": "major",
+          "mode": "manual"
         }
       ]
     },
@@ -381,7 +456,7 @@
           "id": "after-game.one-ring",
           "role": "under-test",
           "precondition": "by hand: the screen is play.home",
-          "expect": "The ring is on exactly one control at a time (ADR-0256 Decision 3); with a Favorites shelf present the order is Continue, Favorites, Recent. Both are judged by eye.",
+          "expect": "The ring is on exactly one control at a time (ADR-0256 Decision 3); with a Favorites shelf present the order is Continue, Favorites, Recent. Both are judged by eye. (manual: how many rings are drawn and the shelf order are judged by eye)",
           "severity": "minor",
           "mode": "manual",
           "content_hash": "98e4f024cfb6d1902ff5e330eb43826e8478067987c8b6b966bf217a2c7a437c"
@@ -444,7 +519,7 @@
           "id": "after-game.contained-other-controls-gap",
           "role": "under-test",
           "precondition": "by hand: the screen is play.home",
-          "expect": "From Favorites, Recent and Open a ROM, D-pad Left and Right keep focus inside Home (the automated steps press them from Continue only)",
+          "expect": "From Favorites, Recent and Open a ROM, D-pad Left and Right keep focus inside Home (the automated steps press them from Continue only) (manual: no `rom` fixture is committed, so the game this case follows cannot be reached by a run)",
           "severity": "major",
           "mode": "manual",
           "content_hash": "bd4513ff46bcd2ef24a1a5a4e6d418b34e60d1621ba5c551bd7ffa20c4d3a4a2"
@@ -533,7 +608,7 @@
           "id": "lib.header-footer-scan",
           "role": "under-test",
           "precondition": "by hand: the screen is play.library",
-          "expect": "LIB-01: header reads \"Your library · N games in M folders\", the footer names A/B/Y/X/LB/RB in the pad's own words (ADR-0256 Decision 6), an animated indicator shows while scanning.",
+          "expect": "LIB-01: header reads \"Your library · N games in M folders\", the footer names A/B/Y/X/LB/RB in the pad's own words (ADR-0256 Decision 6), an animated indicator shows while scanning. (manual: the header text and the scanning indicator are read by eye; the hook reads the action bar's ids, not its words)",
           "severity": "minor",
           "mode": "manual",
           "content_hash": "5d6888faeab8a23cc47427b053620e756cdad01b40004e8af5fbaa41f6dd8b51"
@@ -542,7 +617,7 @@
           "id": "lib.hold-down-repeats",
           "role": "under-test",
           "precondition": "fixture rom-library-large and a library of 100+ ROMs",
-          "expect": "LIB-02: with 100+ ROMs, a held Down repeats after 400 ms then every 100 ms (ADR-0256 Decision 7) and the grid scrolls; judged by timing and eye. Part 2 (same with Right) is the next step.",
+          "expect": "LIB-02: with 100+ ROMs, a held Down repeats after 400 ms then every 100 ms (ADR-0256 Decision 7) and the grid scrolls; judged by timing and eye. Part 2 (same with Right) is the next step. (manual: no 100+ ROM library is committed and the repeat rate is judged by timing)",
           "severity": "major",
           "mode": "manual",
           "content_hash": "ee4698cfbe346e543eb290657014b97800b9d962042bbf6b190638d2f1930208"
@@ -551,7 +626,7 @@
           "id": "lib.hold-right-repeats",
           "role": "under-test",
           "precondition": "fixture rom-library-large and a library of 100+ ROMs",
-          "expect": "LIB-02: the same with Right: a held Right repeats after 400 ms then every 100 ms and the focus walks the row, wrapping onto the next row.",
+          "expect": "LIB-02: the same with Right: a held Right repeats after 400 ms then every 100 ms and the focus walks the row, wrapping onto the next row. (manual: no 100+ ROM library is committed and the repeat rate is judged by timing)",
           "severity": "major",
           "mode": "manual",
           "content_hash": "1affdc52de01a7c969de9fdb371cd92eb8501a3778def45618c8f8e10b680c46"
@@ -578,7 +653,7 @@
           "id": "lib.up-enters-header",
           "role": "under-test",
           "precondition": "a tile focused in the library",
-          "expect": "LIB-03: Up from the top grid row enters the header row (search first, ADR-0264 Decision 3). (manual: needs control play.library.search, control play.library.tile, which mesen-gui does not advertise)",
+          "expect": "LIB-03: Up from the top grid row enters the header row (search first, ADR-0264 Decision 3). (manual: needs control play.library.tile, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual",
           "content_hash": "e9283d602768947c11ff58af326eddabd6fe84de269a11eb492d727f9e716497"
@@ -587,7 +662,7 @@
           "id": "lib.header-right-folders",
           "role": "under-test",
           "precondition": "by hand: the ring is on play.library.search",
-          "expect": "LIB-03: Right moves to Library folders. (manual: needs control play.library.folders, control play.library.search, which mesen-gui does not advertise)",
+          "expect": "LIB-03: Right moves to Library folders. (manual: needs control play.library.folders, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual",
           "content_hash": "66c46d3d69793a9c17a11e550b30f2517ea1d266f59122095b0985c32ef9e91f"
@@ -632,7 +707,7 @@
           "id": "lib.filter-rb-wraps",
           "role": "under-test",
           "precondition": "by hand: the screen is play.library",
-          "expect": "LIB-04: RB steps All -> each console present -> All, wrapping at both ends, the grid narrows, and the ring lands on the segment the press selected (PlayerRomPickerViewModel.ConsoleFilter.cs; ADR-0264 amendment 2026-10-09, #1108), never an empty filter. Record whether the segment the ring is on is obvious at couch distance. The row is not a named control the hook reads, so the landing is judged by eye.",
+          "expect": "LIB-04: RB steps All -> each console present -> All, wrapping at both ends, the grid narrows, and the ring lands on the segment the press selected (PlayerRomPickerViewModel.ConsoleFilter.cs; ADR-0264 amendment 2026-10-09, #1108), never an empty filter. Record whether the segment the ring is on is obvious at couch distance. The row is not a named control the hook reads, so the landing is judged by eye. (manual: the chip row is not a named control and a fresh library has no console to step through)",
           "severity": "minor",
           "mode": "manual",
           "content_hash": "114a1f86924b8dd3123fb64e87b70c3f706d44d82801a06f8cca462986340488"
@@ -641,7 +716,7 @@
           "id": "lib.filter-lb-backwards",
           "role": "under-test",
           "precondition": "by hand: the screen is play.library",
-          "expect": "LIB-04: LB walks the same ring backwards, wrapping at both ends, and lands the ring on the segment it moved (ADR-0264 amendment 2026-10-09, #1108).",
+          "expect": "LIB-04: LB walks the same ring backwards, wrapping at both ends, and lands the ring on the segment it moved (ADR-0264 amendment 2026-10-09, #1108). (manual: the chip row is not a named control and a fresh library has no console to step through)",
           "severity": "minor",
           "mode": "manual",
           "content_hash": "d3516987e1afd05f82b1ee90da29ea7f8b4e32c2af0065dcd95dd6fea4d4733f"
@@ -650,25 +725,16 @@
           "id": "lib.filter-segment-focus",
           "role": "under-test",
           "precondition": "by hand: the screen is play.library",
-          "expect": "LIB-04 (ADR-0264 amendment 2026-10-09, #1108): after a shoulder press the ring is ON the chip row, on the segment the press selected - the row is one element, so its Left/Right step the same ring one console at a time, its Up leaves for the header and its Down returns to the grid it filters, and the footer names the shoulders and no Play (ADR-0256 Decision 6). The landing is skipped only where the sheet's own claim outranks it: while a restore is in flight (IsRestorePending / IsRestoreLanding) the ring lands on the remembered game, and the search box keeps the ring as it always did. FAIL if the ring does not reach the row outside those two. The row is not a named control the hook reads, so this is judged by eye. Record whether the ring on the row is obvious at couch distance.",
+          "expect": "LIB-04 (ADR-0264 amendment 2026-10-09, #1108): after a shoulder press the ring is ON the chip row, on the segment the press selected - the row is one element, so its Left/Right step the same ring one console at a time, its Up leaves for the header and its Down returns to the grid it filters, and the footer names the shoulders and no Play (ADR-0256 Decision 6). The landing is skipped only where the sheet's own claim outranks it: while a restore is in flight (IsRestorePending / IsRestoreLanding) the ring lands on the remembered game, and the search box keeps the ring as it always did. FAIL if the ring does not reach the row outside those two. The row is not a named control the hook reads, so this is judged by eye. Record whether the ring on the row is obvious at couch distance. (manual: the chip row is not a named control and a fresh library has no console to step through)",
           "severity": "major",
           "mode": "manual",
           "content_hash": "4df6f8b716dd70ab26efaec98d334cc8795cdd5375c5f555d01ebae96cf7d5be"
         },
         {
-          "id": "lib.search-y-focuses-field",
-          "role": "under-test",
-          "precondition": "a tile focused in the library",
-          "expect": "LIB-05: Y moves the ring to the search field. (manual: needs control play.library.search, control play.library.tile, which mesen-gui does not advertise)",
-          "severity": "major",
-          "mode": "manual",
-          "content_hash": "42b8a8cefa55350c358a3295a6b025a9a83cd2660ce050fba1155529633fb9ec"
-        },
-        {
           "id": "lib.search-a-opens-keyboard",
           "role": "under-test",
           "precondition": "by hand: the ring is on play.library.search",
-          "expect": "LIB-05: A opens the shared on-screen keyboard (ADR-0262) below the field; the sheet stays open. (manual: needs control play.keyboard, control play.library.search, which mesen-gui does not advertise)",
+          "expect": "LIB-05: A opens the shared on-screen keyboard (ADR-0262) below the field; the sheet stays open. (manual: needs control play.keyboard, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual",
           "content_hash": "8c7cf085aa9edf2cce86199013ca5ccc2d1263dde7e38c5204b09a8a1f348588"
@@ -686,7 +752,7 @@
           "id": "lib.search-b-cancels",
           "role": "under-test",
           "precondition": "by hand: play.keyboard is visible",
-          "expect": "LIB-05: B on the open keyboard closes it, focus returns to the search field and the sheet does not close. The text revert on a second Y, A, B is judged by eye (next step). (manual: needs control play.library.search, control play.keyboard, which mesen-gui does not advertise)",
+          "expect": "LIB-05: B on the open keyboard closes it, focus returns to the search field and the sheet does not close. The text revert on a second Y, A, B is judged by eye (next step). (manual: needs control play.keyboard, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual",
           "content_hash": "4ec56fa6977a37f2d0594033d5e64cd049b410bdac4e308a2142a23a335edc84"
@@ -695,7 +761,7 @@
           "id": "lib.search-second-cancel-reverts",
           "role": "under-test",
           "precondition": "by hand: the ring is on play.library.search",
-          "expect": "LIB-05: after typing, a second Y, A, B returns the field to its previous text; focus returns to it and the sheet does not close (typing is manual, so the text revert is manual). (manual: needs control play.library.search, which mesen-gui does not advertise)",
+          "expect": "LIB-05: after typing, a second Y, A, B returns the field to its previous text; focus returns to it and the sheet does not close (typing is manual, so the text revert is manual). (manual: the typed text is read from the on-screen keyboard, which the hook does not read)",
           "severity": "minor",
           "mode": "manual",
           "content_hash": "f17980fa8a5c82846507039ec735b3e4160083e6c358cd59c6a6e28fd4fe3f5c"
@@ -704,7 +770,7 @@
           "id": "lib.search-sheet-stays",
           "role": "under-test",
           "precondition": "by hand: the ring is on play.library.search",
-          "expect": "LIB-05: the library sheet is still open under the cancelled keyboard. (manual: needs control play.library.search, which mesen-gui does not advertise)",
+          "expect": "LIB-05: the library sheet is still open under the cancelled keyboard. (manual: the keyboard is a sheet over the library that the hook does not read)",
           "severity": "major",
           "mode": "manual",
           "content_hash": "56e5696b408ee531625583aa53de187d4bf52002463dc9362b6b9aaaa08e6d9f"
@@ -713,7 +779,7 @@
           "id": "lib.search-right-folders",
           "role": "under-test",
           "precondition": "by hand: the ring is on play.library.search",
-          "expect": "LIB-06: Right from the search field reaches Library folders. (manual: needs control play.library.folders, control play.library.search, which mesen-gui does not advertise)",
+          "expect": "LIB-06: Right from the search field reaches Library folders. (manual: needs control play.library.folders, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual",
           "content_hash": "226cae7527c95f802d98670b2c2acf575ac318fce77a3c14a29cc550e83cbbc0"
@@ -794,7 +860,7 @@
           "id": "lib.box-art",
           "role": "under-test",
           "precondition": "by hand: the screen is play.library",
-          "expect": "LIB-08: box art for known ROMs (lazy, visible tiles only), a generic console-colored cover carrying the title for unknown ones, nothing waits on the network; a visual check, record only if it blocks focus or scrolling.",
+          "expect": "LIB-08: box art for known ROMs (lazy, visible tiles only), a generic console-colored cover carrying the title for unknown ones, nothing waits on the network; a visual check, record only if it blocks focus or scrolling. (manual: box art is a visual check)",
           "severity": "minor",
           "mode": "manual",
           "content_hash": "df8a93a2d204b1990872f0c80a13c7cc12b2614820b9c71424eda0cc4a618cf1"
@@ -852,6 +918,56 @@
           "severity": "major",
           "mode": "automated",
           "content_hash": "37d26c06a1328d8bc1e85c541646f739ff47fd11753475e923f84a1fa0377e77"
+        },
+        {
+          "id": "lib.reopen-for-search",
+          "role": "under-test",
+          "precondition": "ui.focused == play.home.open-rom",
+          "action": {
+            "name": "pad.press",
+            "args": {
+              "button": "A",
+              "ticks": 4
+            }
+          },
+          "wait": {
+            "check": "ui.screen == play.library",
+            "timeout_ticks": 120
+          },
+          "check": {
+            "name": "ui.screen",
+            "args": {
+              "is": "play.library"
+            }
+          },
+          "expect": "LIB-05 (setup): A on Open a ROM opens the library sheet again, so the search step starts from the grid.",
+          "severity": "major",
+          "mode": "automated"
+        },
+        {
+          "id": "lib.search-y-focuses-field",
+          "role": "under-test",
+          "precondition": "ui.screen == play.library",
+          "action": {
+            "name": "pad.press",
+            "args": {
+              "button": "Y",
+              "ticks": 4
+            }
+          },
+          "wait": {
+            "timeout_ticks": 8
+          },
+          "check": {
+            "name": "ui.focused",
+            "args": {
+              "is": "play.library.search"
+            }
+          },
+          "expect": "LIB-05: Y moves the ring to the search field (play.library.search), read as the focused control (a fresh settings folder has an empty library, so the grid has no tile to start from).",
+          "severity": "major",
+          "mode": "automated",
+          "content_hash": "42b8a8cefa55350c358a3295a6b025a9a83cd2660ce050fba1155529633fb9ec"
         }
       ],
       "teardown": []
@@ -883,7 +999,7 @@
           "id": "fav.footer-reads-unfavorite",
           "role": "under-test",
           "precondition": "by hand: the screen is play.library",
-          "expect": "FAV-01: the footer's X entry now reads Unfavorite (it read Favorite before).",
+          "expect": "FAV-01: the footer's X entry now reads Unfavorite (it read Favorite before). (manual: a favorited game takes a ROM and no `rom` fixture is committed)",
           "severity": "minor",
           "mode": "manual",
           "content_hash": "13ab801849323cab367e48bc1cdd1d1b51ab364d9f0a73bacbf1ccd747fbac09"
@@ -937,7 +1053,7 @@
           "id": "fav.shelf-hides-when-empty",
           "role": "under-test",
           "precondition": "by hand: the screen is play.home",
-          "expect": "FAV-01: with no favorite left the Favorites shelf is hidden.",
+          "expect": "FAV-01: with no favorite left the Favorites shelf is hidden. (manual: a favorited game takes a ROM and no `rom` fixture is committed)",
           "severity": "minor",
           "mode": "manual",
           "content_hash": "eac2816d98bc187e1fb8cac593dc708b29e0c7ba1779c44c7bf20d29e7fe319d"
@@ -1194,7 +1310,7 @@
           "id": "game-bios.status-names-bios",
           "role": "under-test",
           "precondition": "by hand: the screen is play.library",
-          "expect": "GAME-04: the status line names the missing BIOS.",
+          "expect": "GAME-04: the status line names the missing BIOS. (manual: a game that misses its BIOS takes a ROM and no `rom` fixture is committed)",
           "severity": "minor",
           "mode": "manual",
           "content_hash": "3ea6f55ba754a29de3f982ef38f731032d9c0b4a8b0be43e6f7b108aa857a6e6"
@@ -2652,7 +2768,7 @@
           "id": "ctl.no-game-gap",
           "role": "under-test",
           "precondition": "by hand: the screen is play.home",
-          "expect": "CTL-05: KNOWN GAP, expected FAIL. Settings is not reachable by pad with no game (HOME-06, bug #1177), so neither is the Controller sheet. With Settings reached by keyboard, Controls > More in Options opens the classic Options window's Input page because OpenControllerSheet() returns false with no game loaded (ADR-0256 Decision 5 note). Record what the player sees.",
+          "expect": "CTL-05: Settings is reachable by pad with no game now (Y, #1213; HOME-06 passes), but the Controller sheet itself still needs a loaded game (known limitation, not a failure). Controls > More in Options opens the classic Options window's Input page because OpenControllerSheet() returns false with no game loaded (ADR-0256 Decision 5 note). Record what the player sees. (manual: the Options window it opens is a native window the hook does not read)",
           "severity": "major",
           "mode": "manual",
           "content_hash": "dd345b7eb958672c9342e98d225bea29a7da29972de50de33e743fe8523f00cd"
@@ -2665,11 +2781,21 @@
       "setup": [
         {
           "id": "lamps.reach-home",
-          "role": "setup",
+          "role": "under-test",
           "precondition": "fixture settings.profiles.fresh",
-          "expect": "Home with the pad port lamps on the status line (the LAMP-01 precondition: one pad). (manual: needs action nav.goal, which mesen-gui does not advertise)",
+          "wait": {
+            "check": "ui.focused == play.home.open-rom",
+            "timeout_ticks": 120
+          },
+          "check": {
+            "name": "ui.focused",
+            "args": {
+              "is": "play.home.open-rom"
+            }
+          },
+          "expect": "Home with the pad port lamps on the status line (the LAMP-01 precondition), settled with the ring on Open a ROM.",
           "severity": "major",
-          "mode": "manual",
+          "mode": "automated",
           "content_hash": "5b81e60b335712f675d737ff75cd5c27ad6f9f540e6e5a35703146a18ba9c615"
         }
       ],
@@ -2677,20 +2803,214 @@
         {
           "id": "lamp.four-lamps-p1",
           "role": "under-test",
-          "precondition": "by hand: the screen is play.home",
-          "expect": "LAMP-01: the status line shows four lamps, P1 lit and the others dim; the number is the label and the pad name is the tooltip; the hook exposes neither lamps nor tooltips, judged by eye.",
+          "precondition": "ui.screen == play.home",
+          "action": {
+            "name": "pad.connect",
+            "args": {
+              "index": 0
+            }
+          },
+          "wait": {
+            "timeout_ticks": 180
+          },
+          "check": {
+            "name": "ui.lamps",
+            "args": {
+              "port": 1,
+              "is": "lit"
+            }
+          },
+          "expect": "LAMP-01: with one pad connected (simulated through the hook) the status line's P1 lamp is lit.",
           "severity": "minor",
-          "mode": "manual",
+          "mode": "automated",
           "content_hash": "d58277671142af6e4b855be76c3a9cd6ffe55e5f136510dd70410209a9f7e59b"
+        },
+        {
+          "id": "lamp.p2-dim",
+          "role": "under-test",
+          "precondition": "ui.screen == play.home",
+          "wait": {
+            "timeout_ticks": 4
+          },
+          "check": {
+            "name": "ui.lamps",
+            "args": {
+              "port": 2,
+              "is": "dim"
+            }
+          },
+          "expect": "LAMP-01: the P2 lamp is dim.",
+          "severity": "minor",
+          "mode": "automated"
+        },
+        {
+          "id": "lamp.p3-dim",
+          "role": "under-test",
+          "precondition": "ui.screen == play.home",
+          "wait": {
+            "timeout_ticks": 4
+          },
+          "check": {
+            "name": "ui.lamps",
+            "args": {
+              "port": 3,
+              "is": "dim"
+            }
+          },
+          "expect": "LAMP-01: the P3 lamp is dim.",
+          "severity": "minor",
+          "mode": "automated"
+        },
+        {
+          "id": "lamp.p4-dim",
+          "role": "under-test",
+          "precondition": "ui.screen == play.home",
+          "wait": {
+            "timeout_ticks": 4
+          },
+          "check": {
+            "name": "ui.lamps",
+            "args": {
+              "port": 4,
+              "is": "dim"
+            }
+          },
+          "expect": "LAMP-01: the P4 lamp is dim.",
+          "severity": "minor",
+          "mode": "automated"
+        },
+        {
+          "id": "lamp.labels-tooltips",
+          "role": "under-test",
+          "precondition": "by hand: the screen is play.home",
+          "expect": "LAMP-01: the number is the label and the pad name is the tooltip. (manual: a tooltip is judged by eye; the hook reads the lamp state, not the label text)",
+          "severity": "minor",
+          "mode": "manual"
         },
         {
           "id": "lamp.second-pad-hotplug",
           "role": "under-test",
-          "precondition": "by hand: the screen is play.home",
-          "expect": "LAMP-02: plug a second pad in (or power it on over Bluetooth), wait 2 s, power it off: the second lamp lights within about 1 s (1 s poll) and dims again, nothing else moves, the ring stays where it was; the W-P15 pill \"New controller …\" on its first press is expected. A real plug is physical-only and is not simulated.",
+          "precondition": "ui.screen == play.home",
+          "action": {
+            "name": "pad.connect",
+            "args": {
+              "index": 1
+            }
+          },
+          "wait": {
+            "timeout_ticks": 180
+          },
+          "check": {
+            "name": "ui.lamps",
+            "args": {
+              "port": 2,
+              "is": "lit"
+            }
+          },
+          "expect": "LAMP-02: a second pad plugged in (simulated through the hook) lights the P2 lamp within the 1 s poll.",
           "severity": "major",
-          "mode": "manual",
+          "mode": "automated",
           "content_hash": "ebd3e416e4edafdc66924699dae9f27b00eb15ed7b2f580b902b9f114d402600"
+        },
+        {
+          "id": "lamp.second-pad-unplug",
+          "role": "under-test",
+          "precondition": "ui.lamps port 2 lit",
+          "action": {
+            "name": "pad.disconnect",
+            "args": {
+              "index": 1
+            }
+          },
+          "wait": {
+            "timeout_ticks": 2
+          },
+          "check": {
+            "name": "ui.ring",
+            "args": {
+              "is": "play.home.open-rom"
+            }
+          },
+          "expect": "LAMP-02: right after the unplug (read at once, before any poll can bring a drop back) the ring is still on Open a ROM; a ring that leaves it reads none (#824).",
+          "severity": "major",
+          "mode": "automated"
+        },
+        {
+          "id": "lamp.hotplug-ring-t30",
+          "role": "under-test",
+          "precondition": "ui.screen == play.home",
+          "wait": {
+            "timeout_ticks": 28
+          },
+          "check": {
+            "name": "ui.ring",
+            "args": {
+              "is": "play.home.open-rom"
+            }
+          },
+          "expect": "LAMP-02: 30 ticks after the unplug the ring is still on Open a ROM (a drop that recovers inside the 1 s poll is still a failure).",
+          "severity": "major",
+          "mode": "automated"
+        },
+        {
+          "id": "lamp.hotplug-ring-t60",
+          "role": "under-test",
+          "precondition": "ui.screen == play.home",
+          "wait": {
+            "timeout_ticks": 30
+          },
+          "check": {
+            "name": "ui.ring",
+            "args": {
+              "is": "play.home.open-rom"
+            }
+          },
+          "expect": "LAMP-02: 60 ticks after the unplug the ring is still on Open a ROM.",
+          "severity": "major",
+          "mode": "automated"
+        },
+        {
+          "id": "lamp.second-pad-dims",
+          "role": "under-test",
+          "precondition": "ui.lamps port 2 lit",
+          "wait": {
+            "timeout_ticks": 180
+          },
+          "check": {
+            "name": "ui.lamps",
+            "args": {
+              "port": 2,
+              "is": "dim"
+            }
+          },
+          "expect": "LAMP-02: the second pad unplugged dims the P2 lamp again.",
+          "severity": "minor",
+          "mode": "automated"
+        },
+        {
+          "id": "lamp.hotplug-ring-stays",
+          "role": "under-test",
+          "precondition": "ui.screen == play.home",
+          "wait": {
+            "timeout_ticks": 2
+          },
+          "check": {
+            "name": "ui.ring",
+            "args": {
+              "is": "play.home.open-rom"
+            }
+          },
+          "expect": "LAMP-02: nothing else moves, the ring stays where it was (Open a ROM) once the lamp has dimmed; the earlier reads sampled the window across the unplug.",
+          "severity": "major",
+          "mode": "automated"
+        },
+        {
+          "id": "lamp.hotplug-pill",
+          "role": "under-test",
+          "precondition": "by hand: the screen is play.home",
+          "expect": "LAMP-02: the W-P15 pill \"New controller …\" on its first press is expected. (manual: a real plug is physical-only and the hook reads no pill)",
+          "severity": "minor",
+          "mode": "manual"
         }
       ],
       "teardown": []
@@ -2786,7 +3106,7 @@
           "expect": "A on the Fullscreen switch goes full screen and the ring stays on the switch; the mouse cursor is hidden over the game (needs variant window.mode=fullscreen, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual",
-          "content_hash": "a8edab2549538d17e04f82bf1623bf6fbd0bd08192f1c75003a696e87a3856cc"
+          "content_hash": "424f81b9714fbb97b178d202480a2d5a5d8016f65abc0933332d7b5c4708b0af"
         },
         {
           "id": "FS-02",
@@ -2795,7 +3115,7 @@
           "expect": "Left from Done to Exit full screen (its own row, visible only in full screen, #910), A: back to a window with the ring on Done (needs variant window.mode=fullscreen, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual",
-          "content_hash": "aa174f4d74fc24562e5d0b7fd3c9e8be2edd95031afc8261e899f8a327681265"
+          "content_hash": "82070d6f4aeaf4bfdd4ed530a3ac895cdd0805361fe5a620c524a69eee5aa63d"
         },
         {
           "id": "FS-03",
@@ -2804,7 +3124,7 @@
           "expect": "Chord, walk W-P4, open Settings, B, B: the [F] column of P4-01..SET-07, recorded only where it differs (needs variant window.mode=fullscreen, which mesen-gui does not advertise; needs action pad.chord, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual",
-          "content_hash": "6394ecb5867cc7b6fa782146aab5cba42afd3633a73b48f5564af43cf0e6cdc1"
+          "content_hash": "d957330930ef873041f099423be61c2c6f420c1b18d0bcd604e56c7c35ee294e"
         },
         {
           "id": "FS-04",
@@ -2813,7 +3133,7 @@
           "expect": "Shrink the window to its minimum by pad: BLOCKED by design; record only whether the default window is below 1024x640 (ADR-0269 Decision 6). (manual: by design, not automatable - the pad cannot shrink the window, and the case asks a person to read the default window size, which no action or check the adapter advertises expresses)",
           "severity": "major",
           "mode": "manual",
-          "content_hash": "98c68066303764c31d402354dea00bac85b49c997382e9a505dd20ec4cabdaf3"
+          "content_hash": "c70aeb5e80717a74a0c85820a0a6e8c7f6bb5ad3c46922779b5fcfc8ca73921f"
         },
         {
           "id": "FS-05",
@@ -2822,7 +3142,7 @@
           "expect": "Open the library, Cheats and the Controller sheet: nothing clipped, every Done/Back reachable (ADR-0269 Decision 6 names them; needs variant window.mode=fullscreen, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual",
-          "content_hash": "c9f81f3a68de0ecf00b4aaa7e00c875d31a967f222ff0e5848309cee16f62a63"
+          "content_hash": "5f03c91030960d1b4a3eaddcb806c249704f58041c0ef862b04fa57b925fd589"
         }
       ]
     },
@@ -2835,28 +3155,28 @@
           "id": "PAD-01",
           "role": "under-test",
           "precondition": "Any long list (library 100+)",
-          "expect": "Hold Down 5 s, release, hold Up 5 s: steady repeat (~10/s after 0.4 s), stops on release, no overshoot",
+          "expect": "Hold Down 5 s, release, hold Up 5 s: steady repeat (~10/s after 0.4 s), stops on release, no overshoot (manual: stick and repeat feel is judged by hand on a real pad; no check reads a repeat rate)",
           "severity": "major",
           "mode": "manual",
-          "content_hash": "7234492d559c25f98306cc56e9c064989d46a805d170444917afc4a66a231a9d"
+          "content_hash": "b6745b7eee33fdf032c29e7f8ed2acb171a66a17afed76625c1a7a7e69141934"
         },
         {
           "id": "PAD-02",
           "role": "under-test",
           "precondition": "W-P4",
-          "expect": "Tap a direction 10 times quickly: ten steps or as many as rows allow, none dropped, none doubled",
+          "expect": "Tap a direction 10 times quickly: ten steps or as many as rows allow, none dropped, none doubled (manual: W-P4 takes a game and no `rom` fixture is committed)",
           "severity": "major",
           "mode": "manual",
-          "content_hash": "d48303db63efe3d7aec8270bf1b98ef4b70b6b297f87407317dd779b7c8f2489"
+          "content_hash": "617adea998a8002093b31248ac653a21778141c7f823e3867760bfb2e23343d6"
         },
         {
           "id": "PAD-04",
           "role": "under-test",
           "precondition": "Library",
-          "expect": "Diagonal D-pad press (Up+Right): one deterministic step or none, no focus jump off the surface",
+          "expect": "Diagonal D-pad press (Up+Right): one deterministic step or none, no focus jump off the surface (manual: a diagonal is two directions held at once and a step carries one action)",
           "severity": "major",
           "mode": "manual",
-          "content_hash": "0b32607d63ec06015ede0f35fa0adb5881f6223e82e47efc123a53f3df17be3b"
+          "content_hash": "5c64f27762216e61da58c156fcd20bb81721b0abeac7ee5b79571ed27f565476"
         }
       ]
     },
@@ -2872,16 +3192,16 @@
           "expect": "Enter, press B: every surface closes on B to its parent, no surface needs a mouse to leave (needs action pad.chord, which mesen-gui does not advertise to open W-P4 from a game)",
           "severity": "major",
           "mode": "manual",
-          "content_hash": "f811539f164cd5284d6d74e9f43516fb6e0844ea78643fb79a8b6d730ac42fa0"
+          "content_hash": "9b8fee6b85387b615e6a6ba66ef5c4ac28b94f9ec36b00d133e1669ddab91e72"
         },
         {
           "id": "TRAP-02",
           "role": "under-test",
           "precondition": "Any point",
-          "expect": "Watch for any native dialog or classic window: none in the Play door except the ones ADR-0256 Decision 9 lists as deliberately native",
+          "expect": "Watch for any native dialog or classic window: none in the Play door except the ones ADR-0256 Decision 9 lists as deliberately native (manual: a native dialog is not an Avalonia control, so the hook's dialogs list cannot see it)",
           "severity": "major",
           "mode": "manual",
-          "content_hash": "13b3c31e819c4c40e05fdecfbe850a9918f0bcfe7f06e961566f57d37c9531b9"
+          "content_hash": "7e22c0732e8fba003b126ae3f40bdc3158a54bc4e8f5411bb5de75316b99c005"
         },
         {
           "id": "TRAP-03",
@@ -2890,16 +3210,16 @@
           "expect": "Start on the pill, follow the lit steps, hold to skip, let it time out once (needs action pad.chord, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual",
-          "content_hash": "6edef35ac888f64adacbf0c9f9a0a311eb017a390da006e8f649f1a5deb919ab"
+          "content_hash": "4f94d20867c0b41f45910ac06b0254929275d70cad4f3026467e4f83e919ae92"
         },
         {
           "id": "TRAP-04",
           "role": "under-test",
           "precondition": "Home",
-          "expect": "Quit the application by pad: expected FAIL, Tools ... is deliberately unpadded (#1137) and there is no pad route to quit",
+          "expect": "Quit the application by pad: expected FAIL, Tools ... is deliberately unpadded (#1137) and there is no pad route to quit (manual: the pad route to quit does not exist, so there is no action to script)",
           "severity": "major",
           "mode": "manual",
-          "content_hash": "bd9b454f126ce640f2ad018d725a5b239d68ef5b02c54705fa12be6eb58a764e"
+          "content_hash": "a04981502fb3a20061eb76cfc81b3baad805ace96b6d4a1fb2a64b9042f071b5"
         }
       ]
     },
@@ -2915,7 +3235,7 @@
           "expect": "Launch -> Home -> Open a ROM -> search with Y, A -> A on a tile -> play 30 s -> chord -> Settings > Display > Interface size -> Large -> B -> Save states -> save a slot -> B -> Resume -> chord -> Quit game -> confirm -> Home, under 5 minutes (needs action pad.chord, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual",
-          "content_hash": "d5bd528c53c419141c8cd698e65712491f253fd0fdbef2d9ae73f14de298769b"
+          "content_hash": "cbbae8d0e5f3c3a09a4e544d7713c9e07d9ada246a8f64f4d58785e174c08167"
         },
         {
           "id": "JOURNEY-02",
@@ -2924,7 +3244,7 @@
           "expect": "The same trip entered in full screen first and left at the end, focus kept across both mode switches (needs variant window.mode=fullscreen, which mesen-gui does not advertise; needs action pad.chord, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual",
-          "content_hash": "57f301cc4ba2f7b936cf82bdf4d9c24b281f0bc46e1a4f5c7860e23e177bf2cf"
+          "content_hash": "6a47b10a6fb4fcf8abc49fa9d45c24f036bd433781a001f677f9cc48fc914255"
         }
       ]
     },
@@ -2940,34 +3260,34 @@
           "expect": "Chord on P-B: W-P4 opens and the footer names P-B's buttons (needs action pad.chord, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual",
-          "content_hash": "3d7fa669d9d85e4054158252a02ac282900deac7c5450689798efbe6ca662aa3"
+          "content_hash": "daa507e5d71603cad3f28fa78d368dadc6c5b13c14e216d3ced42fd44363fe4f"
         },
         {
           "id": "PAD2-02",
           "role": "under-test",
           "precondition": "W-P4 open",
-          "expect": "Navigate with P-A, then with P-B, alternating: both move the focus, one ring, no double-step",
+          "expect": "Navigate with P-A, then with P-B, alternating: both move the focus, one ring, no double-step (manual: two physical pads and a game, and no `rom` fixture is committed)",
           "severity": "major",
           "mode": "manual",
-          "content_hash": "ad35819ab5dc1aec4171d378bde42513dcbaa6b73c78df299e39db01842c7ac2"
+          "content_hash": "d9ecdcbfa3b9adb2fdfccbe9069bfc2a931c0b07ed15e10e18ad183c2b29ced9"
         },
         {
           "id": "PAD2-03",
           "role": "under-test",
           "precondition": "Controller sheet, both connected",
-          "expect": "Walk the PLAYERS rows and move P-B to P2 by pad: the port lamps are unchanged (ADR-0261)",
+          "expect": "Walk the PLAYERS rows and move P-B to P2 by pad: the port lamps are unchanged (ADR-0261) (manual: two physical pads and a game, and no `rom` fixture is committed)",
           "severity": "major",
           "mode": "manual",
-          "content_hash": "739812c764aacceed9916041e7f337a45ce950b58281718e9c06d3a033be4770"
+          "content_hash": "bee4411e5a99c3191607777cc08c4a353904637ce233f185a31a6df1a632f559"
         },
         {
           "id": "PAD2-04",
           "role": "under-test",
           "precondition": "PAD2-03",
-          "expect": "Unplug P-A, replug: on macOS the reconnect repair never fires and P-A may return on another index (a note for #813's family)",
+          "expect": "Unplug P-A, replug: on macOS the reconnect repair never fires and P-A may return on another index (a note for #813's family) (manual: a physical unplug and replug on macOS is not simulated)",
           "severity": "major",
           "mode": "manual",
-          "content_hash": "6d669b2400e893055abb4c2831a2d5fdf196cdbca2425cd2cfe4160a3faf5d60"
+          "content_hash": "01599e83ee9a70bc5dbf5183e19efa961b9a4045874531c75a1680e3f01dcd53"
         }
       ]
     }

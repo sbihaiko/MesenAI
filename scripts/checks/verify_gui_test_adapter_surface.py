@@ -86,6 +86,12 @@ def automation_ids(repo: Path, errors: list[str]) -> set[str]:
     return ids
 
 
+#The state checks: their `is`/`within` argument compares a value the hook reports - a surface id, a
+#footer word, `lit` - and no AutomationId declares those (#1283). Every other check names a control, so
+#a check added to the adapter later has its id checked and is never skipped without a warning.
+STATE_CHECKS = ("ui.surface", "ui.footer", "ui.lamps", "ui.items", "ui.paused", "ui.haptics", "ui.dialogs")
+
+
 def step_ids(step: dict) -> list[str]:
     """Every control id an automated step names in its check or its wait.
 
@@ -98,7 +104,7 @@ def step_ids(step: dict) -> list[str]:
     out: list[str] = []
     check = step.get("check") or {}
     args = check.get("args") if isinstance(check, dict) else None
-    if isinstance(args, dict):
+    if isinstance(args, dict) and check.get("name") not in STATE_CHECKS:
         for key in ("is", "within"):
             value = args.get(key)
             if isinstance(value, str) and value:
