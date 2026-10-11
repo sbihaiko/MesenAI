@@ -43,6 +43,12 @@ public sealed class TestHookKeys
 
 	public long Frames => _frames() ?? 0;
 
+	//Whether the emulated clock advances - a game loaded and not paused. It is the
+	//family every timed step has to be written in (ADR-0272 item 4) and the one thing
+	//only this layer sees, so `nav.goal` answers a runner's moves in it rather than
+	//letting a model guess a unit (ADR-0271 items 1-2).
+	public bool ClockRunning => _frames() is not null;
+
 	//Null when the press was taken, otherwise why it was not.
 	public string? Press(int pad, string button, int? ticks, int? frames)
 	{
@@ -80,6 +86,58 @@ public sealed class TestHookKeys
 			}
 		}
 		_setKey(code, false);
+		return null;
+	}
+
+	//`pad.chord` (#1779): two buttons or more go down together for one duration and
+	//come up together. A chord is not two `pad.press` requests: the readers that poll
+	//the pressed set - ShortcutKeyHandler's ADR-0251 Select+Start among them - see one
+	//set per poll, so a gesture has to reach it in one.
+	//
+	//Nothing is pressed unless every button of the chord resolves: a half-pressed
+	//chord is a gesture nobody made, and a step that failed halfway would leave the
+	//pad holding a button its own script never let go. A name the backend has no code
+	//for is the step's error, as it is for a press.
+	public string? Chord(int pad, IReadOnlyList<string> buttons, int? ticks, int? frames)
+	{
+		if(buttons.Count < 2) {
+			return "a chord is two buttons or more";
+		}
+		List<ushort> codes = new();
+		foreach(string button in buttons) {
+			ushort code = CodeOfButton(pad, button);
+			if(code == 0) {
+				return Unknown(pad, button);
+			}
+			if(codes.Contains(code)) {
+				return "a chord names each button once: " + button + " is in it twice";
+			}
+			codes.Add(code);
+		}
+		//Every code resolved, so the whole chord is one instant: the clock is read once
+		//here and every hold is added from that one read, before any button goes down.
+		//Reading it per button would let a pause landing between two of them - the
+		//state change the step cannot see coming - refuse the rest while the step still
+		//answered success, leaving the pad holding a button its own script never let go.
+		long? now = _frames();
+		if(now.HasValue) {
+			if(frames is not int heldFrames || heldFrames < 1) {
+				return "the emulated clock is running: write the chord in frames";
+			}
+			foreach(ushort code in codes) {
+				_holds.Add(new Hold(code, 0, now.Value + heldFrames, now.Value, null));
+			}
+		} else {
+			if(ticks is not int heldTicks || heldTicks < 1) {
+				return "the emulated clock is not running: write the chord in ticks";
+			}
+			foreach(ushort code in codes) {
+				_holds.Add(new Hold(code, Tick + heldTicks, null, null, null));
+			}
+		}
+		foreach(ushort code in codes) {
+			_setKey(code, true);
+		}
 		return null;
 	}
 

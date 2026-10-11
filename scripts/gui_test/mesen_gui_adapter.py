@@ -23,10 +23,23 @@ application:
   the port lamps and the pad-loss pause are read from.
 
 Every pad action takes a `pad` index - 0 is the pad in hand, 1 the second pad -
-and the adapter writes it on the wire even when a step leaves it out. The only
-input family a run needs is the pad: `text.*` and `pointer.*` belong to the
-real-window mode ADR-0272 item 7 parks for step 7, so this hook implements
+and the adapter writes it on the wire even when a step leaves it out.
+
+The keyboard is the second input family (#1779): `key.press` names a literal key
+the way the backend names it ("Enter", "Up Arrow", "1") and takes the same
+duration family a pad press does, so a step that drives the application's own
+keyboard needs no pad behind it - which is the case a machine with nothing
+plugged in is. `text.*` and `pointer.*` are not advertised: they belong to the
+real-window mode ADR-0272 item 7 parks for step 7, and this hook implements
 neither.
+
+The hook answers two more verbs than this adapter advertises - `pad.chord` and
+`nav.goal` (#1779) - and they stay unadvertised on purpose: the committed
+pad-only script has 32 manual steps whose claim is that it needs exactly those
+two, and `scripts/checks/verify_gui_test_adapter_surface.py` fails the moment the
+adapter advertises an action a manual step claims is missing. Retiring those
+claims is the script's own slice (#1778); the adapter advertises a verb as soon
+as the script can use it, and advertises `key.press`, which no claim names.
 
 Contract, per ADR-0272 item 6: launch() resolves fixtures first and FAILS on a
 missing one, never skips; check() is an objective read of the hook's snapshot and
@@ -65,7 +78,20 @@ from pathlib import Path
 
 HEADLESS_E2E_CASE = "GuiTestHookTests.GuiTestHook_e2e_a_runner_drives_the_Home_over_the_socket"
 PAD_ACTIONS = ["pad.press", "pad.hold", "pad.release"]
-ACTIONS = PAD_ACTIONS + ["pad.connect", "pad.disconnect"]
+# #1779: the keyboard family, beside the harness's pad. `key.press` is answered by the
+# hook at the layer the GUI keyboard reads (KeyDown/KeyUp), so a step that drives the
+# application's own keyboard needs no pad connected.
+KEY_ACTIONS = ["key.press"]
+ACTIONS = PAD_ACTIONS + KEY_ACTIONS + ["pad.connect", "pad.disconnect"]
+INPUT_FAMILIES = ["pad", "key"]
+# The contract version this adapter speaks. A hook that answers 1 carries neither
+# `pad.chord` nor `nav.goal` and advertises no actions at all; 2 is the one #1779
+# extends. Both are accepted, and each is held to what it promises: a version-2
+# hook names the actions it answers in `hello`, and a launch refuses it when one of
+# the ACTIONS below is missing (Session.connect) rather than letting the step that
+# wrote that verb fail later. A version-1 hook promises nothing, so a run that
+# drives one still fails on the step that needs a verb it cannot answer.
+HOOK_VERSIONS = (1, 2)
 # The pad families a script can hot-plug (#1281), as the two names a person uses:
 # the Xbox-shaped button table and the PlayStation one (PadFamily.Xbox / Ps4).
 PAD_FAMILIES = ("xbox", "playstation")
@@ -199,6 +225,14 @@ def action_args(action, args):
         # the hook can see: which of `ticks`/`frames` this step owes is its ruling,
         # exactly as it is for `pad.press`.
         return args
+    if action in KEY_ACTIONS:
+        key = args.get("key")
+        if not isinstance(key, str) or not key:
+            raise AdapterError(f"{action}: a step names the key it drives (args.key), not {key!r}")
+        # Which of `ticks`/`frames` this step owes is the hook's ruling, as it is for a
+        # pad press: only the hook sees whether the emulated clock is advancing
+        # (ADR-0272 item 4). No `pad` is written: the keyboard is not a pad.
+        return args
     if action in ("pad.connect", "pad.disconnect"):
         index = args.get("index")
         if not isinstance(index, int) or isinstance(index, bool) or index < 0:
@@ -305,7 +339,7 @@ class MesenGuiAdapter:
         self.connect_timeout = connect_timeout
 
     def capabilities(self):
-        return {"actions": list(ACTIONS), "checks": list(CHECKS), "input_families": ["pad"], "variants": {"window.mode": ["windowed"]}}
+        return {"actions": list(ACTIONS), "checks": list(CHECKS), "input_families": list(INPUT_FAMILIES), "variants": {"window.mode": ["windowed"]}}
 
     def launch(self, fixtures):
         mode = window_mode()  # a bad value fails before a clone, a process or a socket exists
@@ -369,8 +403,24 @@ class Session:
         self._sock = sock
         self._file = sock.makefile("rw", encoding="utf-8", newline="\n")
         hello = self._ask("hello")
-        if hello.get("hook") != 1:
-            raise Unavailable(f"unsupported hook version {hello.get('hook')!r}")
+        version = hello.get("hook")
+        if version not in HOOK_VERSIONS:
+            raise Unavailable(f"unsupported hook version {version!r}")
+        # ADR-0272 item 2: a version-2 hook hands its own action list over in `hello`,
+        # and the surface this adapter advertises is what a script is written against.
+        # A v2 hook that leaves one of them out - `key.press`, say - would launch, and
+        # the failure would land on whichever step wrote that verb: later, and nowhere
+        # near the cause. Every advertised action has to be named here, where the
+        # launch is. A version-1 hook advertises no list at all, and stays accepted:
+        # it predates the field, and the step that needs a verb it cannot answer is
+        # still where such a run fails.
+        if version >= 2:
+            answered = hello.get("actions")
+            if not isinstance(answered, list):
+                raise Unavailable(f"hook version {version} advertised no actions: {answered!r}")
+            missing = [action for action in ACTIONS if action not in answered]
+            if missing:
+                raise Unavailable("the hook does not answer the actions this adapter advertises: " + ", ".join(missing))
 
     def require_placement(self):
         """Fail the launch when an application window's frame is not fully inside the primary display's working area (#1255)."""

@@ -9,7 +9,12 @@ namespace Mesen.Logic.TestHook;
 //nothing in Handle throws. The hook keeps no history.
 public sealed class TestHookProtocol
 {
-	public const int Version = 1;
+	//Version 2 (#1779): the verbs a GUI run needs beside a single press - `pad.release`
+	//and `key.press` were 2's floor, `pad.chord` and `nav.goal` are new, and `hello`
+	//now names the actions it answers. A version-1 hook answered `pad.press`,
+	//`pad.hold`, `pad.release`, `key.press` and the two pad hot-plugs and advertised
+	//none of them, so a runner had to spend a step finding out.
+	public const int Version = 2;
 	private static readonly string[] Ops = { "hello", "state", "inject", "capture", "quit" };
 
 	private readonly string _token;
@@ -73,7 +78,24 @@ public sealed class TestHookProtocol
 		//The namespaces an action can be written in: the ones ADR-0272 item 7 gives
 		//this hook. `text.*` and `pointer.*` are the real-window mode's (step 7) and
 		//the hook implements neither (#1281 review).
-		return new JsonObject { ["hook"] = Version, ["ops"] = ops, ["namespaces"] = new JsonArray("pad", "key", "ui") };
+		//
+		//`actions` (#1779) is the contract line a runner reads before it spends a step:
+		//the inject actions this hook answers, sorted, so an old hook - which advertised
+		//none - is told apart from this one by asking, not by failing a step. The five
+		//verbs the pad-only batches need are all in it except the focus read, which is the
+		//`state` op above: a read is not an action.
+		List<string> names = new(Actions);
+		names.Sort(StringComparer.Ordinal);
+		JsonArray actions = new();
+		foreach(string action in names) {
+			actions.Add((JsonNode?)JsonValue.Create(action));
+		}
+		return new JsonObject {
+			["hook"] = Version,
+			["ops"] = ops,
+			["namespaces"] = new JsonArray("pad", "key", "ui"),
+			["actions"] = actions
+		};
 	}
 
 	private JsonObject State()
@@ -88,7 +110,7 @@ public sealed class TestHookProtocol
 	//- 0 is the pad in the hand, 1 the second pad, ADR-0272 section 4's "device 0" -
 	//and it is the index TestHookKeys takes too, so one number names one pad from a
 	//script's step down to the backend's own "Pad1 A" lookup.
-	private static readonly HashSet<string> Actions = new() { "pad.press", "pad.hold", "pad.release", "key.press", "pad.connect", "pad.disconnect" };
+	private static readonly HashSet<string> Actions = new() { "pad.press", "pad.hold", "pad.release", "pad.chord", "key.press", "nav.goal", "pad.connect", "pad.disconnect" };
 
 	private JsonObject Inject(JsonObject request)
 	{
@@ -105,6 +127,13 @@ public sealed class TestHookProtocol
 		if(pad < 0) {
 			throw new ArgumentException("pad is a pad index: 0 is the pad in the hand, 1 the second pad");
 		}
+		//nav.goal is a read of the surface a move is chosen from, answered before the
+		//step below: it injects nothing, so it may be asked between two moves without
+		//restarting the counters a step's own check reads (#1282), and asking it is
+		//never a move. The Choice stays at the runner (ADR-0271 item 6 A).
+		if(action == "nav.goal") {
+			return NavGoal(args, pad);
+		}
 		//#1282: the request that starts a step is the one that counts from now on.
 		_target.Step();
 		string button = args["button"]?.GetValue<string>() ?? "";
@@ -115,6 +144,7 @@ public sealed class TestHookProtocol
 			//HoldDown refuses (ADR-0272 item 4).
 			"pad.hold" => _keys.HoldDown(pad, button, ticks, frames),
 			"pad.release" => _keys.Release(pad, button),
+			"pad.chord" => _keys.Chord(pad, Buttons(args), ticks, frames),
 			"key.press" => _keys.PressKey(args["key"]?.GetValue<string>() ?? "", ticks, frames),
 			"pad.connect" => Pads().Connect(args["index"]?.GetValue<int>() ?? -1, args["family"]?.GetValue<string>()),
 			"pad.disconnect" => Pads().Disconnect(args["index"]?.GetValue<int>() ?? -1),
@@ -124,6 +154,48 @@ public sealed class TestHookProtocol
 			throw new ArgumentException(error);
 		}
 		return new JsonObject();
+	}
+
+	//The buttons of a `pad.chord`, in the order the step wrote them. A `buttons` that is
+	//not an array of names is no chord at all: Chord refuses anything under two, so an
+	//empty list here is the step's own error rather than a press nobody asked for.
+	private static string[] Buttons(JsonObject args)
+	{
+		if(args["buttons"] is not JsonArray list) {
+			return Array.Empty<string>();
+		}
+		List<string> buttons = new();
+		foreach(JsonNode? button in list) {
+			if(button is not null) {
+				buttons.Add(button.GetValue<string>());
+			}
+		}
+		return buttons.ToArray();
+	}
+
+	//ADR-0271 items 1-3, on the hook's side of the decision: a step names a goal as a
+	//check-vocabulary predicate and the runner asks one Choice per move. What the hook
+	//owes that loop is the two things only it has - the UI state the choice is made
+	//from (item 1: the snapshot, never a screenshot) and the moves it will accept,
+	//which are the pad's own six navigation presses (item 2) written in the duration
+	//family the emulated clock allows, so the unit is never a model's guess
+	//(ADR-0272 item 4). Which moves have already failed from a state, the decision cap
+	//and the recording are the runner's (items 3 and 5); no model is reachable here.
+	private JsonObject NavGoal(JsonObject args, int pad)
+	{
+		string goal = args["goal"]?.GetValue<string>() ?? "";
+		if(goal.Length == 0) {
+			throw new ArgumentException("nav.goal needs the goal it navigates to");
+		}
+		string family = _keys.ClockRunning ? "frames" : "ticks";
+		JsonArray moves = new();
+		foreach(PadNavAction navigation in PadNavControls.Navigation) {
+			moves.Add((JsonNode?)new JsonObject {
+				["name"] = "pad.press",
+				["args"] = new JsonObject { ["pad"] = pad, ["button"] = navigation.ToString(), [family] = 1 }
+			});
+		}
+		return new JsonObject { ["goal"] = goal, ["state"] = State(), ["family"] = family, ["moves"] = moves };
 	}
 
 	private TestHookPads Pads()
