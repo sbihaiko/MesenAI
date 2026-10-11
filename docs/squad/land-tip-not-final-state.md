@@ -1,18 +1,20 @@
 # A land closed an issue whose source changes were never committed on its branch
 
-Status: fixed in the fork (`agent-squad` plugin 0.2.30, branch
-`fix/1821-land-tip-not-final-state` at `f3579f0`, pull request
-https://github.com/sbihaiko/agent-squad/pull/2 against that fork's `local/next`).
-Nothing in this repository changes: the land operation is fork-only tooling and
-no file here carries it. GitHub issue #1821. Measured 2026-10-11, against the
-fork's `contrib/squad-goal/scripts/forkclose.sh`.
+Status: pending deployment — the fix is ready in the fork (`agent-squad` plugin
+0.2.30, branch `fix/1821-land-tip-not-final-state` at `f3579f0`, pull request
+https://github.com/sbihaiko/agent-squad/pull/2 against that fork's `local/next`),
+and is not merged into the live `local/next`: #1821 counts as resolved for this
+record, not as deployed in the running loop. Nothing in this repository changes:
+the land operation is fork-only tooling and no file here carries it. GitHub
+issue #1821. Measured 2026-10-11, against the fork's
+`contrib/squad-goal/scripts/forkclose.sh`.
 
 ## What was measured
 
 #1809's source half was never on `local/next` although the issue was closed and
 its card reached Done. Its branch `gui/1809` was locked in a mid-work commit: a
 partial strip (`hidline=3`, no `hid.size?`, no chip builder) while the run's
-final code — `hidchip`, `fmtN`, the `data-col` colour rules — sat uncommitted in
+final code — `hidchip`, `fmtN`, the `data-col` color rules — sat uncommitted in
 `~/wt-as-1809`'s index. The land merged the branch commit, not the index, and the
 merge commit hid it: `d01cd53` is a single-parent commit titled
 `Merge gui/1809 (Refs #1809)` carrying only the three new test files, while

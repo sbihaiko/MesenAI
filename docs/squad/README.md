@@ -6,6 +6,12 @@ this folder and the global tooling they refer to.
 
 - `workflows/dynamic.graph.json` — the dynamic workflow and its caps
   (`max_parallel`, `max_children`, `spend_cap`).
+- `land-tip-not-final-state.md` — a land closed #1809 while the run's source
+  changes were still uncommitted on the branch; the fix is pending deployment.
+- `fork-gate-full-skips-pytest.md` — the gate's full suite class could skip the
+  pytest suite on a branch whose diff selects it.
+- `provider-outage-falls-through.md` — a 402 from one provider ended a dispatch
+  at its first model instead of falling through the chain.
 - `router-model-overrun.md` — notes on router-model overruns.
 
 Global tooling (outside the repo):

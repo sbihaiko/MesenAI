@@ -420,6 +420,12 @@ doc-checks-1: check-manifest
 	./scripts/checks/verify_community_pack_labels_script.sh
 	./scripts/checks/verify_agents_md_recipe_handoff.sh
 	./scripts/checks/verify_claude_md_section.sh
+	#docs/squad/ holds the squad's own incident records and nothing read the
+	#folder: #1825 (a Status line that read as done while its own body said the
+	#fix was not in the live tree), #1826 (en-GB spelling in a versioned en-US
+	#doc) and #1827 (a record missing from the folder index) all shipped in it
+	#unchecked. This asserts the three properties that would have caught them.
+	python3 scripts/checks/verify_squad_docs.py
 	./scripts/checks/verify_report_bug_prefix.sh
 	# #1807: the check above must not carry its own copy of the marker pattern it
 	# enforces, and the pattern it prints must be the one scripts/report-bug.sh runs.
