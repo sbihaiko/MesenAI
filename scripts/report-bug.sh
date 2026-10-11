@@ -30,6 +30,29 @@ case "$PRIORITY" in
   *) echo "Invalid priority: $PRIORITY (use P0, P1, or P2)" >&2; exit 1 ;;
 esac
 
+TITLE="${TITLE#"${TITLE%%[![:space:]]*}"}"
+
+# Every issue this helper files carries exactly one prefix, chosen from the
+# body and never guessed: "[SQUAD] " when the body carries the "Fork-only
+# work" marker (the work is the squad's own tooling), "[MesenAI] " otherwise
+# (the work lands in this repository).
+#
+# The marker test is the one forkonly.sh applies — the substring "Fork-only
+# work" anywhere in the body (`contains("Fork-only work")`, forkonly.sh), not a
+# line-anchored "Fork-only work:" form: the marker is written bold, in a
+# bullet, quoted, or without a colon as often as it is written bare, and a body
+# that merely mentions the phrase is one forkonly.sh already calls fork-only.
+# Asking the same question here is what keeps the two rules from disagreeing.
+# A title that already starts with "[" keeps the prefix its caller named, so it
+# never gets two — the whitespace stripped above can never hide the "[".
+if [[ "$TITLE" != \[* ]]; then
+  if grep -Fq 'Fork-only work' <<<"$BODY"; then
+    TITLE="[SQUAD] $TITLE"
+  else
+    TITLE="[MesenAI] $TITLE"
+  fi
+fi
+
 ISSUE_URL=$(gh issue create --repo "$REPO" --title "$TITLE" --body "$BODY" --label bug)
 echo "Issue created: $ISSUE_URL"
 

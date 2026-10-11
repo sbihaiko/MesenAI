@@ -414,6 +414,7 @@ doc-checks-1: check-manifest
 	./scripts/checks/verify_community_pack_labels_script.sh
 	./scripts/checks/verify_agents_md_recipe_handoff.sh
 	./scripts/checks/verify_claude_md_section.sh
+	./scripts/checks/verify_report_bug_prefix.sh
 	./scripts/checks/verify_community_packs_catalog_doc.sh
 	./scripts/checks/verify_hd_pack_authoring_doc.sh
 	#The artist-facing docs (docs/remastering-a-game.md, ai-kit-review.md,
