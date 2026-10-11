@@ -34,7 +34,6 @@ Steps:
 | `launch.first-run-home` | under-test | `fixture settings.profiles.fresh` | — | `ui.screen == play.home` within 120 ticks | `ui.screen(is="play.home")` | No wizard appears (ADR-0256 Decision 8); Home W-P1 is on screen. | window.mode=windowed | major | automated |
 | `launch.open-rom-focused` | under-test | `ui.screen == play.home` | — | `ui.focused == play.home.open-rom` within 120 ticks | `ui.focused(is="play.home.open-rom")` | The one control, Open a ROM, is already focused at launch. | window.mode=windowed | major | automated |
 | `launch.ring-on-open-rom` | under-test | `ui.screen == play.home` | — | within 4 ticks | `ui.ring(is="play.home.open-rom")` | The focus ring is visible on Open a ROM at launch (ADR-0261). | window.mode=windowed | minor | automated |
-| `launch.port-lamp-p1` | under-test | `ui.screen == play.home` | `pad.connect(index=0)` | within 180 ticks | `ui.lamps(port=1, is="lit")` | With the pad in the hand connected (simulated through the hook) the pad port lamps show P1 lit (ADR-0261). | window.mode=windowed | minor | automated |
 
 ## Batch `home`
 
@@ -48,6 +47,7 @@ Steps:
 
 | ID | Role | Precondition | Action | Wait | Check | Expected | Variants | Severity | Mode |
 |---|---|---|---|---|---|---|---|---|---|
+| `launch.port-lamp-p1` | under-test | `ui.screen == play.home` | `pad.connect(index=0)` | within 180 ticks | `ui.lamps(port=1, is="lit")` | With the pad in the hand connected (simulated through the hook) the pad port lamps show P1 lit (ADR-0261). | window.mode=windowed | minor | automated |
 | `home.focus-holds-up` | under-test | `ui.focused == play.home.open-rom` | `pad.press(button="Up", ticks=4)` | within 4 ticks | `ui.focused(is="play.home.open-rom")` | Focus stays on Open a ROM after D-pad Up. (HOME-02, HOME-04) | all | major | automated |
 | `home.focus-holds-down` | under-test | `ui.focused == play.home.open-rom` | `pad.press(button="Down", ticks=4)` | within 4 ticks | `ui.focused(is="play.home.open-rom")` | Focus stays on Open a ROM after D-pad Down. | all | major | automated |
 | `home.focus-holds-left` | under-test | `ui.focused == play.home.open-rom` | `pad.press(button="Left", ticks=4)` | within 4 ticks | `ui.focused(is="play.home.open-rom")` | Focus stays on Open a ROM after D-pad Left. | all | major | automated |

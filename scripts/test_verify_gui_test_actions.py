@@ -52,6 +52,21 @@ class VerifyGuiTestActions(unittest.TestCase):
                 return step
         return None
 
+    def opens_with_its_first_press(self, doc):
+        """Reduce the home batch to one that opens with the first press it holds.
+
+        #1492 moved the launch batch's `pad.connect` (`launch.port-lamp-p1`) to the
+        head of the home batch's steps, so the pad is connected after the setup that
+        reads the launch focus. Taking the setup away alone therefore leaves a batch
+        that opens with a connect, and a connect is not a press, so the rule this
+        file guards stays silent; the observation to take away is the setup plus
+        that connect.
+        """
+        home = self.batch(doc, "home")
+        home["setup"] = []
+        home["steps"] = [s for s in home["steps"] if s["id"] != "launch.port-lamp-p1"]
+        return home
+
     def test_committed_tree_is_green(self):
         code, out = run_check(ROOT)
         self.assertEqual(code, 0, out)
@@ -62,7 +77,7 @@ class VerifyGuiTestActions(unittest.TestCase):
 
     def test_batch_opening_with_a_pad_press_is_red(self):
         doc = self.doc()
-        self.batch(doc, "home")["setup"] = []
+        self.opens_with_its_first_press(doc)
         self.write(doc)
         code, out = run_check(self.tmp)
         self.assertEqual(code, 1, out)
@@ -71,11 +86,11 @@ class VerifyGuiTestActions(unittest.TestCase):
 
     def test_batch_opening_with_a_chord_is_red(self):
         # #1242: the pilot's `pause` steps are all `manual` now (the chord they need is not advertised), so
-        # the chord is put on the step that opens a batch once that batch's setup is taken away - the same
-        # mutation, on a step that really does press.
+        # the chord is put on the step that opens a batch once that batch's observation is taken away - the
+        # same mutation, on a step that really does press.
         doc = self.doc()
-        self.batch(doc, "home")["setup"] = []
-        self.first_automated(self.batch(doc, "home"))["action"] = {"name": "pad.chord", "args": {"ticks": 2}}
+        home = self.opens_with_its_first_press(doc)
+        self.first_automated(home)["action"] = {"name": "pad.chord", "args": {"ticks": 2}}
         self.write(doc)
         code, out = run_check(self.tmp)
         self.assertEqual(code, 1, out)
@@ -87,8 +102,8 @@ class VerifyGuiTestActions(unittest.TestCase):
         # a batch that opens with one drops the hold the same way #1232's press was
         # dropped - the rule's own words are "actions that put a button down".
         doc = self.doc()
-        self.batch(doc, "home")["setup"] = []
-        self.first_automated(self.batch(doc, "home"))["action"] = {"name": "pad.hold", "args": {"button": "Up", "ticks": 4}}
+        home = self.opens_with_its_first_press(doc)
+        self.first_automated(home)["action"] = {"name": "pad.hold", "args": {"button": "Up", "ticks": 4}}
         self.write(doc)
         code, out = run_check(self.tmp)
         self.assertEqual(code, 1, out)
