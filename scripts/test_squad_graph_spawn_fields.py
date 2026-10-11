@@ -12,30 +12,37 @@ names" - dispatched nothing and the run's whole spend bought nothing
 (run-20261011-160224-2d865b: spawn_rejected `unknown_field:turns`, verdict failed
 `no_dispatch`; issue #1800).
 
-The accepted field list is read from the plugin at runtime, never copied by hand
-into this file: a hand copy would go stale in step with the graph and be blind to
-exactly the version skew this test exists to catch. The sources are the plugin
-installed under `~/.claude/plugins/cache`, `--plugin` for any other checkout, and
-the read-only pin at `scripts/vendor/agent_squad/envelope.py` -- the fork's
-`squad/envelope.py` verbatim, header sha256 verified before it is imported. The
-pin is what lets the CI image, which has no plugin, check the graph instead of
-skipping it.
+The accepted field list is read from a runtime plugin, never from a hand copy:
+a copy would go stale in step with the graph and be blind to exactly the version
+skew this test exists to catch. The sources are the newest plugin installed under
+`~/.claude/plugins/cache`, and `--plugin` or `AGENT_SQUAD_PLUGIN` naming another
+one. The committed copy at `scripts/vendor/agent_squad/envelope.py` - the fork's
+`squad/envelope.py` verbatim, header sha256 verified before it is imported - is
+never reached for on its own: it is a recording of a runtime plugin, and CI, which
+has no plugin installed and cannot read the plugin's private repository, hands it
+to the guard by name. Whenever the contract did come from a runtime plugin, the
+recording is checked against it, so the two cannot disagree in silence: a field
+rename on the plugin side fails here on the next run of this suite, and the copy
+is re-vendored rather than left to stand in for the plugin (review of PR #1804).
 
 When no contract can be loaded the guard FAILS. It never skips: a skip is a PASS
 that asserts nothing, and skipping is how this check let `turns` sit in the graph
-unobserved until a run died on it (review of PR #1804, issue #1800).
+unobserved until a run died on it (review of PR #1804, issue #1800). A fenced
+block that is meant to hold JSON and does not parse fails too: an example the
+guard cannot read is an example it does not check.
 
 Usage:
   python3 scripts/test_squad_graph_spawn_fields.py
   python3 scripts/test_squad_graph_spawn_fields.py --root /tmp/copy-of-another-revision
-  python3 scripts/test_squad_graph_spawn_fields.py --plugin ~/VSCodeProjects/agent-squad
+  python3 scripts/test_squad_graph_spawn_fields.py --plugin ~/.claude/plugins/cache/agent-squad/agent-squad/0.2.0
+  AGENT_SQUAD_PLUGIN=scripts/vendor/agent_squad/envelope.py python3 scripts/test_squad_graph_spawn_fields.py
 
 `--root` points the check at another revision's checkout of the graph (for example
 `git show origin/main:docs/squad/workflows/dynamic.graph.json` written into a temp
 tree), so the pre-fix failure can be shown without touching this worktree.
-`--plugin` reads the contract from a given plugin root (or its `squad/envelope.py`)
-rather than from the cache or the pin; a path that holds no loadable contract is a
-failure, not a fallback.
+`--plugin` and `AGENT_SQUAD_PLUGIN` read the contract from a given runtime plugin
+(or its `squad/envelope.py`) rather than from the installed cache; a path that
+holds no loadable contract is a failure, not a fallback.
 """
 from __future__ import annotations
 
@@ -44,6 +51,7 @@ import hashlib
 import importlib
 import importlib.util
 import json
+import os
 import re
 import sys
 import types
@@ -51,11 +59,14 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 WORKFLOWS = Path("docs") / "squad" / "workflows"
-PINNED = Path("scripts") / "vendor" / "agent_squad" / "envelope.py"
+RECORDED = Path("scripts") / "vendor" / "agent_squad" / "envelope.py"
+ENV = "AGENT_SQUAD_PLUGIN"
 END_MARK = "# ---- end vendored header ----\n"
 
-# ```json ... ``` or ``` ... ```: the graphs show their example inside a fence.
-FENCE = re.compile(r"```(?:json)?[ \t]*\n(.*?)```", re.DOTALL)
+# `(json)?` separates a fence tagged as JSON from a plain one, and from the prose
+# and shell blocks the same instructions carry: only the first is promised to be
+# JSON, so only the first is a failure when it does not parse.
+FENCE = re.compile(r"```(json)?[ \t]*\n(.*?)```", re.DOTALL)
 
 FAILURES = []
 
@@ -118,13 +129,13 @@ def fields_from_plugin(envelope):
         raise ContractError(f"{envelope}: defines no REQUEST_FIELDS ({exc})") from exc
 
 
-def fields_from_pin(path):
-    """(REQUEST_FIELDS, version) from the read-only pin, header sha256 checked first.
+def fields_from_recording(path):
+    """(REQUEST_FIELDS, version) from a committed copy, header sha256 checked first.
 
-    The pin's body is the fork's file verbatim, so the `from squad import skills`
+    The copy's body is the fork's file verbatim, so the `from squad import skills`
     it carries is satisfied by stubs: REQUEST_FIELDS is a module-level constant
     and the guard calls nothing in the module. The sha256 check is what makes the
-    pin trustworthy: a pin edited to agree with a graph fails here instead.
+    copy trustworthy: a copy edited to agree with a graph fails here instead.
     """
     try:
         text = path.read_text(encoding="utf-8")
@@ -146,47 +157,101 @@ def fields_from_pin(path):
     module = importlib.util.module_from_spec(importlib.util.spec_from_file_location("squad.envelope", path))
     try:
         module.__spec__.loader.exec_module(module)
-        return set(module.REQUEST_FIELDS), pinned.get("source-version", "pinned")
+        return set(module.REQUEST_FIELDS), pinned.get("source-version", "unnamed")
     except AttributeError as exc:
         raise ContractError(f"{path}: defines no REQUEST_FIELDS ({exc})") from exc
     except (ImportError, SyntaxError) as exc:
         raise ContractError(f"{path}: cannot be imported ({exc.__class__.__name__}: {exc})") from exc
 
 
-def load_contract(plugin):
-    """(REQUEST_FIELDS, version, source) from --plugin, the cache, or the pin.
+def is_recording(path):
+    """Whether `path` is a committed copy rather than a plugin's own file."""
+    try:
+        return END_MARK in path.read_text(encoding="utf-8")
+    except OSError:
+        return False
 
-    `--plugin` wins, then the newest plugin installed under the cache, then the
-    committed pin. A source that is present but unreadable is an error and not a
-    reason to try the next one: falling through would hide the broken plugin the
-    guard exists to report, and reporting it is the whole point.
+
+def read_contract(named):
+    """(REQUEST_FIELDS, version, source) from the path or plugin root `named`."""
+    envelope = envelope_in(named)
+    if envelope is None:
+        raise ContractError(f"{named}: no runtime plugin there (no squad/envelope.py, no envelope.py)")
+    if is_recording(envelope):
+        fields, version = fields_from_recording(envelope)
+        return fields, version, f"{envelope} (committed copy of agent-squad {version})"
+    version = version_of(envelope)
+    return fields_from_plugin(envelope), version, f"{envelope} (runtime agent-squad {version})"
+
+
+def check_recording(fields, source):
+    """Fail when the committed copy disagrees with the runtime plugin that answered.
+
+    This is what keeps the copy from standing in for the plugin: a runtime plugin
+    whose fields moved fails the suite here, on the machine that has both, and the
+    copy is re-vendored from it instead of quietly ageing.
     """
-    if plugin:
-        envelope = envelope_in(plugin)
-        if envelope is None:
-            raise ContractError(f"--plugin {plugin}: no squad/envelope.py there")
-        return fields_from_plugin(envelope), version_of(envelope), f"{envelope} (--plugin)"
-    cached = cached_plugins()
-    if cached:
+    if not (REPO_ROOT / RECORDED).is_file():
+        fail(
+            f"{RECORDED}: the committed read-only copy is missing; CI reads the contract "
+            f"from it by name, so a tree without it can only be checked by a runtime plugin"
+        )
+        return
+    if str(REPO_ROOT / RECORDED) == str(Path(source.split(" (", 1)[0])):
+        return                                     # the copy answered: nothing to compare
+    try:
+        recorded, version = fields_from_recording(REPO_ROOT / RECORDED)
+    except ContractError as exc:
+        fail(f"the committed copy cannot be read: {exc}")
+        return
+    if recorded != fields:
+        fail(
+            f"{RECORDED} records agent-squad {version} accepting {sorted(recorded)}, but {source} "
+            f"accepts {sorted(fields)}: re-vendor the copy from that plugin "
+            f"(the header names the fork commit it came from) before trusting this check"
+        )
+
+
+def load_contract(plugin):
+    """(REQUEST_FIELDS, version, source) from --plugin, AGENT_SQUAD_PLUGIN or the installed cache.
+
+    `--plugin` wins, then `AGENT_SQUAD_PLUGIN`, then the newest plugin installed
+    under the cache. A source that is present but unreadable is an error and not a
+    reason to try the next one: falling through would hide the broken plugin the
+    guard exists to report, and reporting it is the whole point. With none of them,
+    the guard fails rather than read a copy nobody named.
+    """
+    named = plugin or os.environ.get(ENV) or ""
+    if named:
+        fields, version, source = read_contract(named)
+    else:
+        cached = cached_plugins()
+        if not cached:
+            raise ContractError(
+                f"no runtime plugin: no --plugin, no ${ENV}, and no plugin under "
+                f"{Path.home() / '.claude' / 'plugins' / 'cache'}. Install the agent-squad plugin, "
+                f"or name the committed copy at {RECORDED} with ${ENV} (which is what CI does)"
+            )
         envelope, version = cached[0]
-        return fields_from_plugin(envelope), version, f"{envelope} (installed agent-squad {version})"
-    pin = REPO_ROOT / PINNED
-    if pin.is_file():
-        fields, version = fields_from_pin(pin)
-        return fields, version, f"{PINNED} (read-only pin of agent-squad {version})"
-    raise ContractError(
-        f"no --plugin, no plugin under {Path.home() / '.claude' / 'plugins' / 'cache'}, "
-        f"and no committed pin at {PINNED}"
-    )
+        fields, source = fields_from_plugin(envelope), f"{envelope} (runtime agent-squad {version})"
+    check_recording(fields, source)
+    return fields, version, source
 
 
-def spawn_examples(text):
-    """Every example request in `text`: a JSON object in a fence with a `prompt`."""
+def spawn_examples(text, where):
+    """Every example request in `text`; a fence that should be JSON but is not is a failure."""
     out = []
     for match in FENCE.finditer(text):
+        tagged, body = match.group(1), match.group(2)
         try:
-            parsed = json.loads(match.group(1))
-        except json.JSONDecodeError:
+            parsed = json.loads(body)
+        except json.JSONDecodeError as exc:
+            # A ```json fence is promised to be JSON, and so is an untagged one
+            # that opens an object or an array: a plain fence holding prose or
+            # shell is neither. Skipping a malformed one is how an example that
+            # carries a rejected field reported PASS without being read.
+            if tagged or body.lstrip()[:1] in ("{", "["):
+                fail(f"{where}: a JSON fence does not parse, so its example went unchecked ({exc})")
             continue
         out.extend(walk(parsed))
     return out
@@ -224,12 +289,12 @@ def check_graph(path, root, fields):
                 texts.append((node.get("name", "?"), value))
     before = len(FAILURES)
     for node_name, text in texts:
-        for spawn in spawn_examples(text):
+        where = f"{rel}: node {node_name!r}" if node_name else str(rel)
+        for spawn in spawn_examples(text, where):
             extra = sorted(set(spawn) - fields)
             if extra:
-                where = f"node {node_name!r} " if node_name else ""
                 fail(
-                    f"{rel}: {where}example spawn carries fields agent-squad does not "
+                    f"{rel}: node {node_name!r} example spawn carries fields agent-squad does not "
                     f"accept: {extra} (spawn keys: {sorted(spawn)})"
                 )
     if len(FAILURES) == before:
@@ -255,8 +320,8 @@ def main():
     )
     parser.add_argument(
         "--plugin",
-        help="agent-squad plugin root (or its squad/envelope.py) to read the contract "
-        "from, instead of the installed cache or the committed pin",
+        help="runtime plugin root (or its squad/envelope.py) to read the contract from, "
+        f"instead of ${ENV} or the installed plugin cache",
     )
     args = parser.parse_args()
     root = Path(args.root).resolve()

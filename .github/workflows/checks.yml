@@ -206,11 +206,15 @@ jobs:
   # loops over the files instead. Same Python deps as the doc-checks shards, minus
   # SDL2 (no compilation here). Measured 2026-09-14: 38 files, ~25 s.
   #
-  # No plugin is installed here, which is why the squad spawn-field guard
-  # (scripts/test_squad_graph_spawn_fields.py) reads its contract from the
-  # committed read-only pin at scripts/vendor/agent_squad/envelope.py and fails
-  # when it cannot be loaded - #1804's finding was that this job reported PASS
-  # while the guard skipped for want of a plugin.
+  # No plugin is installed here, and the plugin's own repository is private: the
+  # guard (scripts/test_squad_graph_spawn_fields.py) reads its contract from a
+  # runtime plugin, and naming the committed read-only copy through
+  # AGENT_SQUAD_PLUGIN below is this job supplying one. The guard never reaches
+  # for that copy on its own - #1804's finding was that it did, so a field rename
+  # on the plugin side could not red this job - and wherever a real plugin is
+  # installed it is the contract, with the copy checked against it and any
+  # disagreement failing (which is how a rename reaches this repository: on the
+  # machine that runs the squad, at the next `make python-tests`).
   python-tests:
     runs-on: ubuntu-22.04
 
@@ -237,6 +241,15 @@ jobs:
           python3 -m pip install --user PyYAML==6.0.3 Pillow==12.3.0 numpy==2.2.6 # numpy 2.3+ dropped Python 3.10 (ubuntu-22.04 runners)
 
       - name: Run the Python suite
+        env:
+          # The spawn-field guard's contract, named explicitly: this runner has no
+          # plugin installed and cannot read the plugin's repository
+          # (Korck-lab/agent-squad answers 404 for the tokens this repository
+          # holds), so the committed read-only copy is what it checks against. The
+          # copy is the fork's squad/envelope.py verbatim with its sha256 in the
+          # header; re-vendor it from the fork whenever the plugin's fields move,
+          # which the guard enforces on any machine that has the plugin installed.
+          AGENT_SQUAD_PLUGIN: ${{ github.workspace }}/scripts/vendor/agent_squad/envelope.py
         run: make python-tests
 
   # The PR gate's compile of `Core/`. `make core-unit-tests` builds the listed
