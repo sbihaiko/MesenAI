@@ -62,7 +62,7 @@ Non-goals: the script format, the adapter and the hook (ADR-0272) do not change.
 6. **Bugs, one per failing case.**
    - A case that fails files a bug only when it has none open. A later failing run comments on that open bug instead of filing a new one.
    - The bug links its run issue and its case record, and the run row links the bug.
-   - When the case **passes on the next run, the run closes the bug** with a comment naming the run. The owner's pick: "No primeiro run verde".
+   - When the case **first passes (the first subsequent ✅ for that case) in a later run, that run closes the bug** with a comment naming the run. The owner's pick: "No primeiro run verde".
    - A case that fails again after that files a new bug, which links the closed one.
 
 ## Consequences
@@ -71,4 +71,4 @@ Non-goals: the script format, the adapter and the hook (ADR-0272) do not change.
 - Closing a bug on the first green run means a flaky case can close and reopen bugs repeatedly. The Flaky list is the counterweight: a case that appears there needs a fix of the case, not of the product.
 - Detaching the 100 case sub-issues of #1286 is a one-time migration. `to_test_scenario.publish` must stop re-linking them, or the 100-sub-issue cap blocks every run.
 - The dashboard is machine-written inside markers. Hand edits inside the markers are overwritten on the next run.
-- Mock-up state (2026-10-10): #1286 carries a hand-written dashboard (its prior body is saved by the coordinator) and #1420 is a hand-built run. #1420 is not yet a sub-issue of #1286 because of the cap, which is exactly what Decision 2 fixes.
+- Mock-up state (2026-10-10): #1286 carries a hand-written dashboard and #1420 is a hand-built run. #1420 is not yet a sub-issue of #1286 because of the cap, which is exactly what Decision 2 fixes.
