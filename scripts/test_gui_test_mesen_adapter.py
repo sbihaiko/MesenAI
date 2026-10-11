@@ -46,6 +46,12 @@ class FakeHook:
         # holding down.
         self.pads = {}
         self.held = set()
+        # #1779: the keyboard verb. `keys` is what the hook raised on the GUI keyboard -
+        # the KeyDown/KeyUp layer a key.press reaches and a pad press never does - and
+        # `keys_on` the `pad` field of each request, so a test can prove the keyboard
+        # carries none.
+        self.keys = []
+        self.keys_on = []
         #1255: where the run's windows are, and the display they must stay inside. The
         #env knobs let a launched stand-in app report a window the adapter must refuse.
         self.window_position = [int(os.environ.get("FAKE_WINDOW_X", 40)), int(os.environ.get("FAKE_WINDOW_Y", 60))]
@@ -137,6 +143,18 @@ class FakeHook:
             else:
                 self.pads.pop(index, None)
             return out
+        if action == "key.press":
+            # #1779: the keyboard family. The hook raises the literal key on the GUI
+            # keyboard (`TestHookKeys.PressKey`), which is the layer the menu's own
+            # keyboard reads; which duration family the state allows is its ruling,
+            # exactly as it is for a pad press (ADR-0272 item 4).
+            if not args.get("key"):
+                return refuse("unknown key " + str(args.get("key", "")))
+            if "ticks" not in args and "frames" not in args:
+                return refuse("the emulated clock is not running: write the press in ticks")
+            self.keys.append((args["key"], args.get("ticks", args.get("frames"))))
+            self.keys_on.append(args.get("pad"))
+            return out
         if action not in ("pad.press", "pad.hold", "pad.release"):
             return refuse("unknown action " + action)
         pad = args.get("pad", 0)
@@ -176,6 +194,7 @@ ACTION_ARGS = {
     "pad.press": {"button": "Up", "ticks": 2},
     "pad.hold": {"button": "Up", "ticks": 8},
     "pad.release": {"button": "Up"},
+    "key.press": {"key": "Up Arrow", "ticks": 2},
     "pad.connect": {"index": 1, "family": "playstation"},
     "pad.disconnect": {"index": 1},
 }
@@ -185,11 +204,14 @@ class AdapterContract(Base):
     def test_capabilities_are_the_input_actions_the_hook_implements_and_nothing_else(self):
         caps = adapter.MesenGuiAdapter().capabilities()
         self.assertEqual(caps["actions"], ["pad.press", "pad.hold", "pad.release",
-                                           "pad.connect", "pad.disconnect"])
-        # Every advertised action is a pad action and the hook implements exactly
-        # them: no OS keyboard (ADR-0272 item 7 keeps `text.*` for the real-window
-        # mode), no pointer, no second input family.
-        self.assertEqual(caps["input_families"], ["pad"])
+                                           "key.press", "pad.connect", "pad.disconnect"])
+        # Every advertised action is one the hook answers and a run may write: the
+        # keyboard is the second input family (`key.press`, #1779), and `text.*` once
+        # more is not - ADR-0272 item 7 keeps it for the real-window mode - nor is the
+        # pointer. `pad.chord` and `nav.goal`, which the hook answers, are advertised
+        # when the script's own manual claims retire (#1778): the surface check fails
+        # the moment the adapter advertises an action a manual step says it needs.
+        self.assertEqual(caps["input_families"], ["pad", "key"])
         self.assertEqual(set(caps["checks"]), set(adapter.CHECKS))
         self.assertEqual(caps["variants"], {"window.mode": ["windowed"]})
 
@@ -229,6 +251,19 @@ class AdapterContract(Base):
     def test_an_unadvertised_action_is_refused_before_the_socket(self):
         with self.assertRaises(adapter.AdapterError):
             self.session.inject("pad.chord", {"buttons": ["A"]})
+        self.assertEqual([r for r in self.hook.requests if r["op"] == "inject"], [])
+
+    def test_the_keyboard_verb_reaches_the_hook_with_a_key_name_and_no_pad(self):
+        """#1779: the keyboard a step drives when no pad is behind it."""
+        self.session.inject("key.press", {"key": "Up Arrow", "ticks": 3})
+        self.assertEqual(self.hook.keys, [("Up Arrow", 3)])
+        # No `pad` field: a keyboard press is not a pad press, and the hook's own
+        # `key.press` takes no index (TestHookKeys.PressKey).
+        self.assertEqual(self.hook.keys_on, [None])
+
+    def test_a_keyboard_press_without_a_key_name_is_refused_before_the_socket(self):
+        with self.assertRaises(adapter.AdapterError):
+            self.session.inject("key.press", {"ticks": 3})
         self.assertEqual([r for r in self.hook.requests if r["op"] == "inject"], [])
 
     def test_a_check_naming_an_unknown_id_is_unknown_id_never_false(self):

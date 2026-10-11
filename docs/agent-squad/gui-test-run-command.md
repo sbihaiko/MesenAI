@@ -42,6 +42,35 @@ is).
 | `--test-hook=<socket path>` | open the hook's line-per-JSON-object socket there. Without the switch the process has no hook at all: no socket, no state, no input path changes, and `MESEN_GUI_WINDOW` is not read. |
 | `--test-hook-token=<secret>` | the token every request has to carry. Either switch with no value is a startup failure, not a run that quietly goes on without a hook. |
 
+## The contract version
+
+`hello` is a run's first request and its answer is the contract line: a runner
+reads what the hook answers before it spends a step finding out.
+
+| Field | Meaning |
+| --- | --- |
+| `hook` | the protocol version. **1**: `pad.press`, `pad.hold`, `pad.release`, `key.press` and the two pad hot-plugs are answered, and the answer carries **no** `actions` list. **2** (#1779): `pad.chord` and `nav.goal` are answered as well, and `actions` carries the sorted name of every `inject` action this hook implements - so an old hook is told apart from a new one by asking, never by failing a step. The adapter speaks both. |
+| `ops` | the five operations: `hello`, `state`, `inject`, `capture`, `quit`. |
+| `namespaces` | `pad`, `key`, `ui` (ADR-0272 item 7). |
+| `actions` | the `inject` actions this hook answers (version 2 and later). |
+
+The verbs a GUI run needs beside a single press, and where each one is answered:
+
+| Verb | Answered as |
+| --- | --- |
+| release a held button | `pad.release` |
+| chord two buttons or more | `pad.chord` |
+| navigate to a goal | `nav.goal` |
+| drive the keyboard | `key.press` |
+| read the focused control | the `state` op's `focus` field, which is what the `ui.focused` check reads |
+
+`capabilities()` is what a script is validated against, and it advertises the
+verbs a run can currently write: a verb the hook answers and the adapter does not
+advertise is one no committed script writes yet. The two move together because
+`scripts/checks/verify_gui_test_adapter_surface.py` fails the moment the adapter
+advertises an action whose `manual` step carries a `needs action <name>` claim -
+the claim is what retires with the step that stops being manual.
+
 ## Input actions
 
 A step's `inject` carries one of these (#1281). Every one of them is a pad the
@@ -54,6 +83,8 @@ application's state, never from a pixel (ADR-0271).
 | `pad.press` | `button`, `pad` (0), `ticks` \| `frames` | one press and its release. The duration unit is the state's: while the emulated clock runs the press is written in `frames`, otherwise in `ticks`. |
 | `pad.hold` | `button`, `pad` (0), `ticks` \| `frames` | the button goes down and stays down for that duration before letting go on its own. The unit is the state's, exactly as `pad.press`'s is (ADR-0272 item 4): `frames` while the emulated clock runs, `ticks` otherwise, and the family the state does not use is a failed step rather than a hold counted by a clock that is not moving. |
 | `pad.release` | `button`, `pad` (0) | the button goes up now, before the hold it is under has run out - a two-button gesture is written `pad.hold` then `pad.release`. A button no hold is keeping down is put up anyway: a release never fails a step. |
+| `pad.chord` | `buttons` (two or more), `pad` (0), `ticks` \| `frames` | every button of the chord goes down together for that duration and comes up together. A chord is not two `pad.press` requests: the readers of a press poll the pressed-key set once per tick, so a gesture that means "these together" - ADR-0256 gives the Play pause Select+Start - has to reach the set in one. The unit is the state's, as it is for a press. Nothing is pressed unless every button resolves: a chord that named one button, a stranger, or the same button twice is the step's error, and a half-pressed chord is a gesture nobody made. |
+| `key.press` | `key`, `ticks` \| `frames` | a literal key name, as the backend defines it (`Enter`, `Up Arrow`, `1`), held down for that duration. It reaches the pressed-key set **and** is raised on the application's own keyboard as KeyDown/KeyUp - the layer the menu's keyboard reads - so a step that drives the keyboard needs no pad connected, and a pad press raises nothing there. The unit is the state's, as it is for a press. |
 | `pad.connect` | `index`, `family` (`xbox` \| `playstation`, default `xbox`) | hot-plugs a simulated pad on that device index. While a run is up the connected-pad count the window polls for its port lamps and its pad-loss pause is the hook's, so a script's connect is seen the way a real pad's is; until a script touches it, that count is the backend's own. |
 | `pad.disconnect` | `index` | unplugs the pad on that index. The family goes with the pad: a `pad.connect` after a disconnect, with no `family`, is the default one (`xbox`), never the family the unplugged pad had - a PlayStation pad put back without `family` has its buttons read as Xbox, so name the family again on the reconnect. |
 
@@ -61,12 +92,41 @@ application's state, never from a pixel (ADR-0271).
 "device 0" - and `1` is the second pad. The hook resolves it to the
 backend's key names as `Pad<pad+1>` / `Joy<pad+1>`. A button is named the way the pad bridge names it
 (ADR-0272 item 4): `Up`, `Down`, `Left`, `Right`, `A`, `B`, `Start`, ... in the
-family the pad on that index was connected with.
+family the pad on that index was connected with. A `key.press` carries no `pad`:
+the keyboard is not a pad, and the hook reads the name the backend defines.
 
-Every action above is a `pad.*` action, the namespace ADR-0272 item 7 gives this
-hook, and the ADR is accepted and **not amended** by any of this: the actions are
-the emulator side's implementation of the interface it pins, and the new names
-inside that namespace are written down here. `text.*` and `pointer.*` are
+### `nav.goal`: the moves, not the search
+
+| Action | Args | Meaning |
+| --- | --- | --- |
+| `nav.goal` | `goal` | ADR-0271's navigation action: the step names a goal as a check-vocabulary predicate (`ui.screen == play.library`) and the run reaches it by choosing one move at a time. The hook answers what only it has - the UI state the choice is made from (the `state` snapshot, never a screenshot) and the moves it will accept, which are the pad's six navigation presses, each written as a ready-to-send `pad.press` in the duration family the state allows - and **injects nothing**: asking it is not a move, it declares no step, and no model is reachable from the hook. |
+
+The `nav.goal` answer is the request's own object plus:
+
+```json
+{
+  "goal": "ui.screen == play.library",
+  "family": "ticks",
+  "state": {"screen": "play.home", "focus": "play.home.continue", "controls": [], ...},
+  "moves": [
+    {"name": "pad.press", "args": {"pad": 0, "button": "Up", "ticks": 1}},
+    {"name": "pad.press", "args": {"pad": 0, "button": "Down", "ticks": 1}}
+  ]
+}
+```
+
+`family` is `frames` while the emulated clock advances and `ticks` in every other
+state (ADR-0272 item 4), so the number a move must carry is the hook's ruling and
+never a guess. Which moves already failed from a state, the cap on decisions and
+on spend, and the recording of each decision are the runner's (ADR-0271 items 3
+and 5): the hook holds no history (ADR-0272 item 2), and the chosen move comes
+back as one more `inject`.
+
+The actions above are the two namespaces ADR-0272 item 7 gives this hook - `pad.*`
+and `key.*`, beside `nav.goal`, which that item already lists as the navigation
+decision's action - and the ADR is accepted and **not amended** by any of this:
+the actions are the emulator side's implementation of the interface it pins, and
+the names inside those namespaces are written down here. `text.*` and `pointer.*` are
 deliberately **not** here: item 7 places both in the real-window mode (step 7),
 so a step that writes `text.type` gets `unknown action text.type` back from the
 hook. Typing on the application's own pad keyboard (ADR-0262) stays a product

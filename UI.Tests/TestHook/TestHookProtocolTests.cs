@@ -64,7 +64,7 @@ namespace Mesen.Tests.TestHook
 			public Rig(List<(ushort Key, bool Down)>? raised = null)
 			{
 				Pads = new TestHookPads(() => RealPads);
-				Keys = new TestHookKeys((code, down) => Calls.Add((code, down)), name => name switch { "Pad1 Right" => (ushort)0x1011, "Enter" => (ushort)0x0D, "Up Arrow" => (ushort)24, "1" => (ushort)35, _ => (ushort)0 }, () => Frames, raised is null ? null : (key, down) => raised.Add((key, down)), Pads.FamilyOf);
+				Keys = new TestHookKeys((code, down) => Calls.Add((code, down)), name => name switch { "Pad1 Right" => (ushort)0x1011, "Pad1 Left" => (ushort)0x1012, "Pad1 A" => (ushort)0x1013, "Enter" => (ushort)0x0D, "Up Arrow" => (ushort)24, "1" => (ushort)35, _ => (ushort)0 }, () => Frames, raised is null ? null : (key, down) => raised.Add((key, down)), Pads.FamilyOf);
 				Protocol = new TestHookProtocol("secret", Target, Keys, Pads);
 			}
 
@@ -716,6 +716,189 @@ namespace Mesen.Tests.TestHook
 			} finally {
 				Directory.Delete(parent, true);
 			}
+		}
+
+		//#1779: the five verbs a GUI run needs beside a single press - release, chord,
+		//navigate-to-goal, keyboard input and the focus read. Each one drives or reads
+		//state the hook already owns, and none of them reads a pixel (ADR-0271).
+
+		[Fact]
+		public void Hello_names_the_verbs_the_batches_need_and_the_contract_version()
+		{
+			//ADR-0272 item 2: `hello` is where a runner reads what this hook answers, so a
+			//runner can tell an old hook - which advertised no actions at all and answered
+			//only pad.press - from this one without spending a step on it. The five verbs
+			//the pad-only batches need are all named here.
+			Rig rig = new();
+			JsonObject answer = rig.Ask("{\"id\":1,\"token\":\"secret\",\"op\":\"hello\"}");
+			Assert.Equal(2, answer["hook"]!.GetValue<int>());
+			List<string> actions = new();
+			foreach(JsonNode? action in answer["actions"]!.AsArray()) {
+				actions.Add(action!.GetValue<string>());
+			}
+			Assert.Equal(new[] { "key.press", "nav.goal", "pad.chord", "pad.connect", "pad.disconnect", "pad.hold", "pad.press", "pad.release" }, actions);
+			//The focus read is a state read, not an action: `state` is the op that answers
+			//it, and it is one of the five ops the hello also names.
+			Assert.Contains("state", answer["ops"]!.AsArray().Select(op => op!.GetValue<string>()));
+		}
+
+		[Fact]
+		public void A_release_ends_a_chord_before_its_duration_runs_out()
+		{
+			//The batch's release: a chord is held, one of its buttons lets go early - the
+			//gesture ADR-0256's Play pause is (Select+Start), and the one a timed step
+			//alone cannot write, because the whole chord ends when its duration does.
+			Rig rig = new();
+			Assert.True(rig.Ask("{\"id\":2,\"token\":\"secret\",\"op\":\"inject\",\"action\":\"pad.chord\",\"args\":{\"buttons\":[\"Right\",\"Left\"],\"ticks\":3}}")["ok"]!.GetValue<bool>());
+			Assert.True(rig.Ask("{\"id\":3,\"token\":\"secret\",\"op\":\"inject\",\"action\":\"pad.release\",\"args\":{\"button\":\"Right\"}}")["ok"]!.GetValue<bool>());
+			Assert.Equal(new[] { ((ushort)0x1011, true), ((ushort)0x1012, true), ((ushort)0x1011, false) }, rig.Calls);
+			//The button that is still held ends by its own ticks, and never a second time.
+			rig.Keys.Advance();
+			rig.Keys.Advance();
+			rig.Keys.Advance();
+			//The button the chord still holds goes up on its own ticks. Which of the two
+			//lift events comes first within one tick is not a contract, only that both do.
+			Assert.Equal(4, rig.Calls.Count);
+			Assert.Equal(((ushort)0x1011, false), rig.Calls[2]);
+			Assert.Equal(((ushort)0x1012, false), rig.Calls[3]);
+			rig.Keys.Advance();
+			Assert.Equal(4, rig.Calls.Count);
+		}
+
+		[Fact]
+		public void A_chord_puts_every_button_down_together_and_lifts_them_together()
+		{
+			//One request, one instant: every button of the chord is in the pressed set
+			//before the step ends, which is what "pressed together" means to the readers
+			//that poll that set (ShortcutKeyHandler's Select+Start included, ADR-0272 item 4).
+			Rig rig = new();
+			Assert.True(rig.Ask("{\"id\":4,\"token\":\"secret\",\"op\":\"inject\",\"action\":\"pad.chord\",\"args\":{\"buttons\":[\"Right\",\"Confirm\"],\"ticks\":2}}")["ok"]!.GetValue<bool>());
+			Assert.Equal(new[] { ((ushort)0x1011, true), ((ushort)0x1013, true) }, rig.Calls);
+			rig.Keys.Advance();
+			Assert.Equal(2, rig.Calls.Count);
+			rig.Keys.Advance();
+			Assert.Equal(4, rig.Calls.Count);
+			Assert.Contains(((ushort)0x1011, false), rig.Calls.Skip(2));
+			Assert.Contains(((ushort)0x1013, false), rig.Calls.Skip(2));
+		}
+
+		[Fact]
+		public void A_chord_naming_one_button_or_a_stranger_presses_nothing()
+		{
+			//A chord is two buttons or more, and every one of them has to resolve: a
+			//half-pressed chord is a gesture nobody made, so the request fails before
+			//anything reaches the pressed set.
+			Rig rig = new();
+			JsonObject one = rig.Ask("{\"id\":5,\"token\":\"secret\",\"op\":\"inject\",\"action\":\"pad.chord\",\"args\":{\"buttons\":[\"Right\"],\"ticks\":2}}");
+			Assert.False(one["ok"]!.GetValue<bool>());
+			Assert.Contains("two buttons or more", one["error"]!.GetValue<string>());
+			JsonObject stranger = rig.Ask("{\"id\":6,\"token\":\"secret\",\"op\":\"inject\",\"action\":\"pad.chord\",\"args\":{\"buttons\":[\"Right\",\"Turbo\"],\"ticks\":2}}");
+			Assert.False(stranger["ok"]!.GetValue<bool>());
+			Assert.Contains("unknown button Turbo", stranger["error"]!.GetValue<string>());
+			Assert.Empty(rig.Calls);
+		}
+
+		[Fact]
+		public void A_chord_is_written_in_the_unit_the_emulated_clock_allows_like_a_press()
+		{
+			//ADR-0272 item 4 binds every timed step to one family, and a chord is one of
+			//them: a chord counted in ticks inside a running game would let go by a clock
+			//the game's own counter does not move.
+			Rig rig = new();
+			rig.Frames = 500;
+			JsonObject inTicks = rig.Ask("{\"id\":7,\"token\":\"secret\",\"op\":\"inject\",\"action\":\"pad.chord\",\"args\":{\"buttons\":[\"Right\",\"Left\"],\"ticks\":2}}");
+			Assert.False(inTicks["ok"]!.GetValue<bool>());
+			Assert.Contains("write the chord in frames", inTicks["error"]!.GetValue<string>());
+			Assert.True(rig.Ask("{\"id\":8,\"token\":\"secret\",\"op\":\"inject\",\"action\":\"pad.chord\",\"args\":{\"buttons\":[\"Right\",\"Left\"],\"frames\":2}}")["ok"]!.GetValue<bool>());
+			Assert.Equal(new[] { ((ushort)0x1011, true), ((ushort)0x1012, true) }, rig.Calls);
+			rig.Frames = 502;
+			rig.Keys.Advance();
+			Assert.Equal(4, rig.Calls.Count);
+			Assert.Contains(((ushort)0x1011, false), rig.Calls.Skip(2));
+			Assert.Contains(((ushort)0x1012, false), rig.Calls.Skip(2));
+		}
+
+		[Fact]
+		public void Nav_goal_answers_the_state_and_the_moves_the_hook_owns_in_the_states_unit()
+		{
+			//ADR-0271 items 1 and 2: the state a Choice is made from is the hook's own UI
+			//state, and the options are the moves this hook advertises - its pad's six
+			//navigation presses - written in the duration family the emulated clock allows,
+			//so a runner never guesses the unit (ADR-0272 item 4). No pixel is read and no
+			//model is reachable from the hook: the Choice stays at the runner (item 6 A).
+			Rig rig = new();
+			JsonObject answer = rig.Ask("{\"id\":9,\"token\":\"secret\",\"op\":\"inject\",\"action\":\"nav.goal\",\"args\":{\"goal\":\"ui.screen == play.library\"}}");
+			Assert.True(answer["ok"]!.GetValue<bool>());
+			Assert.Equal("ui.screen == play.library", answer["goal"]!.GetValue<string>());
+			Assert.Equal("ticks", answer["family"]!.GetValue<string>());
+			Assert.Equal("play.home", answer["state"]!["screen"]!.GetValue<string>());
+			Assert.Equal("play.home.continue", answer["state"]!["focus"]!.GetValue<string>());
+			List<string> moves = new();
+			foreach(JsonNode? move in answer["moves"]!.AsArray()) {
+				Assert.Equal("pad.press", move!["name"]!.GetValue<string>());
+				Assert.Equal(0, move["args"]!["pad"]!.GetValue<int>());
+				Assert.Equal(1, move["args"]!["ticks"]!.GetValue<int>());
+				moves.Add(move["args"]!["button"]!.GetValue<string>());
+			}
+			Assert.Equal(new[] { "Up", "Down", "Left", "Right", "Confirm", "Back" }, moves);
+			//While the emulated clock advances the same moves come back in frames: the one
+			//number a step must not get wrong.
+			rig.Frames = 500;
+			JsonObject running = rig.Ask("{\"id\":10,\"token\":\"secret\",\"op\":\"inject\",\"action\":\"nav.goal\",\"args\":{\"goal\":\"ui.screen == play.pause\"}}");
+			Assert.Equal("frames", running["family"]!.GetValue<string>());
+			Assert.Equal(1, running["moves"]!.AsArray()[0]!["args"]!["frames"]!.GetValue<int>());
+			JsonObject noGoal = rig.Ask("{\"id\":11,\"token\":\"secret\",\"op\":\"inject\",\"action\":\"nav.goal\",\"args\":{}}");
+			Assert.False(noGoal["ok"]!.GetValue<bool>());
+			Assert.Contains("nav.goal needs the goal", noGoal["error"]!.GetValue<string>());
+		}
+
+		[Fact]
+		public void Nav_goal_injects_nothing_and_declares_no_step()
+		{
+			//nav.goal is a read of the surface a move is chosen from, never an input: no
+			//key moves and no step begins, so a runner may ask it between two moves
+			//without spending a step's counters (ADR-0272 item 3 / #1282).
+			Rig rig = new();
+			Assert.True(rig.Ask("{\"id\":12,\"token\":\"secret\",\"op\":\"inject\",\"action\":\"nav.goal\",\"args\":{\"goal\":\"ui.screen == play.library\"}}")["ok"]!.GetValue<bool>());
+			Assert.Empty(rig.Calls);
+			Assert.Equal(0, rig.Target.Steps);
+			Assert.True(rig.Ask("{\"id\":13,\"token\":\"secret\",\"op\":\"inject\",\"action\":\"pad.press\",\"args\":{\"button\":\"Right\",\"ticks\":1}}")["ok"]!.GetValue<bool>());
+			Assert.Equal(1, rig.Target.Steps);
+		}
+
+		[Fact]
+		public void A_key_press_drives_the_applications_keyboard_with_no_pad_connected()
+		{
+			//The keyboard verb the batches need: the same request shape as a pad press,
+			//at the layer the GUI keyboard reads (KeyDown/KeyUp), with no pad behind it -
+			//a machine with no controller plugged in is the case this exists for.
+			List<(ushort Key, bool Down)> raised = new();
+			Rig rig = new(raised);
+			Assert.True(rig.Ask("{\"id\":14,\"token\":\"secret\",\"op\":\"inject\",\"action\":\"key.press\",\"args\":{\"key\":\"Enter\",\"ticks\":2}}")["ok"]!.GetValue<bool>());
+			Assert.Equal(new[] { ((ushort)0x0D, true) }, rig.Calls);
+			Assert.Equal(new[] { ((ushort)0x0D, true) }, raised);
+			rig.Keys.Advance();
+			rig.Keys.Advance();
+			Assert.Equal(new[] { ((ushort)0x0D, true), ((ushort)0x0D, false) }, raised);
+			//A pad press raises nothing on the GUI's keyboard: the two verbs are the two
+			//layers, and neither stands in for the other.
+			Assert.True(rig.Ask("{\"id\":15,\"token\":\"secret\",\"op\":\"inject\",\"action\":\"pad.press\",\"args\":{\"button\":\"Right\",\"ticks\":2}}")["ok"]!.GetValue<bool>());
+			Assert.Equal(2, raised.Count);
+		}
+
+		[Fact]
+		public void The_focus_read_is_the_hooks_own_state_and_never_a_picture()
+		{
+			//The read the batches need: which control holds the focus, answered from the
+			//application's own UI state - the op `state`, one of the five the hello names.
+			//A capture is a separate op and this read never takes one (ADR-0271 item 1).
+			Rig rig = new();
+			JsonObject state = rig.Ask("{\"id\":16,\"token\":\"secret\",\"op\":\"state\"}");
+			Assert.True(state["ok"]!.GetValue<bool>());
+			Assert.Equal("play.home.continue", state["focus"]!.GetValue<string>());
+			Assert.Equal("play.home", state["screen"]!.GetValue<string>());
+			Assert.NotNull(state["controls"]);
+			Assert.Equal(0, rig.Target.Captures);
 		}
 	}
 }
