@@ -1,0 +1,198 @@
+{
+  "format": "gui-test-results/1",
+  "run_id": "20261011T054500-303e31",
+  "adapter": "mesen_gui_adapter:MesenGuiAdapter",
+  "adapter_name": "mesen-gui",
+  "script": {
+    "path": "docs/validation/process/play-pad-only.gui-test.json",
+    "sha256": "0031850861083a2a27cb71854cadb5edd3f02dbbb8daed4d7d8f55c66922f444",
+    "name": "play-pad-only"
+  },
+  "platform": "darwin-arm64",
+  "build_sha": "ccf140a1ea2bfe8e17f59200faf02486aca7e01d",
+  "started": "2026-10-11T05:45:00-0300",
+  "status": "passed",
+  "reasons": [],
+  "steps": [
+    {
+      "id": "lamps.reach-home",
+      "batch": "lamps",
+      "mode": "automated",
+      "role": "under-test",
+      "expect": "Home with the pad port lamps on the status line (the LAMP-01 precondition), settled with the ring on Open a ROM.",
+      "verdict": "passed",
+      "capture": {
+        "path": "/tmp/1283-lamps.json.artifacts/capture-1.png",
+        "size": [
+          2200,
+          1400
+        ],
+        "sha256": "c0ee7ecf77ccadc12b5674757536441254018b66dc96c59afe80e1d8a3f2702a"
+      },
+      "held": false
+    },
+    {
+      "id": "lamp.four-lamps-p1",
+      "batch": "lamps",
+      "mode": "automated",
+      "role": "under-test",
+      "expect": "LAMP-01: with one pad connected (simulated through the hook) the status line's P1 lamp is lit.",
+      "verdict": "passed",
+      "capture": {
+        "path": "/tmp/1283-lamps.json.artifacts/capture-2.png",
+        "size": [
+          2200,
+          1400
+        ],
+        "sha256": "ef196ece5c23e28b9c6d81ad5b0f7c642450dde6dbbae77c4eb72a5286a65ee9"
+      },
+      "held": false
+    },
+    {
+      "id": "lamp.p2-dim",
+      "batch": "lamps",
+      "mode": "automated",
+      "role": "under-test",
+      "expect": "LAMP-01: the P2 lamp is dim.",
+      "verdict": "passed",
+      "capture": {
+        "path": "/tmp/1283-lamps.json.artifacts/capture-3.png",
+        "size": [
+          2200,
+          1400
+        ],
+        "sha256": "ef196ece5c23e28b9c6d81ad5b0f7c642450dde6dbbae77c4eb72a5286a65ee9"
+      },
+      "held": false
+    },
+    {
+      "id": "lamp.p3-dim",
+      "batch": "lamps",
+      "mode": "automated",
+      "role": "under-test",
+      "expect": "LAMP-01: the P3 lamp is dim.",
+      "verdict": "passed",
+      "capture": {
+        "path": "/tmp/1283-lamps.json.artifacts/capture-4.png",
+        "size": [
+          2200,
+          1400
+        ],
+        "sha256": "ef196ece5c23e28b9c6d81ad5b0f7c642450dde6dbbae77c4eb72a5286a65ee9"
+      },
+      "held": false
+    },
+    {
+      "id": "lamp.p4-dim",
+      "batch": "lamps",
+      "mode": "automated",
+      "role": "under-test",
+      "expect": "LAMP-01: the P4 lamp is dim.",
+      "verdict": "passed",
+      "capture": {
+        "path": "/tmp/1283-lamps.json.artifacts/capture-5.png",
+        "size": [
+          2200,
+          1400
+        ],
+        "sha256": "ef196ece5c23e28b9c6d81ad5b0f7c642450dde6dbbae77c4eb72a5286a65ee9"
+      },
+      "held": false
+    },
+    {
+      "id": "lamp.labels-tooltips",
+      "batch": "lamps",
+      "mode": "manual",
+      "role": "under-test",
+      "expect": "LAMP-01: the number is the label and the pad name is the tooltip. (manual: a tooltip is judged by eye; the hook reads the lamp state, not the label text)",
+      "verdict": "pending",
+      "capture": null,
+      "held": false
+    },
+    {
+      "id": "lamp.second-pad-hotplug",
+      "batch": "lamps",
+      "mode": "automated",
+      "role": "under-test",
+      "expect": "LAMP-02: a second pad plugged in (simulated through the hook) lights the P2 lamp within the 1 s poll.",
+      "verdict": "passed",
+      "capture": {
+        "path": "/tmp/1283-lamps.json.artifacts/capture-6.png",
+        "size": [
+          2200,
+          1400
+        ],
+        "sha256": "93a87ec007c589dedbda5e921c6d76c26834dcfbe8f6cd7b55b528b7033353d2"
+      },
+      "held": false
+    },
+    {
+      "id": "lamp.second-pad-unplug",
+      "batch": "lamps",
+      "mode": "automated",
+      "role": "under-test",
+      "expect": "LAMP-02: the second pad unplugged dims the P2 lamp again.",
+      "verdict": "passed",
+      "capture": {
+        "path": "/tmp/1283-lamps.json.artifacts/capture-7.png",
+        "size": [
+          2200,
+          1400
+        ],
+        "sha256": "ef196ece5c23e28b9c6d81ad5b0f7c642450dde6dbbae77c4eb72a5286a65ee9"
+      },
+      "held": false
+    },
+    {
+      "id": "lamp.hotplug-ring-stays",
+      "batch": "lamps",
+      "mode": "automated",
+      "role": "under-test",
+      "expect": "LAMP-02: nothing else moves, the ring stays where it was (Open a ROM).",
+      "verdict": "passed",
+      "capture": {
+        "path": "/tmp/1283-lamps.json.artifacts/capture-8.png",
+        "size": [
+          2200,
+          1400
+        ],
+        "sha256": "ef196ece5c23e28b9c6d81ad5b0f7c642450dde6dbbae77c4eb72a5286a65ee9"
+      },
+      "held": false
+    },
+    {
+      "id": "lamp.hotplug-pill",
+      "batch": "lamps",
+      "mode": "manual",
+      "role": "under-test",
+      "expect": "LAMP-02: the W-P15 pill \"New controller \u2026\" on its first press is expected. (manual: a real plug is physical-only and the hook reads no pill)",
+      "verdict": "pending",
+      "capture": null,
+      "held": false
+    }
+  ],
+  "batches": [
+    {
+      "id": "lamps",
+      "verdict": "passed",
+      "teardown": []
+    }
+  ],
+  "bug": {
+    "filed": false,
+    "reason": "no bug was asked for: filing is opt-in (--file-bug)"
+  },
+  "selection": {
+    "kind": "batch",
+    "value": "lamps"
+  },
+  "summary": {
+    "passed": 8,
+    "failed": 0,
+    "needs review": 0,
+    "pending": 2,
+    "not executed": 0,
+    "steps": 10,
+    "executed": 8
+  }
+}

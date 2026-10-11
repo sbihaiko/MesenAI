@@ -4,8 +4,8 @@
 
 - Format: `gui-test/1`
 - Target: `mesen-gui`
-- Requires actions: `pad.press`
-- Requires checks: `ui.focused`, `ui.screen`
+- Requires actions: `pad.connect`, `pad.disconnect`, `pad.press`
+- Requires checks: `ui.focused`, `ui.footer`, `ui.lamps`, `ui.ring`, `ui.screen`, `ui.surface`
 - Variant `window.mode`: `windowed`
 
 ## Fixtures
@@ -33,7 +33,8 @@ Steps:
 |---|---|---|---|---|---|---|---|---|---|
 | `launch.first-run-home` | under-test | `fixture settings.profiles.fresh` | — | `ui.screen == play.home` within 120 ticks | `ui.screen(is="play.home")` | No wizard appears (ADR-0256 Decision 8); Home W-P1 is on screen. | window.mode=windowed | major | automated |
 | `launch.open-rom-focused` | under-test | `ui.screen == play.home` | — | `ui.focused == play.home.open-rom` within 120 ticks | `ui.focused(is="play.home.open-rom")` | The one control, Open a ROM, is already focused at launch. | window.mode=windowed | major | automated |
-| `launch.port-lamp-p1` | under-test | `by hand: the screen is play.home` | — | — | — | The ring is visible on Open a ROM and the pad port lamps show P1 lit (ADR-0261); judged by eye, the hook exposes neither. | window.mode=windowed | minor | manual |
+| `launch.ring-on-open-rom` | under-test | `ui.screen == play.home` | — | within 4 ticks | `ui.ring(is="play.home.open-rom")` | The focus ring is visible on Open a ROM at launch (ADR-0261). | window.mode=windowed | minor | automated |
+| `launch.port-lamp-p1` | under-test | `ui.screen == play.home` | `pad.connect(index=0)` | within 180 ticks | `ui.lamps(port=1, is="lit")` | With the pad in the hand connected (simulated through the hook) the pad port lamps show P1 lit (ADR-0261). | window.mode=windowed | minor | automated |
 
 ## Batch `home`
 
@@ -51,13 +52,14 @@ Steps:
 | `home.focus-holds-down` | under-test | `ui.focused == play.home.open-rom` | `pad.press(button="Down", ticks=4)` | within 4 ticks | `ui.focused(is="play.home.open-rom")` | Focus stays on Open a ROM after D-pad Down. | all | major | automated |
 | `home.focus-holds-left` | under-test | `ui.focused == play.home.open-rom` | `pad.press(button="Left", ticks=4)` | within 4 ticks | `ui.focused(is="play.home.open-rom")` | Focus stays on Open a ROM after D-pad Left. | all | major | automated |
 | `home.focus-holds-right` | under-test | `ui.focused == play.home.open-rom` | `pad.press(button="Right", ticks=4)` | within 4 ticks | `ui.focused(is="play.home.open-rom")` | Focus stays on Open a ROM after D-pad Right. | all | major | automated |
-| `home.ring-visible` | under-test | `by hand: the ring is on play.home.open-rom` | — | — | — | The focus ring never disappears through the four presses. | all | minor | manual |
+| `home.ring-visible` | under-test | `ui.focused == play.home.open-rom` | — | within 4 ticks | `ui.ring(is="play.home.open-rom")` | The focus ring never disappears through the four presses: the ring (ui.ring) is still on Open a ROM after the last one. | all | minor | automated |
 | `home.open-library` | under-test | `ui.focused == play.home.open-rom` | `pad.press(button="A", ticks=4)` | `ui.screen == play.library` within 120 ticks | `ui.screen(is="play.library")` | A on Open a ROM opens the library sheet (LIB-01). (HOME-02) | all | major | automated |
 | `home.back-to-home` | under-test | `ui.screen == play.library` | `pad.press(button="B", ticks=4)` | `ui.screen == play.home` within 120 ticks | `ui.screen(is="play.home")` | B on the sheet returns to Home. | all | major | automated |
 | `home.back-focus-restored` | under-test | `ui.screen == play.home` | — | `ui.focused == play.home.open-rom` within 120 ticks | `ui.focused(is="play.home.open-rom")` | The ring is back on Open a ROM after B. | all | major | automated |
 | `home.chord-opens-nothing` | under-test | `by hand: the screen is play.home` | — | — | — | The chord with no game loaded opens no overlay. (HOME-05) (manual: needs action pad.chord, which mesen-gui does not advertise) | all | major | manual |
 | `home.chord-focus-unchanged` | under-test | `by hand: the screen is play.home` | — | — | — | Focus is unchanged after the chord. (manual: needs action pad.chord, which mesen-gui does not advertise) | all | minor | manual |
-| `home.settings-by-pad-gap` | under-test | `by hand: the screen is play.home` | — | — | — | Y opens the Settings sheet from Home with no game loaded (bug #1177, ADR-0256 W-P8); B returns to Home. | all | major | manual |
+| `home.settings-by-pad-gap` | under-test | `ui.focused == play.home.open-rom` | `pad.press(button="Y", ticks=4)` | within 8 ticks | `ui.surface(is="play.settings")` | Y opens the Settings sheet from Home with no game loaded (bug #1177, ADR-0256 W-P8); the surface is play.settings. | all | major | automated |
+| `home.settings-b-returns` | under-test | `by hand: the Settings sheet is open over play.home` | — | — | — | B on the Settings sheet returns to Home (bug #1177, ADR-0256 W-P8). (manual: the hook reads ui.surface == play.pause after B with no game loaded, not none; judged by eye until that is decided) | all | major | manual |
 
 ## Batch `home-after-game`
 
@@ -75,14 +77,14 @@ Steps:
 | `after-game.order-favorites` | under-test | `by hand: the ring is on play.home.continue` | — | — | — | Favorites follows Continue when the shelf exists (ADR-0268 Decision 6). (manual: needs variant settings.profile=history-one-favorite, which mesen-gui does not advertise - the shelf's own id `play.home.favorites` exists, but only that seeded profile puts a game on it) | all | major | manual |
 | `after-game.order-recent` | under-test | `by hand: the ring is on play.home.favorites` | — | — | — | Recent follows Favorites (Continue, Favorites, Recent; ADR-0268 Decision 6). (manual: needs variant settings.profile=history-one-favorite, which mesen-gui does not advertise - the ids `play.home.favorites` and `play.home.recent` exist, but only that seeded profile puts a game on them) | all | major | manual |
 | `after-game.order-open-rom` | under-test | `by hand: the ring is on play.home.recent` | — | — | — | Open a ROM is reachable last. (manual: needs variant settings.profile=history-one-favorite, which mesen-gui does not advertise - the id `play.home.recent` exists, but only that seeded profile puts a game on it) | all | major | manual |
-| `after-game.one-ring` | under-test | `by hand: the screen is play.home` | — | — | — | The ring is on exactly one control at a time (ADR-0256 Decision 3); with a Favorites shelf present the order is Continue, Favorites, Recent. Both are judged by eye. | all | minor | manual |
+| `after-game.one-ring` | under-test | `by hand: the screen is play.home` | — | — | — | The ring is on exactly one control at a time (ADR-0256 Decision 3); with a Favorites shelf present the order is Continue, Favorites, Recent. Both are judged by eye. (manual: how many rings are drawn and the shelf order are judged by eye) | all | minor | manual |
 | `after-game.contained-up-continue` | under-test | `by hand: the ring is on play.home.continue` | — | — | — | Repeated D-pad Up from Continue never leaves the Home host for the header's Profile or Tools buttons (#1137, #1166). (manual: batch setup after-game.reach-home is manual, so nothing established the state this step asserts) | all | major | manual |
 | `after-game.contained-up-recent` | under-test | `by hand: the ring is on play.home.recent` | — | — | — | Repeated D-pad Up from Recent never leaves the Home host for the header's Profile or Tools buttons (#1137, #1166). (manual: needs variant settings.profile=history-one-favorite, which mesen-gui does not advertise - the id `play.home.recent` exists, but only that seeded profile puts a game on it) | all | major | manual |
 | `after-game.contained-up-favorites` | under-test | `by hand: the ring is on play.home.favorites` | — | — | — | Repeated D-pad Up from Favorites never leaves the Home host for the header's Profile or Tools buttons (#1137, #1166). (manual: needs variant settings.profile=history-one-favorite, which mesen-gui does not advertise - the id `play.home.favorites` exists, but only that seeded profile puts a game on it) | all | major | manual |
 | `after-game.contained-up-open-rom` | under-test | `by hand: the ring is on play.home.open-rom` | — | — | — | Repeated D-pad Up from Open a ROM never leaves the Home host for the header's Profile or Tools buttons (#1137, #1166). (manual: batch setup after-game.reach-home is manual, so nothing established the state this step asserts) | all | major | manual |
 | `after-game.contained-sideways-left` | under-test | `by hand: the ring is on play.home.continue` | — | — | — | Left on the top row stays inside the Home host. (manual: batch setup after-game.reach-home is manual, so nothing established the state this step asserts) | all | major | manual |
 | `after-game.contained-sideways-right` | under-test | `by hand: the ring is on play.home.continue` | — | — | — | Right on the top row stays inside the Home host. (manual: batch setup after-game.reach-home is manual, so nothing established the state this step asserts) | all | major | manual |
-| `after-game.contained-other-controls-gap` | under-test | `by hand: the screen is play.home` | — | — | — | From Favorites, Recent and Open a ROM, D-pad Left and Right keep focus inside Home (the automated steps press them from Continue only) | all | major | manual |
+| `after-game.contained-other-controls-gap` | under-test | `by hand: the screen is play.home` | — | — | — | From Favorites, Recent and Open a ROM, D-pad Left and Right keep focus inside Home (the automated steps press them from Continue only) (manual: no `rom` fixture is committed, so the game this case follows cannot be reached by a run) | all | major | manual |
 
 ## Batch `library`
 
@@ -99,9 +101,9 @@ Steps:
 |---|---|---|---|---|---|---|---|---|---|
 | `lib.open-screen` | under-test | `ui.screen == play.library` | — | `ui.screen == play.library` within 120 ticks | `ui.screen(is="play.library")` | LIB-01: the flat library grid is open. | all | major | automated |
 | `lib.first-tile-focused` | under-test | `by hand: the screen is play.library` | — | — | — | LIB-01: a tile is focused (ring on the grid's first tile). (manual: needs control play.library.tile, which mesen-gui does not advertise) | all | major | manual |
-| `lib.header-footer-scan` | under-test | `by hand: the screen is play.library` | — | — | — | LIB-01: header reads "Your library · N games in M folders", the footer names A/B/Y/X/LB/RB in the pad's own words (ADR-0256 Decision 6), an animated indicator shows while scanning. | all | minor | manual |
-| `lib.hold-down-repeats` | under-test | `fixture rom-library-large and a library of 100+ ROMs` | — | — | — | LIB-02: with 100+ ROMs, a held Down repeats after 400 ms then every 100 ms (ADR-0256 Decision 7) and the grid scrolls; judged by timing and eye. Part 2 (same with Right) is the next step. | all | major | manual |
-| `lib.hold-right-repeats` | under-test | `fixture rom-library-large and a library of 100+ ROMs` | — | — | — | LIB-02: the same with Right: a held Right repeats after 400 ms then every 100 ms and the focus walks the row, wrapping onto the next row. | all | major | manual |
+| `lib.header-footer-scan` | under-test | `by hand: the screen is play.library` | — | — | — | LIB-01: header reads "Your library · N games in M folders", the footer names A/B/Y/X/LB/RB in the pad's own words (ADR-0256 Decision 6), an animated indicator shows while scanning. (manual: the header text and the scanning indicator are read by eye; the hook reads the action bar's ids, not its words) | all | minor | manual |
+| `lib.hold-down-repeats` | under-test | `fixture rom-library-large and a library of 100+ ROMs` | — | — | — | LIB-02: with 100+ ROMs, a held Down repeats after 400 ms then every 100 ms (ADR-0256 Decision 7) and the grid scrolls; judged by timing and eye. Part 2 (same with Right) is the next step. (manual: no 100+ ROM library is committed and the repeat rate is judged by timing) | all | major | manual |
+| `lib.hold-right-repeats` | under-test | `fixture rom-library-large and a library of 100+ ROMs` | — | — | — | LIB-02: the same with Right: a held Right repeats after 400 ms then every 100 ms and the focus walks the row, wrapping onto the next row. (manual: no 100+ ROM library is committed and the repeat rate is judged by timing) | all | major | manual |
 | `lib.tap-down-steps-once` | under-test | `fixture rom-library-large and a tile focused in the library` | — | — | — | LIB-02: one tap steps the focus once and the focus stays in the grid. (manual: needs control play.library.tile, which mesen-gui does not advertise) | all | major | manual |
 | `lib.up-back-to-row-one` | under-test | `a tile focused in the library` | — | — | — | LIB-03 setup: Up returns the focus from row 2 to the top grid row, ready to enter the header. (manual: needs control play.library.tile, which mesen-gui does not advertise) | all | major | manual |
 | `lib.up-enters-header` | under-test | `a tile focused in the library` | — | — | — | LIB-03: Up from the top grid row enters the header row (search first, ADR-0264 Decision 3). (manual: needs control play.library.search, control play.library.tile, which mesen-gui does not advertise) | all | major | manual |
@@ -110,10 +112,9 @@ Steps:
 | `lib.header-right-back` | under-test | `by hand: the ring is on play.library.browse` | — | — | — | LIB-03: Right moves to Back. (manual: needs control play.library.back, control play.library.browse, which mesen-gui does not advertise) | all | major | manual |
 | `lib.header-left-across` | under-test | `by hand: the ring is on play.library.back` | — | — | — | LIB-03: Left walks back across the header row (Back -> Browse), mirroring the Right walk. (manual: needs control play.library.browse, control play.library.back, which mesen-gui does not advertise) | all | major | manual |
 | `lib.header-down-grid` | under-test | `by hand: the ring is on play.library.browse` | — | — | — | LIB-03: Down from the header returns to the grid. (manual: needs control play.library.tile, control play.library.browse, which mesen-gui does not advertise) | all | major | manual |
-| `lib.filter-rb-wraps` | under-test | `by hand: the screen is play.library` | — | — | — | LIB-04: RB steps All -> each console present -> All, wrapping at both ends, the grid narrows, and the ring lands on the segment the press selected (PlayerRomPickerViewModel.ConsoleFilter.cs; ADR-0264 amendment 2026-10-09, #1108), never an empty filter. Record whether the segment the ring is on is obvious at couch distance. The row is not a named control the hook reads, so the landing is judged by eye. | all | minor | manual |
-| `lib.filter-lb-backwards` | under-test | `by hand: the screen is play.library` | — | — | — | LIB-04: LB walks the same ring backwards, wrapping at both ends, and lands the ring on the segment it moved (ADR-0264 amendment 2026-10-09, #1108). | all | minor | manual |
-| `lib.filter-segment-focus` | under-test | `by hand: the screen is play.library` | — | — | — | LIB-04 (ADR-0264 amendment 2026-10-09, #1108): after a shoulder press the ring is ON the chip row, on the segment the press selected - the row is one element, so its Left/Right step the same ring one console at a time, its Up leaves for the header and its Down returns to the grid it filters, and the footer names the shoulders and no Play (ADR-0256 Decision 6). The landing is skipped only where the sheet's own claim outranks it: while a restore is in flight (IsRestorePending / IsRestoreLanding) the ring lands on the remembered game, and the search box keeps the ring as it always did. FAIL if the ring does not reach the row outside those two. The row is not a named control the hook reads, so this is judged by eye. Record whether the ring on the row is obvious at couch distance. | all | major | manual |
-| `lib.search-y-focuses-field` | under-test | `a tile focused in the library` | — | — | — | LIB-05: Y moves the ring to the search field. (manual: needs control play.library.search, control play.library.tile, which mesen-gui does not advertise) | all | major | manual |
+| `lib.filter-rb-wraps` | under-test | `by hand: the screen is play.library` | — | — | — | LIB-04: RB steps All -> each console present -> All, wrapping at both ends, the grid narrows, and the ring lands on the segment the press selected (PlayerRomPickerViewModel.ConsoleFilter.cs; ADR-0264 amendment 2026-10-09, #1108), never an empty filter. Record whether the segment the ring is on is obvious at couch distance. The row is not a named control the hook reads, so the landing is judged by eye. (manual: the chip row is not a named control and a fresh library has no console to step through) | all | minor | manual |
+| `lib.filter-lb-backwards` | under-test | `by hand: the screen is play.library` | — | — | — | LIB-04: LB walks the same ring backwards, wrapping at both ends, and lands the ring on the segment it moved (ADR-0264 amendment 2026-10-09, #1108). (manual: the chip row is not a named control and a fresh library has no console to step through) | all | minor | manual |
+| `lib.filter-segment-focus` | under-test | `by hand: the screen is play.library` | — | — | — | LIB-04 (ADR-0264 amendment 2026-10-09, #1108): after a shoulder press the ring is ON the chip row, on the segment the press selected - the row is one element, so its Left/Right step the same ring one console at a time, its Up leaves for the header and its Down returns to the grid it filters, and the footer names the shoulders and no Play (ADR-0256 Decision 6). The landing is skipped only where the sheet's own claim outranks it: while a restore is in flight (IsRestorePending / IsRestoreLanding) the ring lands on the remembered game, and the search box keeps the ring as it always did. FAIL if the ring does not reach the row outside those two. The row is not a named control the hook reads, so this is judged by eye. Record whether the ring on the row is obvious at couch distance. (manual: the chip row is not a named control and a fresh library has no console to step through) | all | major | manual |
 | `lib.search-a-opens-keyboard` | under-test | `by hand: the ring is on play.library.search` | — | — | — | LIB-05: A opens the shared on-screen keyboard (ADR-0262) below the field; the sheet stays open. (manual: needs control play.keyboard, control play.library.search, which mesen-gui does not advertise) | all | major | manual |
 | `lib.search-type-filters` | under-test | `by hand: play.keyboard is visible` | — | — | — | LIB-05: typing `zel` (or a prefix of an owned title) with D-pad + A filters the grid per letter; OK commits and focus returns to the field; an empty result shows "No games match" with a way to clear it. (manual: needs control play.keyboard, which mesen-gui does not advertise) | all | minor | manual |
 | `lib.search-b-cancels` | under-test | `by hand: play.keyboard is visible` | — | — | — | LIB-05: B on the open keyboard closes it, focus returns to the search field and the sheet does not close. The text revert on a second Y, A, B is judged by eye (next step). (manual: needs control play.library.search, control play.keyboard, which mesen-gui does not advertise) | all | major | manual |
@@ -128,10 +129,12 @@ Steps:
 | `lib.browse-open` | under-test | `by hand: the ring is on play.library.browse` | — | — | — | LIB-07: A on Browse a file opens the folder browser (ADR-0256 Decision 9). (manual: needs control play.library.browse, which mesen-gui does not advertise) | all | major | manual |
 | `lib.browse-walk` | under-test | `by hand: the screen is play.library.browse` | — | — | — | LIB-07: Confirm descends, B ascends; the action row leads the list but the ring never lands on it first (first-row guard); Make this my games folder inside a non-empty folder. (manual: needs control play.library.browse, which mesen-gui does not advertise) | all | minor | manual |
 | `lib.browse-b-root-dismisses` | under-test | `by hand: the screen is play.library.browse` | — | — | — | LIB-07: B on the root dismisses with no load, back to the library. (manual: needs control play.library.browse, which mesen-gui does not advertise) | all | major | manual |
-| `lib.box-art` | under-test | `by hand: the screen is play.library` | — | — | — | LIB-08: box art for known ROMs (lazy, visible tiles only), a generic console-colored cover carrying the title for unknown ones, nothing waits on the network; a visual check, record only if it blocks focus or scrolling. | all | minor | manual |
+| `lib.box-art` | under-test | `by hand: the screen is play.library` | — | — | — | LIB-08: box art for known ROMs (lazy, visible tiles only), a generic console-colored cover carrying the title for unknown ones, nothing waits on the network; a visual check, record only if it blocks focus or scrolling. (manual: box art is a visual check) | all | minor | manual |
 | `lib.browse-down-grid` | under-test | `by hand: the ring is on play.library.browse` | — | — | — | LIB-09: Down from the header returns to the grid (LIB-09 starts from the grid). (manual: needs control play.library.tile, control play.library.browse, which mesen-gui does not advertise) | all | major | manual |
 | `lib.back-to-home` | under-test | `ui.screen == play.library` | `pad.press(button="B", ticks=4)` | `ui.screen == play.home` within 120 ticks | `ui.screen(is="play.home")` | LIB-09: B from the grid goes back to Home. | all | major | automated |
 | `lib.back-ring-on-opener` | under-test | `ui.screen == play.home` | — | `ui.focused == play.home.open-rom` within 8 ticks | `ui.focused(is="play.home.open-rom")` | LIB-09: the ring is on the control that opened the sheet, Open a ROM. | all | major | automated |
+| `lib.reopen-for-search` | under-test | `ui.focused == play.home.open-rom` | `pad.press(button="A", ticks=4)` | `ui.screen == play.library` within 120 ticks | `ui.screen(is="play.library")` | LIB-05 (setup): A on Open a ROM opens the library sheet again, so the search step starts from the grid. | all | major | automated |
+| `lib.search-y-focuses-field` | under-test | `ui.screen == play.library` | `pad.press(button="Y", ticks=4)` | within 8 ticks | `ui.footer(is="confirm,console-filter,back")` | LIB-05: Y moves the ring to the search field; read as the footer, which drops Search once the field has the focus (a fresh settings folder has an empty library, so the grid has no tile to start from). | all | major | automated |
 
 ## Batch `favorites`
 
@@ -146,13 +149,13 @@ Steps:
 | ID | Role | Precondition | Action | Wait | Check | Expected | Variants | Severity | Mode |
 |---|---|---|---|---|---|---|---|---|---|
 | `fav.x-favorites-tile` | under-test | `a tile focused in the library` | — | — | — | FAV-01: X on the focused tile keeps the ring on the grid and toggles Favorite (ADR-0268). (manual: needs control play.library.tile, which mesen-gui does not advertise) | all | major | manual |
-| `fav.footer-reads-unfavorite` | under-test | `by hand: the screen is play.library` | — | — | — | FAV-01: the footer's X entry now reads Unfavorite (it read Favorite before). | all | minor | manual |
+| `fav.footer-reads-unfavorite` | under-test | `by hand: the screen is play.library` | — | — | — | FAV-01: the footer's X entry now reads Unfavorite (it read Favorite before). (manual: a favorited game takes a ROM and no `rom` fixture is committed) | all | minor | manual |
 | `fav.back-to-home` | under-test | `by hand: the screen is play.library` | — | — | — | FAV-01: B returns to Home. (manual: batch setup fav.reach-library is manual, so nothing established the state this step asserts) | all | major | manual |
 | `fav.home-shelf-shown` | under-test | `by hand: the screen is play.home` | — | — | — | FAV-01: Home shows a Favorites shelf between Continue and Recent, newest favorite first. (manual: needs variant settings.profile=history-one-favorite, which mesen-gui does not advertise - the shelf's own id `play.home.favorites` exists, but only that seeded profile shows it) | all | major | manual |
 | `fav.library-again` | under-test | `by hand: the ring is on play.home.open-rom` | — | — | — | FAV-01: A on Open a ROM returns to the library. (manual: batch setup fav.reach-library is manual, so nothing established the state this step asserts) | all | major | manual |
 | `fav.x-unfavorites-tile` | under-test | `a tile focused in the library` | — | — | — | FAV-01: X on the same tile unfavorites it; the ring stays on the grid. (manual: needs control play.library.tile, which mesen-gui does not advertise) | all | major | manual |
 | `fav.back-home-again` | under-test | `by hand: the screen is play.library` | — | — | — | FAV-01: B returns to Home. (manual: batch setup fav.reach-library is manual, so nothing established the state this step asserts) | all | major | manual |
-| `fav.shelf-hides-when-empty` | under-test | `by hand: the screen is play.home` | — | — | — | FAV-01: with no favorite left the Favorites shelf is hidden. | all | minor | manual |
+| `fav.shelf-hides-when-empty` | under-test | `by hand: the screen is play.home` | — | — | — | FAV-01: with no favorite left the Favorites shelf is hidden. (manual: a favorited game takes a ROM and no `rom` fixture is committed) | all | minor | manual |
 
 ## Batch `favorites-home`
 
@@ -225,7 +228,7 @@ Steps:
 | `game-bios.a-opens-bios-sheet` | under-test | `a tile focused in the library (fixture rom-fds)` | — | — | — | GAME-04: A on the FDS image shows the BIOS sheet (W-P13). (manual: needs control play.bios, control play.library.tile, which mesen-gui does not advertise) | all | major | manual |
 | `game-bios.choose-file-native` | under-test | `by hand: the screen is play.bios` | — | — | — | KNOWN GAP: GAME-04: Choose File... on the BIOS sheet is a native dialog (ADR-0256 Decision 9 refusals). Expected FAIL; record that Cancel still backs out. (manual: needs control play.bios, which mesen-gui does not advertise) | all | major | manual |
 | `game-bios.b-cancels` | under-test | `by hand: the screen is play.bios` | — | — | — | GAME-04: B/Cancel backs out cleanly to the library. (manual: needs control play.bios, which mesen-gui does not advertise) | all | major | manual |
-| `game-bios.status-names-bios` | under-test | `by hand: the screen is play.library` | — | — | — | GAME-04: the status line names the missing BIOS. | all | minor | manual |
+| `game-bios.status-names-bios` | under-test | `by hand: the screen is play.library` | — | — | — | GAME-04: the status line names the missing BIOS. (manual: a game that misses its BIOS takes a ROM and no `rom` fixture is committed) | all | minor | manual |
 
 ## Batch `dialogs`
 
@@ -487,7 +490,7 @@ Steps:
 
 | ID | Role | Precondition | Action | Wait | Check | Expected | Variants | Severity | Mode |
 |---|---|---|---|---|---|---|---|---|---|
-| `ctl.no-game-gap` | under-test | `by hand: the screen is play.home` | — | — | — | CTL-05: KNOWN GAP, expected FAIL. Settings is not reachable by pad with no game (HOME-06, bug #1177), so neither is the Controller sheet. With Settings reached by keyboard, Controls > More in Options opens the classic Options window's Input page because OpenControllerSheet() returns false with no game loaded (ADR-0256 Decision 5 note). Record what the player sees. | all | major | manual |
+| `ctl.no-game-gap` | under-test | `by hand: the screen is play.home` | — | — | — | CTL-05: KNOWN GAP, expected FAIL. Settings is not reachable by pad with no game (HOME-06, bug #1177), so neither is the Controller sheet. With Settings reached by keyboard, Controls > More in Options opens the classic Options window's Input page because OpenControllerSheet() returns false with no game loaded (ADR-0256 Decision 5 note). Record what the player sees. (manual: the Options window it opens is a native window the hook does not read) | all | major | manual |
 
 ## Batch `lamps`
 
@@ -495,14 +498,21 @@ Setup:
 
 | ID | Role | Precondition | Action | Wait | Check | Expected | Variants | Severity | Mode |
 |---|---|---|---|---|---|---|---|---|---|
-| `lamps.reach-home` | setup | `fixture settings.profiles.fresh` | — | — | — | Home with the pad port lamps on the status line (the LAMP-01 precondition: one pad). (manual: needs action nav.goal, which mesen-gui does not advertise) | all | major | manual |
+| `lamps.reach-home` | under-test | `fixture settings.profiles.fresh` | — | `ui.focused == play.home.open-rom` within 120 ticks | `ui.focused(is="play.home.open-rom")` | Home with the pad port lamps on the status line (the LAMP-01 precondition), settled with the ring on Open a ROM. | all | major | automated |
 
 Steps:
 
 | ID | Role | Precondition | Action | Wait | Check | Expected | Variants | Severity | Mode |
 |---|---|---|---|---|---|---|---|---|---|
-| `lamp.four-lamps-p1` | under-test | `by hand: the screen is play.home` | — | — | — | LAMP-01: the status line shows four lamps, P1 lit and the others dim; the number is the label and the pad name is the tooltip; the hook exposes neither lamps nor tooltips, judged by eye. | all | minor | manual |
-| `lamp.second-pad-hotplug` | under-test | `by hand: the screen is play.home` | — | — | — | LAMP-02: plug a second pad in (or power it on over Bluetooth), wait 2 s, power it off: the second lamp lights within about 1 s (1 s poll) and dims again, nothing else moves, the ring stays where it was; the W-P15 pill "New controller …" on its first press is expected. A real plug is physical-only and is not simulated. | all | major | manual |
+| `lamp.four-lamps-p1` | under-test | `ui.screen == play.home` | `pad.connect(index=0)` | within 180 ticks | `ui.lamps(port=1, is="lit")` | LAMP-01: with one pad connected (simulated through the hook) the status line's P1 lamp is lit. | all | minor | automated |
+| `lamp.p2-dim` | under-test | `ui.screen == play.home` | — | within 4 ticks | `ui.lamps(port=2, is="dim")` | LAMP-01: the P2 lamp is dim. | all | minor | automated |
+| `lamp.p3-dim` | under-test | `ui.screen == play.home` | — | within 4 ticks | `ui.lamps(port=3, is="dim")` | LAMP-01: the P3 lamp is dim. | all | minor | automated |
+| `lamp.p4-dim` | under-test | `ui.screen == play.home` | — | within 4 ticks | `ui.lamps(port=4, is="dim")` | LAMP-01: the P4 lamp is dim. | all | minor | automated |
+| `lamp.labels-tooltips` | under-test | `by hand: the screen is play.home` | — | — | — | LAMP-01: the number is the label and the pad name is the tooltip. (manual: a tooltip is judged by eye; the hook reads the lamp state, not the label text) | all | minor | manual |
+| `lamp.second-pad-hotplug` | under-test | `ui.screen == play.home` | `pad.connect(index=1)` | within 180 ticks | `ui.lamps(port=2, is="lit")` | LAMP-02: a second pad plugged in (simulated through the hook) lights the P2 lamp within the 1 s poll. | all | minor | automated |
+| `lamp.second-pad-unplug` | under-test | `ui.lamps port 2 lit` | `pad.disconnect(index=1)` | within 180 ticks | `ui.lamps(port=2, is="dim")` | LAMP-02: the second pad unplugged dims the P2 lamp again. | all | minor | automated |
+| `lamp.hotplug-ring-stays` | under-test | `ui.screen == play.home` | — | within 120 ticks | `ui.ring(is="play.home.open-rom")` | LAMP-02: nothing else moves, the ring stays where it was (Open a ROM). | all | minor | automated |
+| `lamp.hotplug-pill` | under-test | `by hand: the screen is play.home` | — | — | — | LAMP-02: the W-P15 pill "New controller …" on its first press is expected. (manual: a real plug is physical-only and the hook reads no pill) | all | minor | manual |
 
 ## Batch `lamps-game`
 
@@ -553,9 +563,9 @@ Steps:
 
 | ID | Role | Precondition | Action | Wait | Check | Expected | Variants | Severity | Mode |
 |---|---|---|---|---|---|---|---|---|---|
-| `PAD-01` | under-test | `Any long list (library 100+)` | — | — | — | Hold Down 5 s, release, hold Up 5 s: steady repeat (~10/s after 0.4 s), stops on release, no overshoot | all | major | manual |
-| `PAD-02` | under-test | `W-P4` | — | — | — | Tap a direction 10 times quickly: ten steps or as many as rows allow, none dropped, none doubled | all | major | manual |
-| `PAD-04` | under-test | `Library` | — | — | — | Diagonal D-pad press (Up+Right): one deterministic step or none, no focus jump off the surface | all | major | manual |
+| `PAD-01` | under-test | `Any long list (library 100+)` | — | — | — | Hold Down 5 s, release, hold Up 5 s: steady repeat (~10/s after 0.4 s), stops on release, no overshoot (manual: stick and repeat feel is judged by hand on a real pad; no check reads a repeat rate) | all | major | manual |
+| `PAD-02` | under-test | `W-P4` | — | — | — | Tap a direction 10 times quickly: ten steps or as many as rows allow, none dropped, none doubled (manual: W-P4 takes a game and no `rom` fixture is committed) | all | major | manual |
+| `PAD-04` | under-test | `Library` | — | — | — | Diagonal D-pad press (Up+Right): one deterministic step or none, no focus jump off the surface (manual: a diagonal is two directions held at once and a step carries one action) | all | major | manual |
 
 ## Batch `trap`
 
@@ -564,9 +574,9 @@ Steps:
 | ID | Role | Precondition | Action | Wait | Check | Expected | Variants | Severity | Mode |
 |---|---|---|---|---|---|---|---|---|---|
 | `TRAP-01` | under-test | `Every Play surface and the three Options exits` | — | — | — | Enter, press B: every surface closes on B to its parent, no surface needs a mouse to leave (needs action pad.chord, which mesen-gui does not advertise to open W-P4 from a game) | all | major | manual |
-| `TRAP-02` | under-test | `Any point` | — | — | — | Watch for any native dialog or classic window: none in the Play door except the ones ADR-0256 Decision 9 lists as deliberately native | all | major | manual |
+| `TRAP-02` | under-test | `Any point` | — | — | — | Watch for any native dialog or classic window: none in the Play door except the ones ADR-0256 Decision 9 lists as deliberately native (manual: a native dialog is not an Avalonia control, so the hook's dialogs list cannot see it) | all | major | manual |
 | `TRAP-03` | under-test | `W-P15 pill shown (a never-mapped pad)` | — | — | — | Start on the pill, follow the lit steps, hold to skip, let it time out once (needs action pad.chord, which mesen-gui does not advertise) | all | major | manual |
-| `TRAP-04` | under-test | `Home` | — | — | — | Quit the application by pad: expected FAIL, Tools ... is deliberately unpadded (#1137) and there is no pad route to quit | all | major | manual |
+| `TRAP-04` | under-test | `Home` | — | — | — | Quit the application by pad: expected FAIL, Tools ... is deliberately unpadded (#1137) and there is no pad route to quit (manual: the pad route to quit does not exist, so there is no action to script) | all | major | manual |
 
 ## Batch `journey`
 
@@ -584,6 +594,6 @@ Steps:
 | ID | Role | Precondition | Action | Wait | Check | Expected | Variants | Severity | Mode |
 |---|---|---|---|---|---|---|---|---|---|
 | `PAD2-01` | under-test | `Both pads connected, game running` | — | — | — | Chord on P-B: W-P4 opens and the footer names P-B's buttons (needs action pad.chord, which mesen-gui does not advertise) | all | major | manual |
-| `PAD2-02` | under-test | `W-P4 open` | — | — | — | Navigate with P-A, then with P-B, alternating: both move the focus, one ring, no double-step | all | major | manual |
-| `PAD2-03` | under-test | `Controller sheet, both connected` | — | — | — | Walk the PLAYERS rows and move P-B to P2 by pad: the port lamps are unchanged (ADR-0261) | all | major | manual |
-| `PAD2-04` | under-test | `PAD2-03` | — | — | — | Unplug P-A, replug: on macOS the reconnect repair never fires and P-A may return on another index (a note for #813's family) | all | major | manual |
+| `PAD2-02` | under-test | `W-P4 open` | — | — | — | Navigate with P-A, then with P-B, alternating: both move the focus, one ring, no double-step (manual: two physical pads and a game, and no `rom` fixture is committed) | all | major | manual |
+| `PAD2-03` | under-test | `Controller sheet, both connected` | — | — | — | Walk the PLAYERS rows and move P-B to P2 by pad: the port lamps are unchanged (ADR-0261) (manual: two physical pads and a game, and no `rom` fixture is committed) | all | major | manual |
+| `PAD2-04` | under-test | `PAD2-03` | — | — | — | Unplug P-A, replug: on macOS the reconnect repair never fires and P-A may return on another index (a note for #813's family) (manual: a physical unplug and replug on macOS is not simulated) | all | major | manual |
