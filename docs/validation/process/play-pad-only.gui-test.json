@@ -3183,6 +3183,15 @@
           "content_hash": "ff3de28c438667fc1319cc86541b02998b1baf9e0e345bdbf686f61cb61b7a80"
         },
         {
+          "id": "PAD-03",
+          "role": "under-test",
+          "precondition": "W-P4, a pad with a worn stick if available",
+          "expect": "Leave the left stick alone, nudge it below half, then push it fully: the bridge reads D-pad key names only (`PadNavControls`), so the stick does not move the menu cursor at any deflection unless the backend reports the stick as D-pad keys (manual: drift needs a worn stick and the reading is judged by hand; no check reads a stick, and `PadNavControls` has no axis entries)",
+          "severity": "major",
+          "mode": "manual",
+          "content_hash": "749cfb3586148ad9385d599ee33fc5fde7b0ccc9df6228d18d2f042a0a07fd63"
+        },
+        {
           "id": "PAD-04",
           "role": "under-test",
           "precondition": "Library",

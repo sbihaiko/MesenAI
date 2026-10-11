@@ -54,7 +54,35 @@ class VerifyGuiTestScenarioCoverage(unittest.TestCase):
 
     def test_a_scenario_fully_referenced_by_a_step_id_precondition_or_expect_passes(self):
         self.write_script(_step("home.first", precondition="HOME-01", expect="home is up"),
-                          _step("P4-04", expect="the footer re-reads"))
+                          _step("p4.switch-pad", expect="the footer re-reads (P4-04)"))
+        code, out = run_check(self.tmp)
+        self.assertEqual((code, out), (0, ""))
+
+    def test_a_table_walked_one_step_per_case_needs_a_step_for_every_case(self):
+        (self.tmp / PROCESS / "play-pad-only-test-script.md").write_text(
+            "# A scenario\n\n### 4.12 Feel\n\n| ID | Precondition | Pad-only steps | Expected | [W] | [F] | Notes |\n"
+            "|---|---|---|---|---|---|---|\n"
+            "| PAD-01 | a long list | hold Down | steady repeat. | | | |\n"
+            "| PAD-02 | W-P4 | tap a direction | ten steps, none dropped. | | | |\n"
+            "| PAD-03 | a worn stick | nudge the stick | the cursor must not move on its own; see SET-05. | | | |\n",
+            encoding="utf-8")
+        self.write_script(_step("PAD-01", precondition="a long list", expect="steady repeat."),
+                          _step("PAD-02", precondition="W-P4", expect="ten steps, none dropped."),
+                          _step("settings.deadzone", expect="SET-05: the readout follows the slider (see PAD-03)"))
+        code, out = run_check(self.tmp)
+        self.assertEqual(code, 1)
+        self.assertIn("case PAD-03 of play-pad-only-test-script.md is in no step's id, while PAD-01 of the same "
+                      "table is", out)
+
+    def test_a_table_walked_by_finer_steps_keeps_the_looser_reference_rule(self):
+        (self.tmp / PROCESS / "play-pad-only-test-script.md").write_text(
+            "# A scenario\n\n### 4.2 Library\n\n| ID | Precondition | Pad-only steps | Expected | [W] | [F] | Notes |\n"
+            "|---|---|---|---|---|---|---|\n"
+            "| LIB-01 | Home | A on Open a ROM | the library opens. | | | |\n"
+            "| LIB-02 | the library | press Y | the keyboard takes the search. | | | |\n",
+            encoding="utf-8")
+        self.write_script(_step("lib.open-screen", precondition="LIB-01", expect="LIB-01: the grid is open."),
+                          _step("lib.search-a-opens-keyboard", precondition="LIB-02", expect="LIB-02: the sheet."))
         code, out = run_check(self.tmp)
         self.assertEqual((code, out), (0, ""))
 
