@@ -1,16 +1,16 @@
 {
   "format": "gui-test-results/1",
-  "run_id": "20261011T053939-2de0bf",
+  "run_id": "20261011T055645-2d80da",
   "adapter": "mesen_gui_adapter:MesenGuiAdapter",
   "adapter_name": "mesen-gui",
   "script": {
     "path": "docs/validation/process/play-pad-only.gui-test.json",
-    "sha256": "2a22db0eaa0f8c29c4bb6b987848b2552ba95c5f9a1fffbc5ef1e46de53bd977",
+    "sha256": "89de073fc601e2eb4045a33fe1297dee84576ffe262682cb6aa123e192a48e1d",
     "name": "play-pad-only"
   },
   "platform": "darwin-arm64",
-  "build_sha": "ccf140a1ea2bfe8e17f59200faf02486aca7e01d",
-  "started": "2026-10-11T05:39:39-0300",
+  "build_sha": "7f8e5b4be6df8c3dc29df30628861e49ea36f27f",
+  "started": "2026-10-11T05:56:45-0300",
   "status": "passed",
   "reasons": [],
   "steps": [
@@ -22,7 +22,7 @@
       "expect": "No wizard appears (ADR-0256 Decision 8); Home W-P1 is on screen.",
       "verdict": "passed",
       "capture": {
-        "path": "/tmp/1283-launch.json.artifacts/capture-1.png",
+        "path": "/tmp/p1283-out/play-pad-only-launch.results.json.artifacts/capture-1.png",
         "size": [
           2200,
           1400
@@ -39,7 +39,7 @@
       "expect": "The one control, Open a ROM, is already focused at launch.",
       "verdict": "passed",
       "capture": {
-        "path": "/tmp/1283-launch.json.artifacts/capture-2.png",
+        "path": "/tmp/p1283-out/play-pad-only-launch.results.json.artifacts/capture-2.png",
         "size": [
           2200,
           1400
@@ -56,7 +56,7 @@
       "expect": "The focus ring is visible on Open a ROM at launch (ADR-0261).",
       "verdict": "passed",
       "capture": {
-        "path": "/tmp/1283-launch.json.artifacts/capture-3.png",
+        "path": "/tmp/p1283-out/play-pad-only-launch.results.json.artifacts/capture-3.png",
         "size": [
           2200,
           1400
@@ -73,12 +73,12 @@
       "expect": "With the pad in the hand connected (simulated through the hook) the pad port lamps show P1 lit (ADR-0261).",
       "verdict": "passed",
       "capture": {
-        "path": "/tmp/1283-launch.json.artifacts/capture-4.png",
+        "path": "/tmp/p1283-out/play-pad-only-launch.results.json.artifacts/capture-4.png",
         "size": [
           2200,
           1400
         ],
-        "sha256": "ef196ece5c23e28b9c6d81ad5b0f7c642450dde6dbbae77c4eb72a5286a65ee9"
+        "sha256": "c834fbfbbdfe6ca2b30e1573006ebb28b64be782b3cdc5465888d5dddb6aceff"
       },
       "held": false
     }

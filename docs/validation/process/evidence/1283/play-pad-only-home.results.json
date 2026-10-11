@@ -1,16 +1,16 @@
 {
   "format": "gui-test-results/1",
-  "run_id": "20261011T053853-4edda4",
+  "run_id": "20261011T055658-9cbf70",
   "adapter": "mesen_gui_adapter:MesenGuiAdapter",
   "adapter_name": "mesen-gui",
   "script": {
     "path": "docs/validation/process/play-pad-only.gui-test.json",
-    "sha256": "2a22db0eaa0f8c29c4bb6b987848b2552ba95c5f9a1fffbc5ef1e46de53bd977",
+    "sha256": "89de073fc601e2eb4045a33fe1297dee84576ffe262682cb6aa123e192a48e1d",
     "name": "play-pad-only"
   },
   "platform": "darwin-arm64",
-  "build_sha": "ccf140a1ea2bfe8e17f59200faf02486aca7e01d",
-  "started": "2026-10-11T05:38:53-0300",
+  "build_sha": "7f8e5b4be6df8c3dc29df30628861e49ea36f27f",
+  "started": "2026-10-11T05:56:58-0300",
   "status": "passed",
   "reasons": [],
   "steps": [
@@ -22,7 +22,7 @@
       "expect": "HOME-01 - no wizard (ADR-0256 Decision 8); Play Home W-P1 is on screen and Open a ROM is already focused",
       "verdict": "passed",
       "capture": {
-        "path": "/tmp/1283-home.json.artifacts/capture-1.png",
+        "path": "/tmp/p1283-out/play-pad-only-home.results.json.artifacts/capture-1.png",
         "size": [
           2200,
           1400
@@ -39,7 +39,7 @@
       "expect": "Focus stays on Open a ROM after D-pad Up. (HOME-02, HOME-04)",
       "verdict": "passed",
       "capture": {
-        "path": "/tmp/1283-home.json.artifacts/capture-2.png",
+        "path": "/tmp/p1283-out/play-pad-only-home.results.json.artifacts/capture-2.png",
         "size": [
           2200,
           1400
@@ -56,7 +56,7 @@
       "expect": "Focus stays on Open a ROM after D-pad Down.",
       "verdict": "passed",
       "capture": {
-        "path": "/tmp/1283-home.json.artifacts/capture-3.png",
+        "path": "/tmp/p1283-out/play-pad-only-home.results.json.artifacts/capture-3.png",
         "size": [
           2200,
           1400
@@ -73,7 +73,7 @@
       "expect": "Focus stays on Open a ROM after D-pad Left.",
       "verdict": "passed",
       "capture": {
-        "path": "/tmp/1283-home.json.artifacts/capture-4.png",
+        "path": "/tmp/p1283-out/play-pad-only-home.results.json.artifacts/capture-4.png",
         "size": [
           2200,
           1400
@@ -90,7 +90,7 @@
       "expect": "Focus stays on Open a ROM after D-pad Right.",
       "verdict": "passed",
       "capture": {
-        "path": "/tmp/1283-home.json.artifacts/capture-5.png",
+        "path": "/tmp/p1283-out/play-pad-only-home.results.json.artifacts/capture-5.png",
         "size": [
           2200,
           1400
@@ -107,7 +107,7 @@
       "expect": "The focus ring never disappears through the four presses: the ring (ui.ring) is still on Open a ROM after the last one.",
       "verdict": "passed",
       "capture": {
-        "path": "/tmp/1283-home.json.artifacts/capture-6.png",
+        "path": "/tmp/p1283-out/play-pad-only-home.results.json.artifacts/capture-6.png",
         "size": [
           2200,
           1400
@@ -124,7 +124,7 @@
       "expect": "A on Open a ROM opens the library sheet (LIB-01). (HOME-02)",
       "verdict": "passed",
       "capture": {
-        "path": "/tmp/1283-home.json.artifacts/capture-7.png",
+        "path": "/tmp/p1283-out/play-pad-only-home.results.json.artifacts/capture-7.png",
         "size": [
           2200,
           1400
@@ -141,12 +141,12 @@
       "expect": "B on the sheet returns to Home.",
       "verdict": "passed",
       "capture": {
-        "path": "/tmp/1283-home.json.artifacts/capture-8.png",
+        "path": "/tmp/p1283-out/play-pad-only-home.results.json.artifacts/capture-8.png",
         "size": [
           2200,
           1400
         ],
-        "sha256": "9465a8d0ae5a34e2e582460d742415da7089e4931b981e8ae3fcae8b0d1aeb68"
+        "sha256": "99feaef4b35baf98ec6c5272fc5df34db022b8a9ed336711e97a9d609440627f"
       },
       "held": false
     },
@@ -158,7 +158,7 @@
       "expect": "The ring is back on Open a ROM after B.",
       "verdict": "passed",
       "capture": {
-        "path": "/tmp/1283-home.json.artifacts/capture-9.png",
+        "path": "/tmp/p1283-out/play-pad-only-home.results.json.artifacts/capture-9.png",
         "size": [
           2200,
           1400
@@ -195,7 +195,7 @@
       "expect": "Y opens the Settings sheet from Home with no game loaded (bug #1177, ADR-0256 W-P8); the surface is play.settings.",
       "verdict": "passed",
       "capture": {
-        "path": "/tmp/1283-home.json.artifacts/capture-10.png",
+        "path": "/tmp/p1283-out/play-pad-only-home.results.json.artifacts/capture-10.png",
         "size": [
           2200,
           1400
@@ -209,7 +209,7 @@
       "batch": "home",
       "mode": "manual",
       "role": "under-test",
-      "expect": "B on the Settings sheet returns to Home (bug #1177, ADR-0256 W-P8). (manual: the hook reads ui.surface == play.pause after B with no game loaded, not none; judged by eye until that is decided)",
+      "expect": "B on the Settings sheet returns to Home (bug #1177, ADR-0256 W-P8). (manual: the hook reads ui.surface == play.pause after B with no game loaded, not none; judged by eye until bug #1485 is fixed)",
       "verdict": "pending",
       "capture": null,
       "held": false

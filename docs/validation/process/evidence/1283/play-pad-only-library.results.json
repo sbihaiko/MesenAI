@@ -1,16 +1,16 @@
 {
   "format": "gui-test-results/1",
-  "run_id": "20261011T053901-9bf981",
+  "run_id": "20261011T055705-3d98ce",
   "adapter": "mesen_gui_adapter:MesenGuiAdapter",
   "adapter_name": "mesen-gui",
   "script": {
     "path": "docs/validation/process/play-pad-only.gui-test.json",
-    "sha256": "2a22db0eaa0f8c29c4bb6b987848b2552ba95c5f9a1fffbc5ef1e46de53bd977",
+    "sha256": "89de073fc601e2eb4045a33fe1297dee84576ffe262682cb6aa123e192a48e1d",
     "name": "play-pad-only"
   },
   "platform": "darwin-arm64",
-  "build_sha": "ccf140a1ea2bfe8e17f59200faf02486aca7e01d",
-  "started": "2026-10-11T05:39:01-0300",
+  "build_sha": "7f8e5b4be6df8c3dc29df30628861e49ea36f27f",
+  "started": "2026-10-11T05:57:05-0300",
   "status": "passed",
   "reasons": [],
   "steps": [
@@ -22,12 +22,12 @@
       "expect": "HOME-01 - the batch opens on a settled home before it presses anything; the ring is not up yet at a fresh launch, so a press sent first is dropped and the step below reads None (#1232).",
       "verdict": "passed",
       "capture": {
-        "path": "/tmp/1283-library.json.artifacts/capture-1.png",
+        "path": "/tmp/p1283-out/play-pad-only-library.results.json.artifacts/capture-1.png",
         "size": [
           2200,
           1400
         ],
-        "sha256": "c0ee7ecf77ccadc12b5674757536441254018b66dc96c59afe80e1d8a3f2702a"
+        "sha256": "0308c7d0c1ed0692d049aa4292d0bd5d87c87b1817f03c4c6150ce12ddd84859"
       },
       "held": false
     },
@@ -39,7 +39,7 @@
       "expect": "LIB-01 - A on the Home's focused Open a ROM opens the Library W-P19 by pad alone, on a fresh settings folder",
       "verdict": "passed",
       "capture": {
-        "path": "/tmp/1283-library.json.artifacts/capture-2.png",
+        "path": "/tmp/p1283-out/play-pad-only-library.results.json.artifacts/capture-2.png",
         "size": [
           2200,
           1400
@@ -56,12 +56,12 @@
       "expect": "LIB-01: the flat library grid is open.",
       "verdict": "passed",
       "capture": {
-        "path": "/tmp/1283-library.json.artifacts/capture-3.png",
+        "path": "/tmp/p1283-out/play-pad-only-library.results.json.artifacts/capture-3.png",
         "size": [
           2200,
           1400
         ],
-        "sha256": "e86ded58b247c9a387f075224a68fa3ce776a5653e8f400c6fcf25b07f3c2416"
+        "sha256": "4a1d23e33a4fa3487d23877a2a796cafee5ea3c675b9127b77e2a0b6b135dd5e"
       },
       "held": false
     },
@@ -130,7 +130,7 @@
       "batch": "library",
       "mode": "manual",
       "role": "under-test",
-      "expect": "LIB-03: Up from the top grid row enters the header row (search first, ADR-0264 Decision 3). (manual: needs control play.library.search, control play.library.tile, which mesen-gui does not advertise)",
+      "expect": "LIB-03: Up from the top grid row enters the header row (search first, ADR-0264 Decision 3). (manual: needs control play.library.tile, which mesen-gui does not advertise)",
       "verdict": "pending",
       "capture": null,
       "held": false
@@ -140,7 +140,7 @@
       "batch": "library",
       "mode": "manual",
       "role": "under-test",
-      "expect": "LIB-03: Right moves to Library folders. (manual: needs control play.library.folders, control play.library.search, which mesen-gui does not advertise)",
+      "expect": "LIB-03: Right moves to Library folders. (manual: needs control play.library.folders, which mesen-gui does not advertise)",
       "verdict": "pending",
       "capture": null,
       "held": false
@@ -220,7 +220,7 @@
       "batch": "library",
       "mode": "manual",
       "role": "under-test",
-      "expect": "LIB-05: A opens the shared on-screen keyboard (ADR-0262) below the field; the sheet stays open. (manual: needs control play.keyboard, control play.library.search, which mesen-gui does not advertise)",
+      "expect": "LIB-05: A opens the shared on-screen keyboard (ADR-0262) below the field; the sheet stays open. (manual: needs control play.keyboard, which mesen-gui does not advertise)",
       "verdict": "pending",
       "capture": null,
       "held": false
@@ -240,7 +240,7 @@
       "batch": "library",
       "mode": "manual",
       "role": "under-test",
-      "expect": "LIB-05: B on the open keyboard closes it, focus returns to the search field and the sheet does not close. The text revert on a second Y, A, B is judged by eye (next step). (manual: needs control play.library.search, control play.keyboard, which mesen-gui does not advertise)",
+      "expect": "LIB-05: B on the open keyboard closes it, focus returns to the search field and the sheet does not close. The text revert on a second Y, A, B is judged by eye (next step). (manual: needs control play.keyboard, which mesen-gui does not advertise)",
       "verdict": "pending",
       "capture": null,
       "held": false
@@ -250,7 +250,7 @@
       "batch": "library",
       "mode": "manual",
       "role": "under-test",
-      "expect": "LIB-05: after typing, a second Y, A, B returns the field to its previous text; focus returns to it and the sheet does not close (typing is manual, so the text revert is manual). (manual: needs control play.library.search, which mesen-gui does not advertise)",
+      "expect": "LIB-05: after typing, a second Y, A, B returns the field to its previous text; focus returns to it and the sheet does not close (typing is manual, so the text revert is manual). (manual: the typed text is read from the on-screen keyboard, which the hook does not read)",
       "verdict": "pending",
       "capture": null,
       "held": false
@@ -260,7 +260,7 @@
       "batch": "library",
       "mode": "manual",
       "role": "under-test",
-      "expect": "LIB-05: the library sheet is still open under the cancelled keyboard. (manual: needs control play.library.search, which mesen-gui does not advertise)",
+      "expect": "LIB-05: the library sheet is still open under the cancelled keyboard. (manual: the keyboard is a sheet over the library that the hook does not read)",
       "verdict": "pending",
       "capture": null,
       "held": false
@@ -270,7 +270,7 @@
       "batch": "library",
       "mode": "manual",
       "role": "under-test",
-      "expect": "LIB-06: Right from the search field reaches Library folders. (manual: needs control play.library.folders, control play.library.search, which mesen-gui does not advertise)",
+      "expect": "LIB-06: Right from the search field reaches Library folders. (manual: needs control play.library.folders, which mesen-gui does not advertise)",
       "verdict": "pending",
       "capture": null,
       "held": false
@@ -383,7 +383,7 @@
       "expect": "LIB-09: B from the grid goes back to Home.",
       "verdict": "passed",
       "capture": {
-        "path": "/tmp/1283-library.json.artifacts/capture-4.png",
+        "path": "/tmp/p1283-out/play-pad-only-library.results.json.artifacts/capture-4.png",
         "size": [
           2200,
           1400
@@ -400,7 +400,7 @@
       "expect": "LIB-09: the ring is on the control that opened the sheet, Open a ROM.",
       "verdict": "passed",
       "capture": {
-        "path": "/tmp/1283-library.json.artifacts/capture-5.png",
+        "path": "/tmp/p1283-out/play-pad-only-library.results.json.artifacts/capture-5.png",
         "size": [
           2200,
           1400
@@ -417,7 +417,7 @@
       "expect": "LIB-05 (setup): A on Open a ROM opens the library sheet again, so the search step starts from the grid.",
       "verdict": "passed",
       "capture": {
-        "path": "/tmp/1283-library.json.artifacts/capture-6.png",
+        "path": "/tmp/p1283-out/play-pad-only-library.results.json.artifacts/capture-6.png",
         "size": [
           2200,
           1400
@@ -431,10 +431,10 @@
       "batch": "library",
       "mode": "automated",
       "role": "under-test",
-      "expect": "LIB-05: Y moves the ring to the search field; read as the footer, which drops Search once the field has the focus (a fresh settings folder has an empty library, so the grid has no tile to start from).",
+      "expect": "LIB-05: Y moves the ring to the search field (play.library.search), read as the focused control (a fresh settings folder has an empty library, so the grid has no tile to start from).",
       "verdict": "passed",
       "capture": {
-        "path": "/tmp/1283-library.json.artifacts/capture-7.png",
+        "path": "/tmp/p1283-out/play-pad-only-library.results.json.artifacts/capture-7.png",
         "size": [
           2200,
           1400

@@ -395,7 +395,7 @@
           "id": "home.settings-b-returns",
           "role": "under-test",
           "precondition": "by hand: the Settings sheet is open over play.home",
-          "expect": "B on the Settings sheet returns to Home (bug #1177, ADR-0256 W-P8). (manual: the hook reads ui.surface == play.pause after B with no game loaded, not none; judged by eye until that is decided)",
+          "expect": "B on the Settings sheet returns to Home (bug #1177, ADR-0256 W-P8). (manual: the hook reads ui.surface == play.pause after B with no game loaded, not none; judged by eye until bug #1485 is fixed)",
           "severity": "major",
           "mode": "manual"
         }
@@ -653,7 +653,7 @@
           "id": "lib.up-enters-header",
           "role": "under-test",
           "precondition": "a tile focused in the library",
-          "expect": "LIB-03: Up from the top grid row enters the header row (search first, ADR-0264 Decision 3). (manual: needs control play.library.search, control play.library.tile, which mesen-gui does not advertise)",
+          "expect": "LIB-03: Up from the top grid row enters the header row (search first, ADR-0264 Decision 3). (manual: needs control play.library.tile, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual",
           "content_hash": "e9283d602768947c11ff58af326eddabd6fe84de269a11eb492d727f9e716497"
@@ -662,7 +662,7 @@
           "id": "lib.header-right-folders",
           "role": "under-test",
           "precondition": "by hand: the ring is on play.library.search",
-          "expect": "LIB-03: Right moves to Library folders. (manual: needs control play.library.folders, control play.library.search, which mesen-gui does not advertise)",
+          "expect": "LIB-03: Right moves to Library folders. (manual: needs control play.library.folders, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual",
           "content_hash": "66c46d3d69793a9c17a11e550b30f2517ea1d266f59122095b0985c32ef9e91f"
@@ -734,7 +734,7 @@
           "id": "lib.search-a-opens-keyboard",
           "role": "under-test",
           "precondition": "by hand: the ring is on play.library.search",
-          "expect": "LIB-05: A opens the shared on-screen keyboard (ADR-0262) below the field; the sheet stays open. (manual: needs control play.keyboard, control play.library.search, which mesen-gui does not advertise)",
+          "expect": "LIB-05: A opens the shared on-screen keyboard (ADR-0262) below the field; the sheet stays open. (manual: needs control play.keyboard, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual",
           "content_hash": "8c7cf085aa9edf2cce86199013ca5ccc2d1263dde7e38c5204b09a8a1f348588"
@@ -752,7 +752,7 @@
           "id": "lib.search-b-cancels",
           "role": "under-test",
           "precondition": "by hand: play.keyboard is visible",
-          "expect": "LIB-05: B on the open keyboard closes it, focus returns to the search field and the sheet does not close. The text revert on a second Y, A, B is judged by eye (next step). (manual: needs control play.library.search, control play.keyboard, which mesen-gui does not advertise)",
+          "expect": "LIB-05: B on the open keyboard closes it, focus returns to the search field and the sheet does not close. The text revert on a second Y, A, B is judged by eye (next step). (manual: needs control play.keyboard, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual",
           "content_hash": "4ec56fa6977a37f2d0594033d5e64cd049b410bdac4e308a2142a23a335edc84"
@@ -761,7 +761,7 @@
           "id": "lib.search-second-cancel-reverts",
           "role": "under-test",
           "precondition": "by hand: the ring is on play.library.search",
-          "expect": "LIB-05: after typing, a second Y, A, B returns the field to its previous text; focus returns to it and the sheet does not close (typing is manual, so the text revert is manual). (manual: needs control play.library.search, which mesen-gui does not advertise)",
+          "expect": "LIB-05: after typing, a second Y, A, B returns the field to its previous text; focus returns to it and the sheet does not close (typing is manual, so the text revert is manual). (manual: the typed text is read from the on-screen keyboard, which the hook does not read)",
           "severity": "minor",
           "mode": "manual",
           "content_hash": "f17980fa8a5c82846507039ec735b3e4160083e6c358cd59c6a6e28fd4fe3f5c"
@@ -770,7 +770,7 @@
           "id": "lib.search-sheet-stays",
           "role": "under-test",
           "precondition": "by hand: the ring is on play.library.search",
-          "expect": "LIB-05: the library sheet is still open under the cancelled keyboard. (manual: needs control play.library.search, which mesen-gui does not advertise)",
+          "expect": "LIB-05: the library sheet is still open under the cancelled keyboard. (manual: the keyboard is a sheet over the library that the hook does not read)",
           "severity": "major",
           "mode": "manual",
           "content_hash": "56e5696b408ee531625583aa53de187d4bf52002463dc9362b6b9aaaa08e6d9f"
@@ -779,7 +779,7 @@
           "id": "lib.search-right-folders",
           "role": "under-test",
           "precondition": "by hand: the ring is on play.library.search",
-          "expect": "LIB-06: Right from the search field reaches Library folders. (manual: needs control play.library.folders, control play.library.search, which mesen-gui does not advertise)",
+          "expect": "LIB-06: Right from the search field reaches Library folders. (manual: needs control play.library.folders, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual",
           "content_hash": "226cae7527c95f802d98670b2c2acf575ac318fce77a3c14a29cc550e83cbbc0"
@@ -959,12 +959,12 @@
             "timeout_ticks": 8
           },
           "check": {
-            "name": "ui.footer",
+            "name": "ui.focused",
             "args": {
-              "is": "confirm,console-filter,back"
+              "is": "play.library.search"
             }
           },
-          "expect": "LIB-05: Y moves the ring to the search field; read as the footer, which drops Search once the field has the focus (a fresh settings folder has an empty library, so the grid has no tile to start from).",
+          "expect": "LIB-05: Y moves the ring to the search field (play.library.search), read as the focused control (a fresh settings folder has an empty library, so the grid has no tile to start from).",
           "severity": "major",
           "mode": "automated",
           "content_hash": "42b8a8cefa55350c358a3295a6b025a9a83cd2660ce050fba1155529633fb9ec"
@@ -2768,7 +2768,7 @@
           "id": "ctl.no-game-gap",
           "role": "under-test",
           "precondition": "by hand: the screen is play.home",
-          "expect": "CTL-05: KNOWN GAP, expected FAIL. Settings is not reachable by pad with no game (HOME-06, bug #1177), so neither is the Controller sheet. With Settings reached by keyboard, Controls > More in Options opens the classic Options window's Input page because OpenControllerSheet() returns false with no game loaded (ADR-0256 Decision 5 note). Record what the player sees. (manual: the Options window it opens is a native window the hook does not read)",
+          "expect": "CTL-05: Settings is reachable by pad with no game now (Y, #1213; HOME-06 passes), but the Controller sheet itself still needs a loaded game (known limitation, not a failure). Controls > More in Options opens the classic Options window's Input page because OpenControllerSheet() returns false with no game loaded (ADR-0256 Decision 5 note). Record what the player sees. (manual: the Options window it opens is a native window the hook does not read)",
           "severity": "major",
           "mode": "manual",
           "content_hash": "dd345b7eb958672c9342e98d225bea29a7da29972de50de33e743fe8523f00cd"
@@ -2908,7 +2908,7 @@
             }
           },
           "expect": "LAMP-02: a second pad plugged in (simulated through the hook) lights the P2 lamp within the 1 s poll.",
-          "severity": "minor",
+          "severity": "major",
           "mode": "automated",
           "content_hash": "ebd3e416e4edafdc66924699dae9f27b00eb15ed7b2f580b902b9f114d402600"
         },
@@ -2922,6 +2922,57 @@
               "index": 1
             }
           },
+          "wait": {
+            "timeout_ticks": 2
+          },
+          "check": {
+            "name": "ui.ring",
+            "args": {
+              "is": "play.home.open-rom"
+            }
+          },
+          "expect": "LAMP-02: right after the unplug (read at once, before any poll can bring a drop back) the ring is still on Open a ROM; a ring that leaves it reads none (#824).",
+          "severity": "major",
+          "mode": "automated"
+        },
+        {
+          "id": "lamp.hotplug-ring-t30",
+          "role": "under-test",
+          "precondition": "ui.screen == play.home",
+          "wait": {
+            "timeout_ticks": 28
+          },
+          "check": {
+            "name": "ui.ring",
+            "args": {
+              "is": "play.home.open-rom"
+            }
+          },
+          "expect": "LAMP-02: 30 ticks after the unplug the ring is still on Open a ROM (a drop that recovers inside the 1 s poll is still a failure).",
+          "severity": "major",
+          "mode": "automated"
+        },
+        {
+          "id": "lamp.hotplug-ring-t60",
+          "role": "under-test",
+          "precondition": "ui.screen == play.home",
+          "wait": {
+            "timeout_ticks": 30
+          },
+          "check": {
+            "name": "ui.ring",
+            "args": {
+              "is": "play.home.open-rom"
+            }
+          },
+          "expect": "LAMP-02: 60 ticks after the unplug the ring is still on Open a ROM.",
+          "severity": "major",
+          "mode": "automated"
+        },
+        {
+          "id": "lamp.second-pad-dims",
+          "role": "under-test",
+          "precondition": "ui.lamps port 2 lit",
           "wait": {
             "timeout_ticks": 180
           },
@@ -2941,7 +2992,7 @@
           "role": "under-test",
           "precondition": "ui.screen == play.home",
           "wait": {
-            "timeout_ticks": 120
+            "timeout_ticks": 2
           },
           "check": {
             "name": "ui.ring",
@@ -2949,8 +3000,8 @@
               "is": "play.home.open-rom"
             }
           },
-          "expect": "LAMP-02: nothing else moves, the ring stays where it was (Open a ROM).",
-          "severity": "minor",
+          "expect": "LAMP-02: nothing else moves, the ring stays where it was (Open a ROM) once the lamp has dimmed; the earlier reads sampled the window across the unplug.",
+          "severity": "major",
           "mode": "automated"
         },
         {
@@ -3055,7 +3106,7 @@
           "expect": "A on the Fullscreen switch goes full screen and the ring stays on the switch; the mouse cursor is hidden over the game (needs variant window.mode=fullscreen, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual",
-          "content_hash": "a8edab2549538d17e04f82bf1623bf6fbd0bd08192f1c75003a696e87a3856cc"
+          "content_hash": "424f81b9714fbb97b178d202480a2d5a5d8016f65abc0933332d7b5c4708b0af"
         },
         {
           "id": "FS-02",
@@ -3064,7 +3115,7 @@
           "expect": "Left from Done to Exit full screen (its own row, visible only in full screen, #910), A: back to a window with the ring on Done (needs variant window.mode=fullscreen, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual",
-          "content_hash": "aa174f4d74fc24562e5d0b7fd3c9e8be2edd95031afc8261e899f8a327681265"
+          "content_hash": "82070d6f4aeaf4bfdd4ed530a3ac895cdd0805361fe5a620c524a69eee5aa63d"
         },
         {
           "id": "FS-03",
@@ -3073,7 +3124,7 @@
           "expect": "Chord, walk W-P4, open Settings, B, B: the [F] column of P4-01..SET-07, recorded only where it differs (needs variant window.mode=fullscreen, which mesen-gui does not advertise; needs action pad.chord, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual",
-          "content_hash": "6394ecb5867cc7b6fa782146aab5cba42afd3633a73b48f5564af43cf0e6cdc1"
+          "content_hash": "d957330930ef873041f099423be61c2c6f420c1b18d0bcd604e56c7c35ee294e"
         },
         {
           "id": "FS-04",
@@ -3082,7 +3133,7 @@
           "expect": "Shrink the window to its minimum by pad: BLOCKED by design; record only whether the default window is below 1024x640 (ADR-0269 Decision 6). (manual: by design, not automatable - the pad cannot shrink the window, and the case asks a person to read the default window size, which no action or check the adapter advertises expresses)",
           "severity": "major",
           "mode": "manual",
-          "content_hash": "98c68066303764c31d402354dea00bac85b49c997382e9a505dd20ec4cabdaf3"
+          "content_hash": "c70aeb5e80717a74a0c85820a0a6e8c7f6bb5ad3c46922779b5fcfc8ca73921f"
         },
         {
           "id": "FS-05",
@@ -3091,7 +3142,7 @@
           "expect": "Open the library, Cheats and the Controller sheet: nothing clipped, every Done/Back reachable (ADR-0269 Decision 6 names them; needs variant window.mode=fullscreen, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual",
-          "content_hash": "c9f81f3a68de0ecf00b4aaa7e00c875d31a967f222ff0e5848309cee16f62a63"
+          "content_hash": "5f03c91030960d1b4a3eaddcb806c249704f58041c0ef862b04fa57b925fd589"
         }
       ]
     },
@@ -3107,7 +3158,7 @@
           "expect": "Hold Down 5 s, release, hold Up 5 s: steady repeat (~10/s after 0.4 s), stops on release, no overshoot (manual: stick and repeat feel is judged by hand on a real pad; no check reads a repeat rate)",
           "severity": "major",
           "mode": "manual",
-          "content_hash": "7234492d559c25f98306cc56e9c064989d46a805d170444917afc4a66a231a9d"
+          "content_hash": "b6745b7eee33fdf032c29e7f8ed2acb171a66a17afed76625c1a7a7e69141934"
         },
         {
           "id": "PAD-02",
@@ -3116,7 +3167,7 @@
           "expect": "Tap a direction 10 times quickly: ten steps or as many as rows allow, none dropped, none doubled (manual: W-P4 takes a game and no `rom` fixture is committed)",
           "severity": "major",
           "mode": "manual",
-          "content_hash": "d48303db63efe3d7aec8270bf1b98ef4b70b6b297f87407317dd779b7c8f2489"
+          "content_hash": "617adea998a8002093b31248ac653a21778141c7f823e3867760bfb2e23343d6"
         },
         {
           "id": "PAD-04",
@@ -3125,7 +3176,7 @@
           "expect": "Diagonal D-pad press (Up+Right): one deterministic step or none, no focus jump off the surface (manual: a diagonal is two directions held at once and a step carries one action)",
           "severity": "major",
           "mode": "manual",
-          "content_hash": "0b32607d63ec06015ede0f35fa0adb5881f6223e82e47efc123a53f3df17be3b"
+          "content_hash": "5c64f27762216e61da58c156fcd20bb81721b0abeac7ee5b79571ed27f565476"
         }
       ]
     },
@@ -3141,7 +3192,7 @@
           "expect": "Enter, press B: every surface closes on B to its parent, no surface needs a mouse to leave (needs action pad.chord, which mesen-gui does not advertise to open W-P4 from a game)",
           "severity": "major",
           "mode": "manual",
-          "content_hash": "f811539f164cd5284d6d74e9f43516fb6e0844ea78643fb79a8b6d730ac42fa0"
+          "content_hash": "9b8fee6b85387b615e6a6ba66ef5c4ac28b94f9ec36b00d133e1669ddab91e72"
         },
         {
           "id": "TRAP-02",
@@ -3150,7 +3201,7 @@
           "expect": "Watch for any native dialog or classic window: none in the Play door except the ones ADR-0256 Decision 9 lists as deliberately native (manual: a native dialog is not an Avalonia control, so the hook's dialogs list cannot see it)",
           "severity": "major",
           "mode": "manual",
-          "content_hash": "13b3c31e819c4c40e05fdecfbe850a9918f0bcfe7f06e961566f57d37c9531b9"
+          "content_hash": "7e22c0732e8fba003b126ae3f40bdc3158a54bc4e8f5411bb5de75316b99c005"
         },
         {
           "id": "TRAP-03",
@@ -3159,7 +3210,7 @@
           "expect": "Start on the pill, follow the lit steps, hold to skip, let it time out once (needs action pad.chord, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual",
-          "content_hash": "6edef35ac888f64adacbf0c9f9a0a311eb017a390da006e8f649f1a5deb919ab"
+          "content_hash": "4f94d20867c0b41f45910ac06b0254929275d70cad4f3026467e4f83e919ae92"
         },
         {
           "id": "TRAP-04",
@@ -3168,7 +3219,7 @@
           "expect": "Quit the application by pad: expected FAIL, Tools ... is deliberately unpadded (#1137) and there is no pad route to quit (manual: the pad route to quit does not exist, so there is no action to script)",
           "severity": "major",
           "mode": "manual",
-          "content_hash": "bd9b454f126ce640f2ad018d725a5b239d68ef5b02c54705fa12be6eb58a764e"
+          "content_hash": "a04981502fb3a20061eb76cfc81b3baad805ace96b6d4a1fb2a64b9042f071b5"
         }
       ]
     },
@@ -3184,7 +3235,7 @@
           "expect": "Launch -> Home -> Open a ROM -> search with Y, A -> A on a tile -> play 30 s -> chord -> Settings > Display > Interface size -> Large -> B -> Save states -> save a slot -> B -> Resume -> chord -> Quit game -> confirm -> Home, under 5 minutes (needs action pad.chord, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual",
-          "content_hash": "d5bd528c53c419141c8cd698e65712491f253fd0fdbef2d9ae73f14de298769b"
+          "content_hash": "cbbae8d0e5f3c3a09a4e544d7713c9e07d9ada246a8f64f4d58785e174c08167"
         },
         {
           "id": "JOURNEY-02",
@@ -3193,7 +3244,7 @@
           "expect": "The same trip entered in full screen first and left at the end, focus kept across both mode switches (needs variant window.mode=fullscreen, which mesen-gui does not advertise; needs action pad.chord, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual",
-          "content_hash": "57f301cc4ba2f7b936cf82bdf4d9c24b281f0bc46e1a4f5c7860e23e177bf2cf"
+          "content_hash": "6a47b10a6fb4fcf8abc49fa9d45c24f036bd433781a001f677f9cc48fc914255"
         }
       ]
     },
@@ -3209,7 +3260,7 @@
           "expect": "Chord on P-B: W-P4 opens and the footer names P-B's buttons (needs action pad.chord, which mesen-gui does not advertise)",
           "severity": "major",
           "mode": "manual",
-          "content_hash": "3d7fa669d9d85e4054158252a02ac282900deac7c5450689798efbe6ca662aa3"
+          "content_hash": "daa507e5d71603cad3f28fa78d368dadc6c5b13c14e216d3ced42fd44363fe4f"
         },
         {
           "id": "PAD2-02",
@@ -3218,7 +3269,7 @@
           "expect": "Navigate with P-A, then with P-B, alternating: both move the focus, one ring, no double-step (manual: two physical pads and a game, and no `rom` fixture is committed)",
           "severity": "major",
           "mode": "manual",
-          "content_hash": "ad35819ab5dc1aec4171d378bde42513dcbaa6b73c78df299e39db01842c7ac2"
+          "content_hash": "d9ecdcbfa3b9adb2fdfccbe9069bfc2a931c0b07ed15e10e18ad183c2b29ced9"
         },
         {
           "id": "PAD2-03",
@@ -3227,7 +3278,7 @@
           "expect": "Walk the PLAYERS rows and move P-B to P2 by pad: the port lamps are unchanged (ADR-0261) (manual: two physical pads and a game, and no `rom` fixture is committed)",
           "severity": "major",
           "mode": "manual",
-          "content_hash": "739812c764aacceed9916041e7f337a45ce950b58281718e9c06d3a033be4770"
+          "content_hash": "bee4411e5a99c3191607777cc08c4a353904637ce233f185a31a6df1a632f559"
         },
         {
           "id": "PAD2-04",
@@ -3236,7 +3287,7 @@
           "expect": "Unplug P-A, replug: on macOS the reconnect repair never fires and P-A may return on another index (a note for #813's family) (manual: a physical unplug and replug on macOS is not simulated)",
           "severity": "major",
           "mode": "manual",
-          "content_hash": "6d669b2400e893055abb4c2831a2d5fdf196cdbca2425cd2cfe4160a3faf5d60"
+          "content_hash": "01599e83ee9a70bc5dbf5183e19efa961b9a4045874531c75a1680e3f01dcd53"
         }
       ]
     }
