@@ -89,6 +89,19 @@ Owns `docs/specs/` (CC0), `docs/roadmap/` (the consolidated PRD), `docs/adr/` (t
   `add_argument` calls *and* from the usage block it states about itself: a CLI
   that hand-parses argv publishes its flags only there, and reading just
   `add_argument` reported a correct doc as broken.
+- `squad/`: `python3 scripts/checks/verify_squad_docs.py` (also in
+  `make doc-checks`) — every `docs/squad/*.md` record is listed as an index
+  bullet in `docs/squad/README.md`; no file in the folder, `README.md`
+  included, spells an en-GB word the check's rule set knows (the productive
+  `-ise`/`-isation`, `-yse`, `-our`, `-ae`/`-oe` and doubled-consonant
+  families plus the common one-off words, with the en-US words of the same
+  shape listed as exceptions); and a record's Status line agrees with that
+  record's own body about whether its fix is live. Written because #1825,
+  #1826 and #1827 all shipped in that folder unchecked — an index that omitted
+  records, an en-GB word in a versioned en-US doc, and a Status line reading
+  as done over a body that said the fix was not in the live tree. Its own
+  tests, which drive it over fixture trees, are
+  `scripts/test_verify_squad_docs.py`.
 - Roadmap: `python3 scripts/checks/verify_prd_live_rows.py` checks shipped
   declarations in live tables. Semantic consistency and acceptance evidence
   require review; the script does not validate product completion.
