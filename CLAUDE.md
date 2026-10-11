@@ -121,7 +121,9 @@ applies — the substring `Fork-only work` anywhere in the body, so the marker
 counts written bold, in a bullet, quoted, or without a colon just as much as
 written bare. A title that already starts with `[` is left alone, so a caller
 that names its own prefix never gets two; leading whitespace is dropped before
-that test, so `  [x]` is read as the prefixed title it is.
+that test, so `  [x]` is read as the prefixed title it is. This decides the
+title prefix and nothing else — routing stays with the `fork-only` label
+above, and the helper does not label, dispatch or route on the prose.
 
 Board fields: Status (To triage → Todo → Doing → Testing → Done), Priority
 (P0/P1/P2), Size (S/M/L). The script sets Status and, optionally, Priority;
