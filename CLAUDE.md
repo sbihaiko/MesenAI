@@ -83,6 +83,20 @@ File one when you (or a subagent) find a real, reproducible bug that is
 user asks to "open a bug" / "file an issue". Architecture/trade-off decisions
 are not bugs; they go through `/adr`.
 
+**Rule — a bug is fixed ASAP and sits outside the waves** (owner, 2026-10-11:
+"bugs nao pertencem a waves, eles devem ser corrigidos ASAP", and "tmb nao
+precisam da label ready-for-agent e fork-only"):
+
+- A bug carries the `bug` label and nothing else from the ticket vocabulary:
+  no `wave:NN`, no `ready-for-agent`, no `fork-only`. A wave orders the slices
+  of a spec; a defect is not a slice and never waits for one.
+- The squad loop's `autobug` dispatches every open `bug` issue on its next
+  cycle; `autofrontier` skips them. A bug in the agent-squad fork is still
+  routed to the fork because its body says `Fork-only work: ...` (the loop
+  reads that sentence as well as the label), so keep that line in the body.
+- It is fixed before the next slice is started, with the TDD RED output posted
+  on the issue.
+
 Use the helper rather than manual `gh` commands — it sets the initial Status
 and Priority with the board's correct IDs:
 
@@ -110,8 +124,9 @@ Issues that each carry:
   blockers, otherwise one more than the highest wave among its blockers. A
   wave's issues can run in parallel once the earlier waves are done; the
   squad hub sorts board cards by it. When an edge changes, move the label.
-- a type label from the repo's vocabulary when one fits (`bug` for a defect;
-  real bugs still go through `scripts/report-bug.sh`, above).
+- a type label from the repo's vocabulary when one fits. A defect is not a
+  slice: it is filed as a bug (`scripts/report-bug.sh`, above), carries no
+  wave and no `ready-for-agent`, and is fixed ASAP.
 
 The personal copy of the skill (`~/.agents/skills/to-tickets/SKILL.md`)
 carries these steps; the agent-squad fork re-vendors it into
