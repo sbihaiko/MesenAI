@@ -54,7 +54,7 @@ The tree is four levels deep (scenario, area, container, run or case), well insi
 
 - **Scenario issue.**
   - Its sub-issues are its areas, never cases.
-  - Its body holds the purpose, the script link, an Areas table (area, objective in one line, case count, latest result) and the dashboard (§5).
+  - Its body holds the purpose, the script link, an Areas table (area, objective in one line, case count, latest result), one legend line naming the record span and the area count the layout holds (§"`/to-test-scenario` changes" C) and the dashboard (§5).
   - It is the only issue on the board.
   - It keeps its labels, `ready-for-agent` included, and gains the type label `Test-Scenario`.
 - **Area issue.**
@@ -214,8 +214,15 @@ Tests: each op's REST call shape against a stub shell.
   ```
   "layout": "areas"
   "areas": {<key>: {"number", "containers": [...], "runs": {"YYYY-MM": [...]}}}
+  "legend": "<the scenario body's legend line>"
   ```
   Each case entry also gains `"area"` and `"container"`.
+  The legend is **rendered from the map**, never typed: the publish step derives the record span and the area count
+  from the areas and writes both into the line, so a migration that changes the areas changes the line with them.
+  #1286's legend said `the case records (#1288-#1387)` - the range the flat layout held before the migration - and
+  the reader who followed it missed the 194 records the areas gained (MesenAI #1764). The committed line is checked
+  against the map by `scripts/checks/verify_gui_test_scenario_legend.py`, which is what makes the next migration
+  that forgets it red rather than silently stale.
 - Links are made top-down: scenario → area → container → record. A record is never linked to the scenario.
 - Container adoption: before creating any container, `list_sub_issues` on its parent adopts an existing one with the same title, so a lost map or a concurrent writer never makes two.
 - Re-publish rules:
