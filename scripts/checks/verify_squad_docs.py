@@ -42,7 +42,11 @@ Three rules, deliberately narrow so each reads a declaration and not a mention:
 The markers of rule (c) are sentence shapes — `is merged into`, `is not merged
 into` — and never a bare mention of a merge or a deployment: a body recounting
 that the mid-work tip *was* merged into the base is describing the defect the
-record was written about, not declaring the fix live.
+record was written about, not declaring the fix live. Each marker counts only
+when its own sentence names the live tree (`local/next`, or `the live tree`): a
+fix deployed to a fork's staging branch or merged into a scratch branch is the
+state a pending Status block already claims, and reading those as live made the
+block and the body contradict each other when they in fact agree.
 
 The scan is whole-file, code fences included: a record anywhere in the folder is
 the artifact under the en-US rule, and a fence is not an exemption from it.
@@ -136,17 +140,49 @@ def en_gb_spellings(line: str) -> list[str]:
                     break
     return hits
 
-#The body sentence that makes a Status block's `fixed` a contradiction. Narrow
-#on purpose: a record that mentions the live tree without claiming the fix sits
-#outside it is not an offender.
+#The target a marker sentence has to name for the marker to count: the live tree
+#itself. `local/next` is that tree by name, and `the live tree` names it too, but
+#a fork's staging branch or a scratch branch is the state a pending Status block
+#already claims — so a body that says the fix is deployed *there* agrees with the
+#block instead of contradicting it, which is what the bare `is deployed to` read
+#as live got wrong.
+LIVE_TREE = r"(?:(?:the live )?`?local/next`?|(?:the )?live tree)"
+
+#The run between a marker and its target: within the marker's own sentence and no
+#further, so a '.'/':'/';' ends the search rather than letting a later mention of
+#the live tree vouch for an earlier clause about a scratch branch.
+BETWEEN_MARKER_AND_TARGET = r"[^.:;]*?"
+
+#The body sentence that makes a Status block's `fixed` a contradiction. Narrow on
+#purpose, in two ways at once: the fix's own state, present tense, and the target
+#it names is the live tree — a record that mentions the live tree without claiming
+#the fix sits outside it is not an offender.
 UNMERGED_BODY = ("is not merged into", "is not yet landed", "is not deployed")
 
-#The mirror of those three shapes, at the polarity that says the fix did reach
-#the live tree. A block still claiming pending over this body is the same
-#contradiction from the other end, and a mention of the past tense is not it:
-#`was merged into` is a record describing a defect, so only the present-tense
-#declaration counts.
+#The mirror of those three shapes, at the polarity that says the fix did reach the
+#live tree. A block still claiming pending over this body is the same contradiction
+#from the other end, and a mention of the past tense is not it: `was merged into` is
+#a record describing a defect, so only the present-tense declaration counts — and
+#only when its target is the live tree, not the fork the pending block already names.
 LANDED_BODY = ("is merged into", "has landed in", "is deployed to", "is deployed in")
+
+
+def marker_sentences(markers: tuple[str, ...]) -> tuple[tuple[str, re.Pattern[str]], ...]:
+    """Every marker with the one sentence shape that makes it count: the marker, then a live-tree
+    target inside the same sentence. One compiled pattern per marker, shared by both directions."""
+    return tuple(
+        (marker, re.compile(re.escape(marker) + BETWEEN_MARKER_AND_TARGET + LIVE_TREE))
+        for marker in markers
+    )
+
+
+UNMERGED_BODY_MARKERS = marker_sentences(UNMERGED_BODY)
+LANDED_BODY_MARKERS = marker_sentences(LANDED_BODY)
+
+
+def body_marker(markers: tuple[tuple[str, re.Pattern[str]], ...], body: str) -> str | None:
+    """The first marker whose sentence names the live tree, or None."""
+    return next((marker for marker, pattern in markers if pattern.search(body)), None)
 
 #What a Status block says instead of a bare done-state, while the body says the
 #fix is unmerged. Two words minimum, so a prose mention of "pending" elsewhere
@@ -217,8 +253,8 @@ def check_status_agrees_with_body(records: list[Path]) -> list[str]:
             continue
         body = body_after_status(text)
         pending = next((marker for marker in PENDING_STATUS if marker in block.lower()), None)
-        unmerged = next((marker for marker in UNMERGED_BODY if marker in body), None)
-        landed = next((marker for marker in LANDED_BODY if marker in body), None)
+        unmerged = body_marker(UNMERGED_BODY_MARKERS, body)
+        landed = body_marker(LANDED_BODY_MARKERS, body)
         #A body admitting the fix is unmerged wins over one saying it landed: the
         #two often sit in the same record ("merged in the fork, not in the live
         #tree"), and it is the live tree the Status block is read as describing.
@@ -265,7 +301,8 @@ def main(argv: list[str]) -> int:
         f"PASS verify_squad_docs: {len(records)} record(s) listed as index bullets in README.md, "
         f"no en-GB spelling among the checked families and words in {len(documents)} file(s) "
         "(README.md included), no Status line contradicting its own body: every body declaring the fix "
-        "unmerged carries a pending marker, and none declaring it landed still claims the fix pending"
+        "unmerged from the live tree carries a pending marker, and none declaring it landed there still "
+        "claims the fix pending"
     )
     return 0
 
