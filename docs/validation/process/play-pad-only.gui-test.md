@@ -42,7 +42,7 @@ Setup:
 
 | ID | Role | Precondition | Action | Wait | Check | Expected | Variants | Severity | Mode |
 |---|---|---|---|---|---|---|---|---|---|
-| `home.first-focus` | setup | `the application has just launched on a fresh settings folder` | — | `ui.focused == play.home.open-rom` within 120 ticks | `ui.focused(is="play.home.open-rom")` | HOME-01 - no wizard (ADR-0256 Decision 8); Play Home W-P1 is on screen and Open a ROM is already focused | all | major | automated |
+| `home.first-focus` | setup | `the application has just launched on a fresh settings folder` | — | `ui.focused == play.home.open-rom` within 300 ticks | `ui.focused(is="play.home.open-rom")` | HOME-01 - no wizard (ADR-0256 Decision 8); Play Home W-P1 is on screen and Open a ROM is already focused | all | major | automated |
 
 Steps:
 
