@@ -568,6 +568,7 @@ Steps:
 |---|---|---|---|---|---|---|---|---|---|
 | `PAD-01` | under-test | `Any long list (library 100+)` | — | — | — | Hold Down 5 s, release, hold Up 5 s: steady repeat (~10/s after 0.4 s), stops on release, no overshoot (manual: stick and repeat feel is judged by hand on a real pad; no check reads a repeat rate) | all | major | manual |
 | `PAD-02` | under-test | `W-P4` | — | — | — | Tap a direction 10 times quickly: ten steps or as many as rows allow, none dropped, none doubled (manual: W-P4 takes a game and no `rom` fixture is committed) | all | major | manual |
+| `PAD-03` | under-test | `W-P4, a pad with a worn stick if available` | — | — | — | Leave the left stick alone, nudge it below half, then push it fully: the bridge reads D-pad key names only (`PadNavControls`), so the stick does not move the menu cursor at any deflection unless the backend reports the stick as D-pad keys (manual: drift needs a worn stick and the reading is judged by hand; no check reads a stick, and `PadNavControls` has no axis entries) | all | major | manual |
 | `PAD-04` | under-test | `Library` | — | — | — | Diagonal D-pad press (Up+Right): one deterministic step or none, no focus jump off the surface (manual: a diagonal is two directions held at once and a step carries one action) | all | major | manual |
 
 ## Batch `trap`
