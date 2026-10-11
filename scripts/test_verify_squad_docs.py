@@ -163,6 +163,33 @@ class VerifySquadDocs(unittest.TestCase):
         rc, out = run_check(root)
         self.assertEqual(rc, 0, f"a past-tense recount of the defect was read as the fix being live:\n{out}")
 
+    def test_deployment_to_a_fork_target_is_not_a_landed_body(self):
+        """A marker counts only when the sentence names a live-tree target: `is deployed to` a fork's staging branch
+        is the state the pending Status block already describes, so the two agree and the record passes."""
+        body = ("# A record\n\nStatus: pending deployment, the fix is ready in the fork.\n\n"
+                "The fix is deployed to the fork's staging branch.\n")
+        root = squad_tree(self, "# Squad operations\n\n" + LISTED.format(name="record.md"), record=body)
+        rc, out = run_check(root)
+        self.assertEqual(rc, 0, f"a deployment to a fork's staging branch was read as the live tree:\n{out}")
+
+    def test_a_merge_into_a_scratch_branch_is_not_a_landed_body(self):
+        """Same shape for the merge marker: a merge into a scratch branch is not a merge into the live tree, and a
+        Status block still reading pending over it agrees with the body."""
+        body = ("# A record\n\nStatus: pending deployment, the fix is ready in the fork.\n\n"
+                "The fix is merged into a scratch branch.\n")
+        root = squad_tree(self, "# Squad operations\n\n" + LISTED.format(name="record.md"), record=body)
+        rc, out = run_check(root)
+        self.assertEqual(rc, 0, f"a merge into a scratch branch was read as the live tree:\n{out}")
+
+    def test_deployment_to_a_staging_target_is_not_an_unmerged_body(self):
+        """And the unmerged markers read the same way: `is not deployed` to staging is not the live tree, so a Status
+        line reading as done over it is not the #1825 contradiction."""
+        body = ("# A record\n\nStatus: fixed.\n\n"
+                "The fix is not deployed to staging.\n")
+        root = squad_tree(self, "# Squad operations\n\n" + LISTED.format(name="record.md"), record=body)
+        rc, out = run_check(root)
+        self.assertEqual(rc, 0, f"a deployment to staging was read as the live tree being unmerged:\n{out}")
+
     def test_the_repo_tree_passes(self):
         """The folder this repository ships passes its own check, README.md included in the en-US scan."""
         rc, out = run_check(ROOT)
