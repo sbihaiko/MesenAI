@@ -33,20 +33,28 @@ esac
 TITLE="${TITLE#"${TITLE%%[![:space:]]*}"}"
 
 # Every issue this helper files carries exactly one prefix, chosen from the
-# body and never guessed: "[SQUAD] " when the body carries the "Fork-only
-# work" marker (the work is the squad's own tooling), "[MesenAI] " otherwise
-# (the work lands in this repository).
+# body and never guessed: "[SQUAD] " when the body carries the fork-only marker
+# line (the work is the squad's own tooling), "[MesenAI] " otherwise (the work
+# lands in this repository).
 #
-# The marker test is the one forkonly.sh applies — the substring "Fork-only
-# work" anywhere in the body (`contains("Fork-only work")`, forkonly.sh), not a
-# line-anchored "Fork-only work:" form: the marker is written bold, in a
-# bullet, quoted, or without a colon as often as it is written bare, and a body
-# that merely mentions the phrase is one forkonly.sh already calls fork-only.
-# Asking the same question here is what keeps the two rules from disagreeing.
+# The marker test is the ONE rule forkonly.sh applies, read from the same
+# pattern, character for character (forkonly.sh, `sg_fork_only`):
+#
+#   ^[[:space:]>*+-]*\**[Ff]ork-only work
+#
+# A MARKER LINE — the phrase owning a line, bare, indented, bulleted, bolded or
+# quoted — is fork-only work. A body that only mentions the phrase inside a
+# sentence is a report about MesenAI, and routing one down the fork costs it the
+# PR that is its only deliverable. Matching the phrase anywhere in the body is
+# the shape #1563 shipped, and it sent prose down the fork; anchoring it at
+# column 0 (the shape #1706's review asked for) misses the bulleted, bolded and
+# quoted marker forms real bodies write. Citing this one pattern on both sides
+# is what keeps the two rules from drifting apart again.
+#
 # A title that already starts with "[" keeps the prefix its caller named, so it
 # never gets two — the whitespace stripped above can never hide the "[".
 if [[ "$TITLE" != \[* ]]; then
-  if grep -Fq 'Fork-only work' <<<"$BODY"; then
+  if grep -qE '^[[:space:]>*+-]*\**[Ff]ork-only work' <<<"$BODY"; then
     TITLE="[SQUAD] $TITLE"
   else
     TITLE="[MesenAI] $TITLE"

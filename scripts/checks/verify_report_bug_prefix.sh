@@ -1,20 +1,30 @@
 #!/usr/bin/env bash
-# Issue #1563: scripts/report-bug.sh must prefix every issue title it files
-# with exactly one marker chosen from the body — "[SQUAD] " when the body
-# carries the "Fork-only work" marker and "[MesenAI] " otherwise (the work
-# lands in this repository).
+# Issue #1563, reshaped by #1773: scripts/report-bug.sh must prefix every issue
+# title it files with exactly one marker chosen from the body — "[SQUAD] " when
+# the body carries the fork-only marker LINE and "[MesenAI] " otherwise (the
+# work lands in this repository).
 #
-# The marker rule is not invented here: forkonly.sh is the ONE rule that
-# decides fork-only work, and its body test is a plain substring test,
-# `contains("Fork-only work")` — not a line-anchored "Fork-only work:" form.
-# So a body carrying the marker in any shape it is normally written (`Fork-only
-# work:` at the start of a line, `**Fork-only work:**`, `- Fork-only work:`,
-# `> Fork-only work`, `Fork-only work —`) is the squad's own tooling and takes
-# [SQUAD], and so is a body that merely mentions the phrase in prose, because
-# forkonly.sh cannot tell the two apart. This check asserts that parity
-# directly against forkonly.sh's own rule whenever that script is on the
-# machine (it lives in the agent-squad fork, not in this checkout, so the
-# parity half is skipped where the fork is absent — e.g. in CI).
+# The marker rule is not invented here: forkonly.sh is the ONE rule that decides
+# fork-only work, and both sides must read the SAME pattern, character for
+# character:
+#
+#   ^[[:space:]>*+-]*\**[Ff]ork-only work
+#
+# A MARKER LINE — the phrase owning a line, plain, indented, bulleted, bolded or
+# quoted — is the squad's own tooling and takes [SQUAD]. A body that only
+# mentions the phrase inside a sentence is a bug report about MesenAI and takes
+# [MesenAI]: matching it anywhere sent work that belonged to MesenAI down the
+# fork route, where no PR is ever opened. It was wrong twice, and both times
+# because one side of the pair changed alone: #1563 prescribed a plain
+# substring test (`grep -Fq 'Fork-only work'`), matching the fork-only rule as
+# it then was, and that test survived #1706 while forkonly.sh moved to the
+# marker line — the drift this check caught on origin/main, where the helper
+# filed [SQUAD] for a body forkonly.sh had already stopped calling fork-only.
+#
+# This check asserts that parity directly against forkonly.sh's own rule
+# whenever that script is on the machine (it lives in the agent-squad fork, not
+# in this checkout, so the parity half is skipped where the fork is absent —
+# e.g. in CI).
 #
 # A title that already starts with "[" is left alone, so a caller that names
 # its own prefix never gets two. Leading whitespace never changes what a title
@@ -123,6 +133,21 @@ if [[ -n "$FORKONLY_SH" ]]; then
     || fail "forkonly.sh's rule needs jq, which is not on PATH"
 fi
 
+# The helper's own marker test, read back from the file that runs it, so the
+# documented pattern is bound to the executed one instead of to a copy of it
+# kept here. Everything after this line compares against this string.
+MARKER_PATTERN=$(sed -n "s/.*grep -qE '\(.*\)' <<<\"\$BODY\".*/\1/p" "$REPORT_BUG")
+[[ -n "$MARKER_PATTERN" ]] \
+  || fail "could not read the marker pattern out of scripts/report-bug.sh — re-point the extraction in this check"
+
+# CLAUDE.md documents that pattern for the humans who write an issue by hand, so
+# it must cite this exact string, once. A second copy, or a stale one, is how
+# the documented rule drifts from the executed one without anything failing.
+CLAUDE_MD="$REPO_ROOT/CLAUDE.md"
+pattern_citations=$(grep -Fc "$MARKER_PATTERN" "$CLAUDE_MD" || true)
+[[ "$pattern_citations" -eq 1 ]] \
+  || fail "CLAUDE.md must cite the marker pattern '$MARKER_PATTERN' exactly once, found $pattern_citations"
+
 # Ask forkonly.sh's rule what prefix a body earns. Only the body half of the
 # rule runs: report-bug.sh files the issue, so no `fork-only` label exists yet.
 forkonly_prefix() {
@@ -149,34 +174,58 @@ body_case() {
 }
 
 BODY_PLAIN="Repro: run the widget. Expected: it saves. Observed: it crashes."
-# The marker in each shape it is normally written in. forkonly.sh matches the
-# substring, so every one of them is the squad's own tooling.
+# The marker in each shape it is normally written in: the phrase owns its line,
+# which is what the shared pattern asks for. Every one of them is fork-only work.
 BODY_FORK="Fork-only work: this is the squad's own tooling, not MesenAI."
 BODY_FORK_BOLD="**Fork-only work:** this is the squad's own tooling, not MesenAI."
 BODY_FORK_BULLET="- Fork-only work: this is the squad's own tooling, not MesenAI."
 BODY_FORK_QUOTED="> Fork-only work"
 BODY_FORK_NO_COLON="Fork-only work — this is the squad's own tooling, not MesenAI."
-# Ordinary report prose that happens to mention the phrase. forkonly.sh matches
-# the substring, so it cannot tell this apart from the marker — and neither may
-# this helper, or the two rules diverge.
+# The pattern's `[Ff]`: a marker line the author lowercased is still a marker
+# line, and the plain substring test this replaces only ever saw the capital F.
+BODY_FORK_LOWER="fork-only work: this is the squad's own tooling, not MesenAI."
+# The pattern's leading `[[:space:]>*+-]*`: an indented marker is still a marker.
+BODY_FORK_INDENTED="  Fork-only work: this is the squad's own tooling, not MesenAI."
+# Ordinary report prose that merely names the phrase mid-sentence — the case
+# that separates this rule from the substring test it replaces. Nothing about
+# the line says "marker", so this is a bug report about MesenAI and must route
+# to a PR in this repository, never down the fork.
 BODY_MENTION="The report explains why Fork-only work is out of scope."
+# The same, with the phrase trailing everyday report vocabulary on its line.
+BODY_MENTION_TAIL="Observed: the child is Fork-only work per the decision below."
 # The marker on its own line of a multi-line body, which is how a real body
-# carries it.
+# carries it, next to prose that must not be mistaken for one.
 BODY_FORK_MULTILINE="Repro: the child dies on launch.
 Fork-only work: this is the squad's own tooling, not MesenAI.
 Observed: exit 1."
 
+# The prose cases come first: telling a report about MesenAI apart from a marker
+# is the decision, and a bug routed down the fork never gets a PR. Then the
+# marker forms the same pattern must still catch.
 body_case "plain body" "Widget crashes on save" "$BODY_PLAIN" "[MesenAI]"
+body_case "prose mentioning the phrase" "Widget report mentions fork-only work" "$BODY_MENTION" "[MesenAI]"
+body_case "prose trailing the phrase" "Widget report mentions fork-only work" "$BODY_MENTION_TAIL" "[MesenAI]"
+# Anchoring is per line, not per body: a multi-line report whose later line
+# merely names the phrase is prose, so it takes [MesenAI] — the body-level
+# question #1563's substring test answered "yes" to by accident.
+body_case "multi-line report with a prose mention" "Widget report mentions fork-only work" \
+  "Repro: the widget crashes.
+The report explains why Fork-only work is out of scope.
+Expected: it saves." "[MesenAI]"
 body_case "marker at column 0" "Squad tooling drops a child" "$BODY_FORK" "[SQUAD]"
 body_case "bold marker" "Squad tooling drops a child" "$BODY_FORK_BOLD" "[SQUAD]"
 body_case "bullet marker" "Squad tooling drops a child" "$BODY_FORK_BULLET" "[SQUAD]"
 body_case "quoted marker" "Squad tooling drops a child" "$BODY_FORK_QUOTED" "[SQUAD]"
 body_case "marker with no colon" "Squad tooling drops a child" "$BODY_FORK_NO_COLON" "[SQUAD]"
-body_case "prose mentioning the phrase" "Widget report mentions fork-only work" "$BODY_MENTION" "[SQUAD]"
+body_case "lowercase marker" "Squad tooling drops a child" "$BODY_FORK_LOWER" "[SQUAD]"
+body_case "indented marker" "Squad tooling drops a child" "$BODY_FORK_INDENTED" "[SQUAD]"
 body_case "marker on its own line" "Squad child dies on launch" "$BODY_FORK_MULTILINE" "[SQUAD]"
 
 # A caller that names its own prefix keeps it — including when the title only
 # reaches the "[" after leading whitespace, which must not earn a second one.
+# Both title cases below are the pair the review of #1706 asked for: a title
+# with leading whitespace before "[" used to come out double-prefixed, and it
+# must be passed through unchanged.
 got=$(run_case "[MesenAI] Already prefixed" "$BODY_PLAIN")
 [[ "$got" == "[MesenAI] Already prefixed" ]] \
   || fail "pre-prefixed title: expected it passed through unchanged, got '$got'"
@@ -199,7 +248,8 @@ got=$(run_case "   " "$BODY_PLAIN")
 
 # The prefix rule must not disturb the rest of the call: the issue still
 # carries the `bug` label, and the board wiring (item-add, then status, then
-# priority) is untouched.
+# priority) is untouched. This is the second half of what the review of #1706
+# asked for — the stub's recorded argv is asserted, not just the title.
 : > "$GH_STUB_LOG"
 bash "$REPORT_BUG" "Board wiring still intact" "$BODY_PLAIN" P1 >/dev/null 2>&1 \
   || fail "scripts/report-bug.sh exited non-zero with a priority"

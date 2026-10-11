@@ -98,9 +98,10 @@ neither the `ready-for-agent` nor a `wave:NN` label):
   is the loop's live authority (`contrib/squad-goal/SKILL.md`), because without
   it the label rule cannot protect the ticket from being dispatched as MesenAI
   work. A fork-side bug still carries `bug` and still has no `wave:NN` and no
-  `ready-for-agent`; it also carries `fork-only`. Keep a `Fork-only work: ...`
-  line in the body as human-readable context, but do not treat that prose as
-  the routing key (a later edit can delete it silently).
+  `ready-for-agent`; it also carries `fork-only`. A `Fork-only work: ...` line
+  in the body is that rule's fallback, read with the same pattern
+  `scripts/report-bug.sh` titles from (below): keep it as the marker line it is,
+  because a later edit can delete it silently and only the label survives.
 
 Use the helper rather than manual `gh` commands — it sets the initial Status
 and Priority with the board's correct IDs:
@@ -114,16 +115,25 @@ It creates the Issue (label `bug`) and adds it to the board with Status =
 (`gh auth refresh -h github.com -s project`, once per machine).
 
 Every issue the helper files carries exactly one title prefix, chosen from
-the body and never guessed: `[SQUAD] ` when the body carries the `Fork-only
-work` marker (the work is the squad's own tooling), `[MesenAI] ` otherwise
-(the work lands in this repository). The marker test is the one `forkonly.sh`
-applies — the substring `Fork-only work` anywhere in the body, so the marker
-counts written bold, in a bullet, quoted, or without a colon just as much as
-written bare. A title that already starts with `[` is left alone, so a caller
-that names its own prefix never gets two; leading whitespace is dropped before
-that test, so `  [x]` is read as the prefixed title it is. This decides the
-title prefix and nothing else — routing stays with the `fork-only` label
-above, and the helper does not label, dispatch or route on the prose.
+the body and never guessed: `[SQUAD] ` when the body carries the fork-only
+marker line (the work is the squad's own tooling), `[MesenAI] ` otherwise (the
+work lands in this repository). The marker test is the one `forkonly.sh`
+applies — the routing rule above — read from the same pattern, character for
+character:
+
+```
+^[[:space:]>*+-]*\**[Ff]ork-only work
+```
+
+A **marker line** — the phrase owning a line, bare, indented, bulleted, bolded
+or quoted — takes `[SQUAD]`. A body that only mentions the phrase inside a
+sentence takes `[MesenAI]`: that is a bug in this repository, and routing it
+down the fork costs it the PR that is its only deliverable. A title that
+already starts with `[` is left alone, so a caller that names its own prefix
+never gets two; leading whitespace is dropped before that test, so `  [x]` is
+read as the prefixed title it is. This decides the title prefix and nothing
+else — routing stays with the `fork-only` label, whose fallback is this same
+marker line, and the helper does not label, dispatch or route on prose.
 
 Board fields: Status (To triage → Todo → Doing → Testing → Done), Priority
 (P0/P1/P2), Size (S/M/L). The script sets Status and, optionally, Priority;
