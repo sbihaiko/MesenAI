@@ -11,6 +11,7 @@ Run with the agent-squad fork commit `36f1a08` (branch `gui/1227`, local only).
 
 The pilot's script carries a `content_hash` per step now (`publish --stamp`); nothing else in it changed.
 
-GitHub allows 100 sub-issues per parent, so a per-case publish of the pilot's 281 cases stops at the 100th. The first
-100 cases (launch, home, after-game, library, favorites, game, game-archive, game-bios and the first dialogs case) are
-published; the rest need a per-batch publish or a split. The module now refuses such a plan before it creates anything.
+At the time of the pilot, GitHub allowed 100 sub-issues per parent, so a per-case publish of the pilot's 281 cases
+stopped at the 100th. The first 100 cases (launch, home, after-game, library, favorites, game, game-archive,
+game-bios and the first dialogs case) were published; the rest needed a per-batch publish or a split. The module
+refused such a plan before it created anything.

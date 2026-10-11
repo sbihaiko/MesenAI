@@ -18,8 +18,11 @@ not the legend is red here, which is what stops the next one from leaving it sta
 The format token is checked the same way, against the ADR's own `Status` line: #1286's legend said
 `Format: ADR-0275 (proposed)` after the ADR was accepted, the same staleness one clause later.
 
-A repository whose maps carry no areas is not a failure - a flat scenario has no areas to name - but a run in which
-no map carries any is: a check that checks nothing is a failure (the same rule as verify_gui_test_scenario_coverage).
+Two shapes make a legend unverifiable rather than wrong, and both are failures: a map laid out as areas that carries
+no areas (its line can say `0 areas` and be internally consistent while naming nothing), and one that carries no
+cases (the range its line names has no record to be checked against). A flat scenario - no `"layout": "areas"` at
+all - has no areas to name and is not a failure, but a run in which no map carries any is: a check that checks
+nothing is a failure (the same rule as verify_gui_test_scenario_coverage).
 
 Usage:
   python3 scripts/checks/verify_gui_test_scenario_legend.py
@@ -73,14 +76,21 @@ def adr_status(repo: Path, adr_id: str) -> str | None:
 
 def check_map(repo: Path, path: Path, doc: dict) -> list[str]:
     rel = path.relative_to(repo)
+    areas_by_key = doc.get("areas") or {}
+    if not areas_by_key:
+        return [f"{rel}: the map is laid out as areas and carries no areas, so a legend naming `0 areas` would "
+                f"verify nothing"]
     legend = doc.get("legend")
     if not legend:
         return [f"{rel}: the map carries no legend, so nothing tells a reader which records the "
                 f"scenario's areas hold"]
     errors = []
-    span, areas = record_span(doc), len(doc.get("areas", {}))
+    span, areas = record_span(doc), len(areas_by_key)
     named = SPAN.search(legend)
-    if span and (not named or tuple(int(g) for g in named.groups()) != span):
+    if span is None:
+        errors.append(f"{rel}: the map carries no cases, so the record range its legend names "
+                      f"({named.group(0) if named else 'no record range'}) has no record to be checked against")
+    elif not named or tuple(int(g) for g in named.groups()) != span:
         errors.append(f"{rel}: the legend names {named.group(0) if named else 'no record range'}, and the areas "
                       f"hold #{span[0]}–#{span[1]}")
     counted = AREA_COUNT.search(legend)

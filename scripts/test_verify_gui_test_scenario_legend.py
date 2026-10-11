@@ -29,8 +29,16 @@ PUBLISHED_BEFORE_THE_MIGRATION = (
 # The same line, with the span the areas of the synthetic map below hold: #100-#130 over 2 areas.
 FIXTURE_LEGEND = (
     "<sub>Legend: ✅ passed · ❌ failed · \U0001f7e1 needs review · \U0001f464 manual "
-    "· ⚪ not run. The run issues are this scenario's sub-issues; the case records (#100–#130) "
-    "live in the 2 areas below, linked from each area's Cases table. Format: ADR-0275 (accepted).</sub>")
+    "· ⚪ not run. The run issues are sub-issues of each area's monthly Runs container; "
+    "the case records (#100–#130) live in the 2 areas below, linked from each area's Cases table. "
+    "Format: ADR-0275 (accepted).</sub>")
+
+# A well-formed line for a map that carries no areas and no records: every token is valid, and it verifies nothing.
+EMPTY_AREAS_LEGEND = (
+    "<sub>Legend: ✅ passed · ❌ failed · \U0001f7e1 needs review · \U0001f464 manual "
+    "· ⚪ not run. The run issues are sub-issues of each area's monthly Runs container; "
+    "the case records live in the 0 areas below, linked from each area's Cases table. "
+    "Format: ADR-0275 (accepted).</sub>")
 
 
 def fixture_map(legend=None):
@@ -75,11 +83,10 @@ class VerifyGuiTestScenarioLegend(unittest.TestCase):
     def test_the_committed_map_s_legend_names_the_span_its_areas_hold(self):
         # The published legend is the only thing a reader follows to the records, and it is committed beside the
         # record map: the span and the area count in it are the areas' own, not a range typed at migration time.
-        doc = json.loads((ROOT / MAP).read_text(encoding="utf-8"))
-        legend = doc.get("legend", "")
-        self.assertIn("#1288–#1787", legend,
-                      f"the map carries no legend naming the span of its areas (got {legend!r})")
-        self.assertIn("16 areas", legend)
+        # Asserting that against the map is the check's job, so the test runs the check over ROOT: a migration that
+        # moves the areas and leaves the line saying `#1288–#1787` and `16 areas` is red here.
+        code, out = run_check(ROOT)
+        self.assertEqual((code, out), (0, ""))
 
     def test_the_legend_the_published_body_carried_before_the_migration_is_rejected(self):
         self.write_map(fixture_map(PUBLISHED_BEFORE_THE_MIGRATION))
@@ -110,6 +117,27 @@ class VerifyGuiTestScenarioLegend(unittest.TestCase):
         code, out = run_check(self.tmp)
         self.assertEqual(code, 1)
         self.assertIn("proposed", out)
+
+    def test_a_map_with_areas_and_no_cases_is_a_failure(self):
+        # With no records the span the legend names has nothing to be checked against, so a line that still carries
+        # the range the flat layout had would pass by being unverifiable. Rejected, not skipped.
+        doc = fixture_map(FIXTURE_LEGEND)
+        doc["cases"] = {}
+        self.write_map(doc)
+        code, out = run_check(self.tmp)
+        self.assertEqual(code, 1)
+        self.assertIn("carries no cases", out)
+
+    def test_a_map_laid_out_as_areas_with_no_areas_is_a_failure(self):
+        # Every token of this line is well formed - 0 areas below is what an empty `areas` object holds - so counting
+        # a map that carries no areas as verified is a check that checks nothing, one indent deeper.
+        doc = fixture_map(EMPTY_AREAS_LEGEND)
+        doc["areas"] = {}
+        doc["cases"] = {}
+        self.write_map(doc)
+        code, out = run_check(self.tmp)
+        self.assertEqual(code, 1)
+        self.assertIn("carries no areas", out)
 
     def test_a_repo_with_no_area_map_is_a_check_that_checks_nothing(self):
         code, out = run_check(self.tmp)
