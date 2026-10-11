@@ -276,6 +276,12 @@ namespace Mesen.Windows
 			//where the answer would run: answer every request first.
 			_model?.BiosSheet.Dismiss();
 			_coreRequests.Close();
+			//#1484: Settings still open at quit. Its Display page re-applies the
+			//video config on every config change, and the writes below (window
+			//settings, Config.Save) come after Release: SetVideoConfig then
+			//dereferenced a null emulator (SIGSEGV, exit -11). The sheet is
+			//closed - saved and disposed - while the core is still alive.
+			_model?.ClosePlayerSettings();
 			EmuApi.Stop();
 			_listener?.Dispose();
 			if(ReleaseCore != null) {
