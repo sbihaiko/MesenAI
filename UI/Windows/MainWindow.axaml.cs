@@ -83,6 +83,13 @@ namespace Mesen.Windows
 		//never outlives the test that opened the window.
 		public Task Startup { get; private set; } = Task.CompletedTask;
 
+		//#1484: the window's 50 ms Play edge-flow poll (PlayEdgeFlowsWiring.Attach's
+		//own timer, kept here so the exit path can stop it). Every tick reads
+		//EmuApi.IsPaused() through MainWindowViewModel.TickPadLoss, so a poll that
+		//outlives EmuApi.Release is a core call through a null emulator. Exposed
+		//because the exit rule is asserted against it (UI.HeadlessTests).
+		public DispatcherTimer? PadPollTimer { get; private set; }
+
 		//#681: completes once Startup has finished (the core is initialized and
 		//the command-line files' post is queued). On a cold launch the OS's
 		//open-documents event can arrive before that; RunWhenStarted holds it.
@@ -155,7 +162,7 @@ namespace Mesen.Windows
 			InitializeComponent();
 
 			//G.5: the Play edge-flow sheets' reload and controller poll.
-			PlayEdgeFlowsWiring.Attach(this, _model);
+			PadPollTimer = PlayEdgeFlowsWiring.Attach(this, _model);
 
 			//ADR-0256 Decisions 2 and 3 (accepted 2026-10-04): the pad drives the
 			//Play GUI, and one focusable control at a time holds it. Every surface's
@@ -271,6 +278,15 @@ namespace Mesen.Windows
 			}
 
 			_timerBackgroundFlag.Stop();
+			//#1484: the pad poll reads EmuApi.IsPaused on every 50 ms tick
+			//(MainWindowViewModel.TickPadLoss), and this exit path releases the
+			//core below - a tick that lands after that one is a core call through
+			//a null emulator (SIGSEGV in Emulator::IsPaused, the exit -11 in the
+			//crash reports). It stops here, before the first core call of the exit
+			//path, so the sheet's close below and the release cannot be overtaken
+			//by a tick. The window's Closed event is too late for that: on the
+			//real backends it arrives after this handler has already released.
+			PadPollTimer?.Stop();
 			//#658: a load waiting on the BIOS sheet (or the classic firmware
 			//dialog) holds the Core's load locks that Stop takes on this thread,
 			//where the answer would run: answer every request first.

@@ -57,6 +57,14 @@ namespace Mesen.Windows
 
 			bool listening = false;
 			DispatcherTimer timer = new DispatcherTimer(PollInterval, DispatcherPriority.Background, (s, e) => listening = Poll(model, listening));
+			//#1484: the same rule the lamps below and PlayPadNavigationWiring's
+			//bridge follow (#840) - the timer goes with the window. This one is
+			//load-bearing beyond the closed window: its tick reads
+			//EmuApi.IsPaused (Poll -> TickPadLoss), so a poll that survives the
+			//window's exit path calls the core after EmuApi.Release emptied it.
+			//MainWindow.CloseEmu stops it before that release; this covers a
+			//window closed by any other route.
+			window.Closed += (_, _) => timer.Stop();
 			timer.Start();
 
 			//The port lamps: four LEDs for the connected pads. Their own cadence and
