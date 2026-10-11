@@ -85,17 +85,22 @@ are not bugs; they go through `/adr`.
 
 **Rule — a bug is fixed ASAP and sits outside the waves** (owner decision,
 2026-10-11: bugs do not belong to waves and are fixed ASAP, and they need
-neither the `ready-for-agent` nor the `fork-only` label):
+neither the `ready-for-agent` nor a `wave:NN` label):
 
-- A bug carries the `bug` label and nothing else from the ticket vocabulary:
-  no `wave:NN`, no `ready-for-agent`, no `fork-only`. A wave orders the slices
-  of a spec; a defect is not a slice and never waits for one.
-- The squad loop's `autobug` dispatches every open `bug` issue on its next
-  cycle; `autofrontier` skips them. A bug in the agent-squad fork is still
-  routed to the fork because its body says `Fork-only work: ...` (the loop
-  reads that sentence as well as the label), so keep that line in the body.
-- It is fixed before the next slice is started, with the TDD RED output posted
-  on the issue.
+- A MesenAI product bug carries the `bug` label and nothing else from the
+  ticket vocabulary: no `wave:NN`, no `ready-for-agent`. A wave orders the
+  slices of a spec; a defect is not a slice and never waits for one.
+- The squad loop's `autobug` dispatches every open `bug` issue into the next
+  free slot, in parallel with the frontier; `autofrontier` only excludes bugs
+  from its own pick and does not pause the frontier while a bug is open. The
+  TDD RED output is posted on the issue.
+- Routing of a fork-side (agent-squad) bug is by the `fork-only` label — that
+  is the loop's live authority (`contrib/squad-goal/SKILL.md`), because without
+  it the label rule cannot protect the ticket from being dispatched as MesenAI
+  work. A fork-side bug still carries `bug` and still has no `wave:NN` and no
+  `ready-for-agent`; it also carries `fork-only`. Keep a `Fork-only work: ...`
+  line in the body as human-readable context, but do not treat that prose as
+  the routing key (a later edit can delete it silently).
 
 Use the helper rather than manual `gh` commands — it sets the initial Status
 and Priority with the board's correct IDs:
@@ -115,7 +120,7 @@ moving further along the board is human triage.
 ## Tickets from a spec (`/to-tickets`)
 
 Work broken out of a spec or plan with `/to-tickets` is published as GitHub
-Issues that each carry:
+Issues. Every issue that is a slice of the spec carries:
 
 - a `## Blocked by` section listing the gating issues (the squad loop and
   `scripts/stack.sh` of the `squad-goal` skill read it);
