@@ -1,406 +1,2159 @@
 {
+  "areas": {
+    "controller": {
+      "containers": [
+        {
+          "id": 5802177885,
+          "number": 1546,
+          "title": "Cases"
+        }
+      ],
+      "id": 5802177754,
+      "number": 1545,
+      "runs": {}
+    },
+    "dialogs": {
+      "containers": [
+        {
+          "id": 5802176850,
+          "number": 1540,
+          "title": "Cases"
+        }
+      ],
+      "id": 5802176739,
+      "number": 1539,
+      "runs": {}
+    },
+    "favorites": {
+      "containers": [
+        {
+          "id": 5802176206,
+          "number": 1536,
+          "title": "Cases"
+        }
+      ],
+      "id": 5802176100,
+      "number": 1535,
+      "runs": {}
+    },
+    "feel": {
+      "containers": [
+        {
+          "id": 5802179272,
+          "number": 1554,
+          "title": "Cases"
+        }
+      ],
+      "id": 5802179160,
+      "number": 1553,
+      "runs": {}
+    },
+    "fullscreen": {
+      "containers": [
+        {
+          "id": 5802178895,
+          "number": 1552,
+          "title": "Cases"
+        }
+      ],
+      "id": 5802178756,
+      "number": 1551,
+      "runs": {}
+    },
+    "game": {
+      "containers": [
+        {
+          "id": 5802176536,
+          "number": 1538,
+          "title": "Cases"
+        }
+      ],
+      "id": 5802176431,
+      "number": 1537,
+      "runs": {}
+    },
+    "home": {
+      "containers": [
+        {
+          "id": 5802175546,
+          "number": 1532,
+          "title": "Cases"
+        }
+      ],
+      "id": 5802175449,
+      "number": 1531,
+      "runs": {}
+    },
+    "journey": {
+      "containers": [
+        {
+          "id": 5802179894,
+          "number": 1558,
+          "title": "Cases"
+        }
+      ],
+      "id": 5802179809,
+      "number": 1557,
+      "runs": {}
+    },
+    "lamps": {
+      "containers": [
+        {
+          "id": 5802178195,
+          "number": 1548,
+          "title": "Cases"
+        }
+      ],
+      "id": 5802178084,
+      "number": 1547,
+      "runs": {}
+    },
+    "launch": {
+      "containers": [
+        {
+          "id": 5802175012,
+          "number": 1530,
+          "title": "Cases"
+        }
+      ],
+      "id": 5802028350,
+      "number": 1527,
+      "runs": {}
+    },
+    "library": {
+      "containers": [
+        {
+          "id": 5802175883,
+          "number": 1534,
+          "title": "Cases"
+        }
+      ],
+      "id": 5802175780,
+      "number": 1533,
+      "runs": {}
+    },
+    "loss": {
+      "containers": [
+        {
+          "id": 5802178517,
+          "number": 1550,
+          "title": "Cases"
+        }
+      ],
+      "id": 5802178436,
+      "number": 1549,
+      "runs": {}
+    },
+    "pause": {
+      "containers": [
+        {
+          "id": 5802177178,
+          "number": 1542,
+          "title": "Cases"
+        }
+      ],
+      "id": 5802177072,
+      "number": 1541,
+      "runs": {}
+    },
+    "settings": {
+      "containers": [
+        {
+          "id": 5802177525,
+          "number": 1544,
+          "title": "Cases"
+        }
+      ],
+      "id": 5802177406,
+      "number": 1543,
+      "runs": {}
+    },
+    "trap": {
+      "containers": [
+        {
+          "id": 5802179569,
+          "number": 1556,
+          "title": "Cases"
+        }
+      ],
+      "id": 5802179464,
+      "number": 1555,
+      "runs": {}
+    },
+    "two": {
+      "containers": [
+        {
+          "id": 5802180305,
+          "number": 1560,
+          "title": "Cases"
+        }
+      ],
+      "id": 5802180167,
+      "number": 1559,
+      "runs": {}
+    }
+  },
   "boarded": true,
   "cases": {
+    "FS-01": {
+      "area": "fullscreen",
+      "container": 1552,
+      "hash": "a8edab2549538d17e04f82bf1623bf6fbd0bd08192f1c75003a696e87a3856cc",
+      "id": 5802528755,
+      "number": 1743
+    },
+    "FS-02": {
+      "area": "fullscreen",
+      "container": 1552,
+      "hash": "aa174f4d74fc24562e5d0b7fd3c9e8be2edd95031afc8261e899f8a327681265",
+      "id": 5802528938,
+      "number": 1744
+    },
+    "FS-03": {
+      "area": "fullscreen",
+      "container": 1552,
+      "hash": "6394ecb5867cc7b6fa782146aab5cba42afd3633a73b48f5564af43cf0e6cdc1",
+      "id": 5802529178,
+      "number": 1745
+    },
+    "FS-04": {
+      "area": "fullscreen",
+      "container": 1552,
+      "hash": "98c68066303764c31d402354dea00bac85b49c997382e9a505dd20ec4cabdaf3",
+      "id": 5802529455,
+      "number": 1746
+    },
+    "FS-05": {
+      "area": "fullscreen",
+      "container": 1552,
+      "hash": "c9f81f3a68de0ecf00b4aaa7e00c875d31a967f222ff0e5848309cee16f62a63",
+      "id": 5802529675,
+      "number": 1747
+    },
+    "JOURNEY-01": {
+      "area": "journey",
+      "container": 1558,
+      "hash": "d5bd528c53c419141c8cd698e65712491f253fd0fdbef2d9ae73f14de298769b",
+      "id": 5802531732,
+      "number": 1755
+    },
+    "JOURNEY-02": {
+      "area": "journey",
+      "container": 1558,
+      "hash": "57f301cc4ba2f7b936cf82bdf4d9c24b281f0bc46e1a4f5c7860e23e177bf2cf",
+      "id": 5802531988,
+      "number": 1756
+    },
+    "PAD-01": {
+      "area": "feel",
+      "container": 1554,
+      "hash": "a6753d78f7ec885e1919225fd47a6e89b3ebc7b629a83a50fdefe2558576554b",
+      "id": 5802529976,
+      "number": 1748
+    },
+    "PAD-02": {
+      "area": "feel",
+      "container": 1554,
+      "hash": "ff3de28c438667fc1319cc86541b02998b1baf9e0e345bdbf686f61cb61b7a80",
+      "id": 5802530221,
+      "number": 1749
+    },
+    "PAD-04": {
+      "area": "feel",
+      "container": 1554,
+      "hash": "5c6d329a775545d787be39074a7b130149ca2f0caa4dc29c2f59194ee11d526f",
+      "id": 5802530424,
+      "number": 1750
+    },
+    "PAD2-01": {
+      "area": "two",
+      "container": 1560,
+      "hash": "3d7fa669d9d85e4054158252a02ac282900deac7c5450689798efbe6ca662aa3",
+      "id": 5802532273,
+      "number": 1757
+    },
+    "PAD2-02": {
+      "area": "two",
+      "container": 1560,
+      "hash": "692460f8ec37231e9fe0f217354cb0f8a554fd4c4706bcb1c7eafad0bd5055b2",
+      "id": 5802532515,
+      "number": 1758
+    },
+    "PAD2-03": {
+      "area": "two",
+      "container": 1560,
+      "hash": "ebf1c100c6fd95205cfe95fcd9aa3db1af9f469278f8e68bd69637b4c9aaaf28",
+      "id": 5802532814,
+      "number": 1759
+    },
+    "PAD2-04": {
+      "area": "two",
+      "container": 1560,
+      "hash": "0dd46147058228f547f0b709a16de1ac8effa10053497810a1969bb4f9d2b3c2",
+      "id": 5802533097,
+      "number": 1760
+    },
+    "TRAP-01": {
+      "area": "trap",
+      "container": 1556,
+      "hash": "f811539f164cd5284d6d74e9f43516fb6e0844ea78643fb79a8b6d730ac42fa0",
+      "id": 5802530730,
+      "number": 1751
+    },
+    "TRAP-02": {
+      "area": "trap",
+      "container": 1556,
+      "hash": "2deab3e1e77e250b4e48dd4f4d551e993afd220235d024f67aef3f4de3e6af66",
+      "id": 5802530914,
+      "number": 1752
+    },
+    "TRAP-03": {
+      "area": "trap",
+      "container": 1556,
+      "hash": "6edef35ac888f64adacbf0c9f9a0a311eb017a390da006e8f649f1a5deb919ab",
+      "id": 5802531152,
+      "number": 1753
+    },
+    "TRAP-04": {
+      "area": "trap",
+      "container": 1556,
+      "hash": "f1b898887865e4951dbfc6ec55c37a5a3316477318499d30fd4ff6d3ee612ebf",
+      "id": 5802531446,
+      "number": 1754
+    },
     "after-game.contained-other-controls-gap": {
-      "hash": "bd4513ff46bcd2ef24a1a5a4e6d418b34e60d1621ba5c551bd7ffa20c4d3a4a2",
+      "area": "home",
+      "container": 1532,
+      "hash": "10bbbf8d71e3e9e71354ac02d0ce7e6495167f4553176c1f1dcc7799d6cc23f7",
       "number": 1315
     },
     "after-game.contained-sideways-left": {
+      "area": "home",
+      "container": 1532,
       "hash": "40235b0ff90af73da60d8b81881ae3f12293ad9c6aa90cd6d4ca612eddfc7950",
       "number": 1313
     },
     "after-game.contained-sideways-right": {
+      "area": "home",
+      "container": 1532,
       "hash": "d7080137caeb217786aa8dafefb03b69884a91d7a33d99f4b80f5016c8ce5f16",
       "number": 1314
     },
     "after-game.contained-up-continue": {
+      "area": "home",
+      "container": 1532,
       "hash": "04920e6691d10e168fccf2acc81ccb633a7691d84cb261f4edc19f8729de2462",
       "number": 1309
     },
     "after-game.contained-up-favorites": {
-      "hash": "20a338168e1becbfb6004d82bef1e0a9411c9adea00afdf381462405b68b539a",
+      "area": "home",
+      "container": 1532,
+      "hash": "098952346ca24fc18ee489531c2b1460ff680f7bcf514690d98a968c0093399b",
       "number": 1311
     },
     "after-game.contained-up-open-rom": {
+      "area": "home",
+      "container": 1532,
       "hash": "cc297012ad252b4fd3a18a68a436e0da181fbd413bb6817d3b1d26c24380e2a1",
       "number": 1312
     },
     "after-game.contained-up-recent": {
-      "hash": "9c4ec7e1c006c25aa21b64a5efd7f3f7f5aa7bdbf4ba67e01cdd14034158a5d1",
+      "area": "home",
+      "container": 1532,
+      "hash": "805ff6ba94c3a66c902234d4c291666465d237e3971b3403ac01ec477a2d5aef",
       "number": 1310
     },
     "after-game.continue-first": {
-      "hash": "a0e96b853c5b1aa95dedc4081fd06ce2bcbcafa80bdb7eae26578ad23b836167",
+      "area": "home",
+      "container": 1532,
+      "hash": "94c39d9640a472b430edff5405dc86e7d27992ac3e9d169318fea2f0f71fdd83",
       "number": 1304
     },
     "after-game.one-ring": {
-      "hash": "98e4f024cfb6d1902ff5e330eb43826e8478067987c8b6b966bf217a2c7a437c",
+      "area": "home",
+      "container": 1532,
+      "hash": "fa08fafef7bbd0a33d8c6c368c9f834cdf457448e8256e42dd6bbc762f39bd00",
       "number": 1308
     },
     "after-game.order-favorites": {
-      "hash": "b684255e26b6125d920275258aea2dc23eaf506279a382a4dcffa26d3ba01111",
+      "area": "home",
+      "container": 1532,
+      "hash": "08b4488021ce862b2dd95ea147b449e1364f12018723d5d919e7326dd9e8d93f",
       "number": 1305
     },
     "after-game.order-open-rom": {
-      "hash": "c609c7aca31b7e0938ef10c5e5f982867d8f0da0cf2843c354132b0b6b31e563",
+      "area": "home",
+      "container": 1532,
+      "hash": "590c97c4162d4ac269202618a7f0767feb50c7fa2b91407e02eb500dbaba7bc6",
       "number": 1307
     },
     "after-game.order-recent": {
-      "hash": "28e0c88f7e62695a8a69e3f19c0152b14082b7a58800430e29595cf0828d1e66",
+      "area": "home",
+      "container": 1532,
+      "hash": "ffbfc62663457e90a12ff82f9641c978f62b1f4911cfa5ae2635fa694c82befa",
       "number": 1306
     },
     "after-game.reach-home": {
+      "area": "home",
+      "container": 1532,
       "hash": "d0cf413d7f69b665b83a88c17184178476fbf4cd3536f0723753057f66250f13",
       "number": 1303
     },
+    "controller-b.leaves": {
+      "area": "controller",
+      "container": 1546,
+      "hash": "4d5893af617bedbaae744b025c3eef4a347f9fd1f82f6d2a6adee29e3bd561f5",
+      "id": 5802523138,
+      "number": 1718
+    },
+    "controller-b.pad-still-moves": {
+      "area": "controller",
+      "container": 1546,
+      "hash": "604aef31bc673c2a9405e54eb79f8481522b7624cb76e6ff91358b5350996a9c",
+      "id": 5802523554,
+      "number": 1720
+    },
+    "controller-b.reach": {
+      "area": "controller",
+      "container": 1546,
+      "hash": "df68917ca7925ecc81286a9c7f96bda9308e23741ca5cd0e7d0f597255865ca8",
+      "id": 5802522865,
+      "number": 1717
+    },
+    "controller-b.reach-settings-row": {
+      "area": "controller",
+      "container": 1546,
+      "hash": "0fc749a09741007a889452402c7540f3312fcf614286f1b00074073111e5964c",
+      "id": 5802523354,
+      "number": 1719
+    },
+    "controller-done.leaves": {
+      "area": "controller",
+      "container": 1546,
+      "hash": "d90becfc54b959ecce0096eb13cbf89867f4954ac7360d5c8c5233f2b24fe8bc",
+      "id": 5802522232,
+      "number": 1714
+    },
+    "controller-done.pad-still-moves": {
+      "area": "controller",
+      "container": 1546,
+      "hash": "604aef31bc673c2a9405e54eb79f8481522b7624cb76e6ff91358b5350996a9c",
+      "id": 5802522673,
+      "number": 1716
+    },
+    "controller-done.reach": {
+      "area": "controller",
+      "container": 1546,
+      "hash": "887c6ae62e079e94057ea2721fae79ac006476da0b523158cd54606048a8604d",
+      "id": 5802522043,
+      "number": 1713
+    },
+    "controller-done.reach-settings-row": {
+      "area": "controller",
+      "container": 1546,
+      "hash": "0fc749a09741007a889452402c7540f3312fcf614286f1b00074073111e5964c",
+      "id": 5802522444,
+      "number": 1715
+    },
+    "ctl-no-game.reach-home": {
+      "area": "controller",
+      "container": 1546,
+      "hash": "88fc6b25a501fc585e4b32df23c11ff6661013b6fdc0de6bf00bb2e5cab49bac",
+      "id": 5802523796,
+      "number": 1721
+    },
+    "ctl.arm-row": {
+      "area": "controller",
+      "container": 1546,
+      "hash": "200bfae6c161e0765aa2c51ca392b015da974c44d151f3fcefaffc205932d174",
+      "id": 5802520363,
+      "number": 1705
+    },
+    "ctl.arm-waits-release": {
+      "area": "controller",
+      "container": 1546,
+      "hash": "f1756cab13a0a0af82a3bd46e226183985624cd32ade0bb2bacdf4f92ceab4c4",
+      "id": 5802520629,
+      "number": 1707
+    },
+    "ctl.b-refused-capture-stays-armed": {
+      "area": "controller",
+      "container": 1546,
+      "hash": "d72dffa9055a9fa0cbbcc74153781c1f92097da39a4d18fa70623f333cf8b760",
+      "id": 5802521077,
+      "number": 1709
+    },
+    "ctl.bind-extra-button": {
+      "area": "controller",
+      "container": 1546,
+      "hash": "039ba16c903fa8f5857c5d05ae2c63912bc25f73bf742e48bd6a4fce084fc41c",
+      "id": 5802521811,
+      "number": 1712
+    },
+    "ctl.focus-stays-on-row-after-cancel": {
+      "area": "controller",
+      "container": 1546,
+      "hash": "6062257af2c8bd1db035a67876c0a1b46eb471147615574f79a51de4de254ad1",
+      "id": 5802521311,
+      "number": 1710
+    },
+    "ctl.nav-control-refused": {
+      "area": "controller",
+      "container": 1546,
+      "hash": "e81e735cc1335200297a7bc0eda592ae318c4a3be116c04d90fe8b1467536575",
+      "id": 5802520848,
+      "number": 1708
+    },
+    "ctl.no-game-gap": {
+      "area": "controller",
+      "container": 1546,
+      "hash": "5b651abce0f970597ae841ed859bed00cb683a8a73d357fd76d4d475f2490eab",
+      "id": 5802524055,
+      "number": 1722
+    },
+    "ctl.open-sheet": {
+      "area": "controller",
+      "container": 1546,
+      "hash": "617062df66c0f54a093c22bbace8f61c5518e5410a608c350fa85d74f4c59d3d",
+      "id": 5802519429,
+      "number": 1701
+    },
+    "ctl.pad-drawing-lights": {
+      "area": "controller",
+      "container": 1546,
+      "hash": "37aca4d7c2b2c3bcfe16c3a8d25116e04354b6a08c618fcd11783a55e7d8e376",
+      "id": 5802519900,
+      "number": 1703
+    },
+    "ctl.reach-controls-tab": {
+      "area": "controller",
+      "container": 1546,
+      "hash": "c9acc4af753ad7d2b87fbed9342785c48f9b5f7a2a5785588b859d5d0fdc0aca",
+      "id": 5802518964,
+      "number": 1699
+    },
+    "ctl.reach-first-row": {
+      "area": "controller",
+      "container": 1546,
+      "hash": "58a6a7a19c0e70433eabab3e2c12e2678023c3a496471af9a950b938f74fb894",
+      "id": 5802520117,
+      "number": 1704
+    },
+    "ctl.reach-more-in-options": {
+      "area": "controller",
+      "container": 1546,
+      "hash": "917cdb76bf427026efeb4beddaa6d3e1a066ecf256352ab86bd8976ba634834d",
+      "id": 5802519181,
+      "number": 1700
+    },
+    "ctl.sheet-holds-focus": {
+      "area": "controller",
+      "container": 1546,
+      "hash": "554ac81df4b8b53cb17d29741d941fc167142143e296d80ad11532772b3c1e88",
+      "id": 5802519645,
+      "number": 1702
+    },
+    "ctl.sheet-stays-after-cancel": {
+      "area": "controller",
+      "container": 1546,
+      "hash": "c275d294b5da5469c141ca88f03a381365d70a27dbd279f1b877906bbbeeb5f2",
+      "id": 5802521564,
+      "number": 1711
+    },
+    "dialogs.no-trap": {
+      "area": "dialogs",
+      "container": 1540,
+      "hash": "96b1e3244b54a2a64e96be84bb97485d24981d5b292fa1aedb53e6d1b5f44781",
+      "id": 5802488725,
+      "number": 1569
+    },
     "dialogs.reach-home": {
+      "area": "dialogs",
+      "container": 1540,
       "hash": "d253640e0fc20a06000044d84a370891798c33b53a052ff2543ff94bebf42e86",
       "number": 1387
     },
     "fav.back-home-again": {
+      "area": "favorites",
+      "container": 1536,
       "hash": "da805aadc1f70f16e1cc4066e8332be665471a4c1b46652659ae28869753f94c",
       "number": 1360
     },
     "fav.back-to-home": {
+      "area": "favorites",
+      "container": 1536,
       "hash": "da805aadc1f70f16e1cc4066e8332be665471a4c1b46652659ae28869753f94c",
       "number": 1356
     },
     "fav.footer-reads-unfavorite": {
-      "hash": "13ab801849323cab367e48bc1cdd1d1b51ab364d9f0a73bacbf1ccd747fbac09",
+      "area": "favorites",
+      "container": 1536,
+      "hash": "870a2d4140dc644263d539e7c725ff5e28144ca2104d9d35df0ac063e87f4b0b",
       "number": 1355
     },
     "fav.home-shelf-shown": {
-      "hash": "cd46b2db580aa1b4a183f665dd81066754180dc804330a7e28979693fe1f6afc",
+      "area": "favorites",
+      "container": 1536,
+      "hash": "5cd2be35db39304e99cbbed0908390b87277409936d4dc5ba51b7237996317d1",
       "number": 1357
     },
     "fav.library-again": {
+      "area": "favorites",
+      "container": 1536,
       "hash": "c8a4610b1309ac4100a8cba0e6d775a1d3f34a19478983e355126cff6b36e97a",
       "number": 1358
     },
     "fav.reach-library": {
+      "area": "favorites",
+      "container": 1536,
       "hash": "6501aee1fd5112a899daa0d177304f7fc914300342fff37f7bb3b25ef3fcd343",
       "number": 1353
     },
     "fav.shelf-hides-when-empty": {
-      "hash": "eac2816d98bc187e1fb8cac593dc708b29e0c7ba1779c44c7bf20d29e7fe319d",
+      "area": "favorites",
+      "container": 1536,
+      "hash": "2af1638e4e2af03d92394bd72dbabc035031c083603f6246505590f757c486d9",
       "number": 1361
     },
     "fav.x-favorites-tile": {
+      "area": "favorites",
+      "container": 1536,
       "hash": "9befbdddfe4d383c507758d1c4fc9459c0edbeed4a4493ebae6505db7b353760",
       "number": 1354
     },
     "fav.x-unfavorites-tile": {
+      "area": "favorites",
+      "container": 1536,
       "hash": "edf1bd5c3f91954d7cac03e8a5e4e7347aca25ee04997986ac6f1749c166b065",
       "number": 1359
     },
     "fav2.down-favorite": {
+      "area": "favorites",
+      "container": 1536,
       "hash": "6703d86475fdbceb1ae624e3ac6dc76d17a5480b67246b159e7b05f81054d69f",
       "number": 1367
     },
     "fav2.down-open-rom": {
-      "hash": "ec57fb55ee33643deb4cb12fbb93d01e9117ba912639f16705418e9377139d97",
+      "area": "favorites",
+      "container": 1536,
+      "hash": "e9c205152e8f3af74c9b23872ea7ff9ec7081a6b0c2a1bc4a14ef2c723cf7ae8",
       "number": 1369
     },
     "fav2.down-recent": {
-      "hash": "abb3c1c51fabce4befebec897cf0fadd53cd0c440580adf7deb44016b885950f",
+      "area": "favorites",
+      "container": 1536,
+      "hash": "5feac5d107f03f961d5d8a2b1296b5c140145e70fd8c2cf16990acfffe992017",
       "number": 1368
     },
     "fav2.focus-stays-on-favorite-tile": {
+      "area": "favorites",
+      "container": 1536,
       "hash": "8178c8493d3325480ccc36bc1b164ce01eae97f717d16dea147df3b2d8403728",
       "number": 1364
     },
     "fav2.reach-favorite-tile": {
+      "area": "favorites",
+      "container": 1536,
       "hash": "9b88660595f84540153a162e198d76c7ea5cc6b2b25327c482aafc1eb7d32529",
       "number": 1362
     },
     "fav2.up-to-continue": {
+      "area": "favorites",
+      "container": 1536,
       "hash": "2577b1650352877b211be2b55a1b92713412f5d55fd51e3dbf2b4c534baabe8b",
       "number": 1365
     },
     "fav2.x-elsewhere-does-nothing": {
+      "area": "favorites",
+      "container": 1536,
       "hash": "ee4653887f96da17145fabc8f33d5e3081c5d95ed719800fd2d96fbe7e08d903",
       "number": 1370
     },
     "fav2.x-on-continue": {
+      "area": "favorites",
+      "container": 1536,
       "hash": "c0b242c050550b4fd2499ba4920868bbbfc822a91ec7eac6f837b1c31b2581cf",
       "number": 1366
     },
     "fav2.x-on-favorite-tile": {
-      "hash": "35991dbd1aee1d101c08aa55cd93c29967533c5c9b8f68a78e7aebe2334df5e6",
+      "area": "favorites",
+      "container": 1536,
+      "hash": "9f891a479b3e3c62ab3eeb65412a67eaeda3073cbd762116235784af49727ba2",
       "number": 1363
     },
     "game-archive.a-opens-select-sheet": {
+      "area": "game",
+      "container": 1538,
       "hash": "d55e072f3c00a3087d2bfef745ceda0b10e872a4e6c02a9e94e1a9222180a026",
       "number": 1378
     },
     "game-archive.a-picks-a-game": {
+      "area": "game",
+      "container": 1538,
       "hash": "9b30c820872519623882a17bf950a5b9dadb638a7258687346bec0787b5ddddf",
       "number": 1381
     },
     "game-archive.a-reopens": {
+      "area": "game",
+      "container": 1538,
       "hash": "b582c93a02d1fc366d037f901e4b5795ccfbb87d6b3142fe1b5c3761f29805fd",
       "number": 1380
     },
     "game-archive.b-cancels-back": {
+      "area": "game",
+      "container": 1538,
       "hash": "4ef6ba3a23f9a21080dbbaf8fdd13f90c3656250e474bde2bf66c179cff6b813",
       "number": 1379
     },
     "game-archive.reach-library": {
+      "area": "game",
+      "container": 1538,
       "hash": "5049aafe702a8ce180cb58f8ca438f910baba8bd7d5730cf599256711e93df1d",
       "number": 1377
     },
     "game-bios.a-opens-bios-sheet": {
+      "area": "game",
+      "container": 1538,
       "hash": "72751e424d7e9a8f9e1a670838d8b17427539ac70225edb21058413144495732",
       "number": 1383
     },
     "game-bios.b-cancels": {
+      "area": "game",
+      "container": 1538,
       "hash": "cb705e4d0437d6655d2199c869250ef8bad4787694383d8bdf6f30ed7ffa5ea6",
       "number": 1385
     },
     "game-bios.choose-file-native": {
+      "area": "game",
+      "container": 1538,
       "hash": "4a88036384cc5944f9f1735e432297cf3afd6706cdc886c86e2c545c957042bf",
       "number": 1384
     },
     "game-bios.reach-library": {
+      "area": "game",
+      "container": 1538,
       "hash": "463eef952061a953b78cc19982aacd1e3617867a7f38f74dd73c2c7ac678202e",
       "number": 1382
     },
     "game-bios.status-names-bios": {
-      "hash": "3ea6f55ba754a29de3f982ef38f731032d9c0b4a8b0be43e6f7b108aa857a6e6",
+      "area": "game",
+      "container": 1538,
+      "hash": "fb26ebd9e50515c98083944c1a444a3da58b5307b3a3821b43340403e966f02c",
       "number": 1386
     },
     "game.a-loads-game": {
+      "area": "game",
+      "container": 1538,
       "hash": "bcd75aafe3c36d31eb9b3f9b3933f4cf4872c80110b45dfcfcf4b5784d36cc3b",
       "number": 1372
     },
     "game.buttons-are-the-consoles": {
+      "area": "game",
+      "container": 1538,
       "hash": "df4e29e8c0575e2a5fa4ea0aca348ae60eb29f2b0c5b382720049c616bfb3139",
       "number": 1375
     },
     "game.load-card-and-toast": {
+      "area": "game",
+      "container": 1538,
       "hash": "84914c9972483eff94f63139b2c8a4419175892bca23ce660a5d0359bc29b97c",
       "number": 1373
     },
     "game.no-menu-feedback": {
+      "area": "game",
+      "container": 1538,
       "hash": "cb35ef0934f20eeed7ac09adff51ee3ea2d0aa80bb05246489c5dfdc4934009f",
       "number": 1376
     },
     "game.pad-is-the-consoles": {
+      "area": "game",
+      "container": 1538,
       "hash": "4f99b092f2b95f58b5d9182a0910849aece4472485678bbb7d39296e988e391e",
       "number": 1374
     },
     "game.reach-library": {
+      "area": "game",
+      "container": 1538,
       "hash": "d91a843088b3421bb4482a2592d360b0c2977ec9d40f2c18397e9bc0a882d278",
       "number": 1371
     },
     "home.back-focus-restored": {
-      "hash": "26d90f25339ff27ca88ffa3fa5df52eb10355ad382570356263faef8161d8eaf",
+      "area": "home",
+      "container": 1532,
+      "hash": "68edb2aa9afa93a4ad8a9e155552ff2b7ce5b7dbdd987a0c1248b4a3e9aa497b",
       "number": 1299
     },
     "home.back-to-home": {
+      "area": "home",
+      "container": 1532,
       "hash": "9c389c55e74391e89c4f53c2bf397c5659576dacf5ff662d3337d4ba3d023f09",
       "number": 1298
     },
     "home.chord-focus-unchanged": {
-      "hash": "4ffb2836a451a9e9f59ed8e68581a04c9f48d52f3a468513c4efbd4f21fcb92b",
+      "area": "home",
+      "container": 1532,
+      "hash": "98940929d49c0d07fa01dd8f24f9fff0d1443b2b9479cc0448cb562bd38e5e02",
       "number": 1301
     },
     "home.chord-opens-nothing": {
+      "area": "home",
+      "container": 1532,
       "hash": "a6b432d3bad0bf67f803c1d044091834a5d82950d80a03fd169847623e7b633a",
       "number": 1300
     },
     "home.first-focus": {
-      "hash": "95c077e6eb904dc26b460847ab764dd1ea3addd1528616ba900b5665efaa2c3a",
+      "area": "home",
+      "container": 1532,
+      "hash": "20bdc88aded8f3c3b0528e34ca3c864111997a6880adf9324b5e04a51ef30590",
       "number": 1291
     },
     "home.focus-holds-down": {
+      "area": "home",
+      "container": 1532,
       "hash": "ac0fe64e16ba302940ad982ea4eba72301b9c6ce9fb9955e6889089a7e9d3c85",
       "number": 1293
     },
     "home.focus-holds-left": {
+      "area": "home",
+      "container": 1532,
       "hash": "1bfd1f2ae615b1726c9be8c141b238681fdeb4fd31768d0f03f581f766c0ab79",
       "number": 1294
     },
     "home.focus-holds-right": {
+      "area": "home",
+      "container": 1532,
       "hash": "5d9f4b5e8aa79e54f6081f6d447439bc8cf605bb7e5302f2d4effc48b36f950a",
       "number": 1295
     },
     "home.focus-holds-up": {
+      "area": "home",
+      "container": 1532,
       "hash": "7aa93648f8e6e32767588ec5dfa4a62a82306b24369b4c7b8c23581ce1155c12",
       "number": 1292
     },
     "home.open-library": {
+      "area": "home",
+      "container": 1532,
       "hash": "ae68a33037b9a0b27721271e738a8eb5823c2528c6684810d1b4e40b11464253",
       "number": 1297
     },
     "home.ring-visible": {
-      "hash": "2c38a82920e9c95bed37b30dd048d98b1948544f6fbf82875e97ed03c0a0f246",
+      "area": "home",
+      "container": 1532,
+      "hash": "a2edda09ac33b5e33f18480538fdf85ae77673a89fb06361a8b3d72d31ae783e",
       "number": 1296
     },
+    "home.settings-b-returns": {
+      "area": "home",
+      "container": 1532,
+      "hash": "e81e6885dc9945df398f0e039d25c91e283b950b8d202704fd0345686e5367b1",
+      "id": 5802488332,
+      "number": 1567
+    },
     "home.settings-by-pad-gap": {
-      "hash": "a8172b9cc539b1ff59f5737be9d7e3c0f80a697dc129b149a70d71df68eadef5",
+      "area": "home",
+      "container": 1532,
+      "hash": "9f6a4a0d22db4addffc4018d2c05820d253660b5b6bb7d3d1d2db8aa4bf9f72c",
       "number": 1302
     },
+    "lamp.bar-hidden-in-game": {
+      "area": "lamps",
+      "container": 1548,
+      "hash": "0c81e8228a0ecad2f3d7f0195bf5266ad9be72ded3fa01ea2afa8d5f6e4710f0",
+      "id": 5802527343,
+      "number": 1737
+    },
+    "lamp.four-lamps-p1": {
+      "area": "lamps",
+      "container": 1548,
+      "hash": "e4cd10c1db0252c03ee9fbb1c901c01a50fcd122c4fe5da4ad26fad355ffef44",
+      "id": 5802524563,
+      "number": 1724
+    },
+    "lamp.hotplug-pill": {
+      "area": "lamps",
+      "container": 1548,
+      "hash": "5577d553b1b7779ebf8c4b57bba05a2431d1a3fb43e8ebcea9fd31ebb20cb6ab",
+      "id": 5802526893,
+      "number": 1735
+    },
+    "lamp.hotplug-ring-stays": {
+      "area": "lamps",
+      "container": 1548,
+      "hash": "aba93dd4e0ab25cfb0ab5115aeddac7641619f0bb927a16d9b8ffc2751805c58",
+      "id": 5802526678,
+      "number": 1734
+    },
+    "lamp.hotplug-ring-t30": {
+      "area": "lamps",
+      "container": 1548,
+      "hash": "faa4f58ac8062de3228b9e3e402c6e168645dde3c21582c0f05702c88e8fe1c5",
+      "id": 5802526072,
+      "number": 1731
+    },
+    "lamp.hotplug-ring-t60": {
+      "area": "lamps",
+      "container": 1548,
+      "hash": "f3d1b33a931747a5a9a18fd9b767d6b1187872e083a0e52964e0e9fa4b5c0627",
+      "id": 5802526267,
+      "number": 1732
+    },
+    "lamp.labels-tooltips": {
+      "area": "lamps",
+      "container": 1548,
+      "hash": "d1db9227b37b7f98ddeb6595aaff7b2ed18b1a2af196c524b1ed5821258a5361",
+      "id": 5802525489,
+      "number": 1728
+    },
+    "lamp.p2-dim": {
+      "area": "lamps",
+      "container": 1548,
+      "hash": "ecf8d919dbf9493a2301d7194bfccffcc92b5333c4d9c76143310a95d5b196e9",
+      "id": 5802524815,
+      "number": 1725
+    },
+    "lamp.p3-dim": {
+      "area": "lamps",
+      "container": 1548,
+      "hash": "b4ceea7a2e3de8adbb6beaa5d100356c7180634b26e34294673f89aa3a81a31c",
+      "id": 5802525042,
+      "number": 1726
+    },
+    "lamp.p4-dim": {
+      "area": "lamps",
+      "container": 1548,
+      "hash": "300e52a5c2942da6885681568b0398bcd8f0c4d5dca244db2ace07b09fbefa4f",
+      "id": 5802525262,
+      "number": 1727
+    },
+    "lamp.second-pad-dims": {
+      "area": "lamps",
+      "container": 1548,
+      "hash": "547cf06a62536e2e30102c9a7afc7ee6d2e292a13665b1f50c9eaa344eb1d7b1",
+      "id": 5802526486,
+      "number": 1733
+    },
+    "lamp.second-pad-hotplug": {
+      "area": "lamps",
+      "container": 1548,
+      "hash": "1bd6adcce69224a23f09b4251578dff67ea525dc2ab7c22ab5669d8d89486234",
+      "id": 5802525721,
+      "number": 1729
+    },
+    "lamp.second-pad-unplug": {
+      "area": "lamps",
+      "container": 1548,
+      "hash": "b85bc6568c5e7333b2df5d564cc453ee46ac22c23317708f5e1a8e48d9ca9a67",
+      "id": 5802525895,
+      "number": 1730
+    },
+    "lamps-game.reach-game": {
+      "area": "lamps",
+      "container": 1548,
+      "hash": "cc077f681743c267a64af0f24697a95929ebe280c928c3e277dd0aef9748e699",
+      "id": 5802527135,
+      "number": 1736
+    },
+    "lamps.reach-home": {
+      "area": "lamps",
+      "container": 1548,
+      "hash": "b77b2ad5c1d40e2b627519b4533b2e056f52a48e7bdb70d2bc4ef5da4726b8f0",
+      "id": 5802524321,
+      "number": 1723
+    },
     "launch.first-run-home": {
+      "area": "launch",
+      "container": 1530,
       "hash": "a951de53b2260401da0cf60b8cdd5d78d403c3f872d4d9296aa461afb46f0e34",
       "number": 1288
     },
     "launch.open-rom-focused": {
+      "area": "launch",
+      "container": 1530,
       "hash": "1807981d2ae2a79be28fde659ec565aff84b33f9f3bc8309373f1b6d58a4e704",
       "number": 1289
     },
     "launch.port-lamp-p1": {
-      "hash": "56efbe4b6af0dad32a598aa10f8c4e5dc6d99b4f45314cea4730e2077e79550a",
+      "area": "home",
+      "container": 1532,
+      "hash": "dcb7f0a59743c7c4e15b2ebb218a61c9ddaf4ee5c771ddb11b0dd894a68e782a",
       "number": 1290
     },
+    "launch.ring-on-open-rom": {
+      "area": "launch",
+      "container": 1530,
+      "hash": "e88853aa59ec81b1514de2cc977287e36dd2f33e3acbfb67977d6a48cc7e30f9",
+      "id": 5802488123,
+      "number": 1566
+    },
     "lib.back-ring-on-opener": {
+      "area": "library",
+      "container": 1534,
       "hash": "37d26c06a1328d8bc1e85c541646f739ff47fd11753475e923f84a1fa0377e77",
       "number": 1352
     },
     "lib.back-to-home": {
+      "area": "library",
+      "container": 1534,
       "hash": "c38a1f3f3ded399a1a375540bfd80b9f4d99daabea163436e41f2c880be3b524",
       "number": 1351
     },
     "lib.box-art": {
-      "hash": "df8a93a2d204b1990872f0c80a13c7cc12b2614820b9c71424eda0cc4a618cf1",
+      "area": "library",
+      "container": 1534,
+      "hash": "5149aea936f810c32889b0859f5e81b22709dd6cbe47f6e7b0a3c3cb584bfd70",
       "number": 1349
     },
     "lib.browse-b-root-dismisses": {
+      "area": "library",
+      "container": 1534,
       "hash": "9ed147980ac4db56e143511045474a22cf30706cab881d518b522d74e4abe998",
       "number": 1348
     },
     "lib.browse-down-grid": {
+      "area": "library",
+      "container": 1534,
       "hash": "855c6a53c7e0836078586345f12d3a7948f8a11d1440cd500a0c25df90b93a6a",
       "number": 1350
     },
     "lib.browse-open": {
+      "area": "library",
+      "container": 1534,
       "hash": "bae834195cbd8cbb19f6251a5e70f72f987e557750880d5c40039cd7bea47037",
       "number": 1346
     },
     "lib.browse-walk": {
+      "area": "library",
+      "container": 1534,
       "hash": "f408f7db406f218edbed35c12fa1f2964d589d00c1834fe2585813254e52fcda",
       "number": 1347
     },
     "lib.filter-lb-backwards": {
-      "hash": "d3516987e1afd05f82b1ee90da29ea7f8b4e32c2af0065dcd95dd6fea4d4733f",
+      "area": "library",
+      "container": 1534,
+      "hash": "f8517c38fd71dd61a3ed5450e6e72645d112817b3035f4319ea645ea5e78b371",
       "number": 1332
     },
     "lib.filter-rb-wraps": {
-      "hash": "114a1f86924b8dd3123fb64e87b70c3f706d44d82801a06f8cca462986340488",
+      "area": "library",
+      "container": 1534,
+      "hash": "150bcf4b9a54e521b04f2e58558f3ec2813fe4132fa127731a0a9fd88a6ccc34",
       "number": 1331
     },
     "lib.filter-segment-focus": {
-      "hash": "4df6f8b716dd70ab26efaec98d334cc8795cdd5375c5f555d01ebae96cf7d5be",
+      "area": "library",
+      "container": 1534,
+      "hash": "65efb9ef35b8e128bace1b1cb4fd4ae2af0e7648685356c1bcbac160dc2d2b17",
       "number": 1333
     },
     "lib.first-tile-focused": {
+      "area": "library",
+      "container": 1534,
       "hash": "4658f0d1e038320117125fcad857c81d3e0a1d8ee72ef1d277d821f08f7fd141",
       "number": 1319
     },
     "lib.folders-add-remove": {
+      "area": "library",
+      "container": 1534,
       "hash": "3827ad9089bc5097803ecb96aeb3b8c6b134870660376e8d205929e9dd1b0366",
       "number": 1343
     },
     "lib.folders-b-closes": {
+      "area": "library",
+      "container": 1534,
       "hash": "ea696394abcd5a0a4a7ea434dfdaa6984227f73b661e0446b835058d3f74c4ae",
       "number": 1344
     },
     "lib.folders-no-native-dialog": {
+      "area": "library",
+      "container": 1534,
       "hash": "6e0ee9dd11edec965449eedd792426f50e99fbc87ce4f71a1ecc88c13d2fd527",
       "number": 1342
     },
     "lib.folders-open": {
+      "area": "library",
+      "container": 1534,
       "hash": "8bc6cfa04ec6a59ac8f7ed63212f7a7f062c5b93a8ace9df413f51a973f0e506",
       "number": 1341
     },
     "lib.folders-right-browse": {
+      "area": "library",
+      "container": 1534,
       "hash": "9ca90b2d607c37dafc004a8072d3404c96642ae01eacfc5096d3a3b6bd768fb1",
       "number": 1345
     },
     "lib.header-down-grid": {
+      "area": "library",
+      "container": 1534,
       "hash": "760bff056ffa5a7f75f21e8702c098d6c316670fe16af3aed472136b41ce2acf",
       "number": 1330
     },
     "lib.header-footer-scan": {
-      "hash": "5d6888faeab8a23cc47427b053620e756cdad01b40004e8af5fbaa41f6dd8b51",
+      "area": "library",
+      "container": 1534,
+      "hash": "9d2e5040c8e47adecfb1e3099e24acba0fe1ba24d8e1eff2f21fdae95c1f8c07",
       "number": 1320
     },
     "lib.header-left-across": {
+      "area": "library",
+      "container": 1534,
       "hash": "fbf581734b023c2bdc3e6d659f2b94d23be5b3d21bacc943cdeafd972f896c9d",
       "number": 1329
     },
     "lib.header-right-back": {
+      "area": "library",
+      "container": 1534,
       "hash": "44034d9594a4f97e068161919e9cffd00cab0e5dee6a1b00f2a813c33314118b",
       "number": 1328
     },
     "lib.header-right-browse": {
+      "area": "library",
+      "container": 1534,
       "hash": "440007cc0c33e006c0e447585da90658535ad387ee3b5e85b6225baa4869a66f",
       "number": 1327
     },
     "lib.header-right-folders": {
-      "hash": "66c46d3d69793a9c17a11e550b30f2517ea1d266f59122095b0985c32ef9e91f",
+      "area": "library",
+      "container": 1534,
+      "hash": "644f17af30c9bf13ffb8e2fd6da5f13e2e8d887bd323d0ac6e118eaea4ddafc0",
       "number": 1326
     },
     "lib.hold-down-repeats": {
-      "hash": "ee4698cfbe346e543eb290657014b97800b9d962042bbf6b190638d2f1930208",
+      "area": "library",
+      "container": 1534,
+      "hash": "58d04de3109d7c39d13998dd18bf74191229f7e3a81e4e5eced738baa243eef5",
       "number": 1321
     },
     "lib.hold-right-repeats": {
-      "hash": "1affdc52de01a7c969de9fdb371cd92eb8501a3778def45618c8f8e10b680c46",
+      "area": "library",
+      "container": 1534,
+      "hash": "798794cb93794efee9454d929e26480e1546fad88dc7989d70908d7c6c76637d",
       "number": 1322
     },
     "lib.home-ring": {
+      "area": "library",
+      "container": 1534,
       "hash": "39a961aef4ba0140c741b58d07500febba787032830c1114609c2753ec829ad4",
       "number": 1316
     },
     "lib.open-screen": {
+      "area": "library",
+      "container": 1534,
       "hash": "9b3d02781b4c6cb535457ebc62eccb2d3ba6fdf0d68255760416be03a47c10ba",
       "number": 1318
     },
     "lib.reach-library": {
+      "area": "library",
+      "container": 1534,
       "hash": "191dfccfbeda28be39a6346ce94dbec497bc156c1ba9dd1edeeb5ee51ee1dc39",
       "number": 1317
     },
+    "lib.reopen-for-search": {
+      "area": "library",
+      "container": 1534,
+      "hash": "c0c7b1721f7be113a0e4e20cd650b3258b036fc0ae8bd7c5ed5160c60f746cee",
+      "id": 5802488539,
+      "number": 1568
+    },
     "lib.search-a-opens-keyboard": {
-      "hash": "8c7cf085aa9edf2cce86199013ca5ccc2d1263dde7e38c5204b09a8a1f348588",
+      "area": "library",
+      "container": 1534,
+      "hash": "0923a064f8bbca6335548d1d04dc69b32d9e29b81148ad21a3883e2106cc72d5",
       "number": 1335
     },
     "lib.search-b-cancels": {
-      "hash": "4ec56fa6977a37f2d0594033d5e64cd049b410bdac4e308a2142a23a335edc84",
+      "area": "library",
+      "container": 1534,
+      "hash": "7f95c38664a43a8637f9bcbedfff48d2fbc2bd517439ae15354f742bfff0f451",
       "number": 1337
     },
     "lib.search-right-folders": {
-      "hash": "226cae7527c95f802d98670b2c2acf575ac318fce77a3c14a29cc550e83cbbc0",
+      "area": "library",
+      "container": 1534,
+      "hash": "eba52a6abee1187504590e381a71600b06ad1753063c8e1418d523964cfb4569",
       "number": 1340
     },
     "lib.search-second-cancel-reverts": {
-      "hash": "f17980fa8a5c82846507039ec735b3e4160083e6c358cd59c6a6e28fd4fe3f5c",
+      "area": "library",
+      "container": 1534,
+      "hash": "274a391504bfbcd3032af742020030e0f26727d364ec6f5c600e372cee619678",
       "number": 1338
     },
     "lib.search-sheet-stays": {
-      "hash": "56e5696b408ee531625583aa53de187d4bf52002463dc9362b6b9aaaa08e6d9f",
+      "area": "library",
+      "container": 1534,
+      "hash": "1aa0e3a5cd0c15685d96918b91c19b53a4b1eb98133be93b1d7fbc6cbc8b68bf",
       "number": 1339
     },
     "lib.search-type-filters": {
+      "area": "library",
+      "container": 1534,
       "hash": "5e5361bc55ddb6a467c9fd98b1fe9afa9d2fe1f31eb782ef9e26c234a299a27b",
       "number": 1336
     },
     "lib.search-y-focuses-field": {
-      "hash": "42b8a8cefa55350c358a3295a6b025a9a83cd2660ce050fba1155529633fb9ec",
+      "area": "library",
+      "container": 1534,
+      "hash": "a46b3a3a9e24ff23b1a3abd0a7de9f55de12329ef12c377a827e0ac2822aae9e",
       "number": 1334
     },
     "lib.tap-down-steps-once": {
+      "area": "library",
+      "container": 1534,
       "hash": "acafc48050c8a1a2f175e7b49f59a5958ca047c56f8eb00a925208f63acd8d7f",
       "number": 1323
     },
     "lib.up-back-to-row-one": {
+      "area": "library",
+      "container": 1534,
       "hash": "a539a4097be3e6e7e6e76fced304b33c3fc34e41b5fcc5f23671b502b039550a",
       "number": 1324
     },
     "lib.up-enters-header": {
-      "hash": "e9283d602768947c11ff58af326eddabd6fe84de269a11eb492d727f9e716497",
+      "area": "library",
+      "container": 1534,
+      "hash": "c4de745bb7f3f7ff4491fc5b1dcd06d7b6e438cf9e6b04a988cf27900939952a",
       "number": 1325
+    },
+    "loss.focus-lost-pauses": {
+      "area": "loss",
+      "container": 1550,
+      "hash": "d94287e6dda16cacfa8176cea5f2614e2c63499503992f8107f085024346b06f",
+      "id": 5802527803,
+      "number": 1739
+    },
+    "loss.pad-off-mid-menu": {
+      "area": "loss",
+      "container": 1550,
+      "hash": "55af83c39eb8f01011a88485f36616f36c44954c3a94a00b75b7029ff5466244",
+      "id": 5802528232,
+      "number": 1741
+    },
+    "loss.pad-sleep": {
+      "area": "loss",
+      "container": 1550,
+      "hash": "8df83642b97456a1a3e592f90b2aa0b95374a85ad90f82264b980468c7cef461",
+      "id": 5802528465,
+      "number": 1742
+    },
+    "loss.pad-unplug-pauses": {
+      "area": "loss",
+      "container": 1550,
+      "hash": "9dbb243f1eb6c2befa9ae11745402fefe9d1ee40327c79ca1b41e3ad10217f80",
+      "id": 5802528005,
+      "number": 1740
+    },
+    "loss.reach-game": {
+      "area": "loss",
+      "container": 1550,
+      "hash": "c68cf558a658c9923b49caea45212529a3cbd1457c39b88d1561ab1075022afe",
+      "id": 5802527594,
+      "number": 1738
+    },
+    "pause-pack-multi.chord-opens": {
+      "area": "pause",
+      "container": 1542,
+      "hash": "48b7fe7e26068f5b4f4cc8b7bcb790b45d736a5d4aabc154e0885e571d6ab335",
+      "id": 5802503625,
+      "number": 1632
+    },
+    "pause-pack-multi.pack-focus": {
+      "area": "pause",
+      "container": 1542,
+      "hash": "c0de03c14ac44013b904dbb9a73e72996a5bd8fd652861ce25a737a87ea704fc",
+      "id": 5802503864,
+      "number": 1633
+    },
+    "pause-pack-multi.pack-picker-b-to-pause": {
+      "area": "pause",
+      "container": 1542,
+      "hash": "005751255cfe0f21013f5dfa93c2c56912fd6c70f70f407f32f2a486934a7fd6",
+      "id": 5802504518,
+      "number": 1636
+    },
+    "pause-pack-multi.pack-picker-controls": {
+      "area": "pause",
+      "container": 1542,
+      "hash": "ae0dff3bf763374c438294026d1edc0609994dbba87390d64c91a766377aee75",
+      "id": 5802504306,
+      "number": 1635
+    },
+    "pause-pack-multi.pack-picker-opens": {
+      "area": "pause",
+      "container": 1542,
+      "hash": "ec61c2d4fe1fe9b5a61e79c6d0411f8bf06723bd9bdc53ce4f1932e3440a6ec2",
+      "id": 5802504095,
+      "number": 1634
+    },
+    "pause-pack-multi.reach-game": {
+      "area": "pause",
+      "container": 1542,
+      "hash": "4d4ef5759c4de877c3b42a0cca3946f45176d07c84777973d14afef82d38053a",
+      "id": 5802503407,
+      "number": 1631
+    },
+    "pause.b-resumes": {
+      "area": "pause",
+      "container": 1542,
+      "hash": "2baa8f5a436adad5eac305a6eb09daeee097a381118eea25137e82f3b25c80ec",
+      "id": 5802492234,
+      "number": 1584
+    },
+    "pause.cheats-add-focus": {
+      "area": "pause",
+      "container": 1542,
+      "hash": "654874fbbbcdc7210a4a5ad82c5f50075ce0a4c42cf59f692667b678f74633cd",
+      "id": 5802500640,
+      "number": 1619
+    },
+    "pause.cheats-add-keyboard": {
+      "area": "pause",
+      "container": 1542,
+      "hash": "b5cf3965e4399b50f9239c07a4fe82e02e6cb2452541c525a36b17ba79ea60d2",
+      "id": 5802500868,
+      "number": 1620
+    },
+    "pause.cheats-api-key-mask": {
+      "area": "pause",
+      "container": 1542,
+      "hash": "57271b42e547921526213b73b9bcd92c9edd17288761dfd75dbed3f6eaa44879",
+      "id": 5802501602,
+      "number": 1623
+    },
+    "pause.cheats-b-to-pause": {
+      "area": "pause",
+      "container": 1542,
+      "hash": "b676a0ba2296aeb696558f57411d1409beb9125b7c404523bac44529c2dbf323",
+      "id": 5802501890,
+      "number": 1624
+    },
+    "pause.cheats-code-keyboard-letters": {
+      "area": "pause",
+      "container": 1542,
+      "hash": "d819da1b4dd3fafa592e348c1a25a3cd1d876cbf4661890ff94f196f7e3433a0",
+      "id": 5802501131,
+      "number": 1621
+    },
+    "pause.cheats-field-b-cancels": {
+      "area": "pause",
+      "container": 1542,
+      "hash": "d61cc08ab2290074dfd18847bebed3952dd78b839303a2b171242af13d6ed672",
+      "id": 5802501380,
+      "number": 1622
+    },
+    "pause.cheats-focus": {
+      "area": "pause",
+      "container": 1542,
+      "hash": "1ad9c967aee10fcfb748129c3649fbd52a66c378eeca570fdc9610b46934b331",
+      "id": 5802500145,
+      "number": 1617
+    },
+    "pause.cheats-opens": {
+      "area": "pause",
+      "container": 1542,
+      "hash": "327660e431dc4af52a8d223a20c68988ef35f074ecbd62820c24239483fa5124",
+      "id": 5802500430,
+      "number": 1618
+    },
+    "pause.chord-again-resumes": {
+      "area": "pause",
+      "container": 1542,
+      "hash": "f34c583b29cff9649bf56e75f6f21b3acddf588f4325e180e4c5b8a3bac9db43",
+      "id": 5802491720,
+      "number": 1582
+    },
+    "pause.chord-opens": {
+      "area": "pause",
+      "container": 1542,
+      "hash": "3577c3b8704d5885ad989f6f65ec43f2a540e44491374d2729f529212f5ac45c",
+      "id": 5802489220,
+      "number": 1571
+    },
+    "pause.down-no-wrap": {
+      "area": "pause",
+      "container": 1542,
+      "hash": "b86393f8ec4d082224cb4badaa04a3d68f562a8e06face90f75e3f6fcaba2bb3",
+      "id": 5802494164,
+      "number": 1592
+    },
+    "pause.down-to-cheats": {
+      "area": "pause",
+      "container": 1542,
+      "hash": "45dc5da590f0de6e00b9257bf48ea536c827e872da104101d75cf7196177bdb5",
+      "id": 5802493463,
+      "number": 1589
+    },
+    "pause.down-to-enhancements": {
+      "area": "pause",
+      "container": 1542,
+      "hash": "6700e05c043d5a20f9d53fdf0f9a839af77968309a0f7edab7c0c1f23428ba54",
+      "id": 5802493215,
+      "number": 1588
+    },
+    "pause.down-to-pack": {
+      "area": "pause",
+      "container": 1542,
+      "hash": "b1738411c241a4137ad6b1791fe49558324efdc716c4fe3ecc62c77140fb8694",
+      "id": 5802492982,
+      "number": 1587
+    },
+    "pause.down-to-quit-game": {
+      "area": "pause",
+      "container": 1542,
+      "hash": "0c24a961396466e2afe1daed69ed38900e76954b57ebf9c0809a5e46c3f6ed9b",
+      "id": 5802493951,
+      "number": 1591
+    },
+    "pause.down-to-save-states": {
+      "area": "pause",
+      "container": 1542,
+      "hash": "d189150dfecb5a43191060581b768979da34444217ec8c9c4f51e4d2ac6e7050",
+      "id": 5802492722,
+      "number": 1586
+    },
+    "pause.down-to-settings": {
+      "area": "pause",
+      "container": 1542,
+      "hash": "c24e7eac19c4de1399fcef4367ebb4c3d2ad6fd441d48778700dc1c0319ab447",
+      "id": 5802493692,
+      "number": 1590
+    },
+    "pause.enh-b-discards": {
+      "area": "pause",
+      "container": 1542,
+      "hash": "fa84d3aa6e46d565a67d55ba8be7e8b810e21407c4d6198a3fb0506e6bb1f884",
+      "id": 5802499919,
+      "number": 1616
+    },
+    "pause.enh-focus": {
+      "area": "pause",
+      "container": 1542,
+      "hash": "e8bbf8727d6dd6c380e76dbd22bafc4c108af7e064a41a41b2a35d1e7a731c57",
+      "id": 5802499135,
+      "number": 1613
+    },
+    "pause.enh-opens": {
+      "area": "pause",
+      "container": 1542,
+      "hash": "d77530d149c0d845c9d39bf4c410d9574fc88ab1fec7112f377fe25c8097e914",
+      "id": 5802499399,
+      "number": 1614
+    },
+    "pause.enh-toggle-apply": {
+      "area": "pause",
+      "container": 1542,
+      "hash": "0668e34a98a303bfe321261a720b0cea854d7eab06e727d251b9527aaf041e4a",
+      "id": 5802499642,
+      "number": 1615
+    },
+    "pause.footer-follows-pad": {
+      "area": "pause",
+      "container": 1542,
+      "hash": "3b6ceacc30e05ead26130ec396ef7bd8b831f83f42110706d5577007d5c19e19",
+      "id": 5802496806,
+      "number": 1603
+    },
+    "pause.footer-words": {
+      "area": "pause",
+      "container": 1542,
+      "hash": "3e6140d9bd8ccce25e5195800a34fc72c7364cb139b4afb09a34463ab41cdda3",
+      "id": 5802491245,
+      "number": 1580
+    },
+    "pause.frozen-frame-bar-lamps": {
+      "area": "pause",
+      "container": 1542,
+      "hash": "d748081cb32f7e1eca25c5a5d17b30c4161afb7319dfcd9871893e3a73f09e06",
+      "id": 5802491487,
+      "number": 1581
+    },
+    "pause.left-contained": {
+      "area": "pause",
+      "container": 1542,
+      "hash": "64435e199190f1fbca7ea56306615be8a0efa3cd53115785ef33e4a52cb823bc",
+      "id": 5802494408,
+      "number": 1593
+    },
+    "pause.pack-b-to-pause": {
+      "area": "pause",
+      "container": 1542,
+      "hash": "137aeb457dc84956df6fd2c6bc9c8350160712137fb61de3bb0a6b295e88af5e",
+      "id": 5802498882,
+      "number": 1612
+    },
+    "pause.pack-detail-controls": {
+      "area": "pause",
+      "container": 1542,
+      "hash": "68e934e3b300d988529e39e32af8037cfac7c9f52364ca455e316bc44847721a",
+      "id": 5802498442,
+      "number": 1610
+    },
+    "pause.pack-focus": {
+      "area": "pause",
+      "container": 1542,
+      "hash": "95dd13b78e2d9db22daf9abdcd6252809aa191bcb8ba2cd38f8c92964c87a503",
+      "id": 5802498012,
+      "number": 1608
+    },
+    "pause.pack-opens": {
+      "area": "pause",
+      "container": 1542,
+      "hash": "193898bfd29aa71a0244ae97882335ebc9c830d766da1179a2a452f45cb221cc",
+      "id": 5802498199,
+      "number": 1609
+    },
+    "pause.pack-show-folder-gap": {
+      "area": "pause",
+      "container": 1542,
+      "hash": "c513a7f17a934a6feaad1e134b8bbc4621f2079c226a524d5217d415c6205369",
+      "id": 5802498657,
+      "number": 1611
+    },
+    "pause.quit-b-keeps-playing": {
+      "area": "pause",
+      "container": 1542,
+      "hash": "a72b16c9c8617fac4f12bedb4c1e72283ed735b4b76ddb06d7e19fc8b7b9618a",
+      "id": 5802502550,
+      "number": 1627
+    },
+    "pause.quit-confirm-in-place": {
+      "area": "pause",
+      "container": 1542,
+      "hash": "31f142bd56a09147d51ab6c61512672782e950a2bec7039d60f9f5ad9944fdf9",
+      "id": 5802502325,
+      "number": 1626
+    },
+    "pause.quit-confirm-lands-home": {
+      "area": "pause",
+      "container": 1542,
+      "hash": "0bba2248dbdbb0e668fc5a9d84ff9324d7d634843bcb3dd6e4894d18b6a88758",
+      "id": 5802502986,
+      "number": 1629
+    },
+    "pause.quit-focus": {
+      "area": "pause",
+      "container": 1542,
+      "hash": "7d230897825e63a33ccfc0d0d4637302d5a9c265c262c907ff94a8359441e460",
+      "id": 5802502080,
+      "number": 1625
+    },
+    "pause.quit-home-ring": {
+      "area": "pause",
+      "container": 1542,
+      "hash": "2258af691b89f47501ba29b4f7bf79d8d5bed93fd2f4afd69b20b03dd7f32c43",
+      "id": 5802503164,
+      "number": 1630
+    },
+    "pause.quit-reconfirm": {
+      "area": "pause",
+      "container": 1542,
+      "hash": "000bbb2b22d4476ba42c32b1b46227d54cbdf1458b2a8504ee64c424b30fc8c3",
+      "id": 5802502767,
+      "number": 1628
+    },
+    "pause.reach-game": {
+      "area": "pause",
+      "container": 1542,
+      "hash": "dcd3b61c61ea5e03393be55882f59430b739ca14da27031b3a6e1fd204a7e079",
+      "id": 5802489011,
+      "number": 1570
+    },
+    "pause.reopen-for-b": {
+      "area": "pause",
+      "container": 1542,
+      "hash": "ecacbe7994d4c58cf1d621990fb0d069054c28ac1b2f0c5add7236b53958b26c",
+      "id": 5802491970,
+      "number": 1583
+    },
+    "pause.reopen-for-rows": {
+      "area": "pause",
+      "container": 1542,
+      "hash": "6f449c82a0ba486111b812dd803391ba2986661014061e05c3f6856e0e2d7a0a",
+      "id": 5802492464,
+      "number": 1585
+    },
+    "pause.resume-focused": {
+      "area": "pause",
+      "container": 1542,
+      "hash": "600971ad2c0e6775e309cbe22eef6cd14b71d4d62bda5f4dab62214b6355ce40",
+      "id": 5802489466,
+      "number": 1572
+    },
+    "pause.right-contained": {
+      "area": "pause",
+      "container": 1542,
+      "hash": "0e606ace133f21e3351440bd5b08e01c7fd8d402f46a5cca4084616d68b82bbe",
+      "id": 5802494640,
+      "number": 1594
+    },
+    "pause.ring-visible-each-row": {
+      "area": "pause",
+      "container": 1542,
+      "hash": "af3644de51ef21f942b9d743c7de039f1d2939c8587c19fa584fdeffa428b392",
+      "id": 5802496578,
+      "number": 1602
+    },
+    "pause.row-cheats": {
+      "area": "pause",
+      "container": 1542,
+      "hash": "896f746cd85f5d0e4f688916ed2b5a2bfd7d6ac9c70fa9dd25fdc970698fe2b6",
+      "id": 5802490610,
+      "number": 1577
+    },
+    "pause.row-enhancements": {
+      "area": "pause",
+      "container": 1542,
+      "hash": "d63d6c6ffebd4bc6f244d75950998318623a546e63790955cc97e12d3fe2cac5",
+      "id": 5802490394,
+      "number": 1576
+    },
+    "pause.row-pack": {
+      "area": "pause",
+      "container": 1542,
+      "hash": "c130fc306eb321df41e86b392ab95389fccc5bb694e6204ef5aa8e1632bf30f4",
+      "id": 5802490165,
+      "number": 1575
+    },
+    "pause.row-quit-game": {
+      "area": "pause",
+      "container": 1542,
+      "hash": "c939ab4399311383dc7ed3943b5e2590c87b950fa70b8c3219f6b025113beea7",
+      "id": 5802491005,
+      "number": 1579
+    },
+    "pause.row-resume": {
+      "area": "pause",
+      "container": 1542,
+      "hash": "ef77bc18eb9f58cf5c2f1484b28c982a953bef4cbda743a37a653fd78929e835",
+      "id": 5802489724,
+      "number": 1573
+    },
+    "pause.row-save-states": {
+      "area": "pause",
+      "container": 1542,
+      "hash": "f3fb9ce218d10b3b25b3c4c5d8faa20203ef1371cab1419f33ae1b762e23d3b1",
+      "id": 5802489950,
+      "number": 1574
+    },
+    "pause.row-settings": {
+      "area": "pause",
+      "container": 1542,
+      "hash": "f5aac8c8742153067bd6b3695c8ff70588ad2a913bed343fee95b4a14cf73295",
+      "id": 5802490822,
+      "number": 1578
+    },
+    "pause.save-states-b-to-pause": {
+      "area": "pause",
+      "container": 1542,
+      "hash": "b22dfd467c569e33876f030dbf8e7ee299fbcac3f694102b71e8ad7853d96928",
+      "id": 5802497765,
+      "number": 1607
+    },
+    "pause.save-states-focus": {
+      "area": "pause",
+      "container": 1542,
+      "hash": "2b5f0dcadba7c6e33506f371b34dc3f0483711b7b0f36d510628bd7cfd080c04",
+      "id": 5802497071,
+      "number": 1604
+    },
+    "pause.save-states-opens": {
+      "area": "pause",
+      "container": 1542,
+      "hash": "15e6d3645dec1a3a48e9c745f2279c610d3c73d48831f51cd6337018be2a8fcc",
+      "id": 5802497305,
+      "number": 1605
+    },
+    "pause.save-states-slot-roundtrip": {
+      "area": "pause",
+      "container": 1542,
+      "hash": "ec2b2d9b81f492ec7afa737ff1455e6c5b0a5a70408f4c3729a43ace3400ad8b",
+      "id": 5802497510,
+      "number": 1606
+    },
+    "pause.up-no-wrap-header": {
+      "area": "pause",
+      "container": 1542,
+      "hash": "b588a0bc97ccfd2c6af1726991893bbe9276e009a8772b528c86d271250b9686",
+      "id": 5802496350,
+      "number": 1601
+    },
+    "pause.up-to-cheats": {
+      "area": "pause",
+      "container": 1542,
+      "hash": "bafb22894a129b753fb0a46967823b00a73f84fe453acee774e2b7a6d09b20ef",
+      "id": 5802495178,
+      "number": 1596
+    },
+    "pause.up-to-enhancements": {
+      "area": "pause",
+      "container": 1542,
+      "hash": "bda29b8ce03c58c08abf408078c6d9c526f49229a05cba98a35857137fb58300",
+      "id": 5802495424,
+      "number": 1597
+    },
+    "pause.up-to-pack": {
+      "area": "pause",
+      "container": 1542,
+      "hash": "60e806c374445b8643023d072f2ca0f32ba70bc5e655c0d9b3015d21323ff796",
+      "id": 5802495619,
+      "number": 1598
+    },
+    "pause.up-to-resume": {
+      "area": "pause",
+      "container": 1542,
+      "hash": "a107f1df10f9b2170b1bcd70fb05eedc8847af867ca4e3841b7a5ac073e2a0a2",
+      "id": 5802496122,
+      "number": 1600
+    },
+    "pause.up-to-save-states": {
+      "area": "pause",
+      "container": 1542,
+      "hash": "d6092c1fe75b18945dbc8dcb9b94cddb7b1860b5ce0b0dec70d133f8bb61b430",
+      "id": 5802495903,
+      "number": 1599
+    },
+    "pause.up-to-settings": {
+      "area": "pause",
+      "container": 1542,
+      "hash": "a49fd9ffda40c1b4de675c4ea08391e25ce887c3ea1922cd4c7a48ceb6a80fa1",
+      "id": 5802494868,
+      "number": 1595
+    },
+    "settings-menu-sounds.menu-sounds-blips": {
+      "area": "settings",
+      "container": 1544,
+      "hash": "4dee4a725ef62e16e292a3cc0da67ac4871f6b1c726876239a47b7114764e74e",
+      "id": 5802518733,
+      "number": 1698
+    },
+    "settings-menu-sounds.menu-sounds-focus": {
+      "area": "settings",
+      "container": 1544,
+      "hash": "6df4da26458022e8bd54809d6e10cec786b113fc8f2cdbd0351af6136cb2c392",
+      "id": 5802518298,
+      "number": 1696
+    },
+    "settings-menu-sounds.menu-sounds-toggle": {
+      "area": "settings",
+      "container": 1544,
+      "hash": "02d3326edd325977ec61bca87240b6681367c19c29430d95d7da96fd8f9d79c2",
+      "id": 5802518515,
+      "number": 1697
+    },
+    "settings-menu-sounds.reach-audio": {
+      "area": "settings",
+      "container": 1544,
+      "hash": "f257ae41d5deeb9a07bbd1989252f304de47d6ad4c545f0c08ba88c01d1d564d",
+      "id": 5802518053,
+      "number": 1695
+    },
+    "settings.a-opens": {
+      "area": "settings",
+      "container": 1544,
+      "hash": "1665ed82739db19cc7a4890960b9301e7be440ed3042369df16b9a3e2cc1ffc2",
+      "id": 5802505043,
+      "number": 1638
+    },
+    "settings.audio-back-to-tab": {
+      "area": "settings",
+      "container": 1544,
+      "hash": "ddc33a9a03299d99f909c36f47e086070132bc7fbdb3e1a6eb4f1e0614040f92",
+      "id": 5802509272,
+      "number": 1656
+    },
+    "settings.audio-done-reachable": {
+      "area": "settings",
+      "container": 1544,
+      "hash": "14681d59ff90f9479c0cb0d32ed0e2a82b7539d18cfdae7075f2da5e81856405",
+      "id": 5802508533,
+      "number": 1653
+    },
+    "settings.audio-down-into-page": {
+      "area": "settings",
+      "container": 1544,
+      "hash": "c49025d27aec948ca21f6ea52a3483b5f09dba6e5069b8383e6d8eb9ba7359ab",
+      "id": 5802508287,
+      "number": 1652
+    },
+    "settings.audio-up-more": {
+      "area": "settings",
+      "container": 1544,
+      "hash": "2c4598b6c99f78f9ef5058183137e8de14b908e99e2c0d39a4eb541537fc5bd7",
+      "id": 5802508761,
+      "number": 1654
+    },
+    "settings.audio-up-page": {
+      "area": "settings",
+      "container": 1544,
+      "hash": "61a4f8159e7a96facfee159ed2fb608b39866a6e5dbd95ca22342fc919d9a57e",
+      "id": 5802509036,
+      "number": 1655
+    },
+    "settings.b-closes-to-pause": {
+      "area": "settings",
+      "container": 1544,
+      "hash": "75be0bb1ea876e5bde4dd1387376aad9388fdf423b1bb8957beee96b97ed0582",
+      "id": 5802517599,
+      "number": 1693
+    },
+    "settings.box-art-change": {
+      "area": "settings",
+      "container": 1544,
+      "hash": "3fa226031fce481aac96ad54e1887b80cc6cf31ea4234054478c8eadfecf40c5",
+      "id": 5802516666,
+      "number": 1689
+    },
+    "settings.box-art-change-back": {
+      "area": "settings",
+      "container": 1544,
+      "hash": "a0c4996b720a09ffb3c6f6aaa9ceb3fb0d1c6ce3b1aa088ba3a156d872e7a995",
+      "id": 5802516895,
+      "number": 1690
+    },
+    "settings.box-art-focus": {
+      "area": "settings",
+      "container": 1544,
+      "hash": "7e5c4363a1f87c12d298658187a1b0829d197498a7db64eefff3823f8d8fd70e",
+      "id": 5802516417,
+      "number": 1688
+    },
+    "settings.changes-kept": {
+      "area": "settings",
+      "container": 1544,
+      "hash": "4dc6dda7192c07a94b848a54275443b70dc6af27dd017b2ed02e6d0532f73b9d",
+      "id": 5802517853,
+      "number": 1694
+    },
+    "settings.controls-back-to-tab": {
+      "area": "settings",
+      "container": 1544,
+      "hash": "61d80c138e1f08c320a4f9fd1cd407040437672b504f551b2fcc789ead633544",
+      "id": 5802510587,
+      "number": 1662
+    },
+    "settings.controls-done-reachable": {
+      "area": "settings",
+      "container": 1544,
+      "hash": "1ca937b7f3d5da33df98edcd2fdee2b735524f18ea435948b004cdd6c0e17a7d",
+      "id": 5802509945,
+      "number": 1659
+    },
+    "settings.controls-down-into-page": {
+      "area": "settings",
+      "container": 1544,
+      "hash": "14424f684d2fda65b6aaadcee8d909b3efe028e997f72e7105dc3b72ffb3d1fa",
+      "id": 5802509738,
+      "number": 1658
+    },
+    "settings.controls-up-more": {
+      "area": "settings",
+      "container": 1544,
+      "hash": "c5e72c5f0bcd5f0164e9fb77d5d97816ede3f3e8fc198cd2a4b679ec4e14e838",
+      "id": 5802510165,
+      "number": 1660
+    },
+    "settings.controls-up-page": {
+      "area": "settings",
+      "container": 1544,
+      "hash": "e637b6003f431cb4dfc11f1ee3d397ff911fc2542feb4931a0981dca31ec6e10",
+      "id": 5802510384,
+      "number": 1661
+    },
+    "settings.deadzone-focus": {
+      "area": "settings",
+      "container": 1544,
+      "hash": "611ca1447071ee4d5a673d72a6769bcc28fa1b1728f9fa84f4d134ecfb2fe196",
+      "id": 5802515547,
+      "number": 1684
+    },
+    "settings.deadzone-left": {
+      "area": "settings",
+      "container": 1544,
+      "hash": "463fce147f8cf3e35e82ac93514fc460d9e99efec95936ca0738504bf5faa2c6",
+      "id": 5802515755,
+      "number": 1685
+    },
+    "settings.deadzone-readout-drift": {
+      "area": "settings",
+      "container": 1544,
+      "hash": "275835be5e0d94cefb77afc1047a31d7f21ca60df4e2190cf104258c18afdb80",
+      "id": 5802516190,
+      "number": 1687
+    },
+    "settings.deadzone-right": {
+      "area": "settings",
+      "container": 1544,
+      "hash": "5f0153f639c857822374d65e552ff3eb93e0a4ba2481dd548ed17ae3cc6d3189",
+      "id": 5802515981,
+      "number": 1686
+    },
+    "settings.display-back-to-tab": {
+      "area": "settings",
+      "container": 1544,
+      "hash": "cbc3f41a23527ca111450a34349bf4a35994e04d0d0ad7bd8b435beb87d5d82c",
+      "id": 5802506202,
+      "number": 1643
+    },
+    "settings.display-done-reachable": {
+      "area": "settings",
+      "container": 1544,
+      "hash": "c5911ec999f1f1268e37935ac85a0c5d2f4599351893a8df33b58d7da927d204",
+      "id": 5802505732,
+      "number": 1641
+    },
+    "settings.display-down-into-page": {
+      "area": "settings",
+      "container": 1544,
+      "hash": "b272e11841f8fd9c9f3fafe152029c77c6ea57c8e889743d6ae68bc779814b1b",
+      "id": 5802505501,
+      "number": 1640
+    },
+    "settings.display-up-page": {
+      "area": "settings",
+      "container": 1544,
+      "hash": "15d31114b1fc6175276432b2eb4665404ec7efc5fbe2cebbfae059d0a22ae7aa",
+      "id": 5802505989,
+      "number": 1642
+    },
+    "settings.exit-fullscreen-done-focus": {
+      "area": "settings",
+      "container": 1544,
+      "hash": "91a478a36a1aee4aec1cf97071e9d9322d27e734a651b06460a85feff547a931",
+      "id": 5802511929,
+      "number": 1668
+    },
+    "settings.exit-fullscreen-left-of-done": {
+      "area": "settings",
+      "container": 1544,
+      "hash": "3b523f4b98853f753df58b046c09685026eb63bfa7a774e843b861f3dd26cc5d",
+      "id": 5802512198,
+      "number": 1669
+    },
+    "settings.look-back-to-tab": {
+      "area": "settings",
+      "container": 1544,
+      "hash": "be72362c9ce8df7a719dea0ccdaa962072c1cd66d05c2ab2aeb021c507315be3",
+      "id": 5802507847,
+      "number": 1650
+    },
+    "settings.look-done-reachable": {
+      "area": "settings",
+      "container": 1544,
+      "hash": "d4d77003002613a03636746f6e572ae3ab288c9fbf20e3cd4853e8fdac1a6da1",
+      "id": 5802507326,
+      "number": 1648
+    },
+    "settings.look-down-into-page": {
+      "area": "settings",
+      "container": 1544,
+      "hash": "e2092086a5a2bd597fdedb4d073933e1174a2809643120aa68c8d274761d5edd",
+      "id": 5802507078,
+      "number": 1647
+    },
+    "settings.look-up-page": {
+      "area": "settings",
+      "container": 1544,
+      "hash": "2f4d72778dc32c70cba1adf0c5e965c1c81246c8b8cdd303ff45f466991f3250",
+      "id": 5802507532,
+      "number": 1649
+    },
+    "settings.menu-sounds-row": {
+      "area": "settings",
+      "container": 1544,
+      "hash": "bb0a05bf0c4f787b64430dfca608fa6c89be074c20d097127d396f112e11793c",
+      "id": 5802514383,
+      "number": 1679
+    },
+    "settings.menu-tick": {
+      "area": "settings",
+      "container": 1544,
+      "hash": "a54630b5c4ed4126aeccdc69101c908eeb7fbd4de1755a85db2d548d968b2165",
+      "id": 5802515302,
+      "number": 1683
+    },
+    "settings.reach-pause": {
+      "area": "settings",
+      "container": 1544,
+      "hash": "4c6415efe4f84b7332c1e9d58053f487943c8f553b4ae752cdbdd671b0d50907",
+      "id": 5802504780,
+      "number": 1637
+    },
+    "settings.rumble-focus": {
+      "area": "settings",
+      "container": 1544,
+      "hash": "204866dfe0d02cdaf20dbf2437d3c676e8f9d5b854f6d629e0ee0bb38f8ca2ca",
+      "id": 5802514610,
+      "number": 1680
+    },
+    "settings.rumble-left": {
+      "area": "settings",
+      "container": 1544,
+      "hash": "09d8f7d9d0f84b33ab57b86a9533c61aa589f6bc998979506e8ce7608bac959a",
+      "id": 5802514859,
+      "number": 1681
+    },
+    "settings.rumble-right": {
+      "area": "settings",
+      "container": 1544,
+      "hash": "90de61683dacfa8a5b746f3df6e081a653a6bb2e9bef2b329aa91a900bbc2447",
+      "id": 5802515089,
+      "number": 1682
+    },
+    "settings.size-applies-scrolls": {
+      "area": "settings",
+      "container": 1544,
+      "hash": "74442c8423e3b3f9a4d1e179992d1cfdbfb69cfef71435cf7e61b285828a2c4b",
+      "id": 5802514164,
+      "number": 1678
+    },
+    "settings.size-back-to-row": {
+      "area": "settings",
+      "container": 1544,
+      "hash": "5afa667024e57d14e57a04a56b66a094eb1607fd05cde73b6841bbf226733d52",
+      "id": 5802513308,
+      "number": 1674
+    },
+    "settings.size-focus": {
+      "area": "settings",
+      "container": 1544,
+      "hash": "069733d9bf219cf5522c429579cc66a4cb803e124e00f635ed2b4ecb71e1ac0e",
+      "id": 5802512417,
+      "number": 1670
+    },
+    "settings.size-left-standard": {
+      "area": "settings",
+      "container": 1544,
+      "hash": "659c65c9b559baf5de95c76fb2c3da62e17bf1f48d4d5167750a364d4876cc24",
+      "id": 5802513555,
+      "number": 1675
+    },
+    "settings.size-left-standard-2": {
+      "area": "settings",
+      "container": 1544,
+      "hash": "107164d3439685966990a2299187c49036e0652d06a4b8242a6471fbf315f6d0",
+      "id": 5802513738,
+      "number": 1676
+    },
+    "settings.size-right-large": {
+      "area": "settings",
+      "container": 1544,
+      "hash": "518ce7c38373630a8e05b4e39382358c5fb3723ab3bf787b4f91a4ef9d168fee",
+      "id": 5802512616,
+      "number": 1671
+    },
+    "settings.size-right-xlarge": {
+      "area": "settings",
+      "container": 1544,
+      "hash": "d928ce6fba9aa5291cf862e114b4fb779e6b72b83c7c7e477023caf81cd2bac4",
+      "id": 5802512825,
+      "number": 1672
+    },
+    "settings.size-standard-done": {
+      "area": "settings",
+      "container": 1544,
+      "hash": "78e4619b39001fee560fcf5c19cbe63e35d5b36f4441093b4bfde977c85196f5",
+      "id": 5802513948,
+      "number": 1677
+    },
+    "settings.size-xlarge-done": {
+      "area": "settings",
+      "container": 1544,
+      "hash": "87e0ccf74cb63ef58821fb4f7af83cb52dec64197e125883932d408564f4ba6d",
+      "id": 5802513073,
+      "number": 1673
+    },
+    "settings.system-back-to-tab": {
+      "area": "settings",
+      "container": 1544,
+      "hash": "16b31166d0f315c6c2a65ad7738ce23d927ec434adac87e7e5dfc94451050524",
+      "id": 5802511720,
+      "number": 1667
+    },
+    "settings.system-done-reachable": {
+      "area": "settings",
+      "container": 1544,
+      "hash": "5e05e419ff7a6eab06561fb33738ba5e768f1b9ca7c02f0bea2bc86ded206bd8",
+      "id": 5802511253,
+      "number": 1665
+    },
+    "settings.system-down-into-page": {
+      "area": "settings",
+      "container": 1544,
+      "hash": "a8b1f1fbf5371d8caf6f63f318b2eea31565d7f7fb1e00442fd3ee724091cc87",
+      "id": 5802511035,
+      "number": 1664
+    },
+    "settings.system-no-native-dialog": {
+      "area": "settings",
+      "container": 1544,
+      "hash": "cc4ac8c1742925bbd9628c90b9a0908494b6a3d95f1f61a96bb7b0d36057a994",
+      "id": 5802517162,
+      "number": 1691
+    },
+    "settings.system-rows-restart": {
+      "area": "settings",
+      "container": 1544,
+      "hash": "02bed97fe4f38bbc936ebc80d331b641f81abd186eb39d4882699322c3347a3b",
+      "id": 5802517373,
+      "number": 1692
+    },
+    "settings.system-up-page": {
+      "area": "settings",
+      "container": 1544,
+      "hash": "75a2957d44e1ec3f6abe024a45091a3cf6830d91bfacc059656a1eff199b3e0d",
+      "id": 5802511498,
+      "number": 1666
+    },
+    "settings.tab-display-first": {
+      "area": "settings",
+      "container": 1544,
+      "hash": "a2264b9e5e732241b6b0df04fcd61f07f5dc3fb7ac904e9395b333ba3fff4fc7",
+      "id": 5802505255,
+      "number": 1639
+    },
+    "settings.tab-left-display": {
+      "area": "settings",
+      "container": 1544,
+      "hash": "25d78073654ec7862ecbd01ef9c72883aea90f6d1dddb4f9a4d134110f9a81ca",
+      "id": 5802506581,
+      "number": 1645
+    },
+    "settings.tab-right-audio": {
+      "area": "settings",
+      "container": 1544,
+      "hash": "17fddc4055add01f7cea6bf69679752203e5bc649ae092e7eb5d99da92427ec8",
+      "id": 5802508055,
+      "number": 1651
+    },
+    "settings.tab-right-controls": {
+      "area": "settings",
+      "container": 1544,
+      "hash": "93e8574337eaa35aee1611226d0991d1f012b9b6552d7c7f62e2b72ab25f74c3",
+      "id": 5802509490,
+      "number": 1657
+    },
+    "settings.tab-right-look": {
+      "area": "settings",
+      "container": 1544,
+      "hash": "fa75bbc11898a9243616f122beef73305f7ce64d094e94ec90be279c3befdaf1",
+      "id": 5802506398,
+      "number": 1644
+    },
+    "settings.tab-right-look-again": {
+      "area": "settings",
+      "container": 1544,
+      "hash": "6e8ef21808a047893712ea8d5a0c4f916fcbe46002b880e84d9d64d634bdf2eb",
+      "id": 5802506812,
+      "number": 1646
+    },
+    "settings.tab-right-system": {
+      "area": "settings",
+      "container": 1544,
+      "hash": "d59e5a6c49188a7154c5689fc7b6a36d722925dd02318a76ee4580fe6049572d",
+      "id": 5802510784,
+      "number": 1663
     }
   },
+  "layout": "areas",
   "parent": 1286
 }
