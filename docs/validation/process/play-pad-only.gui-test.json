@@ -103,34 +103,6 @@
           },
           "severity": "minor",
           "mode": "automated"
-        },
-        {
-          "id": "launch.port-lamp-p1",
-          "role": "under-test",
-          "precondition": "ui.screen == play.home",
-          "action": {
-            "name": "pad.connect",
-            "args": {
-              "index": 0
-            }
-          },
-          "wait": {
-            "timeout_ticks": 180
-          },
-          "check": {
-            "name": "ui.lamps",
-            "args": {
-              "port": 1,
-              "is": "lit"
-            }
-          },
-          "expect": "With the pad in the hand connected (simulated through the hook) the pad port lamps show P1 lit (ADR-0261).",
-          "variants": {
-            "window.mode": "windowed"
-          },
-          "severity": "minor",
-          "mode": "automated",
-          "content_hash": "56efbe4b6af0dad32a598aa10f8c4e5dc6d99b4f45314cea4730e2077e79550a"
         }
       ]
     },
@@ -159,6 +131,34 @@
       ],
       "teardown": [],
       "steps": [
+        {
+          "id": "launch.port-lamp-p1",
+          "role": "under-test",
+          "precondition": "ui.screen == play.home",
+          "action": {
+            "name": "pad.connect",
+            "args": {
+              "index": 0
+            }
+          },
+          "wait": {
+            "timeout_ticks": 180
+          },
+          "check": {
+            "name": "ui.lamps",
+            "args": {
+              "port": 1,
+              "is": "lit"
+            }
+          },
+          "expect": "With the pad in the hand connected (simulated through the hook) the pad port lamps show P1 lit (ADR-0261).",
+          "variants": {
+            "window.mode": "windowed"
+          },
+          "severity": "minor",
+          "mode": "automated",
+          "content_hash": "56efbe4b6af0dad32a598aa10f8c4e5dc6d99b4f45314cea4730e2077e79550a"
+        },
         {
           "id": "home.focus-holds-up",
           "role": "under-test",
