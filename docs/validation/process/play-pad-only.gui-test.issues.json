@@ -2162,5 +2162,6 @@
     }
   },
   "layout": "areas",
+  "legend": "<sub>Legend: \u2705 passed \u00b7 \u274c failed \u00b7 \ud83d\udfe1 needs review \u00b7 \ud83d\udc64 manual \u00b7 \u26aa not run. The run issues are sub-issues of each area's monthly Runs container; the case records (#1288\u2013#1787) live in the 16 areas below, linked from each area's Cases table. Format: ADR-0275 (accepted).</sub>",
   "parent": 1286
 }

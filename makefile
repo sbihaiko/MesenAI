@@ -394,6 +394,12 @@ doc-checks-1: check-manifest
 	# counts live in the script and in the check's own run, not in this comment.
 	python3 scripts/checks/verify_gui_test_scenario_coverage.py
 	python3 scripts/test_verify_gui_test_scenario_coverage.py
+	# #1764: a published scenario's legend names the record span and the area count
+	# the map's areas hold, so a migration cannot leave it naming the range the flat
+	# layout had (#1286's said #1288-#1387 while its areas held #1288-#1787). The
+	# format ADR's status token is read from the register, not from the legend.
+	python3 scripts/checks/verify_gui_test_scenario_legend.py
+	python3 scripts/test_verify_gui_test_scenario_legend.py
 	./scripts/checks/verify_core_no_http_client.sh
 	./scripts/checks/verify_fetcher_no_filesystem_allowlist_load.sh
 	./scripts/checks/verify_no_ptbr_usage_strings.sh
