@@ -52,6 +52,11 @@ class FakeHook:
         # carries none.
         self.keys = []
         self.keys_on = []
+        # #1779: the handshake this hook answers with. The default is the version-1 one
+        # a run may still meet - no `actions` field at all - and a test that wants a
+        # version-2 hook sets the version and the action list it advertises.
+        self.hook_version = 1
+        self.hook_actions = None
         #1255: where the run's windows are, and the display they must stay inside. The
         #env knobs let a launched stand-in app report a window the adapter must refuse.
         self.window_position = [int(os.environ.get("FAKE_WINDOW_X", 40)), int(os.environ.get("FAKE_WINDOW_Y", 60))]
@@ -98,7 +103,9 @@ class FakeHook:
         out = {"id": req["id"], "ok": True}
         op = req["op"]
         if op == "hello":
-            out.update(hook=1, ops=["hello", "state", "inject", "capture", "quit"], namespaces=["pad", "key", "ui"])
+            out.update(hook=self.hook_version, ops=["hello", "state", "inject", "capture", "quit"], namespaces=["pad", "key", "ui"])
+            if self.hook_actions is not None:
+                out["actions"] = list(self.hook_actions)
         elif op == "state":
             self.tick += 0 if self.frozen else 3
             out.update(
@@ -547,6 +554,60 @@ class InputActions(Base):
     def test_the_module_docstring_names_the_actions_it_advertises(self):
         for action in adapter.ACTIONS:
             self.assertIn(action, adapter.__doc__ or "", f"{action} is not documented in the adapter's own docstring")
+
+
+class HookHandshake(unittest.TestCase):
+    """#1779: what a launch accepts from the hook's own `hello` (ADR-0272 item 2)."""
+
+    class Running:
+        """A child that is still up, so the handshake is driven the way `launch` drives it."""
+
+        returncode = None
+
+        def poll(self):
+            return None
+
+        def wait(self, timeout=None):
+            return 0
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp(prefix="g1779-", dir="/tmp"))
+        self.addCleanup(lambda: __import__("shutil").rmtree(self.tmp, True))
+
+    def connect(self, version, actions):
+        """A hook answering `hello` as given, and the session the adapter opens on it."""
+        hook = FakeHook(self.tmp / "h.sock")
+        self.addCleanup(hook.server.close)
+        hook.hook_version = version
+        hook.hook_actions = actions
+        session = adapter.Session(str(self.tmp / "h.sock"), TOKEN, process=self.Running(), workdir=self.tmp)
+        self.addCleanup(session.close)
+        session.connect(1)
+        return hook, session
+
+    def test_a_v2_handshake_missing_an_action_the_adapter_advertises_fails_the_launch(self):
+        # A version-2 hook hands its own action list over, and this adapter's surface is
+        # a promise the run is written against. A v2 hook that answers no `key.press`
+        # while the adapter advertises it would launch, and the failure would land on
+        # whichever step wrote the keyboard verb - later, and nowhere near the cause.
+        short = [action for action in adapter.ACTIONS if action != "key.press"]
+        self.assertNotIn("key.press", short)
+        with self.assertRaises(adapter.Unavailable) as caught:
+            self.connect(2, short)
+        self.assertIn("key.press", str(caught.exception))
+
+    def test_a_v2_handshake_advertising_every_advertised_action_launches_and_drives(self):
+        # The other side of the same rule: a v2 hook that carries the whole surface
+        # launches, and the verb the first case refused reaches it.
+        hook, session = self.connect(2, list(adapter.ACTIONS))
+        session.inject("key.press", {"key": "Up Arrow", "ticks": 1})
+        self.assertEqual(hook.keys, [("Up Arrow", 1)])
+
+    def test_a_v1_handshake_carrying_no_actions_still_launches(self):
+        # Version 1 predates the list and advertises nothing: it is still accepted, and
+        # the step that needs a verb it does not answer is where that run fails.
+        hook, session = self.connect(1, None)
+        self.assertEqual(session.check("ui.screen", {"is": "play.home"})["passed"], True)
 
 
 class WindowMode(unittest.TestCase):

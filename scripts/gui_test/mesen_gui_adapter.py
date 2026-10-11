@@ -86,9 +86,11 @@ ACTIONS = PAD_ACTIONS + KEY_ACTIONS + ["pad.connect", "pad.disconnect"]
 INPUT_FAMILIES = ["pad", "key"]
 # The contract version this adapter speaks. A hook that answers 1 carries neither
 # `pad.chord` nor `nav.goal` and advertises no actions at all; 2 is the one #1779
-# extends. Both are accepted: the verbs a script writes are matched against ACTIONS
-# below, so a run that drives an old hook still fails on the step that needs a verb
-# the hook does not answer, rather than on the launch.
+# extends. Both are accepted, and each is held to what it promises: a version-2
+# hook names the actions it answers in `hello`, and a launch refuses it when one of
+# the ACTIONS below is missing (Session.connect) rather than letting the step that
+# wrote that verb fail later. A version-1 hook promises nothing, so a run that
+# drives one still fails on the step that needs a verb it cannot answer.
 HOOK_VERSIONS = (1, 2)
 # The pad families a script can hot-plug (#1281), as the two names a person uses:
 # the Xbox-shaped button table and the PlayStation one (PadFamily.Xbox / Ps4).
@@ -401,8 +403,24 @@ class Session:
         self._sock = sock
         self._file = sock.makefile("rw", encoding="utf-8", newline="\n")
         hello = self._ask("hello")
-        if hello.get("hook") not in HOOK_VERSIONS:
-            raise Unavailable(f"unsupported hook version {hello.get('hook')!r}")
+        version = hello.get("hook")
+        if version not in HOOK_VERSIONS:
+            raise Unavailable(f"unsupported hook version {version!r}")
+        # ADR-0272 item 2: a version-2 hook hands its own action list over in `hello`,
+        # and the surface this adapter advertises is what a script is written against.
+        # A v2 hook that leaves one of them out - `key.press`, say - would launch, and
+        # the failure would land on whichever step wrote that verb: later, and nowhere
+        # near the cause. Every advertised action has to be named here, where the
+        # launch is. A version-1 hook advertises no list at all, and stays accepted:
+        # it predates the field, and the step that needs a verb it cannot answer is
+        # still where such a run fails.
+        if version >= 2:
+            answered = hello.get("actions")
+            if not isinstance(answered, list):
+                raise Unavailable(f"hook version {version} advertised no actions: {answered!r}")
+            missing = [action for action in ACTIONS if action not in answered]
+            if missing:
+                raise Unavailable("the hook does not answer the actions this adapter advertises: " + ", ".join(missing))
 
     def require_placement(self):
         """Fail the launch when an application window's frame is not fully inside the primary display's working area (#1255)."""

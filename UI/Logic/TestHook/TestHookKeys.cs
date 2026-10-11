@@ -114,16 +114,29 @@ public sealed class TestHookKeys
 			}
 			codes.Add(code);
 		}
-		//Every code resolved, so each start is a hold that lasts: the family check runs
-		//before the first button goes down, not between two of them.
-		if(ClockRunning && (frames is not int || frames < 1)) {
-			return "the emulated clock is running: write the chord in frames";
-		}
-		if(!ClockRunning && (ticks is not int || ticks < 1)) {
-			return "the emulated clock is not running: write the chord in ticks";
+		//Every code resolved, so the whole chord is one instant: the clock is read once
+		//here and every hold is added from that one read, before any button goes down.
+		//Reading it per button would let a pause landing between two of them - the
+		//state change the step cannot see coming - refuse the rest while the step still
+		//answered success, leaving the pad holding a button its own script never let go.
+		long? now = _frames();
+		if(now.HasValue) {
+			if(frames is not int heldFrames || heldFrames < 1) {
+				return "the emulated clock is running: write the chord in frames";
+			}
+			foreach(ushort code in codes) {
+				_holds.Add(new Hold(code, 0, now.Value + heldFrames, now.Value, null));
+			}
+		} else {
+			if(ticks is not int heldTicks || heldTicks < 1) {
+				return "the emulated clock is not running: write the chord in ticks";
+			}
+			foreach(ushort code in codes) {
+				_holds.Add(new Hold(code, Tick + heldTicks, null, null, null));
+			}
 		}
 		foreach(ushort code in codes) {
-			StartHold(code, "", ticks, frames, null, "chord");
+			_setKey(code, true);
 		}
 		return null;
 	}

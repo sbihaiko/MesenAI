@@ -54,6 +54,9 @@ namespace Mesen.Tests.TestHook
 			public readonly List<(ushort Code, bool Down)> Calls = new();
 			public readonly FakeTarget Target = new();
 			public long? Frames;
+			//#1779: what happens after every key the overlay is told about - the pause
+			//that lands while a multi-button step is still in flight.
+			public Action<(ushort Code, bool Down)>? AfterKey;
 			//#1281: the pads a script hot-plugs, and the count the application would
 			//read - 2, as a machine with two real pads on it.
 			public uint RealPads = 2;
@@ -64,7 +67,7 @@ namespace Mesen.Tests.TestHook
 			public Rig(List<(ushort Key, bool Down)>? raised = null)
 			{
 				Pads = new TestHookPads(() => RealPads);
-				Keys = new TestHookKeys((code, down) => Calls.Add((code, down)), name => name switch { "Pad1 Right" => (ushort)0x1011, "Pad1 Left" => (ushort)0x1012, "Pad1 A" => (ushort)0x1013, "Enter" => (ushort)0x0D, "Up Arrow" => (ushort)24, "1" => (ushort)35, _ => (ushort)0 }, () => Frames, raised is null ? null : (key, down) => raised.Add((key, down)), Pads.FamilyOf);
+				Keys = new TestHookKeys((code, down) => { Calls.Add((code, down)); AfterKey?.Invoke((code, down)); }, name => name switch { "Pad1 Right" => (ushort)0x1011, "Pad1 Left" => (ushort)0x1012, "Pad1 A" => (ushort)0x1013, "Enter" => (ushort)0x0D, "Up Arrow" => (ushort)24, "1" => (ushort)35, _ => (ushort)0 }, () => Frames, raised is null ? null : (key, down) => raised.Add((key, down)), Pads.FamilyOf);
 				Protocol = new TestHookProtocol("secret", Target, Keys, Pads);
 			}
 
@@ -812,6 +815,28 @@ namespace Mesen.Tests.TestHook
 			Assert.True(rig.Ask("{\"id\":8,\"token\":\"secret\",\"op\":\"inject\",\"action\":\"pad.chord\",\"args\":{\"buttons\":[\"Right\",\"Left\"],\"frames\":2}}")["ok"]!.GetValue<bool>());
 			Assert.Equal(new[] { ((ushort)0x1011, true), ((ushort)0x1012, true) }, rig.Calls);
 			rig.Frames = 502;
+			rig.Keys.Advance();
+			Assert.Equal(4, rig.Calls.Count);
+			Assert.Contains(((ushort)0x1011, false), rig.Calls.Skip(2));
+			Assert.Contains(((ushort)0x1012, false), rig.Calls.Skip(2));
+		}
+
+		[Fact]
+		public void A_chord_reaches_the_pressed_set_whole_when_the_clock_stops_between_its_buttons()
+		{
+			//#1779: a chord is one instant, so the family it is written in is read once
+			//and the whole gesture goes down from that one read. A pause that lands
+			//between two of its buttons - the state change the step cannot see coming -
+			//must not split it: a half-pressed chord is a gesture nobody made, and the
+			//step would have answered success over a pad left holding one button.
+			Rig rig = new();
+			rig.Frames = 500;
+			rig.AfterKey = _ => rig.Frames = null;
+			JsonObject answer = rig.Ask("{\"id\":10,\"token\":\"secret\",\"op\":\"inject\",\"action\":\"pad.chord\",\"args\":{\"buttons\":[\"Right\",\"Left\"],\"frames\":2}}");
+			Assert.True(answer["ok"]!.GetValue<bool>());
+			Assert.Equal(new[] { ((ushort)0x1011, true), ((ushort)0x1012, true) }, rig.Calls);
+			//And nothing is left held: a frame hold ends with its clock (Advance), so the
+			//chord the pause interrupted lets go instead of sticking to the pad.
 			rig.Keys.Advance();
 			Assert.Equal(4, rig.Calls.Count);
 			Assert.Contains(((ushort)0x1011, false), rig.Calls.Skip(2));
