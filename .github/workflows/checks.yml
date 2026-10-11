@@ -222,7 +222,11 @@ jobs:
   # the plugin is checked where a plugin is installed, at the next `make
   # python-tests` on that machine, which is where a rename reaches this
   # repository (the guard reads the newest installed plugin and fails, naming
-  # both, until the copy is re-vendored).
+  # both, until the copy is re-vendored). ADR-0276 §2 is this split and §5 is
+  # the limit it puts on what a green run here may be read as; its §1 is the
+  # plugin side and its §3 is what the committed copy is instead of a contract.
+  # Whether CI may read the plugin's repository is the owner's access change,
+  # not this job's, and is tracked as issue #1812.
   python-tests:
     runs-on: ubuntu-22.04
 
@@ -251,8 +255,8 @@ jobs:
       - name: Run the Python suite
         # No AGENT_SQUAD_PLUGIN here on purpose: the only contract this runner
         # could name is the committed copy, and a copy of the artifact under test
-        # is not a contract. The guard says in its own output which half it
-        # checked and which half it did not.
+        # is not a contract (ADR-0276 §2, §3). The guard says in its own output
+        # which half it checked and which half it did not.
         run: make python-tests
 
   # The PR gate's compile of `Core/`. `make core-unit-tests` builds the listed

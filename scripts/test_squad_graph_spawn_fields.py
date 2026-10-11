@@ -12,7 +12,8 @@ names" - dispatched nothing and the run's whole spend bought nothing
 (run-20261011-160224-2d865b: spawn_rejected `unknown_field:turns`, verdict failed
 `no_dispatch`; issue #1800).
 
-Two rules, and the weaker one is the one that always runs:
+Two rules, and the weaker one is the one that always runs - ADR-0276 §1 (the
+plugin side) and §2 (the CI side, which is rule 1 and nothing else):
 
 1. Every example is bounded by the field list **its own graph declares** for a
    request (the backticked `{...}` list beside the example). This needs nothing
@@ -31,7 +32,7 @@ The contract is read from a runtime plugin and from nothing else: `--plugin`, th
 plugin - the fork's `squad/envelope.py` verbatim, header sha256 verified before it
 is imported - and a recording is never a contract, named or not: a copy of the
 artifact under test cannot disagree with itself, and CI naming it is what kept a
-plugin-side rename green (review of PR #1804). Wherever a plugin did answer, the
+plugin-side rename green (review of PR #1804; ADR-0276 §3). Wherever a plugin did answer, the
 copy is read - against that plugin and against its own header - so it cannot age
 in silence there; a copy that is stale or edited fails and is re-vendored from
 the fork rather than left standing in for the plugin.
@@ -43,7 +44,8 @@ real check that reds on drift, and the plugin half is named as the part only a
 machine holding the plugin can make. A fence that is meant to hold JSON and does
 not parse fails too: an example the guard cannot read is an example it does not
 check. A graph whose example has no declared field list beside it fails for the
-same reason - nothing bounds it (review of PR #1804, issue #1800).
+same reason - nothing bounds it (review of PR #1804, issue #1800; ADR-0276 §2 and
+§4, and §5 for the limit this puts on a green CI run).
 
 Usage:
   python3 scripts/test_squad_graph_spawn_fields.py

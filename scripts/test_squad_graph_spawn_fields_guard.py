@@ -15,6 +15,9 @@ These cases pin the fixes from the outside: the guard is run as its own process
 against a throwaway tree, so what is asserted is its exit code and its output,
 never its internals.
 
+The two halves ADR-0276 splits the check into, one case each, because each half
+has a contract the other side cannot have:
+
 - The contract is a runtime plugin: `--plugin`, `AGENT_SQUAD_PLUGIN`, or the
   newest plugin installed under the plugin cache.
 - A committed copy is **never** a contract, named or not: it is a recording of
@@ -24,7 +27,12 @@ never its internals.
 - With no plugin reachable at all, the guard still refuses to be vacuous: each
   graph's example is checked against the field list that graph declares for
   itself, a graph declaring none fails, and the run says in the open that the
-  plugin half is not what it checked.
+  plugin half is not what it checked. The copy bounds nothing on that side, and
+  a field the copy lacks passes there while failing against a plugin - the two
+  cases that pin the split, one per half.
+- No workflow hands the guard a contract from outside this repository: the
+  `AGENT_SQUAD_PLUGIN` line CI used to carry is the #1804 finding, and a
+  workflow that names one again fails here.
 
 A fence that should hold an example request but does not parse is a failure, not
 an example skipped over.
@@ -35,6 +43,7 @@ Exit 0 when every case behaves; exit 1 with one line per case that does not.
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -211,6 +220,55 @@ def case_runtime_plugin_that_disagrees_with_the_copy_fails(tmp):
     )
 
 
+def case_no_workflow_hands_the_guard_a_contract(tmp):
+    """The #1804 finding itself: no workflow may supply a contract from outside.
+
+    `AGENT_SQUAD_PLUGIN` in the `python-tests` job's env made the committed copy
+    - an artifact under test - the contract, so a plugin-side rename could not
+    red CI. CI's contract is the field list each graph declares for itself now
+    (ADR-0276), which needs nothing from outside this repository. Comment lines
+    are skipped so a job comment may still discuss the variable by name.
+    """
+    workflows = sorted((REPO_ROOT / ".github" / "workflows").glob("*.yml"))
+    check(
+        "there are workflows to scan",
+        bool(workflows),
+        "no *.yml under .github/workflows: nothing here can say CI is given no contract",
+    )
+    named = []
+    for path in workflows:
+        for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+            if line.lstrip().startswith("#"):
+                continue
+            if re.search(r"AGENT_SQUAD_PLUGIN\s*[:=]", line):
+                named.append(f"{path.name}:{number}")
+    check("no workflow supplies the guard a contract", not named, ", ".join(named))
+
+
+def case_the_recording_bounds_nothing_where_no_plugin_answered(tmp):
+    """CI's half of the split: no plugin, so the graph's own list is the contract.
+
+    The mutation the plugin case below shares - `stalls` renamed to a field the
+    committed copy does not carry - run where no plugin is reachable, which is
+    CI's shape. It passes there: what CI checks is every graph against the list
+    it declares for itself, and the copy bounds nothing (ADR-0276). Named as a
+    plugin, the same graph is red, which is the other half of the pair.
+    """
+    root, home = tree(tmp, vendored=True)
+    doc, node = example_fence(root)
+    node["instructions"] = node["instructions"].replace("stalls", "stall_count")
+    (root / GRAPH).write_text(json.dumps(doc), encoding="utf-8")
+    code, out = run(root, home)
+    check("no plugin, a field the copy lacks exits 0", code == 0, f"exit {code}\n{out}")
+    check(
+        "no plugin, the recording is not the contract",
+        "committed copy of agent-squad" not in out,
+        out,
+    )
+    code, out = run(root, home, "--plugin", str(plugin(tmp, COPY_FIELDS)))
+    check("the same graph against a plugin exits non-zero", code != 0, f"exit {code}\n{out}")
+
+
 def case_a_declaration_the_plugin_rejects_fails(tmp):
     """A graph declaring a field the plugin rejects is red even where examples agree."""
     root, home = tree(tmp, vendored=True)
@@ -252,6 +310,8 @@ def main():
         case_tampered_copy_is_a_hard_failure,
         case_runtime_plugin_that_disagrees_with_the_copy_fails,
         case_a_declaration_the_plugin_rejects_fails,
+        case_no_workflow_hands_the_guard_a_contract,
+        case_the_recording_bounds_nothing_where_no_plugin_answered,
         case_malformed_example_fence_is_a_hard_failure,
     ]
     for case in cases:
