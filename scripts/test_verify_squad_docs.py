@@ -30,6 +30,16 @@ The review of f5cf2bf9f found two of the same shape remaining:
     target `doc-checks` never recurses into — passed as a wiring. It now asks `make -n doc-checks` which recipe
     lines it would run, and compares a whole recipe line.
 
+The review of cee4f1f3c found two of the same shape again, both in the target each rule reads:
+
+  - The marker sentence still let anything that was not a `.`, `:` or `;` sit between the marker and the live tree,
+    so a negated mention (`is deployed to staging, not the live tree`) or a later clause (`is not merged into the
+    fork, but the live tree carries it`) vouched for a target the marker never named, and a record whose block and
+    body agree failed. The target now directly follows the marker, at most one preposition away, which is the same
+    narrowing the finding asked for and is why the two fixtures below are passing cases.
+  - The index rule was a substring test over the bullet, so a name appearing only inside *another* bullet's
+    description passed as an entry for a record the index never lists. The rule now reads the bullet's own entry.
+
 Run: python3 scripts/test_verify_squad_docs.py
 """
 import os
@@ -98,6 +108,15 @@ class VerifySquadDocs(unittest.TestCase):
                           **{"listed": "# A record\n"})
         rc, out = run_check(root)
         self.assertEqual(rc, 0, f"a listed record was reported as unlisted:\n{out}")
+
+    def test_a_name_in_another_bullets_description_is_not_an_entry(self):
+        """The bullet's own entry is what lists a record: a name that appears only in another entry's description is
+        the reader's route to that other record, and the omitted record stays undiscoverable."""
+        readme = ("# Squad operations\n\n- `listed.md` - a record that supersedes `mention-only.md`.\n")
+        root = squad_tree(self, readme, **{"listed": "# A record\n", "mention-only": "# A record\n"})
+        rc, out = run_check(root)
+        self.assertNotEqual(rc, 0, "a name mentioned inside another bullet's description passed as an index entry")
+        self.assertIn("mention-only.md", out, f"the verdict must name the unlisted record:\n{out}")
 
     def test_readme_is_scanned_for_en_gb_too(self):
         """README.md is a versioned en-US doc in the folder the check owns, so an en-GB word in it fails the run."""
@@ -189,6 +208,55 @@ class VerifySquadDocs(unittest.TestCase):
         root = squad_tree(self, "# Squad operations\n\n" + LISTED.format(name="record.md"), record=body)
         rc, out = run_check(root)
         self.assertEqual(rc, 0, f"a deployment to staging was read as the live tree being unmerged:\n{out}")
+
+    def test_a_comma_clause_naming_the_live_tree_does_not_vouch_for_a_fork_target(self):
+        """The target must directly follow the marker: the live-tree mention in the clause after the comma is a
+        different claim from the one the marker makes — here the fork is the target and the live tree is what
+        carries the fix anyway — so a done Status block over it is not the #1825 contradiction."""
+        body = ("# A record\n\nStatus: fixed in the fork.\n\n"
+                "The fix is not merged into the fork, but the live tree carries it.\n")
+        root = squad_tree(self, "# Squad operations\n\n" + LISTED.format(name="record.md"), record=body)
+        rc, out = run_check(root)
+        self.assertEqual(rc, 0, f"a live-tree mention in a later clause was read as the marker's own target:\n{out}")
+
+    def test_a_negated_live_tree_mention_does_not_vouch_for_a_staging_target(self):
+        """`not the live tree` names the live tree to deny it: read as the marker's target it turns a deployment to
+        staging into a landed body and reddens a record whose block and body agree."""
+        body = ("# A record\n\nStatus: pending deployment, the fix is ready in the fork.\n\n"
+                "The fix is deployed to staging, not the live tree.\n")
+        root = squad_tree(self, "# Squad operations\n\n" + LISTED.format(name="record.md"), record=body)
+        rc, out = run_check(root)
+        self.assertEqual(rc, 0, f"a negated live-tree mention vouched for a staging target:\n{out}")
+
+    def test_a_negated_landed_marker_over_the_live_tree_still_fails(self):
+        """The narrowing must not lose the marker it keeps: `is not yet landed` whose target is the live tree is still
+        the unmerged body the Status rule reads, so a block reading done over it still fails."""
+        body = ("# A record\n\nStatus: fixed in the fork.\n\n"
+                "The fix is not yet landed in `local/next`.\n")
+        root = squad_tree(self, "# Squad operations\n\n" + LISTED.format(name="record.md"), record=body)
+        rc, out = run_check(root)
+        self.assertNotEqual(rc, 0, "a body saying the fix is not yet landed in the live tree passed a done Status")
+        self.assertIn("Status", out, f"the verdict must name the Status line:\n{out}")
+
+    def test_a_negated_deployment_over_the_live_tree_still_fails(self):
+        """Same shape for the deployment marker: a preposition between marker and target is still the marker's own
+        sentence, so `is not deployed to the live tree` counts and the done Status block fails."""
+        body = ("# A record\n\nStatus: fixed in the fork.\n\n"
+                "The fix is not deployed to the live tree.\n")
+        root = squad_tree(self, "# Squad operations\n\n" + LISTED.format(name="record.md"), record=body)
+        rc, out = run_check(root)
+        self.assertNotEqual(rc, 0, "a body saying the fix is not deployed to the live tree passed a done Status")
+        self.assertIn("Status", out, f"the verdict must name the Status line:\n{out}")
+
+    def test_a_landed_body_over_a_pending_status_still_fails(self):
+        """And the mirror, with no preposition and no clause: a body declaring the fix landed in the live tree under a
+        block still reading pending is the contradiction, and the narrowing must keep catching it."""
+        body = ("# A record\n\nStatus: pending deployment, the fix is ready in the fork.\n\n"
+                "The fix has landed in the live tree.\n")
+        root = squad_tree(self, "# Squad operations\n\n" + LISTED.format(name="record.md"), record=body)
+        rc, out = run_check(root)
+        self.assertNotEqual(rc, 0, "a body saying the fix landed in the live tree passed a pending Status block")
+        self.assertIn("Status", out, f"the verdict must name the Status line:\n{out}")
 
     def test_the_repo_tree_passes(self):
         """The folder this repository ships passes its own check, README.md included in the en-US scan."""
