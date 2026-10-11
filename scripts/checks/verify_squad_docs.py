@@ -26,18 +26,23 @@ Three rules, deliberately narrow so each reads a declaration and not a mention:
   (c) A record's Status line agrees with the record's own body about whether
       the fix is live. The Status block is the `Status:` line and the lines
       that continue its paragraph, up to the first blank line — the block the
-      file puts first and a reader takes as the state of the world. When the
-      body of that same file says the fix is not merged into the live tree, the
-      Status block must carry a pending marker (`pending deployment`, `not
-      deployed`, `not merged`, `not yet landed`); a block that only says
-      `fixed in the fork` while the body says it is unmerged is the #1825
-      defect. The body is the source of truth, so the rule maintains itself:
-      when the operator lands the fix, both the status and the body sentence
-      change together.
+      file puts first and a reader takes as the state of the world. The body of
+      that same file is the source of truth, and the rule reads it in both
+      directions, each from one narrow declaration of the fix's own state:
+      when the body says the fix is not merged into the live tree, the Status
+      block must carry a pending marker (`pending deployment`, `not deployed`,
+      `not merged`, `not yet landed`) — a block that only says `fixed in the
+      fork` while the body says it is unmerged is the #1825 defect; and when the
+      body says the fix did reach the live tree, the block must not still claim
+      the fix is pending, which is the same contradiction stated from the other
+      end. The body is the source of truth, so the rule maintains itself: when
+      the operator lands the fix, both the status and the body sentence change
+      together.
 
-Rule (c) is deliberately asymmetric — a Status block claiming pending while the
-body says it landed is not caught — because only the first direction is a claim
-written ahead of what the file admits.
+The markers of rule (c) are sentence shapes — `is merged into`, `is not merged
+into` — and never a bare mention of a merge or a deployment: a body recounting
+that the mid-work tip *was* merged into the base is describing the defect the
+record was written about, not declaring the fix live.
 
 The scan is whole-file, code fences included: a record anywhere in the folder is
 the artifact under the en-US rule, and a fence is not an exemption from it.
@@ -136,6 +141,13 @@ def en_gb_spellings(line: str) -> list[str]:
 #outside it is not an offender.
 UNMERGED_BODY = ("is not merged into", "is not yet landed", "is not deployed")
 
+#The mirror of those three shapes, at the polarity that says the fix did reach
+#the live tree. A block still claiming pending over this body is the same
+#contradiction from the other end, and a mention of the past tense is not it:
+#`was merged into` is a record describing a defect, so only the present-tense
+#declaration counts.
+LANDED_BODY = ("is merged into", "has landed in", "is deployed to", "is deployed in")
+
 #What a Status block says instead of a bare done-state, while the body says the
 #fix is unmerged. Two words minimum, so a prose mention of "pending" elsewhere
 #in the block cannot satisfy the rule by accident.
@@ -204,15 +216,23 @@ def check_status_agrees_with_body(records: list[Path]) -> list[str]:
         if block is None:
             continue
         body = body_after_status(text)
+        pending = next((marker for marker in PENDING_STATUS if marker in block.lower()), None)
         unmerged = next((marker for marker in UNMERGED_BODY if marker in body), None)
-        if unmerged is None:
-            continue
-        if any(marker in block.lower() for marker in PENDING_STATUS):
-            continue
-        bad.append(
-            f"{path.name}: the Status line reads as done while the body says the fix "
-            f"'{unmerged}' the live tree: {block.splitlines()[0]}"
-        )
+        landed = next((marker for marker in LANDED_BODY if marker in body), None)
+        #A body admitting the fix is unmerged wins over one saying it landed: the
+        #two often sit in the same record ("merged in the fork, not in the live
+        #tree"), and it is the live tree the Status block is read as describing.
+        if unmerged is not None:
+            if pending is None:
+                bad.append(
+                    f"{path.name}: the Status line reads as done while the body says the fix "
+                    f"'{unmerged}' the live tree: {block.splitlines()[0]}"
+                )
+        elif landed is not None and pending is not None:
+            bad.append(
+                f"{path.name}: the Status line reads as pending while the body says the fix "
+                f"'{landed}' the live tree: {block.splitlines()[0]}"
+            )
     return bad
 
 
@@ -244,7 +264,8 @@ def main(argv: list[str]) -> int:
     print(
         f"PASS verify_squad_docs: {len(records)} record(s) listed as index bullets in README.md, "
         f"no en-GB spelling among the checked families and words in {len(documents)} file(s) "
-        "(README.md included), every Status line agreeing with its own body"
+        "(README.md included), no Status line contradicting its own body: every body declaring the fix "
+        "unmerged carries a pending marker, and none declaring it landed still claims the fix pending"
     )
     return 0
 

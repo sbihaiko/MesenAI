@@ -18,8 +18,21 @@ question weaker than the one its verdict claimed to have answered.
 `test_en_us_words_of_a_gb_shape_are_not_flagged` is the other half of that: a rule that fires on `raised`, `four` or
 `analyses` would redden innocent docs, which is worse than the miss it replaced.
 
+The review of f5cf2bf9f found two of the same shape remaining:
+
+  - Rule (c) was asymmetric while the PASS verdict said "every Status line agreeing with its own body", so a Status
+    block still reading pending over a body that said the fix had reached the live tree passed under a verdict
+    claiming the two agreed. The rule now reads the body's sentence in both directions, and
+    `test_status_block_declaring_pending_over_a_landed_body_fails` is that half with
+    `test_a_past_tense_mention_of_a_merge_is_not_a_landed_body` as its other, so a body recounting that a tip
+    *was* merged into the base is not read as the fix being live.
+  - The wiring test searched the makefile's text for the check's path, so the path sitting in a comment — or in a
+    target `doc-checks` never recurses into — passed as a wiring. It now asks `make -n doc-checks` which recipe
+    lines it would run, and compares a whole recipe line.
+
 Run: python3 scripts/test_verify_squad_docs.py
 """
+import os
 import shutil
 import subprocess
 import sys
@@ -29,7 +42,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 CHECK = ROOT / "scripts" / "checks" / "verify_squad_docs.py"
-MAKEFILE = ROOT / "makefile"
+#The recipe line `doc-checks` must carry for this check to gate anything.
+WIRED_COMMAND = "python3 scripts/checks/verify_squad_docs.py"
 
 LISTED = "- `{name}` - a record.\n"
 PROSE_ONLY = "The record `{name}` covers it.\n"
@@ -39,6 +53,22 @@ def run_check(root):
     """The check's verdict over `root`, as (exit code, stdout + stderr)."""
     p = subprocess.run([sys.executable, str(CHECK), str(root)], capture_output=True, text=True)
     return p.returncode, p.stdout + p.stderr
+
+
+def dry_run_doc_checks():
+    """Every recipe line `make -n doc-checks` would run, as a set of stripped commands.
+
+    The dry run is what answers the question: make expands the target's recursion
+    into `doc-checks-1..4` and prints each shard's recipes, and `-n` runs none of
+    them. A recipe line is compared whole, so the same path inside a recipe
+    comment is not a wiring.
+    """
+    env = {k: v for k, v in os.environ.items() if k != "MAKEFLAGS"}
+    p = subprocess.run(["make", "-n", "doc-checks"], cwd=ROOT, env=env,
+                       capture_output=True, text=True)
+    if p.returncode != 0:
+        raise AssertionError(f"`make -n doc-checks` failed (rc={p.returncode}):\n{p.stdout}{p.stderr}")
+    return {line.strip() for line in (p.stdout + p.stderr).splitlines()}
 
 
 def squad_tree(self, readme, **records):
@@ -113,6 +143,26 @@ class VerifySquadDocs(unittest.TestCase):
         rc, out = run_check(root)
         self.assertEqual(rc, 0, f"a Status block declaring the fix pending was reported:\n{out}")
 
+    def test_status_block_declaring_pending_over_a_landed_body_fails(self):
+        """The reverse direction is a contradiction too, and the verdict claimed to catch it: a Status block still
+        reading pending over a body that says the fix reached the live tree states the opposite of the file it heads."""
+        body = ("# A record\n\nStatus: pending deployment, the fix is ready in the fork.\n\n"
+                "The fix is merged into the live `local/next`.\n")
+        root = squad_tree(self, "# Squad operations\n\n" + LISTED.format(name="record.md"), record=body)
+        rc, out = run_check(root)
+        self.assertNotEqual(rc, 0, "a Status block reading pending passed over a body that says the fix is merged "
+                                   "into the live tree, while the verdict claimed the two agreed")
+        self.assertIn("Status", out, f"the verdict must name the Status line:\n{out}")
+
+    def test_a_past_tense_mention_of_a_merge_is_not_a_landed_body(self):
+        """The landed marker reads the fix's own state, not any use of the words: a body recounting that the
+        mid-work tip *was* merged into the base describes the defect the record was written about."""
+        body = ("# A record\n\nStatus: pending deployment, the fix is ready in the fork.\n\n"
+                "The land merged the branch commit, and the mid-work tip was merged into the base: that is the bug.\n")
+        root = squad_tree(self, "# Squad operations\n\n" + LISTED.format(name="record.md"), record=body)
+        rc, out = run_check(root)
+        self.assertEqual(rc, 0, f"a past-tense recount of the defect was read as the fix being live:\n{out}")
+
     def test_the_repo_tree_passes(self):
         """The folder this repository ships passes its own check, README.md included in the en-US scan."""
         rc, out = run_check(ROOT)
@@ -120,9 +170,13 @@ class VerifySquadDocs(unittest.TestCase):
         self.assertIn("README.md", out, "the verdict must say README.md was scanned, or a reader cannot tell")
 
     def test_check_is_wired_into_doc_checks(self):
-        """The check is durable only while doc-checks runs it: an unwired check gates nothing."""
-        self.assertIn("scripts/checks/verify_squad_docs.py", MAKEFILE.read_text(encoding="utf-8"),
-                      "makefile no longer runs scripts/checks/verify_squad_docs.py")
+        """The check is durable only while doc-checks runs it, so the question is asked of `make -n doc-checks` and
+        not of the makefile's text: a path sitting in a comment, or in a target that `doc-checks` never recurses
+        into, is not a wiring — and the makefile is mostly comments."""
+        commands = dry_run_doc_checks()
+        self.assertIn(WIRED_COMMAND, commands,
+                      "`make -n doc-checks` does not run scripts/checks/verify_squad_docs.py:\n"
+                      + "\n".join(sorted(commands)))
 
     def test_check_is_documented_in_the_owning_tree(self):
         """docs/AGENTS.md owns docs/ and states the Verification contract every doc change is gated by."""
