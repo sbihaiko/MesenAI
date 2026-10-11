@@ -249,6 +249,9 @@ jobs:
           # copy is the fork's squad/envelope.py verbatim with its sha256 in the
           # header; re-vendor it from the fork whenever the plugin's fields move,
           # which the guard enforces on any machine that has the plugin installed.
+          # This job therefore proves the graph agrees with the pinned copy, and
+          # NOT that the copy still agrees with the plugin's runtime: nothing here
+          # can, and a green check must not be read as that claim (ADR-0276).
           AGENT_SQUAD_PLUGIN: ${{ github.workspace }}/scripts/vendor/agent_squad/envelope.py
         run: make python-tests
 

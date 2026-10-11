@@ -24,6 +24,9 @@ to the guard by name. Whenever the contract did come from a runtime plugin, the
 recording is checked against it, so the two cannot disagree in silence: a field
 rename on the plugin side fails here on the next run of this suite, and the copy
 is re-vendored rather than left to stand in for the plugin (review of PR #1804).
+Which of those two contracts is in force, and what each one does and does not
+prove, is ADR-0276: CI proves the graph agrees with the pinned copy, and the
+plugin-side comparison is the part only a machine holding the plugin can make.
 
 When no contract can be loaded the guard FAILS. It never skips: a skip is a PASS
 that asserts nothing, and skipping is how this check let `turns` sit in the graph
