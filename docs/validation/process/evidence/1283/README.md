@@ -5,7 +5,7 @@ on the notebook's built-in display (`MESEN_GUI_WINDOW` unset, so `primary`), aga
 (`7f8e5b4be` plus the `play.library.search` AutomationId in `PlayerRomPickerView.axaml`) with the native core from a Release
 build of `main` beside the launcher.
 
-All four results files were produced against the committed script, sha256 `e4ca709c…` (the `script.sha256` field in each file).
+All four results files were produced against the committed script, sha256 `89de073f…` (the `script.sha256` field in each file).
 Earlier runs of the launch, home and library batches used a previous script version (`2a22db0e…`); they are replaced.
 
 | File | Batch | Result |
