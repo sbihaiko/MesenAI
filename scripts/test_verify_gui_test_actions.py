@@ -89,7 +89,8 @@ class VerifyGuiTestActions(unittest.TestCase):
         # the chord is put on the step that opens a batch once that batch's observation is taken away - the
         # same mutation, on a step that really does press.
         doc = self.doc()
-        self.first_automated(self.opens_with_its_first_press(doc))["action"] = {"name": "pad.chord", "args": {"ticks": 2}}
+        home = self.opens_with_its_first_press(doc)
+        self.first_automated(home)["action"] = {"name": "pad.chord", "args": {"ticks": 2}}
         self.write(doc)
         code, out = run_check(self.tmp)
         self.assertEqual(code, 1, out)
@@ -101,7 +102,8 @@ class VerifyGuiTestActions(unittest.TestCase):
         # a batch that opens with one drops the hold the same way #1232's press was
         # dropped - the rule's own words are "actions that put a button down".
         doc = self.doc()
-        self.first_automated(self.opens_with_its_first_press(doc))["action"] = {"name": "pad.hold", "args": {"button": "Up", "ticks": 4}}
+        home = self.opens_with_its_first_press(doc)
+        self.first_automated(home)["action"] = {"name": "pad.hold", "args": {"button": "Up", "ticks": 4}}
         self.write(doc)
         code, out = run_check(self.tmp)
         self.assertEqual(code, 1, out)
