@@ -6,9 +6,9 @@
 #
 # The marker rule is not invented here: forkonly.sh is the ONE rule that decides
 # fork-only work, and both sides must read the SAME pattern, character for
-# character:
-#
-#   ^[[:space:]>*+-]*\**[Ff]ork-only work
+# character. That pattern is not written down in this file — it is read out of
+# scripts/report-bug.sh below and printed with the verdict, so the pattern a
+# reader sees here is the one that ran (#1807).
 #
 # A MARKER LINE — the phrase owning a line, plain, indented, bulleted, bolded or
 # quoted — is the squad's own tooling and takes [SQUAD]. A body that only
@@ -272,10 +272,12 @@ grep -qx 'f971fb55' < <(block_args project item-edit) \
 grep -qx '0a877460' < <(block_args project item-edit) \
   || fail "the P1 edit no longer sets the P1 option"
 
+echo "PASS: report-bug.sh prefixes every issue it files, one prefix chosen from the body"
+# The pattern the run enforced, as read from the helper above rather than
+# restated: whatever a reader sees here is what report-bug.sh matched with.
+echo "      (marker pattern, read from scripts/report-bug.sh: $MARKER_PATTERN)"
 if [[ -n "$FORKONLY_SH" ]]; then
-  echo "PASS: report-bug.sh prefixes every issue it files, one prefix chosen from the body"
   echo "      (marker parity checked against $FORKONLY_SH)"
 else
-  echo "PASS: report-bug.sh prefixes every issue it files, one prefix chosen from the body"
   echo "      (SKIPPED forkonly.sh parity: forkonly.sh not found on this machine)"
 fi
