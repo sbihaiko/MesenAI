@@ -1,6 +1,6 @@
 # ADR-0275: A GUI test scenario records each run as its own issue, with one emoji row per case
 
-- Status: proposed (2026-10-11). The owner picked the levels, the case rows, the bug rule and the area layout (below). The layout is mocked up by hand in example tree #1422. The ADR becomes accepted when the owner approves that mock-up. Implementation then goes to fork-only tickets in agent-squad, cut from the "`/to-test-scenario` changes" section below.
+- Status: accepted (2026-10-11). The owner accepted it and asked for the implementation in the fork, then a refresh of the live skill: "aplique no fork e depois atualize a versão atual" (2026-10-11), confirming "Sim, aceitar". It is a pending slice, cut into fork-only tickets #1472 (A), #1473 (B), #1474 (C), #1475 (D), #1476 (E), #1477 (F) and #1478 (G). Migrating #1286 itself is not part of it: the owner chose "Não migrar agora". The layout is mocked up in example tree #1422.
 - Date: 2026-10-10 (area layout and tool spec added 2026-10-11, after an adversarial review against the code)
 - Related:
   - ADR-0272: the GUI test hook, adapter interface and script format. Unchanged except the optional batch fields of §2.
