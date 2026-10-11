@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
 # Issue #1563: scripts/report-bug.sh must prefix every issue title it files
 # with exactly one marker chosen from the body — "[SQUAD] " when the body
-# carries the "Fork-only work" marker line (the same line the squad's
-# forkonly.sh reads; the work is the squad's own tooling) and "[MesenAI] "
-# otherwise (the work lands in this repository). A title that already starts
-# with "[" is left alone, so a caller that names its own prefix never gets two.
+# carries the "Fork-only work:" marker line at the start of a line (the same
+# line the squad's forkonly.sh reads; the work is the squad's own tooling) and
+# "[MesenAI] " otherwise (the work lands in this repository). The marker is a
+# line, not a phrase: a body that only mentions "Fork-only work" in its prose
+# lands in this repository. A title that already starts with "[" is left
+# alone, so a caller that names its own prefix never gets two.
 #
 # Host-free: the real scripts/report-bug.sh runs, but the only `gh` on its
 # PATH is a stub in a temp dir that records its argv and answers just enough
@@ -73,6 +75,14 @@ run_case() {
 
 BODY_PLAIN="Repro: run the widget. Expected: it saves. Observed: it crashes."
 BODY_FORK="Fork-only work: this is the squad's own tooling, not MesenAI."
+# Ordinary report prose that happens to mention the phrase: it carries no
+# marker line, so it is not the squad's own tooling.
+BODY_MENTION="The report explains why Fork-only work is out of scope."
+# The marker on its own line of a multi-line body, which is how a real body
+# carries it.
+BODY_FORK_MULTILINE="Repro: the child dies on launch.
+Fork-only work: this is the squad's own tooling, not MesenAI.
+Observed: exit 1."
 
 got=$(run_case "Widget crashes on save" "$BODY_PLAIN")
 [[ "$got" == "[MesenAI] Widget crashes on save" ]] \
@@ -81,6 +91,14 @@ got=$(run_case "Widget crashes on save" "$BODY_PLAIN")
 got=$(run_case "Squad tooling drops a child" "$BODY_FORK")
 [[ "$got" == "[SQUAD] Squad tooling drops a child" ]] \
   || fail "Fork-only body: expected '[SQUAD] Squad tooling drops a child', got '$got'"
+
+got=$(run_case "Widget report mentions fork-only work" "$BODY_MENTION")
+[[ "$got" == "[MesenAI] Widget report mentions fork-only work" ]] \
+  || fail "prose mentioning the phrase: expected '[MesenAI] Widget report mentions fork-only work', got '$got'"
+
+got=$(run_case "Squad child dies on launch" "$BODY_FORK_MULTILINE")
+[[ "$got" == "[SQUAD] Squad child dies on launch" ]] \
+  || fail "marker on its own line: expected '[SQUAD] Squad child dies on launch', got '$got'"
 
 got=$(run_case "[MesenAI] Already prefixed" "$BODY_PLAIN")
 [[ "$got" == "[MesenAI] Already prefixed" ]] \

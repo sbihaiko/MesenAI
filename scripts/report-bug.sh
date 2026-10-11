@@ -32,12 +32,14 @@ esac
 
 # Every issue this helper files carries exactly one prefix, chosen from the
 # body and never guessed: "[SQUAD] " when the body carries the "Fork-only
-# work" marker line (the work is the squad's own tooling — the same line
-# forkonly.sh reads), "[MesenAI] " otherwise (the work lands in this
-# repository). A title that already starts with "[" keeps the prefix its
+# work:" marker line at the start of a line (the work is the squad's own
+# tooling — the same line forkonly.sh reads), "[MesenAI] " otherwise (the
+# work lands in this repository). The marker is matched as a line, not as a
+# phrase: a report that merely mentions "Fork-only work" in its prose lands in
+# this repository. A title that already starts with "[" keeps the prefix its
 # caller named, so it never gets two.
 if [[ "$TITLE" != \[* ]]; then
-  if grep -Fq "Fork-only work" <<<"$BODY"; then
+  if grep -Eq '^Fork-only work:' <<<"$BODY"; then
     TITLE="[SQUAD] $TITLE"
   else
     TITLE="[MesenAI] $TITLE"

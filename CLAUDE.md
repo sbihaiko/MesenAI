@@ -115,9 +115,11 @@ It creates the Issue (label `bug`) and adds it to the board with Status =
 
 Every issue the helper files carries exactly one title prefix, chosen from
 the body and never guessed: `[SQUAD] ` when the body carries the
-`Fork-only work` marker line (the work is the squad's own tooling — the same
-line `forkonly.sh` reads), `[MesenAI] ` otherwise (the work lands in this
-repository). A title that already starts with `[` is left alone, so a caller
+`Fork-only work:` marker line at the start of a line (the work is the squad's
+own tooling — the same line `forkonly.sh` reads), `[MesenAI] ` otherwise (the
+work lands in this repository). The marker is matched as a line, not as a
+phrase, so a body that only mentions "Fork-only work" in its prose is
+`[MesenAI] `. A title that already starts with `[` is left alone, so a caller
 that names its own prefix never gets two.
 
 Board fields: Status (To triage → Todo → Doing → Testing → Done), Priority
