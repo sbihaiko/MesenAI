@@ -136,6 +136,15 @@ namespace Mesen.Tests.Play
 			Assert.Equal(PlayEscAction.CloseSheetToOverlay, PlayEsc.Next(true, sheet, overlayVisible: false));
 		}
 
+		//#1471 (ADR-0256 W-P8, HOME-06): Settings opened over the home has no game
+		//under it, so there is no W-P4 to return to - B/Esc closes the sheet to the
+		//home and opens nothing.
+		[Fact]
+		public void Settings_over_the_home_closes_to_the_home_not_to_an_overlay()
+		{
+			Assert.Equal(PlayEscAction.CloseSheet, PlayEsc.Next(gameLoaded: false, PlaySheet.Settings, overlayVisible: false));
+		}
+
 		[Fact]
 		public void The_first_start_picker_is_dismissed_not_returned_to_an_overlay()
 		{
