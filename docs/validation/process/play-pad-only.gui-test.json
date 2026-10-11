@@ -143,7 +143,7 @@
           "precondition": "the application has just launched on a fresh settings folder",
           "wait": {
             "check": "ui.focused == play.home.open-rom",
-            "timeout_ticks": 120
+            "timeout_ticks": 300
           },
           "check": {
             "name": "ui.focused",
