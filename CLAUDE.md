@@ -83,9 +83,9 @@ File one when you (or a subagent) find a real, reproducible bug that is
 user asks to "open a bug" / "file an issue". Architecture/trade-off decisions
 are not bugs; they go through `/adr`.
 
-**Rule — a bug is fixed ASAP and sits outside the waves** (owner, 2026-10-11:
-"bugs nao pertencem a waves, eles devem ser corrigidos ASAP", and "tmb nao
-precisam da label ready-for-agent e fork-only"):
+**Rule — a bug is fixed ASAP and sits outside the waves** (owner decision,
+2026-10-11: bugs do not belong to waves and are fixed ASAP, and they need
+neither the `ready-for-agent` nor the `fork-only` label):
 
 - A bug carries the `bug` label and nothing else from the ticket vocabulary:
   no `wave:NN`, no `ready-for-agent`, no `fork-only`. A wave orders the slices
