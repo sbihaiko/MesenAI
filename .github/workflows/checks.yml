@@ -205,6 +205,12 @@ jobs:
   # `unittest discover` collects a small fraction of the cases; the runner
   # loops over the files instead. Same Python deps as the doc-checks shards, minus
   # SDL2 (no compilation here). Measured 2026-09-14: 38 files, ~25 s.
+  #
+  # No plugin is installed here, which is why the squad spawn-field guard
+  # (scripts/test_squad_graph_spawn_fields.py) reads its contract from the
+  # committed read-only pin at scripts/vendor/agent_squad/envelope.py and fails
+  # when it cannot be loaded - #1804's finding was that this job reported PASS
+  # while the guard skipped for want of a plugin.
   python-tests:
     runs-on: ubuntu-22.04
 
