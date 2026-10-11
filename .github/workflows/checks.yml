@@ -206,15 +206,23 @@ jobs:
   # loops over the files instead. Same Python deps as the doc-checks shards, minus
   # SDL2 (no compilation here). Measured 2026-09-14: 38 files, ~25 s.
   #
-  # No plugin is installed here, and the plugin's own repository is private: the
-  # guard (scripts/test_squad_graph_spawn_fields.py) reads its contract from a
-  # runtime plugin, and naming the committed read-only copy through
-  # AGENT_SQUAD_PLUGIN below is this job supplying one. The guard never reaches
-  # for that copy on its own - #1804's finding was that it did, so a field rename
-  # on the plugin side could not red this job - and wherever a real plugin is
-  # installed it is the contract, with the copy checked against it and any
-  # disagreement failing (which is how a rename reaches this repository: on the
-  # machine that runs the squad, at the next `make python-tests`).
+  # No plugin is installed here, and the plugin's own repository is private
+  # (Korck-lab/agent-squad answers 404 for the tokens this repository holds), so
+  # this job cannot read agent-squad's runtime REQUEST_FIELDS. It does not hand
+  # the guard (scripts/test_squad_graph_spawn_fields.py) a stand-in for them:
+  # #1804's finding was that naming the committed read-only copy through
+  # AGENT_SQUAD_PLUGIN made a copy of the artifact under test the contract, so a
+  # field rename on the plugin side could not red this job. The guard is given no
+  # contract at all now, a committed copy is refused as a contract, and what
+  # runs here is the check that needs nothing else: every example spawn is
+  # bounded by the field list its own graph declares for a request - the #1800
+  # shape, a list that moved with an example left behind. This job therefore
+  # proves the graph agrees with itself, and NOT that its list still matches the
+  # plugin; a green check here is not a claim about the plugin. Agreement with
+  # the plugin is checked where a plugin is installed, at the next `make
+  # python-tests` on that machine, which is where a rename reaches this
+  # repository (the guard reads the newest installed plugin and fails, naming
+  # both, until the copy is re-vendored).
   python-tests:
     runs-on: ubuntu-22.04
 
@@ -241,18 +249,10 @@ jobs:
           python3 -m pip install --user PyYAML==6.0.3 Pillow==12.3.0 numpy==2.2.6 # numpy 2.3+ dropped Python 3.10 (ubuntu-22.04 runners)
 
       - name: Run the Python suite
-        env:
-          # The spawn-field guard's contract, named explicitly: this runner has no
-          # plugin installed and cannot read the plugin's repository
-          # (Korck-lab/agent-squad answers 404 for the tokens this repository
-          # holds), so the committed read-only copy is what it checks against. The
-          # copy is the fork's squad/envelope.py verbatim with its sha256 in the
-          # header; re-vendor it from the fork whenever the plugin's fields move,
-          # which the guard enforces on any machine that has the plugin installed.
-          # This job therefore proves the graph agrees with the pinned copy, and
-          # NOT that the copy still agrees with the plugin's runtime: nothing here
-          # can, and a green check must not be read as that claim (ADR-0276).
-          AGENT_SQUAD_PLUGIN: ${{ github.workspace }}/scripts/vendor/agent_squad/envelope.py
+        # No AGENT_SQUAD_PLUGIN here on purpose: the only contract this runner
+        # could name is the committed copy, and a copy of the artifact under test
+        # is not a contract. The guard says in its own output which half it
+        # checked and which half it did not.
         run: make python-tests
 
   # The PR gate's compile of `Core/`. `make core-unit-tests` builds the listed

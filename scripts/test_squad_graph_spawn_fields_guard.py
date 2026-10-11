@@ -1,22 +1,33 @@
 #!/usr/bin/env python3
-"""The spawn-field guard must fail, never pass, when the contract cannot be loaded.
+"""The spawn-field guard must fail, never pass, when it cannot bound an example.
 
 `scripts/test_squad_graph_spawn_fields.py` is only worth its runtime if a graph
 that reintroduces a field agent-squad rejects turns it red. It reported PASS
 twice where it should have refused: first a `SKIP` when no plugin was installed
-(the CI image has none), then a fallback to the committed read-only copy at
-`scripts/vendor/agent_squad/envelope.py`, which made that copy the contract --
-so a field rename on the plugin side left CI green while the router's requests
-were rejected whole (`unknown_field:*`; PR #1804, findings at
+(the CI image has none), then - the finding the review of `b04dae52e` kept -
+CI still handing it the committed read-only copy through `AGENT_SQUAD_PLUGIN`,
+which made a copy of the artifact under test the contract, so a field rename on
+the plugin side left the job green while the router's requests were rejected
+whole (`unknown_field:*`; PR #1804, findings at
 scripts/test_squad_graph_spawn_fields.py:159, :173 and :189).
 
 These cases pin the fixes from the outside: the guard is run as its own process
 against a throwaway tree, so what is asserted is its exit code and its output,
-never its internals. The contract is a runtime plugin, named by `--plugin` or
-`AGENT_SQUAD_PLUGIN`, or the newest plugin installed under the plugin cache;
-the committed copy is read only when one of those names it, and a runtime plugin
-that disagrees with the copy fails. A fence that should hold an example request
-but does not parse is a failure, not an example skipped over.
+never its internals.
+
+- The contract is a runtime plugin: `--plugin`, `AGENT_SQUAD_PLUGIN`, or the
+  newest plugin installed under the plugin cache.
+- A committed copy is **never** a contract, named or not: it is a recording of
+  a runtime plugin, and a recording cannot disagree with itself. It is still
+  read - against a plugin that answered and against its own sha256 header - so
+  it cannot age in silence on a machine that has both.
+- With no plugin reachable at all, the guard still refuses to be vacuous: each
+  graph's example is checked against the field list that graph declares for
+  itself, a graph declaring none fails, and the run says in the open that the
+  plugin half is not what it checked.
+
+A fence that should hold an example request but does not parse is a failure, not
+an example skipped over.
 
 Usage: python3 scripts/test_squad_graph_spawn_fields_guard.py
 Exit 0 when every case behaves; exit 1 with one line per case that does not.
@@ -34,6 +45,13 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 GUARD = Path("scripts") / "test_squad_graph_spawn_fields.py"
 VENDORED = Path("scripts") / "vendor" / "agent_squad" / "envelope.py"
 GRAPH = Path("docs") / "squad" / "workflows" / "dynamic.graph.json"
+
+# The copy's own field list: a fixture plugin carrying it lets a case fail for
+# the one reason it is about instead of for a plugin/copy disagreement.
+COPY_FIELDS = {
+    "prompt", "skill", "model", "effort", "tools", "stalls", "spend",
+    "deadline", "workspace", "inputs", "after", "task",
+}
 
 FAILURES = []
 CASES = 0
@@ -70,6 +88,16 @@ def tree(tmp, *, vendored):
     return root, home
 
 
+def plugin(tmp, fields, name="plugin"):
+    """A plugin root holding squad/envelope.py, the shape the guard imports."""
+    root = Path(tmp) / name
+    (root / "squad").mkdir(parents=True)
+    (root / "squad" / "envelope.py").write_text(
+        f"REQUEST_FIELDS = set({sorted(fields)!r})\n", encoding="utf-8"
+    )
+    return root
+
+
 def run(root, home, *args, env=None):
     """The guard as its own process, with HOME pointed away from any plugin cache."""
     proc = subprocess.run(
@@ -100,42 +128,63 @@ def case_missing_plugin_is_a_hard_failure(tmp):
     )
 
 
-def case_no_plugin_anywhere_is_a_hard_failure(tmp):
-    """No --plugin, no $AGENT_SQUAD_PLUGIN, no installed plugin: refuse, never skip."""
+def case_the_committed_copy_is_never_a_contract(tmp):
+    """What CI used to do: hand the guard the copy of the artifact it tests."""
     root, home = tree(tmp, vendored=True)
-    code, out = run(root, home)
-    check("no plugin anywhere exits non-zero", code != 0, f"exit {code}\n{out}")
-    check("no plugin anywhere does not skip", "SKIP" not in out, out)
+    copy = str(root / VENDORED)
+    for args, env in ((("--plugin", copy), None), ((), {"AGENT_SQUAD_PLUGIN": copy})):
+        code, out = run(root, home, *args, env=env)
+        named = args[0] if args else "AGENT_SQUAD_PLUGIN"
+        check(f"a copy named by {named} is not a contract", code != 0, f"exit {code}\n{out}")
+        check(f"a copy named by {named} is refused as a recording", "recording" in out, out)
+        check(f"a copy named by {named} checks no graph", "every example spawn" not in out, out)
 
 
-def case_the_committed_copy_is_not_reached_for_on_its_own(tmp):
-    """The copy is in the tree and the guard still refuses it: it is a recording."""
+def case_no_plugin_checks_each_graph_against_its_own_declaration(tmp):
+    """No plugin anywhere: the guard checks what it can and says what it did not."""
     root, home = tree(tmp, vendored=True)
     code, out = run(root, home)
-    check("a copy alone is not a contract", code != 0, f"exit {code}\n{out}")
+    check("no plugin exits 0 when every example matches its graph", code == 0, f"exit {code}\n{out}")
     check(
-        "a copy alone says the contract cannot be loaded",
-        "cannot be loaded" in out,
+        "no plugin checks each graph against its own declared fields",
+        "every example spawn names only accepted fields" in out,
+        out,
+    )
+    check(
+        "no plugin says the plugin half is not what it checked",
+        "NOT CHECKED" in out and "REQUEST_FIELDS" in out,
         out,
     )
 
 
-def case_named_copy_checks_the_graph(tmp):
-    """What CI does: no plugin installed, the copy named, and a real verdict."""
+def case_an_example_outside_its_own_declaration_fails_without_a_plugin(tmp):
+    """The #1800 shape: the graph's list was updated and its example was not."""
     root, home = tree(tmp, vendored=True)
-    named = str(root / VENDORED)
-    code, out = run(root, home, env={"AGENT_SQUAD_PLUGIN": named})
-    check("named-copy run exits 0", code == 0, f"exit {code}\n{out}")
-    check("named-copy run checks the graph", "every example spawn names only accepted fields" in out, out)
-
     doc, node = example_fence(root)
     node["instructions"] = node["instructions"].replace(
         '"workspace": "worktrees/child"', '"turns": 100, "workspace": "worktrees/child"'
     )
     (root / GRAPH).write_text(json.dumps(doc), encoding="utf-8")
-    code, out = run(root, home, env={"AGENT_SQUAD_PLUGIN": named})
-    check("named-copy run catches a reintroduced field", code != 0, f"exit {code}\n{out}")
-    check("named-copy run names the field", "['turns']" in out, out)
+    code, out = run(root, home)
+    check("an example its own graph does not declare exits non-zero", code != 0, f"exit {code}\n{out}")
+    check("an example its own graph does not declare names the field", "['turns']" in out, out)
+
+
+def case_a_graph_declaring_no_field_list_fails(tmp):
+    """Nothing bounds the example: that is the skip this guard must never take."""
+    root, home = tree(tmp, vendored=True)
+    doc, node = example_fence(root)
+    node["instructions"] = node["instructions"].replace(
+        "each `{prompt, skill, model, effort, tools, stalls, spend, deadline, workspace}`", "each request"
+    )
+    (root / GRAPH).write_text(json.dumps(doc), encoding="utf-8")
+    code, out = run(root, home)
+    check("a graph declaring no field list exits non-zero", code != 0, f"exit {code}\n{out}")
+    check(
+        "a graph declaring no field list says so",
+        "declares no" in out,
+        out,
+    )
 
 
 def case_tampered_copy_is_a_hard_failure(tmp):
@@ -145,7 +194,7 @@ def case_tampered_copy_is_a_hard_failure(tmp):
     copy.write_text(
         copy.read_text(encoding="utf-8").replace('"task"}', '"task", "turns"}'), encoding="utf-8"
     )
-    code, out = run(root, home, env={"AGENT_SQUAD_PLUGIN": str(copy)})
+    code, out = run(root, home, "--plugin", str(plugin(tmp, COPY_FIELDS)))
     check("tampered copy exits non-zero", code != 0, f"exit {code}\n{out}")
     check("tampered copy names the sha256 drift", "sha256" in out, out)
 
@@ -153,16 +202,26 @@ def case_tampered_copy_is_a_hard_failure(tmp):
 def case_runtime_plugin_that_disagrees_with_the_copy_fails(tmp):
     """A plugin whose fields moved: the copy is re-vendored, never left to disagree."""
     root, home = tree(tmp, vendored=True)
-    plugin = Path(tmp) / "plugin" / "squad"
-    plugin.mkdir(parents=True)
-    (plugin / "envelope.py").write_text('REQUEST_FIELDS = {"prompt", "turns"}\n', encoding="utf-8")
-    code, out = run(root, home, "--plugin", str(plugin.parent))
+    code, out = run(root, home, "--plugin", str(plugin(tmp, {"prompt", "turns"})))
     check("a plugin the copy disagrees with exits non-zero", code != 0, f"exit {code}\n{out}")
     check(
         "the disagreement names the copy and the plugin",
         "records agent-squad" in out,
         out,
     )
+
+
+def case_a_declaration_the_plugin_rejects_fails(tmp):
+    """A graph declaring a field the plugin rejects is red even where examples agree."""
+    root, home = tree(tmp, vendored=True)
+    doc, node = example_fence(root)
+    node["instructions"] = node["instructions"].replace(
+        "spend, deadline, workspace}`", "spend, deadline, workspace, turns}`"
+    ).replace('"workspace": "worktrees/child"', '"turns": 100, "workspace": "worktrees/child"')
+    (root / GRAPH).write_text(json.dumps(doc), encoding="utf-8")
+    code, out = run(root, home, "--plugin", str(plugin(tmp, COPY_FIELDS)))
+    check("a declaration the plugin rejects exits non-zero", code != 0, f"exit {code}\n{out}")
+    check("a declaration the plugin rejects names the field", "['turns']" in out, out)
 
 
 def case_malformed_example_fence_is_a_hard_failure(tmp):
@@ -175,7 +234,7 @@ def case_malformed_example_fence_is_a_hard_failure(tmp):
         '"spend": 6.5, "workspace"', '"turns": 100, "spend": 6.5, "workspace"'
     ).replace('"worktrees/child"}\n```', '"worktrees/child",}\n```')
     (root / GRAPH).write_text(json.dumps(doc), encoding="utf-8")
-    code, out = run(root, home, env={"AGENT_SQUAD_PLUGIN": str(root / VENDORED)})
+    code, out = run(root, home)
     check("a malformed example fence exits non-zero", code != 0, f"exit {code}\n{out}")
     check("a malformed example fence does not report PASS", "every example spawn" not in out, out)
 
@@ -186,11 +245,13 @@ def main():
         sys.exit(1)
     cases = [
         case_missing_plugin_is_a_hard_failure,
-        case_no_plugin_anywhere_is_a_hard_failure,
-        case_the_committed_copy_is_not_reached_for_on_its_own,
-        case_named_copy_checks_the_graph,
+        case_the_committed_copy_is_never_a_contract,
+        case_no_plugin_checks_each_graph_against_its_own_declaration,
+        case_an_example_outside_its_own_declaration_fails_without_a_plugin,
+        case_a_graph_declaring_no_field_list_fails,
         case_tampered_copy_is_a_hard_failure,
         case_runtime_plugin_that_disagrees_with_the_copy_fails,
+        case_a_declaration_the_plugin_rejects_fails,
         case_malformed_example_fence_is_a_hard_failure,
     ]
     for case in cases:
