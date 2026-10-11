@@ -136,13 +136,25 @@ namespace Mesen.Tests.Play
 			Assert.Equal(PlayEscAction.CloseSheetToOverlay, PlayEsc.Next(true, sheet, overlayVisible: false));
 		}
 
-		//#1471 (ADR-0256 W-P8, HOME-06): Settings opened over the home has no game
-		//under it, so there is no W-P4 to return to - B/Esc closes the sheet to the
-		//home and opens nothing.
-		[Fact]
-		public void Settings_over_the_home_closes_to_the_home_not_to_an_overlay()
+		//#1471 (ADR-0256 W-P8, HOME-06): the whole close-to-overlay family is one
+		//of sheets with a game under them - W-P4 is what each of them returns to.
+		//With no game loaded there is no W-P4 to return to, so B/Esc closes the
+		//sheet to the home and opens nothing. Settings is the member a pad can
+		//open over the home today (HOME-06); the rest are the same rule, so a
+		//sheet that joins the family cannot land on a pause of nothing.
+		[Theory]
+		[InlineData(PlaySheet.PackPickerFromOverlay)]
+		[InlineData(PlaySheet.Enhancements)]
+		[InlineData(PlaySheet.Cheats)]
+		[InlineData(PlaySheet.SaveStates)]
+		[InlineData(PlaySheet.PackDetail)]
+		[InlineData(PlaySheet.PackDep)]
+		[InlineData(PlaySheet.Replays)]
+		[InlineData(PlaySheet.Settings)]
+		[InlineData(PlaySheet.Controller)]
+		public void A_sheet_with_no_game_under_it_closes_to_the_home(PlaySheet sheet)
 		{
-			Assert.Equal(PlayEscAction.CloseSheet, PlayEsc.Next(gameLoaded: false, PlaySheet.Settings, overlayVisible: false));
+			Assert.Equal(PlayEscAction.CloseSheet, PlayEsc.Next(gameLoaded: false, sheet, overlayVisible: false));
 		}
 
 		[Fact]

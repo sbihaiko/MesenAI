@@ -173,8 +173,9 @@ public enum PlayEscAction
 	DismissPackPicker,
 	//Rule 8: a sheet opened from the pause overlay closes back to it.
 	CloseSheetToOverlay,
-	//#1471 (ADR-0256 W-P8): a sheet with no game under it (Settings over the
-	//home) closes to the home; there is no W-P4 to return to.
+	//#1471 (ADR-0256 W-P8): a sheet of the close-to-overlay family with no game
+	//under it (Settings over the home) closes to the home; there is no W-P4 to
+	//return to.
 	CloseSheet,
 	CloseOverlayAndResume,
 	OpenOverlayAndPause,
@@ -209,10 +210,13 @@ public static class PlayEsc
 			//chain PlayEsc has always run, with one state more.
 			case PlaySheet.Controller when capturing:
 				return PlayEscAction.CancelCapture;
-			//#1471 (ADR-0256 W-P8, HOME-06): Settings over the home has no game under
-			//it, so Back closes to the home, not to a W-P4 with nothing to pause.
-			case PlaySheet.Settings when !gameLoaded:
-				return PlayEscAction.CloseSheet;
+			//#1471 (ADR-0256 W-P8, HOME-06): the family below is one of sheets with
+			//a game under them - W-P4 is what each of them came from and what Back
+			//returns to. With no game loaded there is no W-P4 to return to, so Back
+			//closes the sheet to the home and opens nothing. Settings is the member
+			//a pad can open over the home today (HOME-06); reading the rule here for
+			//the family rather than for that one member is what keeps the next sheet
+			//added to it from landing on a pause of nothing.
 			case PlaySheet.PackPickerFromOverlay:
 			case PlaySheet.Enhancements:
 			case PlaySheet.Cheats:
@@ -222,7 +226,7 @@ public static class PlayEsc
 			case PlaySheet.Replays:
 			case PlaySheet.Settings:
 			case PlaySheet.Controller:
-				return PlayEscAction.CloseSheetToOverlay;
+				return gameLoaded ? PlayEscAction.CloseSheetToOverlay : PlayEscAction.CloseSheet;
 		}
 		if(overlayVisible) {
 			return PlayEscAction.CloseOverlayAndResume;
