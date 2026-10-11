@@ -173,6 +173,9 @@ public enum PlayEscAction
 	DismissPackPicker,
 	//Rule 8: a sheet opened from the pause overlay closes back to it.
 	CloseSheetToOverlay,
+	//#1471 (ADR-0256 W-P8): a sheet with no game under it (Settings over the
+	//home) closes to the home; there is no W-P4 to return to.
+	CloseSheet,
 	CloseOverlayAndResume,
 	OpenOverlayAndPause,
 	//ADR-0255 slice 3: the Controller sheet is capturing "press a control", so
@@ -206,6 +209,10 @@ public static class PlayEsc
 			//chain PlayEsc has always run, with one state more.
 			case PlaySheet.Controller when capturing:
 				return PlayEscAction.CancelCapture;
+			//#1471 (ADR-0256 W-P8, HOME-06): Settings over the home has no game under
+			//it, so Back closes to the home, not to a W-P4 with nothing to pause.
+			case PlaySheet.Settings when !gameLoaded:
+				return PlayEscAction.CloseSheet;
 			case PlaySheet.PackPickerFromOverlay:
 			case PlaySheet.Enhancements:
 			case PlaySheet.Cheats:

@@ -186,6 +186,10 @@ namespace Mesen.ViewModels
 					OpenPauseOverlay();
 					break;
 
+				case PlayEscAction.CloseSheet:
+					CloseSheet(sheet);
+					break;
+
 				case PlayEscAction.CloseOverlayAndResume:
 					//Back to the game: W-P7's detour (if one was open) ends here.
 					EndEnhancementsDraftVisit();
