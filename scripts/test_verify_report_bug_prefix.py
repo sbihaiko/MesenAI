@@ -56,10 +56,8 @@ def fixture_repo(pattern):
 
 
 class VerifyReportBugPrefix(unittest.TestCase):
-    def setUp(self):
-        self.addCleanup(shutil.rmtree, getattr(self, "tmp", None), True)
-
     def test_check_prints_the_pattern_the_helper_runs(self):
+        """The verdict names the marker pattern the helper runs, read out of the helper, not a copy."""
         pattern = helper_pattern(ROOT)
         rc, out = run_check(CHECK)
         self.assertEqual(rc, 0, f"the check is red at HEAD:\n{out}")
@@ -67,18 +65,33 @@ class VerifyReportBugPrefix(unittest.TestCase):
                       "the check's verdict must name the marker pattern it enforced, read from the helper")
 
     def test_helper_pattern_change_reaches_the_check_output(self):
+        """A helper moved to a pattern the check has never seen must reach the check's output, not be papered over."""
         moved = helper_pattern(ROOT).replace(" work", f"{MOVED}work")
         self.assertNotEqual(moved, helper_pattern(ROOT))
         self.tmp = fixture_repo(moved)
+        # Registered here, not in `setUp`: a path read before `fixture_repo` made the tree would be `None`.
+        self.addCleanup(shutil.rmtree, self.tmp, True)
         rc, out = run_check(self.tmp / "scripts" / "checks" / CHECK.name)
         self.assertEqual(rc, 0, f"the check is red on a tree whose helper runs '{moved}':\n{out}")
         self.assertIn(moved, out, f"the check must report '{moved}', the pattern its helper now runs:\n{out}")
 
     def test_check_keeps_no_copy_of_the_pattern(self):
+        """The check must not restate the pattern: a copy is what goes stale while the check stays green."""
         pattern = helper_pattern(ROOT)
         # `pattern in ...` rather than assertNotIn: the message must name the copy, not reprint the whole check.
         self.assertFalse(pattern in CHECK.read_text(),
                          f"the check restates the marker pattern '{pattern}'; it must read it from the helper")
+
+    def test_the_fixture_directory_is_removed_when_the_case_finishes(self):
+        """The cleanup must carry the directory `fixture_repo` made. A cleanup registered with a path read
+        before the fixture exists captures `None`, and `shutil.rmtree(None, True)` removes nothing: every run
+        of the fixture case would leak a tree under the system temp folder, silently."""
+        case = VerifyReportBugPrefix("test_helper_pattern_change_reaches_the_check_output")
+        result = unittest.TestResult()
+        case.run(result)
+        self.assertEqual(result.errors + result.failures, [], "the case is red, so its cleanup proves nothing")
+        self.assertFalse(case.tmp.exists(),
+                         f"the fixture directory {case.tmp} leaked: the cleanup ran on None, not on the fixture")
 
 
 if __name__ == "__main__":
