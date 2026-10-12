@@ -18,6 +18,11 @@ name: CI channel publish
 #     artifacts expired (90 days) - and nothing is published from it. The job
 #     dispatches build.yml on `prod` instead, whose own `publish` job refreshes
 #     the channel, and says so in the job summary.
+#   - a refused or failed read (a rate or abuse limit, HTTP 403) reaches no
+#     verdict at all. The job says that - naming GitHub's own message, request
+#     id and timestamp, which the step log carries - and dispatches build.yml
+#     too, but "no build qualifies" is a claim about the repository, so only a
+#     lookup that ran to completion may report it.
 #
 # The tree-equality reasoning (why not head sha, why not `git merge-tree`) is in
 # scripts/ci_channel_find_build.sh. A manual
@@ -68,7 +73,10 @@ jobs:
           summary "### ci-latest after #$PR_NUMBER (merge $MERGE_SHA)"
 
           reason=""
-          if run_id="$(scripts/ci_channel_find_build.sh "$MERGE_SHA" "$HEAD_SHA")"; then
+          rc=0
+          run_id="$(scripts/ci_channel_find_build.sh "$MERGE_SHA" "$HEAD_SHA")" || rc=$?
+
+          if [ "$rc" -eq 0 ]; then
             if gh run download "$run_id" --repo "$GITHUB_REPOSITORY" -D artifacts &&
                scripts/stage_ci_channel_assets.sh artifacts out; then
               scripts/publish_ci_channel.sh out
@@ -76,6 +84,8 @@ jobs:
               exit 0
             fi
             reason="build run $run_id compiled the merged tree, but its artifacts could not be downloaded or staged"
+          elif [ "$rc" -eq 3 ]; then
+            reason="GitHub refused or failed the lookup of a build of $HEAD_SHA, so no verdict was reached (the step log names GitHub's own message, request id and timestamp)"
           else
             reason="no successful pull request build of $HEAD_SHA compiled the merged tree (see the step log for each candidate)"
           fi
