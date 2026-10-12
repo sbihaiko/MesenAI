@@ -40,12 +40,21 @@ namespace Mesen.Services
 		private static string CatalogCachePath => CommunityPackPaths.CatalogCachePath;
 		private static string CatalogEtagPath => Path.Combine(CacheFolder, "community-packs.etag");
 
+		//The HTTP status the last download this class failed on (0 when the failure
+		//was not an HTTP answer - refused hop, cap, timeout, throw). Reset at the
+		//start of every FetchMatchingPackAsync, so it never survives a fetch and a
+		//later success cannot leave a stale 403 behind. Read by the caller that got
+		//the null back, which holds the install gate - every fetch is serialized
+		//behind it, so one status is unambiguous.
+		public static int LastFailureStatus { get; private set; }
+
 		//onMatched (G.4, W-P9): called once a catalog row matches, before its
 		//download starts, so the Play HUD can show which pack is installing.
 		//onProgress (#734): the primary artifact's bytes so far and its size,
 		//for the pill's bar (deps are not counted).
 		public static async Task<CommunityPackFetchResult?> FetchMatchingPackAsync(Action<CommunityPackCatalogEntry>? onMatched = null, Action<long, long?>? onProgress = null)
 		{
+			LastFailureStatus = 0;
 			string romSha1 = EmuApi.GetMepRomSha1();
 			if(string.IsNullOrWhiteSpace(romSha1)) {
 				EmuApi.WriteLogEntry("[CommunityPackFetch] no ROM sha1 available");
@@ -224,8 +233,23 @@ namespace Mesen.Services
 				}
 				EmuApi.WriteLogEntry("[CommunityPackDownload] downloading url=" + url);
 				CommunityPackDownloader.Response? response = await CommunityPackDownloader.GetAsync(url, allowedHosts, CommunityPackDownloader.MaxArtifactBytes, timeout: ArtifactTimeout);
-				if(response?.Body == null) {
-					EmuApi.WriteLogEntry("[CommunityPackDownload] GetAsync returned null body (host not allowed, redirect rejected, size cap, timeout, or network error)");
+				if(response == null) {
+					//No answer at all: a hop outside the allow-list, the redirect
+					//cap, the size cap, the wall-clock budget, or a throw. Status 0
+					//is exactly that.
+					LastFailureStatus = 0;
+					EmuApi.WriteLogEntry("[CommunityPackDownload] " + CommunityPackHttpStatus.Describe(0));
+					return null;
+				}
+				if(response.Body == null) {
+					//A non-200 answer arrives with a null body - the primitive reads
+					//the body only on 200 (CommunityPackDownloader.FetchAsync). The
+					//status is the whole diagnosis and used to be dropped right here:
+					//a 403 (rate limited / not permitted) came out as "host not
+					//allowed, redirect rejected, size cap, timeout, or network error",
+					//five causes, none of them the real one.
+					LastFailureStatus = response.StatusCode;
+					EmuApi.WriteLogEntry("[CommunityPackDownload] " + url + " -> " + CommunityPackHttpStatus.Describe(response.StatusCode));
 					return null;
 				}
 				string actualSha256 = ComputeSha256(response.Body);
