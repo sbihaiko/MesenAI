@@ -68,7 +68,9 @@ jobs:
           summary "### ci-latest after #$PR_NUMBER (merge $MERGE_SHA)"
 
           reason=""
-          if run_id="$(scripts/ci_channel_find_build.sh "$MERGE_SHA" "$HEAD_SHA")"; then
+          rc=0
+          run_id="$(scripts/ci_channel_find_build.sh "$MERGE_SHA" "$HEAD_SHA")" || rc=$?
+          if [ "$rc" -eq 0 ]; then
             if gh run download "$run_id" --repo "$GITHUB_REPOSITORY" -D artifacts &&
                scripts/stage_ci_channel_assets.sh artifacts out; then
               scripts/publish_ci_channel.sh out
@@ -76,6 +78,11 @@ jobs:
               exit 0
             fi
             reason="build run $run_id compiled the merged tree, but its artifacts could not be downloaded or staged"
+          elif [ "$rc" -eq 3 ]; then
+            # The lookup was refused, not answered - GitHub rate-limited it (or
+            # answered with its abuse/secondary limit). The tree check never
+            # ran, so nothing may be claimed about this head sha's builds.
+            reason="the GitHub API refused the build lookup (rate limit or abuse response), so whether a build of $HEAD_SHA compiled the merged tree was never determined"
           else
             reason="no successful pull request build of $HEAD_SHA compiled the merged tree (see the step log for each candidate)"
           fi

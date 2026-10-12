@@ -7,7 +7,11 @@
 # Env:   GH_TOKEN (actions: read, contents: read), GITHUB_REPOSITORY
 #
 # Prints the run id and exits 0 when one qualifies. Exits 1 with nothing on
-# stdout when none does; the reason for every rejected candidate goes to stderr.
+# stdout when none does - a lookup that ran to completion and found no
+# qualifying candidate; the reason for every rejected candidate goes to stderr.
+# Exits 3 when GitHub refused a request (a rate limit, or the abuse/secondary
+# limit's HTTP 403): a refusal answers nothing about the tree, so it is never
+# reported as "no run qualifies".
 #
 # Why tree equality, and why it is read from the build rather than inferred:
 #
@@ -52,13 +56,49 @@ for sha in "$MERGE_SHA" "$HEAD_SHA"; do
   fi
 done
 
-merge_tree="$(gh api "repos/$REPO/git/commits/$MERGE_SHA" --jq '.tree.sha')"
+# Every GitHub read goes through this wrapper, because to `gh` a refused request
+# and an empty answer look alike: both exit non-zero with nothing on stdout.
+# GitHub reports a rate limit - and the abuse/secondary ("scraping") limit - as
+# HTTP 403 whose body names the request id and timestamp to quote to Support,
+# and gh prints it on stderr. The refusal is therefore reported as its own
+# verdict (exit 3), keeping that message, instead of being folded into the
+# negative one the caller acts on: per ADR-0204 §6 a missing verdict dispatches
+# a rebuild, and "the API refused the question" is not a verdict at all.
+REFUSAL_PATTERN='rate limit|abuse|scraping|secondary'
+
+refused() {
+  # <stderr-file>: does this failure message carry a throttle/abuse refusal?
+  grep -qiE "$REFUSAL_PATTERN" "$1"
+}
+
+gh_api() {
+  # gh api "$@" -> stdout; a refused/failed call reports itself and exits 3.
+  local err detail out rc
+  err="$(mktemp)"
+  rc=0
+  out="$(gh api "$@" 2>"$err")" || rc=$?
+  if [ "$rc" -ne 0 ]; then
+    detail="$(tr '\n' ' ' <"$err")"
+    if refused "$err"; then
+      echo "API-FAILURE: GitHub refused this request - rate limit or abuse response (gh exit $rc): $detail" >&2
+    else
+      echo "API-FAILURE: gh api $1 failed (gh exit $rc): $detail" >&2
+    fi
+    echo "API-FAILURE: no verdict on whether a build run compiled the merged tree; this is not 'no run qualifies'" >&2
+    rm -f "$err"
+    exit 3
+  fi
+  rm -f "$err"
+  printf '%s' "$out"
+}
+
+merge_tree="$(gh_api "repos/$REPO/git/commits/$MERGE_SHA" --jq '.tree.sha')"
 if ! [[ "$merge_tree" =~ ^[0-9a-f]{40}$ ]]; then
   echo "FAIL: could not read the tree of merge commit $MERGE_SHA" >&2
   exit 1
 fi
 
-runs="$(gh api "repos/$REPO/actions/workflows/build.yml/runs?event=pull_request&status=success&head_sha=$HEAD_SHA&per_page=30" \
+runs="$(gh_api "repos/$REPO/actions/workflows/build.yml/runs?event=pull_request&status=success&head_sha=$HEAD_SHA&per_page=30" \
   --jq "[.workflow_runs[] | select(.conclusion == \"success\" and .head_sha == \"$HEAD_SHA\")] | sort_by(.created_at) | reverse | .[].id")"
 
 if [ -z "$runs" ]; then
@@ -71,7 +111,13 @@ trap 'rm -rf "$tmp"' EXIT
 
 for id in $runs; do
   dir="$tmp/$id"
-  if ! gh run download "$id" --repo "$REPO" -n ci-channel-provenance -D "$dir" >/dev/null 2>&1; then
+  dl_err="$tmp/$id.download.err"
+  if ! gh run download "$id" --repo "$REPO" -n ci-channel-provenance -D "$dir" >/dev/null 2>"$dl_err"; then
+    if refused "$dl_err"; then
+      echo "API-FAILURE: GitHub refused downloading this candidate's provenance - rate limit or abuse response: $(tr '\n' ' ' <"$dl_err")" >&2
+      echo "API-FAILURE: no verdict on whether a build run compiled the merged tree; this is not 'no run qualifies'" >&2
+      exit 3
+    fi
     echo "run $id: no ci-channel-provenance artifact (built before ADR-0204 §6, or expired)" >&2
     continue
   fi

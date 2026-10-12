@@ -70,6 +70,10 @@ def opt(name):
 if args[:1] == ["api"]:
     path = args[1]
     jq = opt("--jq")
+    for refused in state.get("refused", []):
+        if refused in path:
+            sys.stderr.write("gh: " + state["refused_message"] + " (HTTP 403)\n")
+            sys.exit(1)
     if "/git/commits/" in path:
         sha = path.rsplit("/", 1)[1]
         if sha not in state["commits"]:
@@ -80,6 +84,9 @@ if args[:1] == ["api"]:
     sys.exit(1)
 if args[:2] == ["run", "download"]:
     run_id = args[2]
+    if state.get("refused_download"):
+        sys.stderr.write("gh: " + state["refused_message"] + " (HTTP 403)\n")
+        sys.exit(1)
     prov = state.get("provenance", {}).get(run_id)
     if opt("-n") != "ci-channel-provenance" or prov is None:
         sys.exit(1)
@@ -93,6 +100,18 @@ if args[:2] in (["release", "create"], ["release", "upload"]):
     sys.exit(0)
 sys.exit(1)
 '''
+
+WORKFLOW = REPO_ROOT / ".github" / "workflows" / "ci-channel-publish.yml"
+
+# GitHub's own body for a throttle refusal (rate limit or the abuse/secondary
+# limit "scraping" one): HTTP 403, gh exits 1 with this on stderr and nothing
+# on stdout - the same exit code it uses for an empty, legitimate answer.
+REFUSED_MESSAGE = (
+    "API rate limit exceeded for user ID 122891372. If you reach out to GitHub Support for help, "
+    "please include the request ID ED6C:33E3F1:22431F1:3EDF4BC:6ACC5EB1 and timestamp "
+    "2026-10-12 04:14:41 UTC. For more on scraping GitHub and how it may affect your rights, "
+    "please review our Terms of Service."
+)
 
 MERGE = "a" * 40
 HEAD = "b" * 40
@@ -277,6 +296,71 @@ class FindBuildTests(unittest.TestCase):
         r, gh = self.find([], {}, merge="main")
         self.assertEqual(r.returncode, 2)
         self.assertEqual(gh.calls(), [])
+
+
+def publish_step(text):
+    # The step that actually runs the lookup (the file's own header comment
+    # names the script too, and is not a step).
+    marker = "scripts/ci_channel_find_build.sh \"$MERGE_SHA\""
+    blocks = [b for b in text.split("\n      - name:") if marker in b]
+    return blocks[0] if blocks else ""
+
+
+@unittest.skipIf(shutil.which("jq") is None, "jq is not installed; the fake gh applies --jq with it")
+class RefusedLookupTests(unittest.TestCase):
+    """A refused `gh` request is not an answer.
+
+    GitHub reports a rate limit (and the abuse/secondary "scraping" limit) as
+    HTTP 403; `gh` exits 1 and puts the API's message on stderr - the same exit
+    code it uses for an empty, legitimate result. So "the API refused the
+    question" and "no run qualifies" must not collapse into one verdict: the
+    first says nothing about whether a build compiled the merged tree, and
+    reporting it as the second makes the workflow state a false fact and
+    dispatch a full rebuild on the strength of it.
+    """
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.tmp)
+
+    def refused(self, **state):
+        state.setdefault("commits", {MERGE: MERGE_TREE})
+        state.setdefault("runs", [])
+        state.setdefault("provenance", {})
+        state.setdefault("refused_message", REFUSED_MESSAGE)
+        gh = FakeGh(self.tmp, state)
+        return run([FIND, MERGE, HEAD], env=gh.env())
+
+    def assert_refused_and_reported(self, r):
+        self.assertEqual(r.stdout, "", "a refused lookup prints no run id")
+        self.assertEqual(r.returncode, 3, r.stderr)
+        # The API's own message (what GitHub asks the caller to quote) reaches
+        # the log, with its request id, instead of being swallowed.
+        self.assertIn("ED6C:33E3F1:22431F1:3EDF4BC:6ACC5EB1", r.stderr)
+        # And the refusal is never reported as the completed negative verdict.
+        self.assertNotIn("no successful pull_request run", r.stderr)
+        self.assertNotIn("no ci-channel-provenance artifact", r.stderr)
+
+    def test_a_rate_limited_commit_read_is_not_no_qualifying_run(self):
+        self.assert_refused_and_reported(self.refused(refused=["/git/commits/"]))
+
+    def test_a_rate_limited_runs_read_is_not_no_qualifying_run(self):
+        self.assert_refused_and_reported(self.refused(refused=["/actions/workflows/build.yml/runs"]))
+
+    def test_a_rate_limited_artifact_download_is_not_a_missing_artifact(self):
+        # The commit and runs reads answer; the download of the only candidate
+        # is refused. That is still not "this run has no provenance artifact".
+        self.assert_refused_and_reported(
+            self.refused(runs=[a_run(11, "2026-10-02T00:00:00Z")], refused_download=True)
+        )
+
+    def test_the_publish_step_tells_a_refused_lookup_apart(self):
+        block = publish_step(WORKFLOW.read_text(encoding="utf-8"))
+        self.assertTrue(block, "the publish step calls scripts/ci_channel_find_build.sh")
+        self.assertIn("-eq 3", block, "the step handles the script's 'no verdict' code")
+        # The "no build compiled the merged tree" claim is only reachable after
+        # the refusal branch, so a rate-limited lookup cannot make it.
+        self.assertLess(block.index("-eq 3"), block.index("no successful pull request build"))
 
 
 if __name__ == "__main__":
