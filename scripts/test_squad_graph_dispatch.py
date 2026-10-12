@@ -21,9 +21,15 @@ file into the run directory, so `$SG_CHECKOUT/runs/<run>/graph.json` records the
 graph a run was shown. Two sources, one rule, and the rule is the guard's: it is
 executed as its own process here, so nothing is reimplemented.
 
-1. The dispatch source: `docs/squad/workflows/*.graph.json` in the loop's
-   checkout, the file the next launch there hands the engine. This is the half
-   that can be fixed before another run is lost.
+1. The dispatch source: the graph the next launch in the loop's checkout resolves
+   for `$SG_WORKFLOW`, the file that launch hands the engine. Which file that is
+   is the source's own rule, not this check's reading of the folder: the unnamed
+   workflow is that checkout's `default` file, else its `dynamic` file, else the
+   source's router seed, and a named id is that checkout's file, else the workflow
+   the source ships. Only the file the rule answers with is dispatched, so only it
+   is bounded here - and where no source is named the fallback graphs are not on
+   this machine at all, so the checkout's own graphs are what can be read. This is
+   the half that can be fixed before another run is lost.
 2. The newest dispatch that checkout recorded: `runs/run-*/graph.json`, the
    revision the last launch handed the router. Run directories are
    `run-<date>-<time>-<hex>`, so the newest name is the newest dispatch.
@@ -42,6 +48,16 @@ graph *here* is bounded, where the graph that reaches a router is the one over
 there. Where no checkout is named (the GitHub runner, which is nobody's dispatch
 checkout) the tree this check lives in is read instead, and the run says which
 tree that was.
+
+Which source resolves the id: `$SG_SQUAD`, else the plugin installed under
+`~/.claude/plugins/`, else none - the launcher's own order. The rule is read from
+that source by importing its `squad.workflows` and asking it, never restated
+here: a rule restated in this check is a rule that can drift from the one the loop
+runs, and the seed and the shipped graphs a workflow falls back to live inside the
+source, so they are reachable only through it. A source that is named but is not
+one fails rather than falling through to the checkout's folder, which is how a
+dispatched seed would go unread again. With no source the checkout's own graphs
+are all there is to bound, and the run says so.
 
 Where a runtime plugin is reachable the guard reads its REQUEST_FIELDS as the
 contract (ADR-0276 §1) and a graph teaching a field that plugin rejects is red;
@@ -71,6 +87,8 @@ Exit 0 when every source is bounded; 1 with the guard's own output per source.
 from __future__ import annotations
 
 import argparse
+import importlib
+import json
 import os
 import shutil
 import subprocess
@@ -83,9 +101,17 @@ GUARD = Path("scripts") / "test_squad_graph_spawn_fields.py"
 WORKFLOWS = Path("docs") / "squad" / "workflows"
 RUNS = Path("runs")
 ENV_CHECKOUT = "SG_CHECKOUT"
-# The name the dispatched copy is given in the throwaway tree: the guard globs
-# `*.graph.json` under `<root>/docs/squad/workflows`, and a run directory keeps
-# only `graph.json`, which records no workflow name.
+# The workflow id a launch hands the engine, and the source that resolves it: both
+# are the launcher's (`launch.py` reads `$SG_WORKFLOW` and runs `$SG_SQUAD`, else the
+# installed plugin), and both are read here for the same reason `$SG_CHECKOUT` is.
+ENV_WORKFLOW = "SG_WORKFLOW"
+ENV_SQUAD = "SG_SQUAD"
+INSTALLED = Path(".claude") / "plugins" / "installed_plugins.json"
+PLUGIN_KEY = "agent-squad@agent-squad"
+# The name a dispatched copy is given in the throwaway tree, where the graph it
+# came from carries no id to name it by: the guard globs `*.graph.json` under
+# `<root>/docs/squad/workflows`, and a run directory keeps only `graph.json`. A
+# graph that has a name (`dynamic.graph.json`, `router.graph.json`) keeps it.
 DISPATCHED = "dynamic.graph.json"
 
 FAILURES = []
@@ -111,14 +137,58 @@ def check_source(tree, where):
         print(f"    {line}")
     if proc.returncode:
         fail(
-            f"{where}: the guard rejects the graph the loop dispatches from - an example carrying "
-            f"a field the same text does not declare for a request reaches the router as a request "
-            f"agent-squad refuses whole (`unknown_field:<k>`), and the run then ends `no_dispatch` "
-            f"with nothing spawned (issue #1840). What to fix: that graph, in that checkout - it is "
-            f"the file a launch there hands the engine, and `origin/main` is where the field list "
-            f"and its example agree"
+            f"{where}: the guard rejects the graph a launch there dispatches from - its own line "
+            f"above names the rule and the field. What to fix: that graph (where a launch there "
+            f"reads it, which is not always the checkout's own folder). A request built from a "
+            f"rejected example reaches the router as one agent-squad refuses whole "
+            f"(`unknown_field:<k>`), and the run then ends `no_dispatch` with nothing spawned "
+            f"(issue #1840)"
         )
     return proc.returncode
+
+
+class ResolutionError(Exception):
+    """The graph a launch dispatches cannot be resolved. The check fails; it never guesses."""
+
+
+def squad_source():
+    """The agent-squad source the loop runs, or None when this machine names none.
+
+    The launcher picks it the same way - `$SG_SQUAD`, else the installed plugin's
+    `installPath` (`launch.py`) - and the source is where the graphs a workflow id
+    falls back to live, so it is where they are read from too. A source that is
+    named but is not one is a failure, never a reason to try the next: silently
+    dropping to the checkout's own folder is how a dispatched seed goes unread.
+    """
+    named = os.environ.get(ENV_SQUAD, "")
+    if named:
+        return Path(named).expanduser().resolve(), f"${ENV_SQUAD}"
+    manifest = Path.home() / INSTALLED
+    try:
+        plugins = json.loads(manifest.read_text(encoding="utf-8"))["plugins"]
+        path = plugins[PLUGIN_KEY][0]["installPath"]
+    except (OSError, ValueError, KeyError, IndexError, TypeError):
+        return None, ""
+    return Path(path).expanduser().resolve(), f"{manifest}"
+
+
+def workflow_module(source):
+    """The source's own `squad.workflows`: the rule the loop resolves an id with.
+
+    Imported from the source rather than restated here, the way the guard reads the
+    runtime plugin's `REQUEST_FIELDS`: a rule restated in this check is a rule that
+    can drift from the one the loop runs, which is the drift this pair exists for.
+    """
+    sys.path.insert(0, str(source))
+    try:
+        return importlib.import_module("squad.workflows")
+    except Exception as exc:
+        raise ResolutionError(
+            f"{source}: no loadable squad.workflows there ({exc.__class__.__name__}: {exc}), so which "
+            f"graph a launch dispatches cannot be resolved"
+        ) from exc
+    finally:
+        sys.path.remove(str(source))
 
 
 def newest_dispatch(checkout):
@@ -155,8 +225,60 @@ def main():
         print(f"\n{len(FAILURES)} failure(s)")
         sys.exit(1)
 
-    print(f"dispatch source: {checkout / WORKFLOWS} (the file a launch there hands the engine)")
-    check_source(checkout, f"{WORKFLOWS} in {checkout}")
+    named = os.environ.get(ENV_WORKFLOW, "")
+    print(
+        f"workflow: {named!r} (`${ENV_WORKFLOW}`)"
+        if named
+        else f"workflow: the unnamed one (`${ENV_WORKFLOW}` is unset)"
+    )
+    source, named_source = squad_source()
+    if source is None:
+        print(
+            f"agent-squad source: none named here (no ${ENV_SQUAD}, no installed plugin), so the graphs a "
+            f"workflow id falls back to are not on this machine to read: the checkout's own graphs are all "
+            f"there is to bound"
+        )
+        print(f"dispatch source: {checkout / WORKFLOWS} (any graph a launch there could dispatch)")
+        check_source(checkout, f"{WORKFLOWS} in {checkout}")
+    else:
+        print(
+            f"agent-squad source: {source} (from {named_source}) - the source the loop runs, whose own rule "
+            f"resolves the workflow id"
+        )
+        try:
+            module = workflow_module(source)
+        except ResolutionError as exc:
+            fail(str(exc))
+            print(f"\n{len(FAILURES)} failure(s)")
+            sys.exit(1)
+        try:
+            graph = module.resolve(named or None, folder=checkout / WORKFLOWS)
+        except module.WorkflowError as exc:
+            fail(
+                f"{checkout}: a launch there dispatches nothing, so no graph reaches the router and none is "
+                f"bounded: {exc}. A launch refuses the run before starting it, so this is the state of the "
+                f"dispatch rather than an example to fix"
+            )
+            graph = None
+        if graph is not None:
+            print(
+                f"dispatch source: {graph} (what that rule resolves the id to: the file a launch "
+                f"there hands the engine)"
+            )
+            if not graph.is_file():
+                fail(
+                    f"{graph}: the workflow a launch in {checkout} resolves to is not there, so the launch "
+                    f"dispatches nothing and nothing is bounded (resolved by {source})"
+                )
+            else:
+                with tempfile.TemporaryDirectory(prefix="squad-dispatch-") as tmp:
+                    tree = Path(tmp)
+                    dest = tree / WORKFLOWS / (
+                        graph.name if graph.name.endswith(".graph.json") else DISPATCHED
+                    )
+                    dest.parent.mkdir(parents=True)
+                    shutil.copy2(graph, dest)
+                    check_source(tree, f"{graph} (as dispatched)")
 
     run_id, graph = newest_dispatch(checkout)
     if run_id is None:

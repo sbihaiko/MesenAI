@@ -25,6 +25,12 @@ internals. What each one is about:
 - The dispatch source of the loop's checkout is checked, not this tree's: a clean
   tree that names a checkout whose graph carries the teach is red.
 - The loop's checkout is taken from `--dispatch`, else `$SG_CHECKOUT`.
+- The graph checked is the one a launch there resolves for `$SG_WORKFLOW` through
+  agent-squad's own rule, never the checkout's folder: an absent unnamed workflow
+  resolves to the source's router seed and a named one to the workflow the source
+  ships, so both fallbacks are dispatch sources of their own and both are covered
+  here - the seed case reds, the bounded one passes, a shipped graph reds, and an
+  id that resolves nowhere is red rather than silent.
 - The newest dispatch of that checkout is checked even when its tree no longer
   carries that revision - the half nothing ran before, and the reason the check
   exists at all.
@@ -53,6 +59,40 @@ CHECK = Path("scripts") / "test_squad_graph_dispatch.py"
 GUARD = Path("scripts") / "test_squad_graph_spawn_fields.py"
 VENDORED = Path("scripts") / "vendor" / "agent_squad" / "envelope.py"
 GRAPH = Path("docs") / "squad" / "workflows" / "dynamic.graph.json"
+SQUAD_ENV = "SG_SQUAD"
+
+# A stand-in for the runtime `squad/workflows.py`: an agent-squad source resolves a
+# workflow id through this rule, and the fixtures below drive the check through it.
+# It is a fixture, not a contract - it exists so a case can put the fallback graphs
+# (the router seed, the shipped workflows) where the check reads them.
+STANDIN_WORKFLOWS = '''"""A fixture stand-in for the runtime `squad/workflows.py`."""
+from pathlib import Path
+
+
+class WorkflowError(Exception):
+    pass
+
+
+ROOT = Path(__file__).resolve().parents[1]
+SEED = ROOT / "docs" / "design" / "router.graph.json"
+SHIPPED = ROOT / "docs" / "workflows"
+SUFFIX = ".graph.json"
+
+
+def resolve(workflow=None, folder=None, seed=SEED):
+    folder = Path(folder)
+    if workflow is None or workflow in ("default", "dynamic"):
+        for wid in ("default", "dynamic"):
+            if (folder / (wid + SUFFIX)).is_file():
+                return folder / (wid + SUFFIX)
+        return seed
+    mine = folder / (workflow + SUFFIX)
+    if not mine.is_file() and (SHIPPED / (workflow + SUFFIX)).is_file():
+        return SHIPPED / (workflow + SUFFIX)
+    if not mine.is_file():
+        raise WorkflowError(f"no workflow {workflow!r} in {folder}")
+    return mine
+'''
 
 # The fields the committed copy records, so a fixture plugin built from them
 # agrees with the copy and a case fails for the one reason it is about.
@@ -79,6 +119,21 @@ def check(name, condition, detail=""):
         print(f"FAIL {name}: {detail}")
 
 
+def copy_graph(dest, *, teach=False, src=None):
+    """This repository's graph at `dest`, optionally carrying the teach the run was shown."""
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(src or (REPO_ROOT / GRAPH), dest)
+    if teach:
+        doc = json.loads(dest.read_text(encoding="utf-8"))
+        for node in doc["nodes"]:
+            if isinstance(node.get("instructions"), str):
+                node["instructions"] = node["instructions"].replace(
+                    '"workspace": "worktrees/child"', TAUGHT
+                )
+        dest.write_text(json.dumps(doc), encoding="utf-8")
+    return dest
+
+
 def checkout(tmp, name="loop-checkout", *, teach=False):
     """A checkout of this repository holding the check, the guard and the graph.
 
@@ -86,35 +141,33 @@ def checkout(tmp, name="loop-checkout", *, teach=False):
     the one the loop launches from (`other`) - the check must read the second.
     """
     root = Path(tmp) / name
-    for rel in (CHECK, GUARD, GRAPH, VENDORED):
+    for rel in (CHECK, GUARD, VENDORED):
         dest = root / rel
         dest.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(REPO_ROOT / rel, dest)
-    if teach:
-        path = root / GRAPH
-        doc = json.loads(path.read_text(encoding="utf-8"))
-        for node in doc["nodes"]:
-            if isinstance(node.get("instructions"), str):
-                node["instructions"] = node["instructions"].replace(
-                    '"workspace": "worktrees/child"', TAUGHT
-                )
-        path.write_text(json.dumps(doc), encoding="utf-8")
+    copy_graph(root / GRAPH, teach=teach)
+    return root
+
+
+def squad_source(tmp, name="squad-source", *, seed_teach=False, shipped=()):
+    """An agent-squad source the loop runs from: the module it resolves ids with, and the graphs it falls back to.
+
+    `shipped` names the workflows the source ships under `docs/workflows/`; each is
+    offered as `(id, teaches_the_rejected_field)`.
+    """
+    root = Path(tmp) / name
+    (root / "squad").mkdir(parents=True, exist_ok=True)
+    (root / "squad" / "__init__.py").write_text("", encoding="utf-8")
+    (root / "squad" / "workflows.py").write_text(STANDIN_WORKFLOWS, encoding="utf-8")
+    copy_graph(root / "docs" / "design" / "router.graph.json", teach=seed_teach)
+    for wid, teaches in shipped:
+        copy_graph(root / "docs" / "workflows" / f"{wid}.graph.json", teach=teaches)
     return root
 
 
 def dispatch(root, run, *, taught=False):
     """Record a dispatch this checkout made: the graph the engine copied into runs/<run>/."""
-    path = root / "runs" / run / "graph.json"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(root / GRAPH, path)
-    if taught:
-        doc = json.loads(path.read_text(encoding="utf-8"))
-        for node in doc["nodes"]:
-            if isinstance(node.get("instructions"), str):
-                node["instructions"] = node["instructions"].replace(
-                    '"workspace": "worktrees/child"', TAUGHT
-                )
-        path.write_text(json.dumps(doc), encoding="utf-8")
+    copy_graph(root / "runs" / run / "graph.json", teach=taught, src=root / GRAPH)
     return run
 
 
@@ -140,7 +193,7 @@ def run(self_tree, *args, env=None):
         capture_output=True,
         text=True,
         cwd=str(self_tree),
-        env={"PATH": "/usr/bin:/bin", "HOME": str(home), "SG_CHECKOUT": "", **(env or {})},
+        env={"PATH": "/usr/bin:/bin", "HOME": str(home), "SG_CHECKOUT": "", SQUAD_ENV: "", **(env or {})},
     )
     return proc.returncode, proc.stdout + proc.stderr
 
@@ -241,12 +294,81 @@ def case_the_check_runs_the_guard_and_not_a_rule_of_its_own(tmp):
 
 
 def case_a_loop_checkout_with_no_graph_fails(tmp):
-    """Nothing to bound is a failure, never a pass."""
+    """With no local graph and no source to fall back to, a launch there dispatches nothing at all."""
     self_tree = checkout(tmp, "child-worktree")
     loop = checkout(tmp, "loop-checkout")
     (loop / GRAPH).unlink()
     code, out = run(self_tree, "--dispatch", str(loop))
     check("a loop checkout with no graph exits non-zero", code != 0, f"exit {code}\n{out}")
+
+
+def case_an_absent_workflow_resolves_to_the_sources_seed(tmp):
+    """A checkout with no `dynamic.graph.json` is not "no graph".
+
+    The source the loop runs resolves the unnamed workflow to its own router seed,
+    so a launch there still dispatches a graph - and that seed is the graph to bound.
+    Reading only the checkout's own folder passed over it in silence, and red on an
+    empty folder for a graph the launch was dispatching all along.
+    """
+    self_tree = checkout(tmp, "child-worktree")
+    loop = checkout(tmp, "loop-checkout")
+    (loop / GRAPH).unlink()
+    source = squad_source(tmp, seed_teach=True)
+    code, out = run(self_tree, "--dispatch", str(loop), env={SQUAD_ENV: str(source)})
+    check("a checkout with no graph whose seed teaches exits non-zero", code != 0, f"exit {code}\n{out}")
+    check("a checkout with no graph whose seed teaches names the seed", "router.graph.json" in out, out)
+    check("a checkout with no graph whose seed teaches names the field", "['turns']" in out, out)
+
+
+def case_a_bounded_seed_fallback_is_not_a_false_failure(tmp):
+    """The other half of the same finding: the fallback graph is a real graph, and a bounded one passes."""
+    self_tree = checkout(tmp, "child-worktree")
+    loop = checkout(tmp, "loop-checkout")
+    (loop / GRAPH).unlink()
+    source = squad_source(tmp)
+    code, out = run(self_tree, "--dispatch", str(loop), env={SQUAD_ENV: str(source)})
+    check("a checkout falling back to a bounded seed exits 0", code == 0, f"exit {code}\n{out}")
+    check(
+        "a checkout falling back to a bounded seed says the seed is bounded",
+        "every example spawn names only accepted fields" in out and "router.graph.json" in out,
+        out,
+    )
+
+
+def case_a_named_workflow_resolves_to_the_graph_the_source_ships(tmp):
+    """`$SG_WORKFLOW` is the id the launcher hands the engine, and a shipped graph is still dispatched."""
+    self_tree = checkout(tmp, "child-worktree")
+    loop = checkout(tmp, "loop-checkout")
+    (loop / GRAPH).unlink()
+    source = squad_source(tmp, shipped=[("spec-to-build", True)])
+    code, out = run(
+        self_tree, "--dispatch", str(loop), env={SQUAD_ENV: str(source), "SG_WORKFLOW": "spec-to-build"}
+    )
+    check("a shipped workflow that teaches exits non-zero", code != 0, f"exit {code}\n{out}")
+    check("a shipped workflow that teaches names the shipped file", "spec-to-build.graph.json" in out, out)
+
+
+def case_a_named_workflow_reads_the_file_that_id_names_not_the_unnamed_one(tmp):
+    """The id is what decides: a bounded `dynamic` beside a teaching second workflow does not cover it."""
+    self_tree = checkout(tmp, "child-worktree")
+    loop = checkout(tmp, "loop-checkout")
+    source = squad_source(tmp)
+    copy_graph(loop / (GRAPH.parent / "nightly.graph.json"), teach=True)
+    code, out = run(
+        self_tree, "--dispatch", str(loop), env={SQUAD_ENV: str(source), "SG_WORKFLOW": "nightly"}
+    )
+    check("the workflow $SG_WORKFLOW names is the one checked", code != 0, f"exit {code}\n{out}")
+    check("the workflow $SG_WORKFLOW names is named", "nightly.graph.json" in out, out)
+
+
+def case_a_named_workflow_that_resolves_nowhere_fails(tmp):
+    """A launch refuses a workflow id it cannot resolve, so there is nothing to bound - never a pass."""
+    self_tree = checkout(tmp, "child-worktree")
+    loop = checkout(tmp, "loop-checkout")
+    source = squad_source(tmp)
+    code, out = run(self_tree, "--dispatch", str(loop), env={SQUAD_ENV: str(source), "SG_WORKFLOW": "ghost"})
+    check("a workflow that resolves nowhere exits non-zero", code != 0, f"exit {code}\n{out}")
+    check("a workflow that resolves nowhere says which id", "ghost" in out, out)
 
 
 def main():
@@ -269,6 +391,11 @@ def main():
         case_no_checkout_named_reads_the_tree_the_check_lives_in,
         case_the_check_runs_the_guard_and_not_a_rule_of_its_own,
         case_a_loop_checkout_with_no_graph_fails,
+        case_an_absent_workflow_resolves_to_the_sources_seed,
+        case_a_bounded_seed_fallback_is_not_a_false_failure,
+        case_a_named_workflow_resolves_to_the_graph_the_source_ships,
+        case_a_named_workflow_reads_the_file_that_id_names_not_the_unnamed_one,
+        case_a_named_workflow_that_resolves_nowhere_fails,
     ]
     for case in cases:
         with tempfile.TemporaryDirectory(prefix="spawn-dispatch-") as tmp:
