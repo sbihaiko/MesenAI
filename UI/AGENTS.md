@@ -561,7 +561,13 @@ can be exercised by real xunit tests without Avalonia or the native
   `CommunityPackDownloader` follows only 301/302/303/307/308
   (`CommunityPackHttpStatus.IsFollowableRedirect`); HTTP 304 is a terminal
   catalog-cache status for `CommunityCatalogCacheDecision`, never a
-  redirect.
+  redirect. A non-2xx status is reported as itself
+  (`CommunityPackHttpStatus.Describe`), never folded into the "no answer"
+  bucket: `IsRateLimited` marks 403/429, and
+  `CommunityPackCatalogFetcher.LastFailureStatus` carries the status of the
+  fetch that just returned null so an explicit Restore can tell the player a
+  refusal rather than claim the pack left the catalog. Pinned by
+  `UI.Tests/CommunityPacks/CommunityPackHttpStatusTests`.
 - **Renderer size (`UI/Logic/RendererViewportFit`, P.7 plus upstream
   3924215).** `MainWindow` sizes the renderer only from its result; don't
   round inline there. Invariants, covered by `RendererViewportFitTests` and

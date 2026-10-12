@@ -104,7 +104,13 @@ namespace Mesen.Services
 				CommunityPackFetchResult? fetched = await Task.Run(() => CommunityPackCatalogFetcher.FetchMatchingPackAsync(entry => RaiseStarted(entry.Name), RaiseProgress));
 				if(fetched == null) {
 					RaiseFinished(false, false);
-					return (false, "the pack is no longer in the catalog (nothing to restore from)");
+					//A refusal is not a missing catalog row. The fetch used to lose
+					//the status on the way out, so a 403 (rate limited / not
+					//permitted) was reported to the player as "the pack is no longer
+					//in the catalog" - a false statement about the catalog.
+					return (false, CommunityPackHttpStatus.IsRateLimited(CommunityPackCatalogFetcher.LastFailureStatus)
+						? "the download host refused the request (" + CommunityPackHttpStatus.Describe(CommunityPackCatalogFetcher.LastFailureStatus) + "); try again later"
+						: "the pack is no longer in the catalog (nothing to restore from)");
 				}
 				//Restore() is synchronous file/interop work - keep it off the UI thread.
 				//A throw here would skip RaiseFinished and leave the pill installing.
